@@ -1,0 +1,31 @@
+---
+name: project-stream-host-move-corpvm17-2026-10-13
+description: "Stream host moving SMVMTR1 -> CORPVM17 (10/13): C: only, runs as corp\\agenewe, via the laptop; decisions, staged board, what still has to happen"
+metadata:
+  node_type: memory
+  type: project
+  originSessionId: e6692ca4-4cf5-4b6c-9bc6-113c26f431a3
+  modified: 2026-10-13T12:38:58.865Z
+---
+
+Gene 2026-10-13: the stream moves from SMVMTR1 to **CORPVM17**, run as **corp\agenewe** (not speedmerchants). Route: SMVMTR1 -> laptop -> CORPVM17. A home (non-domain) machine was floated first and dropped (policy, same as 9/28: [[project-stream-host-smvmtr1-2026-09-28]]).
+
+**CORPVM17 facts:** no D: drive (C: 699 GB, 407 GB free); shared box (other user profiles, Profisee FR25R1/R2/Matching on IIS); old 2025 clones in C:\devops\repos (no speedmerchants). WinRM/CIM from the laptop failed (Kerberos), SMB c$ works.
+
+**Speedy web site MOVED 10/13 to CORPVM17** (Gene; a first copy to CORPVMHA1 was the wrong address, removed): SMVMTR1 C:\inetpub\wwwroot\speedy (336 files, 209 MB: docs, demo mp3/mp4, status/priority/cost pages) copied byte-exact to CORPVM17 C:\inetpub\wwwroot\speedy, live at https://corpvm17.corp.profisee.com/speedy/ (FQDN; cert is for the FQDN). VM17 StatusPageDir = C:\inetpub\wwwroot\speedy; staged board status-url/priority-url point there, status-mirror.txt has no extra line (originals *.smvmtr1). SMVMTR1 copy still in place until retirement.
+
+**Decisions (Gene, all recommended):** status pages on CORPVM17 IIS C:\inetpub\wwwroot\speedy; git commit+push+worktrees; skills as LOCAL COPIES (SkillsLinkRoot blank); SMVMTR1 retired as stream host (disable its "Speedy Tier2 nightly speedmerchants" 1 AM task, recreate on CORPVM17 as agenewe with C: repo; keep its .streams as read-only archive).
+
+**Done 10/13:** Sync-Machine SMVMTR1->CORPLTR94 applied + published (4 stream-kit scripts). Profile draft D:\DeployMyAI\vm17\ProfileMachineConfig.md (all C:, validates 0 issues). machines.json has CORPVM17 (c$\AIWork\work-ai, agenewe pwsh profile, c$\tmp\stream-host). Board staged on laptop C:\scratch\stream-move\20261013\.streams (robocopy 21,239 files 1.19 GB, 0 failed) + worktree-diffs\ backup.
+
+**Why it is safe:** origin users/agenewe/stream-sync clean + pushed at ec79acf; in-flight work is in .streams\patches (kit's carrier: worktrees are laid as HEAD + main diff + dependency patches, so worktree diffs show extra dependency files - not lost work). Board base.worktree paths say D:\devops\worktrees (record only; New-TaskWorktree uses {WorktreesRoot}).
+
+**How to apply:** never run Move-StreamHostLayout.ps1 on CORPVM17 (moves to D:); run Install-StreamHost/Test-StreamHostReady with -ContainerRoot = Rancher's C: location (defaults are D:\RancherDesktop). Next: Gene finishes tools/accounts -> Stage-Machine.ps1 -ComputerName CORPVM17 -ProfileMd D:\DeployMyAI\vm17\ProfileMachineConfig.md -> Start-MachineRollout on VM17 -> clone repo -> copy staged .streams -> Test-StreamHostReady -> set user env secrets (SM_*, SPEEDY_CENTRAL_*) -> recreate nightly task -> start streams. Built tasks G6.T308/G6.T347 integrate from patches on the new host.
+
+**Progress 10/13 PM:** CORPVM17 has Git, Python packages, WSL 3.0.3 (VM BLOCKED: nested virtualization off, HCS_E_HYPERV_NOT_INSTALLED; IT ticket filed), Rancher 1.24 all-users (cannot start until ticket), Playwright, Claude 2.1.296 native, AI rollout 0D2889EC1E6B (recovery self-test 1 race fail = slow pwsh start, link tests need symlink right; both harmless), Profisee 26.3 /speedmerchants on prod-clone DB (SM_SUT key 3496..., MCP needs licence with MCP), board copied to C:\devops\repos\speedmerchants\.streams (hash ok) + .git\info\exclude from TR1. SMVMTR1 nightly task DISABLED 16:10. Left: Rancher after ticket -> Test-StreamHostReady -ContainerRoot C:\ -> Register-NightlySuite (only after Docker works, else failed legs file fix tasks) -> start streams; speedMcpRemote key via Export-AISecrets (import OVERWRITES SM_SUT_* with laptop values: re-setx after).
+
+**10/13 evening:** nested virt fixed (Hyper-V host: Set-VMProcessor -ExposeVirtualizationExtensions; guest Win32_Processor.VirtualizationFirmwareEnabled still reads False = unreliable, real test = wsl import/docker). Rancher + docker OK (hello-world), Test-StreamHostReady 0 FAIL. Secrets via Export-AISecrets/Install-AIMachine -SecretsFile (then SM_SUT_* re-set). Nightly task registered on CORPVM17 (agenewe, S4U, 01:00). Gene set Sysinternals Autologon64 for agenewe so Rancher starts after reboot (re-run Autologon after any domain password change). Next: addStreams -Repo C:\devops\repos\speedmerchants.
+
+**MOVE COMPLETE 10/13 17:55:** streams ran on CORPVM17 (5 authors + 5 builders; builds G6.T251/T271/T295/T310 + G11.T001 claimed, worktrees on C:\devops\worktrees\speedmerchants), then Gene stopped them until his credit reset (stopStreams -CloseSessions). VM stays up for the 01:00 nightly (no tokens). Restart: addStreams -Repo C:\devops\repos\speedmerchants; consider StreamMaxAuthors/StreamMaxBuilders caps in VM17 profile (blank = unlimited). Open: kit test race 75q (swap stub lines 2407/2408-2409), kit test space-in-path bug, CrewChief ApiKeyEncryptor singleton caches blank key until restart + stale secrets.local.json message, laptop SM_SUT_APIKEY stale, optional lock-after-autologon task. SMVMTR1: nightly disabled, board = archive, speedy site copy still there.
+
+**SMVMTR1 CLEANED 10/14 (Gene's choices):** board zipped to \SMVMTR1\d$\DataArchive\stream-board-smvmtr1-2026-10-13.zip (21,239 entries = source, 328.5 MB; SMB zip took 2.8 h); nightly task DELETED; D:\tmp\stream-host deleted; repo D:\devops\repos\speedmerchants + worktrees + C:\inetpub\wwwroot\speedy deleted (see result line below). Its only stash (10/2, G3.T238 WIP, RuntimeReadoutSource.cs + tests) saved to laptop C:\scratch\stream-move\20261013\worktree-diffs\smvmtr1-stash0-G3.T238-base4240272.patch. KEPT: Rancher (66 GB D:\RancherDesktop), D:\AIWork corpus, speedmerchants account skill links, speed-merchants repo. SMB laptop->SMVMTR1 is very slow: run bulk work ON the box when possible.

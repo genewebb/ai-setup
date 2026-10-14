@@ -1,0 +1,1 @@
+{ "name": "stream-unit", "version": "0.1.0", "description": "Ends a stream-kit runner unit: the unit_done tool writes the unit result file and exits the session.", "author": { "name": "Gene Webb" } }

@@ -1,0 +1,496 @@
+<title>MyLoop Replacement Verdict</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#f7f6f2; --card:#fcfcfb; --ink:#1c1b19; --ink-2:#55534d; --muted:#898781; --rule:#dad8d0; --hair:#e8e6df;
+  --accent:#b4530a; --accent-ink:#7a3705; --accent-wash:#f6e7d8;
+  --good:#006300; --bad:#b3261e; --warn:#8a5a00;
+  --c1:#2a78d6; --c2:#eb6834; --c3:#1baf7a; --c4:#eda100; --c5:#e87ba4; --c6:#4a3aa7;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#141412; --card:#1c1c1a; --ink:#ece9e0; --ink-2:#c3c2b7; --muted:#8f8d86; --rule:#33322f; --hair:#262623;
+  --accent:#e0813b; --accent-ink:#f2b98a; --accent-wash:#2c1f14;
+  --good:#5cc25c; --bad:#f08a84; --warn:#e6b45a;
+  --c1:#3987e5; --c2:#d95926; --c3:#199e70; --c4:#c98500; --c5:#d55181; --c6:#9085e9;
+}}
+:root[data-theme="dark"]{
+  --paper:#141412; --card:#1c1c1a; --ink:#ece9e0; --ink-2:#c3c2b7; --muted:#8f8d86; --rule:#33322f; --hair:#262623;
+  --accent:#e0813b; --accent-ink:#f2b98a; --accent-wash:#2c1f14;
+  --good:#5cc25c; --bad:#f08a84; --warn:#e6b45a;
+  --c1:#3987e5; --c2:#d95926; --c3:#199e70; --c4:#c98500; --c5:#d55181; --c6:#9085e9;
+}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;margin:0;padding-block:0 64px;padding-inline:16px}
+.wrap{max-width:980px;margin:0 auto}
+header{padding-block:40px 24px;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font-size:clamp(26px,4vw,38px);font-weight:600;letter-spacing:-.01em;line-height:1.15;margin:8px 0 12px;text-wrap:balance}
+h2{font-size:22px;font-weight:600;margin:48px 0 12px;letter-spacing:-.005em;text-wrap:balance;padding-top:8px;border-top:1px solid var(--rule)}
+h3{font-size:16px;font-weight:600;margin:28px 0 8px}
+p,li{max-width:72ch}
+.lede{font-size:17px;color:var(--ink-2);max-width:72ch}
+.verdict{display:grid;grid-template-columns:1fr;gap:12px;margin:24px 0}
+@media(min-width:720px){.verdict{grid-template-columns:1.2fr 1fr}}
+.verdict .box{background:var(--card);border:1px solid var(--rule);padding:18px 20px}
+.verdict .big{font-family:var(--mono);font-size:28px;font-weight:500;color:var(--accent-ink);background:var(--accent-wash);border-color:var(--accent)}
+.verdict .big small{display:block;font-family:var(--sans);font-size:14px;color:var(--ink-2);margin-top:6px;font-weight:400}
+.kv{font-family:var(--mono);font-size:13px;color:var(--ink-2)}
+.kv b{color:var(--ink);font-weight:500}
+.scroll{overflow-x:auto;margin:12px 0 4px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;vertical-align:top;padding:7px 10px;border-bottom:1px solid var(--hair)}
+th{font-weight:600;color:var(--ink-2);font-size:12px;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid var(--rule)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)}
+code,.k{font-family:var(--mono);font-size:12.5px;background:var(--hair);padding:1px 5px;border-radius:3px}
+pre{font-family:var(--mono);font-size:12.5px;background:var(--card);border:1px solid var(--rule);padding:12px 14px;overflow-x:auto;line-height:1.45}
+.tag{display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:1px 7px;border-radius:3px;border:1px solid var(--rule);color:var(--ink-2);white-space:nowrap}
+.impl{border-color:var(--good);color:var(--good)} .part{border-color:var(--warn);color:var(--warn)} .none{border-color:var(--bad);color:var(--bad)} .doc{border-color:var(--muted);color:var(--muted)}
+.meas{border-color:var(--accent);color:var(--accent-ink);background:var(--accent-wash)}
+.note{border-left:3px solid var(--accent);padding:6px 14px;color:var(--ink-2);margin:14px 0;max-width:72ch}
+.grid2{display:grid;gap:16px;grid-template-columns:1fr}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+.card{background:var(--card);border:1px solid var(--rule);padding:14px 16px}
+.card h3{margin-top:0}
+/* stacked bar */
+.bar{display:flex;height:34px;gap:2px;margin:10px 0 6px}
+.bar span{display:block;height:100%;border-radius:0}
+.bar span:first-child{border-radius:4px 0 0 4px}.bar span:last-child{border-radius:0 4px 4px 0}
+.legend{display:grid;grid-template-columns:14px 1fr auto auto;gap:6px 10px;align-items:center;font-size:13.5px;max-width:640px}
+.legend i{display:block;width:14px;height:14px;border-radius:3px}
+.legend .n{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;color:var(--ink-2)}
+.flow{font-family:var(--mono);font-size:12.5px;line-height:1.6;background:var(--card);border:1px solid var(--rule);padding:12px 14px;overflow-x:auto;white-space:pre}
+.toc{font-size:13.5px;columns:2;column-gap:32px;margin:16px 0 0;padding:0;list-style:none}
+.toc li{break-inside:avoid;padding:2px 0}
+.toc a{color:var(--ink-2);text-decoration:none;border-bottom:1px solid var(--rule)}
+a{color:var(--accent-ink)}
+.small{font-size:13px;color:var(--ink-2)}
+ol.steps li{margin-bottom:8px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Evidence review · 2026-09-16 · repo <span class="k">speedmerchants</span> · lead session read-only against the live loop</div>
+  <h1>Should MyLoop be replaced by AIWorkHub or Superharness?</h1>
+  <p class="lede">Ten phases, every figure measured from the loop's own records, both candidates traced in code (not README), a shadow scheduler replayed over 27 real dispatch epochs, and ten crash injections against scratch copies of <span class="k">.loop</span>.</p>
+
+  <div class="verdict">
+    <div class="box big">KEEP MYLOOP<small>plus a targeted hardening list (section 10). Neither candidate can run this backlog on this machine as shipped, neither models the dependency class that produced 12 of the 13 scheduler disagreements, and the measured seat loss is 45% ticket supply, which no orchestrator swap touches.</small></div>
+    <div class="box kv">
+      <div><b>Weighted score</b> MyLoop 5.7 · AIWorkHub 4.5 · Superharness 3.3 (of 10)</div>
+      <div><b>Shadow scheduler</b> 27 epochs · 13 disagreements · 13 would be false READY under either candidate's semantics</div>
+      <div><b>Seats busy</b> 9.1% of 7 seats over the 16 h window (mean 0.64 workers)</div>
+      <div><b>Recoverable by any orchestrator</b> ≤ 13% of seat capacity (lead latency), obtainable in-house</div>
+      <div><b>MyLoop stranded-state defects found</b> 6 of 10 crash points (fixable, ~1 day)</div>
+    </div>
+  </div>
+
+  <p class="small">Companion diagram: <a href="MyLoop-Replacement-Verdict-Diagram.html">MyLoop Replacement Verdict (Archify workflow)</a> shows the six row stages, the measured seat-loss buckets and which stage each candidate would replace.</p>
+  <ul class="toc">
+    <li><a href="#s1">1 Executive conclusion</a></li>
+    <li><a href="#s2">2 Architecture comparison</a></li>
+    <li><a href="#s3">3 Reliability findings</a></li>
+    <li><a href="#s4">4 Scheduler findings</a></li>
+    <li><a href="#s5">5 Performance results</a></li>
+    <li><a href="#s6">6 Dependency model comparison</a></li>
+    <li><a href="#s7">7 What we could delete</a></li>
+    <li><a href="#s8">8 What we must retain</a></li>
+    <li><a href="#s9">9 Migration architecture</a></li>
+    <li><a href="#s10">10 Plan: smallest reversible steps</a></li>
+    <li><a href="#s11">11 Scorecard</a></li>
+    <li><a href="#s12">12 Prior-analysis claims, checked</a></li>
+    <li><a href="#s13">13 Method, confidence, caveats</a></li>
+<li><a href="#s14">14 Autoresearch for MyLoop</a></li>
+  </ul>
+</header>
+
+<h2 id="s1">1 · Executive conclusion</h2>
+<p><b>KEEP MYLOOP.</b> The replacement threshold (≈20% more useful work per wall-clock hour with equal or better correctness and recovery) is not met, and cannot be met by either candidate on this workload for three independent, measured reasons:</p>
+<ol>
+  <li><b>The bottleneck is ticket supply, not orchestration.</b> Over the 16 h window, 7 seats × 951 min = 6,657 seat-minutes. 44.6% went idle because no accepted ticket existed; 27.2% waited on a real ordering dependency or a human gate. Only 13.0% was a legal ticket waiting while a seat sat free (lead latency). Live board right now: 207 open rows, <b>200 without a ticket</b>, 0 ready. A better dispatcher can recover at most the 13% slice; a better scheduler recovers nothing.</li>
+  <li><b>Both candidates would have made correctness errors MyLoop did not make.</b> Replaying the real dispatch epochs with each candidate's dependency semantics released 12 rows into an exclusive resource (the Docker stack or the warehouse) that another in-flight row was rebuilding, and Superharness's deps-only model additionally released one genuine same-file write conflict. Zero false-BLOCKED decisions were attributable to MyLoop's scheduler; every legal-but-undispatched row was the lead not acting, not the rule refusing.</li>
+  <li><b>Neither candidate runs here as shipped.</b> AIWorkHub refuses task creation unless its MCP server's parent is a VS Code-hosted Claude session (this machine's sessions report <span class="k">entrypoint: "cli"</span>) and its Windows worker launch is blocked by two localized bugs (a DLL export looked up in <span class="k">kernel32</span> instead of <span class="k">kernelbase</span>; no <span class="k">windows_appcontainer</span> branch in <span class="k">sandbox_argv</span>). Superharness hard-codes <span class="k">bash</span> and the util-linux <span class="k">script</span> binary on its dispatch path; the escape is an undocumented-by-default env var plus Git Bash. Neither was executed against the backlog, so no wall-clock figure for either exists, and under the burden of proof that alone forbids REPLACE.</li>
+</ol>
+<p>What the investigation <i>did</i> find is a short list of genuine MyLoop defects (non-atomic state writes that stop the whole loop on a torn file, three crash points that strand a row, no automatic LOST, a dispatch race) and two mechanisms worth borrowing from the candidates (version-checked updates and epoch-fenced claims). Those are one to two days of scripted work inside the existing design, listed in section 10.</p>
+
+<h2 id="s2">2 · Architecture comparison</h2>
+<h3>2.1 MyLoop as it actually runs (traced, not documented)</h3>
+<div class="flow">TICKET (lead or ticket-author agent writes PLAN-&lt;key&gt;.md + grader + self-test)
+  │  Mark-Started.ps1        → dispatched.json entry {phase: ticket}         board: TICKETED
+  │  Test-Ticket.ps1         → refuses only (grader RED on named clauses, trap stub, CLAUSE READING); lead reads every clause
+  ▼
+Get-ReadySet.ps1            → largest legal set, greedy in schedule-order, ≤ maxParallel 7; prints FIRST block reason per row
+Dispatch-Row.ps1 -Keys a,b  → refuses: green grader, failed self-test, writeSet overlap, after not closed, gate unapproved,
+  │                            exclusive held, testProject busy, unchanged ticket+grader hash (LOST attempt exempt)
+  │                          → rows/&lt;key&gt;.json state=dispatched, _snap-&lt;key&gt;.json (tree hash), wave/&lt;key&gt;.prompt.md, wave.json
+  ▼
+Workflow(myloop-wave.js)    → foreman-worker agent per row IN PARALLEL (inside the lead session); null result ⇒ LOST record
+  ▼
+Collect-Row.ps1 -Status     → class checks (grader, build, tests ≥ floor, constraint vs snapshot, crosschecks) + regression graders
+  │                            of closed rows touching changed files → state=collected, verdict sheet
+  ▼
+Workflow(stage verify)      → blind foreman-verifier per code/security row; Collect-Row -Verifier records from a FILE
+  ▼
+Close-Row.ps1 -Residual     → refuses failed checks / missing verdict unless -Override reason; merges append-only lines;
+                               board Close-Row moves dispatched→started.json; board status line; schedule regen; state=closed
+Reject (-Reject) → state=rejected → sharpened ticket → Dispatch (attempt N+1)      Reconcile-Rows -MarkLost → state=lost</div>
+
+<div class="scroll"><table>
+<tr><th>State</th><th>Persisted in</th><th>Entered by</th><th>Leaves via</th><th>Idempotent re-entry</th><th>Can strand?</th></tr>
+<tr><td>(ticketed)</td><td>tools/dispatched.json entry with <span class="k">phase</span></td><td>Mark-Started</td><td>Dispatch-Row (keeps <span class="k">at</span>)</td><td>yes</td><td>no record; entry is the only trace</td></tr>
+<tr><td>dispatched</td><td>rows/&lt;key&gt;.json + dispatched.json + _snap</td><td>Dispatch-Row</td><td>Collect / MarkLost</td><td>refused (already dispatched)</td><td><b>yes</b>: F1, F2, F3 (section 3)</td></tr>
+<tr><td>collected</td><td>rows/&lt;key&gt;.json (checks, verifier)</td><td>Collect-Row</td><td>Close / Reject</td><td>yes (re-collect overwrites)</td><td><b>yes</b>: F6</td></tr>
+<tr><td>closed</td><td>row + actuals.json + started.json + board line</td><td>Close-Row</td><td>terminal</td><td>refused (not collected)</td><td>partial: F7 (record closed, board not)</td></tr>
+<tr><td>rejected</td><td>row (attempt.rejectedAt)</td><td>Collect -Reject</td><td>Dispatch attempt N+1</td><td>hash guard</td><td>no</td></tr>
+<tr><td>lost</td><td>row (attempt.status LOST)</td><td>Reconcile -MarkLost (human)</td><td>Dispatch (hash guard waived)</td><td>yes</td><td>no, but entry is manual</td></tr>
+<tr><td>approved (gate)</td><td>rows/&lt;n&gt;.json class=gate</td><td>Approve-Gate (human words)</td><td>terminal</td><td>refused without batch PASS</td><td>no</td></tr>
+</table></div>
+<p class="small">No transition matrix exists; each script checks the states it accepts. The lead lock (<span class="k">foreman-state.json</span>, 45 min stale) is the only mutual exclusion. Every JSON write is <span class="k">File.WriteAllText</span> in place (15 sites, 0 temp+rename). Events go to an append-only <span class="k">events.jsonl</span> with share-read retry. MyLoop's own suite: <span class="tag meas">18 / 18 pass</span> on a scratch copy of the live records.</p>
+
+<h3>2.2 The candidates, classified from implementation</h3>
+<p>Every cell below was traced to code with file:line by a fresh-context inspector and the load-bearing ones re-read by the lead. Legend: <span class="tag impl">IMPLEMENTED</span> <span class="tag part">PARTIAL</span> <span class="tag doc">DOCUMENTED ONLY</span> <span class="tag none">NOT PRESENT</span>.</p>
+<div class="scroll"><table>
+<tr><th>Capability</th><th>MyLoop</th><th>AIWorkHub (head 3ceb24d, 2026-09-15)</th><th>Superharness (v1.84.1, 2026-08-28; upstream 09-12 differs by 1 file)</th></tr>
+<tr><td>Durable state</td><td><span class="tag part">PARTIAL</span> JSON per row, non-atomic writes</td><td><span class="tag impl">IMPLEMENTED</span> SQLite WAL, <span class="k">BEGIN IMMEDIATE</span>, write lease; JSON side files temp+rename</td><td><span class="tag impl">IMPLEMENTED</span> SQLite schema v39, YAML export-only, <span class="k">version</span>-checked UPDATE → ConcurrencyError; daemon state file not atomic</td></tr>
+<tr><td>State machine</td><td><span class="tag part">PARTIAL</span> per-script guards, no matrix</td><td><span class="tag part">PARTIAL</span> FSM exists, 25 SQL sites write <span class="k">tasks.status</span>, one FSM call site, no CHECK</td><td><span class="tag impl">IMPLEMENTED</span> 18 states, explicit graph, DB CHECK (v35), 370 transition tests; fail-open on unknown status; <span class="k">force=True</span> hatch</td></tr>
+<tr><td>DAG scheduling</td><td><span class="tag impl">IMPLEMENTED</span> after (closed), gate, exclusive, testProject, writeSet; greedy largest legal set; no cycle report</td><td><span class="tag part">PARTIAL</span> <span class="k">depends_on</span> direct parents only; cycle check at edge creation; <b>advisory</b>: <span class="k">claim_start_exact</span> and launch preflight never read <span class="k">depends_on</span></td><td><span class="tag part">PARTIAL</span> <span class="k">blocked_by</span> table; four inconsistent readiness implementations; <span class="k">auto_dispatch</span> skips any non-empty <span class="k">blocked_by</span> forever; no cycle check; <span class="k">get_unblocked</span> has zero callers</td></tr>
+<tr><td>Write-collision prevention</td><td><span class="tag impl">IMPLEMENTED</span> prefix overlap, appendOnly exempt</td><td><span class="tag part">PARTIAL</span> <span class="k">allowed_writes</span> mandatory; enforcing guard is glob-blind (<span class="k">glob_aware=False</span>), advisory plan guard is not</td><td><span class="tag none">NOT PRESENT</span> only post-hoc <span class="k">git diff --name-only</span> snapshot</td></tr>
+<tr><td>Named resource locks</td><td><span class="tag impl">IMPLEMENTED</span> <span class="k">exclusive: [stack, warehouse]</span></td><td><span class="tag none">NOT PRESENT</span></td><td><span class="tag none">NOT PRESENT</span></td></tr>
+<tr><td>Worktree isolation</td><td><span class="tag none">NOT PRESENT</span> by design (never commit/branch; graders run on the live tree + Docker stack)</td><td><span class="tag impl">IMPLEMENTED</span> per attempt; promote = hash-guarded file copy, not git merge</td><td><span class="tag part">PARTIAL</span> conditional (Pi or dirty tree); <span class="k">--detach</span>, removed <span class="k">--force</span>, <b>no merge-back on the dispatch path</b></td></tr>
+<tr><td>Worker leases</td><td><span class="tag none">NOT PRESENT</span> agents live inside the lead session; wave returns LOST</td><td><span class="tag part">PARTIAL</span> supervisor heartbeat 15 s, lease 60 s + 120 s grace, PID creation-time identity; no lease column on task row</td><td><span class="tag part">PARTIAL</span> atomic <span class="k">claim_next</span>; PID reclaim scans <span class="k">status='running'</span> which nothing writes; real detection is 15 min log inactivity</td></tr>
+<tr><td>Crash recovery (control plane)</td><td><span class="tag part">PARTIAL</span> Reconcile flags; 3 stranding points measured</td><td><span class="tag impl">IMPLEMENTED</span> append-only ledger replayed on start, epoch-fenced CAS, reconciler daemon 30 s; recovered tasks go to <span class="k">blocked</span>, never auto-relaunch</td><td><span class="tag part">PARTIAL</span> supervisor respawn, singleton lease; no in-flight dispatch reconcile (claim-then-die row stays <span class="k">launched</span> 15–20 min)</td></tr>
+<tr><td>Orphan recovery</td><td><span class="tag part">PARTIAL</span> OVERDUE at 3× calibrated est; human runs -MarkLost</td><td><span class="tag impl">IMPLEMENTED</span> identity-first tree kill, Job Object kill-on-close</td><td><span class="tag part">PARTIAL</span> time-based only; nothing kills the orphaned agent process</td></tr>
+<tr><td>Retry semantics</td><td><span class="tag impl">IMPLEMENTED</span> unchanged ticket+grader refused; two-strike rule</td><td><span class="tag impl">IMPLEMENTED</span> transient budget 3, backoff 30·2ⁿ; new worktree per attempt</td><td><span class="tag impl">IMPLEMENTED</span> max_retries 3, cap 12, cross-agent fallback; <b>no backoff</b>, opt-in</td></tr>
+<tr><td>Idempotency</td><td><span class="tag part">PARTIAL</span> re-collect yes; close-after-board-step no (F6)</td><td><span class="tag impl">IMPLEMENTED</span> <span class="k">already_reconciled</span>, terminal-state short-circuit</td><td><span class="tag part">PARTIAL</span> version CAS on rows; re-run not guarded</td></tr>
+<tr><td>Fair scheduling / starvation</td><td><span class="tag part">PARTIAL</span> board order; theoretical starvation of low-order wide write sets, never observed</td><td><span class="tag part">PARTIAL</span> LIFO <span class="k">ORDER BY updated_at DESC</span>; priority rank omits the default <span class="k">normal</span> (ranks below <span class="k">low</span>)</td><td><span class="tag part">PARTIAL</span> strict priority + FIFO, no aging</td></tr>
+<tr><td>Parallel ticket creation</td><td><span class="tag impl">IMPLEMENTED</span> author agents in parallel, two acceptance gates</td><td><span class="tag part">PARTIAL</span> one MCP call per task, identity-gated</td><td><span class="tag impl">IMPLEMENTED</span> CLI create, topological order required</td></tr>
+<tr><td>Parallel execution</td><td><span class="tag impl">IMPLEMENTED</span> ≤7, measured max 3 concurrent</td><td><span class="tag impl">IMPLEMENTED</span> <span class="k">AIWORKHUB_MAX_PROCESSES</span> default 4, max 32</td><td><span class="tag none">NOT PRESENT</span> as a setting; structural ceiling ≈ one in-flight worker per registered agent (≤5)</td></tr>
+<tr><td>Collection pipeline</td><td><span class="tag impl">IMPLEMENTED</span> grader/build/tests/constraint/crosscheck/regression</td><td><span class="tag impl">IMPLEMENTED</span> per-task declared validation commands really run, hashed outputs</td><td><span class="tag doc">DOCUMENTED ONLY</span> <span class="k">verify.py</span> takes <span class="k">--result pass|fail</span> from the caller; runs nothing</td></tr>
+<tr><td>Blind verifier</td><td><span class="tag impl">IMPLEMENTED</span> fresh agent, ticket + diff, never the worker's reasoning</td><td><span class="tag impl">IMPLEMENTED</span> closed review packet, "not given the worker's rationale"</td><td><span class="tag doc">DOCUMENTED ONLY</span> <span class="k">DispatchProfile.validator</span> is unwired; live reviewer is told to read the worker's handoff</td></tr>
+<tr><td>Human gates</td><td><span class="tag impl">IMPLEMENTED</span> gate rows, batch PASS required</td><td><span class="tag part">PARTIAL</span> a bool supplied by the AI coordinator</td><td><span class="tag impl">IMPLEMENTED</span> approve/reject, idempotent; "away mode" <span class="tag none">NOT PRESENT</span></td></tr>
+<tr><td>Metrics / event history</td><td><span class="tag impl">IMPLEMENTED</span> events.jsonl, throughput.md, replayable</td><td><span class="tag impl">IMPLEMENTED</span> ~60 KPIs over MCP; no HTTP dashboard; console script entry dangling</td><td><span class="tag impl">IMPLEMENTED</span> HTTP dashboard, events table; unbounded growth</td></tr>
+<tr><td>Multi-model routing</td><td><span class="tag part">PARTIAL</span> per-class seat model in foreman.json</td><td><span class="tag impl">IMPLEMENTED</span> 10 adapters, capability/cost routing</td><td><span class="tag impl">IMPLEMENTED</span> 5 harnesses, tier router, fallback chain</td></tr>
+<tr><td>Claude Code as worker</td><td><span class="tag impl">IMPLEMENTED</span> Agent/Workflow in-session</td><td><span class="tag impl">IMPLEMENTED</span> <span class="k">claude -p … --permission-mode dontAsk</span> (argv verified against CLI 2.1.273) but unreachable on Windows today</td><td><span class="tag impl">IMPLEMENTED</span> <span class="k">claude -p --dangerously-skip-permissions</span> via bash launcher; SDK path is the Windows-clean route</td></tr>
+<tr><td>Headless on this machine (Win 11, no VS Code, no tmux)</td><td><span class="tag impl">runs today</span></td><td><span class="tag none">blocked</span> creation gate + 2 launch bugs</td><td><span class="tag part">plausible</span> Git Bash + <span class="k">SUPERHARNESS_NO_PTY_WRAP=1</span>; not executed</td></tr>
+</table></div>
+<p class="small">Size and tests: AIWorkHub ~200k LOC Python, 11,146 tests collected, ran here → <span class="k">10282 passed, 374 failed</span> (Windows platform failures; the curated Windows manifests pass 148/148 and 139/139). Superharness 74k LOC, 5,155 test functions; <span class="k">tests/state_machine + tests/chaos</span> → <span class="k">390 passed</span>; full <span class="k">tests/unit + state_machine + chaos</span> → <span class="k">81 failed, 4146 passed, 834 skipped</span> in 32 min. The core <span class="k">db / engine / daemon</span> subdirectories fail only 4, all one Windows cp1252 <span class="k">read_text()</span> defect in a test (426 encoding-less call sites in the suite); the 834 skips carry the string "legacy YAML fixture — pending SQLite migration (see PR #208)", which is where the whole dependency test module sits. HydraFusion is a closed research preview inside GitHub Copilot CLI (Single / Cascade / Critique per turn; +4.9 quality at −67% cost on TerminalBench 2.1, −1.5 on DeepSWE). No source, no self-hosting, no task-level scheduling: a per-turn model-routing pattern, evaluated only as Option E.</p>
+
+<h2 id="s3">3 · Reliability findings</h2>
+<h3>3.1 MyLoop crash injection (measured, scratch copies, exit 137 planted in copied scripts)</h3>
+<div class="scroll"><table>
+<tr><th>#</th><th>Kill point</th><th>State left behind</th><th>What the loop does next</th><th>Verdict</th></tr>
+<tr><td>F1</td><td>Dispatch-Row after row record written, before snapshot / dispatched.json / event</td><td>row <span class="k">dispatched</span>, no snapshot, not in dispatched.json</td><td>Reconcile flags "NOT in dispatched.json"; re-dispatch refused ("already dispatched"); collect FAILs constraint ("no dispatch snapshot")</td><td><span class="tag none">STRANDED</span> until human -MarkLost</td></tr>
+<tr><td>F2</td><td>Dispatch-Row before wave.json (no worker ever launched)</td><td>row <span class="k">dispatched</span>, no prompt file</td><td>indistinguishable from a running worker until OVERDUE; -MarkLost then re-dispatch works (LOST waives hash guard)</td><td><span class="tag part">manual recovery, no loss</span></td></tr>
+<tr><td>F3</td><td>Worker vanishes (lead session dies), 2 h silence</td><td>row <span class="k">dispatched</span></td><td>Reconcile: "OVERDUE 121m &gt; 3× calibrated 9m, check /tasks; if gone -MarkLost". Nothing changes state automatically</td><td><span class="tag part">detected, not acted on</span></td></tr>
+<tr><td>F4</td><td>Collect-Row after status stamped, before checks</td><td>attempt.status DONE, state dispatched</td><td>Sync-Board owes "Collect-Row"; re-collect → collected</td><td><span class="tag impl">idempotent</span></td></tr>
+<tr><td>F5</td><td>Collect-Row after checks, before state write</td><td>state dispatched, 0 checks</td><td>Close refused; re-collect → collected</td><td><span class="tag impl">idempotent</span></td></tr>
+<tr><td>F6</td><td>Close-Row after board close (dispatched.json → started.json), before row record</td><td>row <span class="k">collected</span>, entry gone</td><td>retry close fails forever: "dispatched.json has no entry"; only a hand edit clears it (forbidden by principle)</td><td><span class="tag none">STRANDED</span></td></tr>
+<tr><td>F7</td><td>Close-Row after row record closed, before board line</td><td>row closed, board still open</td><td>scheduler correct (reads the record); board/schedule/TaskUpdate wrong forever (nothing re-derives the line)</td><td><span class="tag part">misreport</span></td></tr>
+<tr><td>F8</td><td>Torn row JSON (power cut mid WriteAllText)</td><td>half a file</td><td>Reconcile, Sync-Board, Get-ReadySet and Dispatch of an <b>unrelated</b> row all die in <span class="k">ConvertFrom-Json</span></td><td><span class="tag none">WHOLE LOOP STOPS</span></td></tr>
+<tr><td>F9</td><td>Torn dispatched.json</td><td>half a file</td><td>same: every script dies</td><td><span class="tag none">WHOLE LOOP STOPS</span></td></tr>
+<tr><td>F10</td><td>Two Dispatch-Row processes at once (disjoint rows; what parallel tool calls do)</td><td>both rows dispatched</td><td>dispatched.json lost one entry; wave.json holds only the last writer's row</td><td><span class="tag none">LOST UPDATE</span></td></tr>
+</table></div>
+<p>Root cause of F8/F9/F10 is one pattern: read-modify-write of whole JSON files with no temp+rename and no lock. Root cause of F1/F6 is multi-file transactions with no ordering rule or reconciliation. All are inside <span class="k">RowCommon.ps1</span> and the two board scripts; none requires a new system.</p>
+<p>Observed in production records: 4 LOST attempts across 88 rows (all after a session died), each recovered by -MarkLost and re-dispatch; one attempt has no <span class="k">lostAt</span> stamp. No duplicate execution, no lost closed row.</p>
+
+<h3>3.2 Check misattribution: the wave problem in numbers</h3>
+<p>82 closed rows, <b>39 closed with an -Override</b> (48%). Failed-check categories among those overrides: regression grader red on a changed tree 35, crosscheck 12, build/tests 8, repo changed under a mockup/doc row 6, grader 5, constraint 3. In <b>19</b> rows every failed check was attribution-class (another row's files, a lead-merged append line, a closed grader reacting to a wave-mate). Concrete cases: 52.S0.4y failed build/tests on 52.S0.8's half-landed edit and passed on re-collect; 52.S0.4v failed constraint on a census line the lead merged while it ran. This is the known 48.WAVE1 defect. It is a collect-design issue; a candidate scheduler does not see the compiler either (AIWorkHub isolates per worktree, which sidesteps it at the cost of graders that must run in a worktree, not against the live stack).</p>
+
+<h3>3.3 Candidate reliability, from their code and their own tests</h3>
+<div class="grid2">
+<div class="card"><h3>AIWorkHub</h3><p>Strongest recovery story of the three: durable reservation row before spawn, ledger replay classifying each request by PID identity (UNKNOWN defers, MISMATCH finalizes), epoch-fenced full-card CAS, reconciler thread every 30 s, Job Object kill-on-close. Chaos tests assert real things (crashed supervisor still routes to review; orphaned child is terminated; expired lease cannot mutate after reclaim). Weak spots: task row has no lease column; launch reservation lease is fixed 120 s and never renewed; no fsync on the ledger append; recovered work lands in <span class="k">blocked</span> and needs a manager.</p></div>
+<div class="card"><h3>Superharness</h3><p>State layer is genuinely solid (SQLite tx, version CAS, atomic claim, DB CHECK on status). Execution layer is weaker than the README: the only PID-aware inbox reclaim scans a status nothing writes, so worker death is noticed by 15 min log silence; a daemon killed between claim and spawn leaves a phantom <span class="k">launched</span> row for 15–20 min; the orphan agent is never killed; daemon state file is a non-atomic <span class="k">write_text</span>; Windows timeout terminates the direct child only (no tree kill). Its chaos suite covers DB concurrency and garbage files well, and one real runaway incident (max_retries reached 65) is now guarded.</p></div>
+</div>
+
+<h2 id="s4">4 · Scheduler findings</h2>
+<h3>4.1 Shadow replay over the real backlog</h3>
+<p>Method: every <span class="k">dispatched</span> event since the event log began (2026-09-15 17:54) is a scheduling epoch (27). At each, the in-flight set and the ready tickets (first <span class="k">ticket-check ready=true</span> or <span class="k">ticket-ready</span> event) were reconstructed from the records, then three schedulers were asked what else was legal: <b>MyLoop semantics</b> (after, gate, exclusive, testProject, writeSet prefix overlap with appendOnly exempt), <b>deps + write scope</b> (the AIWorkHub shape: <span class="k">depends_on</span> + <span class="k">allowed_writes</span>, no named resources), and <b>deps only</b> (the Superharness shape: <span class="k">blocked_by</span>).</p>
+<div class="scroll"><table>
+<tr><th>Measure</th><th class="num">Value</th><th>Reading</th></tr>
+<tr><td>Dispatch epochs</td><td class="num">27</td><td>39 rows closed in the window</td></tr>
+<tr><td>Σ actual in flight ÷ Σ MyLoop-legal in flight</td><td class="num">78 / 92 = 0.85</td><td>15% of legal seats unfilled at dispatch moments: lead did not dispatch a legal row (48.CGL1, 48.RFM2, 48.RGD1 at 00:09 the largest gap)</td></tr>
+<tr><td>MyLoop false READY (measured in production)</td><td class="num">3 in 39</td><td>shared build (4y/8), grader side effect (RFM2 plants a file in src/Domain), append-only close under a live row (4t/4v); all invisible to every scheduler here, all filed as 48.WAVE1 / 48.CGL2</td></tr>
+<tr><td>MyLoop false BLOCKED by rule</td><td class="num">0</td><td>every held row was held by a true dependency, a true exclusive or a true same-file overlap; the "extra" rows were lead latency</td></tr>
+<tr><td>Deps-only would release beyond MyLoop</td><td class="num">13</td><td>12 × exclusive (52.P2.6 into the stack/warehouse another row was rebuilding, 52.P1.8b4a into the stack) + 1 × same-file overlap (52.S0.4q vs 52.S0.4l on <span class="k">StandingFleet.cs</span>)</td></tr>
+<tr><td>Deps + write-scope would release beyond MyLoop</td><td class="num">12</td><td>all 12 exclusive cases; the write-scope check catches the file overlap</td></tr>
+<tr><td>Both candidates would release fewer than MyLoop</td><td class="num">0</td><td>no false-BLOCKED advantage anywhere</td></tr>
+</table></div>
+<p>Each of those 12 releases is a correctness failure on this workload: the rows rebuild the Docker stack or migrate the warehouse, and two of them running together produces a proof receipt certifying a build that no longer exists (the exact failure the exclusive class was added to prevent on 09-15). There is one hidden edge no scheduler encoded (48.RFM2's grader side effect); the lead caught it by reading, and the shadow scheduler credits MyLoop with a legal-but-undispatched seat there. That is one false READY shared by all three systems, and it is the argument for the lead's clause read, not for a scheduler.</p>
+
+<h3>4.2 Scheduler defects found in each</h3>
+<div class="scroll"><table>
+<tr><th>System</th><th>Defect</th><th>Effect</th><th>Evidence</th></tr>
+<tr><td>MyLoop</td><td>No cycle diagnosis</td><td>two rows <span class="k">after</span> each other read "waits on X (no row record)" forever</td><td>measured on a scratch pair T.X/T.Y</td></tr>
+<tr><td>MyLoop</td><td>Compiler, grader side effects, append merge not modelled</td><td>3 misattributed collects in 39 rows; 19 override closes</td><td>row records; 48.WAVE1</td></tr>
+<tr><td>MyLoop</td><td>Greedy board order</td><td>a low-order row with a wide write set can starve; never observed because tickets are scarce</td><td>Get-ReadySet.ps1 packing loop</td></tr>
+<tr><td>AIWorkHub</td><td>DAG advisory on the launch path</td><td>explicit launch of a dependency-blocked card runs against missing inputs</td><td><span class="k">core.claim_start_exact</span> and <span class="k">_preflight</span> never read <span class="k">depends_on</span> (re-verified)</td></tr>
+<tr><td>AIWorkHub</td><td>Enforcing collision guard glob-blind</td><td><span class="k">src/**</span> and <span class="k">src/a.py</span> admitted together</td><td><span class="k">core.py:3448-3453</span>, <span class="k">glob_aware=False</span> at 8525</td></tr>
+<tr><td>AIWorkHub</td><td>LIFO dispatch; default priority ranks below <span class="k">low</span></td><td>starvation of older cards; priority inversion</td><td><span class="k">ORDER BY updated_at DESC</span> (re-verified); <span class="k">priority_rank</span> lacks <span class="k">normal</span> (re-verified)</td></tr>
+<tr><td>AIWorkHub</td><td>Archived-finished dependency blocks dependents forever; cancelled dep read as pending</td><td>permanent false BLOCKED</td><td><span class="k">task_plan.py:362-363, 549-571</span></td></tr>
+<tr><td>Superharness</td><td><span class="k">auto_dispatch</span> skips any non-empty <span class="k">blocked_by</span> without reading blocker status</td><td>permanent false BLOCKED for every dependent task on the autonomous path</td><td><span class="k">auto_dispatch.py:304-309</span> (re-verified)</td></tr>
+<tr><td>Superharness</td><td>Four readiness implementations disagree (<span class="k">done</span> vs <span class="k">done|archived</span>; missing task ⇒ ready; DB error ⇒ ready)</td><td>same graph READY at one gate, BLOCKED at another; fail-open false READY</td><td><span class="k">engine/inbox.py:58-79</span>, <span class="k">inbox_watch.py:49-65</span></td></tr>
+<tr><td>Superharness</td><td>No cycle detection beyond self-reference; dependency test module wholly skipped</td><td>mutual deadlock archived by lifecycle timers as if worked</td><td><span class="k">tests/unit/test_task_dependencies.py:25-27</span></td></tr>
+</table></div>
+
+<h2 id="s5">5 · Performance results</h2>
+<p><span class="tag meas">MEASURED</span> MyLoop, from <span class="k">events.jsonl</span> and row records. <span class="tag none">NOT MEASURED</span> AIWorkHub and Superharness: neither could be executed against the backlog here (section 1, point 3). No wall-clock, utilization or token figure is claimed for either; features not exercised earn no points.</p>
+<div class="scroll"><table>
+<tr><th>Metric (MyLoop)</th><th class="num">Value</th><th>Source</th></tr>
+<tr><td>Rows closed per wall hour (24 h to 09-16 08:48)</td><td class="num">1.62</td><td>Get-Throughput</td></tr>
+<tr><td>Estimated minutes delivered per wall hour</td><td class="num">108</td><td>Get-Throughput (2,588 est-min / 24 h)</td></tr>
+<tr><td>Mean workers running (24 h) / (16 h replay window)</td><td class="num">0.59 / 0.64</td><td>Get-Throughput / replay</td></tr>
+<tr><td>Max concurrent workers (limit 7)</td><td class="num">3</td><td>replay</td></tr>
+<tr><td>Seat-minutes busy</td><td class="num">609 of 6,657 (9.1%)</td><td>replay</td></tr>
+<tr><td>Row time by phase: queue / ticket / work / verify</td><td class="num">45% / 21% / 14% / 8%</td><td>Get-Throughput phase table</td></tr>
+<tr><td>Finished worker waiting to be collected (24 h)</td><td class="num">223 min</td><td>Get-Throughput</td></tr>
+<tr><td>Collect run median / verify median</td><td class="num">4 min / 12 min</td><td>Get-Throughput</td></tr>
+<tr><td>Retried rows in window / rework</td><td class="num">5 of 39 / 70 min (1%)</td><td>Get-Throughput</td></tr>
+<tr><td>Actual ÷ estimate, median (82 closed)</td><td class="num">0.44</td><td>row records</td></tr>
+<tr><td>Attempts per closed row</td><td class="num">1:59 · 2:19 · 4:3 · 6:1</td><td>row records</td></tr>
+<tr><td>Lead acceptance read, median per ticket</td><td class="num">7 min (13 rows)</td><td>lead-read events</td></tr>
+<tr><td>Worker tokens per attempt, median by class</td><td class="num">mockup 197k · code 157k · doc 162k · security 270k</td><td>WAVE-UPGRADE baseline</td></tr>
+</table></div>
+
+<h3>Where the seven seats went (Phase 8)</h3>
+<p>Minute by minute over the 951-minute replay window, each free seat was assigned to the first reason it was free. "Unknown" is empty.</p>
+<div class="bar" aria-hidden="true">
+  <span style="width:44.6%;background:var(--c1)" title="no ticket supply 44.6%"></span>
+  <span style="width:27.2%;background:var(--c2)" title="dependency / gate 27.2%"></span>
+  <span style="width:13.0%;background:var(--c4)" title="lead latency 13.0%"></span>
+  <span style="width:9.1%;background:var(--c3)" title="busy 9.1%"></span>
+  <span style="width:5.2%;background:var(--c6)" title="exclusive 5.2%"></span>
+  <span style="width:0.8%;background:var(--c5)" title="write-set 0.8%"></span>
+</div>
+<div class="legend">
+  <i style="background:var(--c1)"></i><span>No ticket supply (seat free, nothing ticketed and legal)</span><span class="n">2,972</span><span class="n">44.6%</span>
+  <i style="background:var(--c2)"></i><span>Real dependency block (<span class="k">after</span> not closed, or a gate; includes gates waiting on their own unticketed input)</span><span class="n">1,812</span><span class="n">27.2%</span>
+  <i style="background:var(--c4)"></i><span>Lead latency: a legal ticket waited while a seat was free</span><span class="n">867</span><span class="n">13.0%</span>
+  <i style="background:var(--c3)"></i><span>Busy: a worker running</span><span class="n">609</span><span class="n">9.1%</span>
+  <i style="background:var(--c6)"></i><span>Exclusive resource held (stack / warehouse / testProject)</span><span class="n">344</span><span class="n">5.2%</span>
+  <i style="background:var(--c5)"></i><span>Write-set conflict with a row in flight</span><span class="n">53</span><span class="n">0.8%</span>
+</div>
+<p class="small">Seat-minutes, 7 seats × 951 min = 6,657. Separately, 774 row-minutes were spent in flight with the worker already finished, waiting on collect / verify / close; those are lead minutes, not seats. The daily Get-Throughput figures agree in shape: 290 min with no worker while a ready ticket waited, 193 min where ticket writing alone held the loop, 223 min finished-uncollected.</p>
+<p>Reading: <b>the only orchestrator-addressable loss is the 13% lead-latency slice plus the collect wait.</b> Both are "a script should have run without being asked": auto-dispatch of the Get-ReadySet result and auto-collect on a wave return. Everything larger is either the absence of a ticket (a human and author-agent activity both candidates also require) or a real dependency. A candidate that filled every legal seat instantly would raise busy seat-minutes from 609 toward at most 1,476, and would then idle on supply.</p>
+
+<h2 id="s6">6 · Dependency model comparison</h2>
+<div class="scroll"><table>
+<tr><th>Dependency class (from the real backlog)</th><th>Example rows</th><th>MyLoop</th><th>AIWorkHub</th><th>Superharness</th></tr>
+<tr><td>No dependency</td><td>52.S0.4b, 52.S0.4d</td><td>ready</td><td>ready</td><td>ready</td></tr>
+<tr><td>Simple <span class="k">after</span></td><td>48.SWR1 after 48.RFM2</td><td>closed-state check</td><td><span class="k">depends_on</span> = finished (advisory on explicit launch)</td><td><span class="k">blocked_by</span> = done (auto-dispatch never re-evaluates)</td></tr>
+<tr><td>Multiple predecessors</td><td>52.P2.7 after 52.P2.5, 52.P2.6; 52.S0.9 after 52.S0.8, 52.S0.8m</td><td>all closed</td><td>all finished, direct parents only</td><td>all done; <span class="k">archived</span> parent blocks forever at the watcher gate</td></tr>
+<tr><td>Transitive chain</td><td>52.S0.4u after 4p after 4n after 4t</td><td>implied by closed requirement</td><td>implied, except terminal-artifact deps are dropped from the edge set</td><td>implied, broken by <span class="k">force=True</span> transitions</td></tr>
+<tr><td>Write overlap, same file</td><td>52.S0.4q vs 52.S0.4l (<span class="k">StandingFleet.cs</span>)</td><td>refused</td><td>refused (exact path); glob case leaks</td><td><span class="tag none">not modelled</span></td></tr>
+<tr><td>Disjoint files, common project build</td><td>52.S0.4y with 52.S0.8</td><td><span class="tag none">not modelled</span> (misattributed collect)</td><td>sidestepped by per-attempt worktree; graders then run off the live stack</td><td>conditional worktree, no merge-back</td></tr>
+<tr><td>Shared test project (assembly lock)</td><td>52.S0.4x, 52.S0.8c, 52.S0.8d</td><td><span class="k">testProject</span>, used sparingly by measurement</td><td><span class="tag none">not modelled</span></td><td><span class="tag none">not modelled</span></td></tr>
+<tr><td>Exclusive stack / warehouse</td><td>52.P2.5, 52.P2.6, 52.S0.4n/p/u, 52.S0.8c/d, 52.P1.8b4a</td><td><span class="k">exclusive: [stack, warehouse]</span></td><td><span class="tag none">not modelled</span> (12 shadow false READYs)</td><td><span class="tag none">not modelled</span> (12 shadow false READYs)</td></tr>
+<tr><td>Append-only shared file</td><td>tests/CENSUS-INVENTORY.md across 20+ rows</td><td>exempt from overlap; staged lines merged at close; close-under-live-row misattribution open</td><td>would collide on <span class="k">allowed_writes</span> (serialises) or needs promote-time merge</td><td><span class="tag none">not modelled</span></td></tr>
+<tr><td>Grader side effect</td><td>48.RFM2 plants a file under src/Domain</td><td><span class="tag none">not modelled</span>; lead caught it</td><td><span class="tag none">not modelled</span></td><td><span class="tag none">not modelled</span></td></tr>
+<tr><td>Long / very short tasks</td><td>52.S0.3b 315 min, 6 attempts · 52.S0.4y 7 min</td><td>calibrated estimate, OVERDUE 3×</td><td>7200 s default timeout</td><td>effort-tier timeouts 15/30/60 min, lifecycle archive at 180 min</td></tr>
+<tr><td>Verifier failure / residual</td><td>52.P1.3c (4 attempts), 52.S0.4 two-strike close with residual row</td><td>reject → sharpened ticket → hash-guarded re-dispatch; Residual must name a filed row</td><td>reject_review → rework with predecessor tree pinned</td><td>review_failed → plan_proposed; verify result is caller-typed</td></tr>
+<tr><td>Human gate with unfinished input</td><td>gates 67, 70</td><td>"gate has nothing to approve yet: X has NO TICKET" (fixed 09-16)</td><td>risk-tier approval bool</td><td>pending_user_approval state</td></tr>
+</table></div>
+
+<h2 id="s7">7 · What we could delete (if a candidate were adopted)</h2>
+<p>Listed for completeness; the recommendation is not to adopt. Under <b>Option A (Superharness as execution substrate)</b>: <span class="k">Claim-Lead</span>/lead lock (replaced by watcher singleton), the OVERDUE half of <span class="k">Reconcile-Rows</span>, <span class="k">Set-Pause</span>, the Monitor fallback, the wave's LOST detection, dispatched.json/started.json bookkeeping (≈600 lines of PowerShell). Under <b>Option D (AIWorkHub replaces all)</b>: additionally Get-ReadySet, Dispatch-Row's overlap and after checks, snapshots and constraint gate (its worktree + scope violation covers part), the collect class checks (its declared validation runs), the blind verifier prompt builder (its review packet). What would <i>not</i> be deletable under either: everything in section 8.</p>
+
+<h2 id="s8">8 · What we must retain</h2>
+<ul>
+  <li><b>Named exclusive resources and testProject</b>: absent from both candidates; responsible for 12 of 13 shadow disagreements.</li>
+  <li><b>Ticket discipline</b>: grader RED at dispatch, self-test with a trap stub, CLAUSE READING, the lead's clause read (4 of 6 reads found a defect no script could), unchanged-ticket refusal, two-strike rule, Residual gate at close. No candidate has an equivalent; Superharness's verify is caller-typed, AIWorkHub's validation is real but its "human" gate is an AI-supplied bool.</li>
+  <li><b>Live-tree execution</b>: proofs run against the running Docker stack, the warehouse and the vault; worktree isolation is not a substitute, and "never commit, never branch" is a standing rule.</li>
+  <li><b>Regression graders at collect</b> over closed rows whose files changed; the dispatch snapshot; append-only staging.</li>
+  <li><b>Board, schedule Artifact, TaskUpdate page</b> in their fixed formats, regenerated on every state change.</li>
+  <li><b>Throughput instrumentation</b> (events.jsonl → Get-Throughput) that made this evaluation possible in the first place.</li>
+</ul>
+
+<h2 id="s9">9 · Migration architecture</h2>
+<p>Because the verdict is KEEP, the "proposed" flow is the current flow with four scripted additions (marked ★) and one storage change (marked ◆). Nothing moves out of <span class="k">.loop</span>.</p>
+<div class="grid2">
+<div class="card"><h3>CURRENT</h3><div class="flow" style="border:0;padding:0">ticket → Test-Ticket → lead reads
+→ lead runs Get-ReadySet, decides
+→ Dispatch-Row (JSON in place)
+→ Workflow wave (agents)
+→ lead notices return, runs Collect-Row
+→ lead runs verify wave, records verdicts
+→ lead Close-Row / Reject
+→ Sync-Board on wake
+crash: Reconcile prints; human -MarkLost</div></div>
+<div class="card"><h3>PROPOSED (Option C, in-house)</h3><div class="flow" style="border:0;padding:0">ticket → Test-Ticket → lead reads
+→ ★ Auto-Dispatch: on every wake, dispatch the
+   Get-ReadySet result (accepted tickets only)
+→ Dispatch-Row ◆ atomic writes, per-attempt
+   record, ordered multi-file commit + journal
+→ Workflow wave (agents), unchanged
+→ ★ Auto-Collect: Collect-Row -Json per returned
+   row the moment the stage returns
+→ verify wave, unchanged
+→ lead Close-Row / Reject (judgment stays here)
+→ ★ Sync-Board repairs: torn file → quarantine +
+   rebuild from events; F1/F6 shapes → auto-fix
+★ OVERDUE ≥ 3× + dead task ⇒ auto LOST + re-dispatch</div></div>
+</div>
+
+<h2 id="s10">10 · Migration plan: smallest reversible steps</h2>
+<p>Each step is a MyLoop row with a grader, a self-test and a blind verifier, like any other. Ordered by measured value ÷ risk.</p>
+<ol class="steps">
+  <li><b>Atomic state writes</b> (◆). <span class="k">Write-Json</span> writes <span class="k">&lt;file&gt;.tmp.&lt;pid&gt;</span> then <span class="k">File.Move</span> with overwrite; readers of a torn file quarantine it to <span class="k">rows/_quarantine/</span> and continue. Removes F8/F9 (whole-loop stop). Test: truncate a row mid-write on a scratch copy, run Sync-Board, expect one WARNING and a normal OWED list.</li>
+  <li><b>Dispatch journal + ordering rule</b>. Dispatch-Row writes <span class="k">dispatched.json</span> and the snapshot <i>before</i> the row record, and appends a <span class="k">dispatch-intent</span> event first; Reconcile repairs a row with a record but no entry (F1) and a collected row with no entry (F6) from the journal. Test: F1 and F6 replayed, then Close succeeds.</li>
+  <li><b>Single-writer guard on shared files</b>. A mutex around <span class="k">Update-DispatchedFile</span> / <span class="k">Write-Json</span> (named <span class="k">Mutex</span>, same pattern events.jsonl uses). Removes F10. Test: two concurrent Dispatch-Row calls both land.</li>
+  <li><b>Auto-collect</b> (★). The lead's step 10 becomes a script that runs <span class="k">Collect-Row -Json</span> for every row in the wave result before anything else. Target: the 223 min/day finished-uncollected → near 0. Measured by the existing <span class="k">collect wait</span> column.</li>
+  <li><b>Auto-dispatch of the legal set</b> (★). On every wake, if not paused and no gate blocks, dispatch <span class="k">Get-ReadySet</span>'s READY list <i>restricted to tickets carrying a lead-accepted marker</i> (the two gates stay human). Target: the 867 seat-min lead-latency bucket. Measured by the replay's efficiency figure (0.85 → ≥ 0.95).</li>
+  <li><b>Automatic LOST</b> (★). Reconcile marks LOST when OVERDUE ≥ 3× calibrated <i>and</i> the harness task list no longer contains the task id, then re-dispatches (hash guard already waives LOST). Removes the human step in F2/F3.</li>
+  <li><b>Wave-aware collect</b> (48.WAVE1, already filed). Collect refuses build/test clauses while a wave-mate holding a code write set is still <span class="k">dispatched</span>, and names it, instead of reporting a failure it misattributes; the scope check exempts an appendOnly path changed by another row's close. Target: the 19 attribution-class overrides → 0.</li>
+  <li><b>Cycle report</b> in Get-ReadySet: walk <span class="k">after</span> edges among open tickets, print "cycle: A → B → A" as its own bucket. Ten lines.</li>
+  <li><b>Borrow, do not adopt</b>: a <span class="k">version</span> field on the row record checked on every write (Superharness pattern) and a <span class="k">claimEpoch</span> on attempts (AIWorkHub pattern) so a stale writer is refused rather than clobbering.</li>
+  <li><b>Option E, HydraFusion-style routing inside a row</b>: already the shape of <span class="k">seat</span> / <span class="k">verifierModelByClass</span>; the 09-15 paired Fable measurements (verifier −12 to −14% tokens, author +21% tokens and one undelivered ticket) say keep it per-class and measured, and keep it out of the scheduler. No change recommended now.</li>
+</ol>
+<p class="small">Expected effect, stated as bounds: steps 1–3 remove the six stranding shapes measured in section 3 (reliability). Steps 4–6 can recover at most 13% of seat capacity plus the collect wait; that is the ceiling for <i>any</i> orchestration change while 200 of 207 open rows have no ticket. The lever that moves throughput is ticket supply, and the loop's own analysis already says so.</p>
+
+<h3>Shadow-scheduler test, as requested</h3>
+<p>Done, in reverse: rather than run the candidates' code (not runnable here), their <i>semantics</i> were re-implemented from their code (deps + write scope; deps only) and replayed against every MyLoop scheduling decision in the window. Every disagreement is listed in section 4.1 with MyLoop's reason. If AIWorkHub becomes runnable on Windows (two fixes named above, plus lifting the VS Code identity gate), the same replay can be re-run against its real <span class="k">task_plan.build_snapshot</span> by feeding it the row records as cards; the script and the compact row dump are in the session scratchpad (<span class="k">replay.py</span>, <span class="k">rows-compact.json</span>).</p>
+
+<h2 id="s11">11 · Scorecard</h2>
+<p>Scores use measured results where they exist and code inspection where execution was impossible; a category not exercised earns 0. Scale 0–10 per category.</p>
+<div class="scroll"><table>
+<tr><th>Category</th><th class="num">Weight</th><th class="num">MyLoop</th><th class="num">AIWorkHub</th><th class="num">Superharness</th><th>Evidence</th></tr>
+<tr><td>Correct dependency scheduling</td><td class="num">20%</td><td class="num">8</td><td class="num">5</td><td class="num">2</td><td>replay: 0 false BLOCKED, 3 unmodelled false READY (MyLoop); DAG advisory + glob hole (AWH); 4 inconsistent gates, permanent false BLOCKED in auto_dispatch, no write set (SH)</td></tr>
+<tr><td>Crash/restart reliability</td><td class="num">15%</td><td class="num">4</td><td class="num">8</td><td class="num">6</td><td>F1/F6/F8/F9/F10 (MyLoop); ledger replay + PID identity + chaos tests (AWH); SQLite tx but phantom launched rows, dead PID reclaim (SH)</td></tr>
+<tr><td>State-machine correctness</td><td class="num">10%</td><td class="num">6</td><td class="num">5</td><td class="num">8</td><td>18/18 own tests, per-script guards (MyLoop); 25 bypass sites (AWH); explicit graph, DB CHECK, 370 tests (SH)</td></tr>
+<tr><td>Safe parallelism</td><td class="num">15%</td><td class="num">7</td><td class="num">4</td><td class="num">1</td><td>exclusive + writeSet honoured, wave misattribution open (MyLoop); glob-blind guard, no exclusive (AWH); no write set, worktree without merge-back (SH)</td></tr>
+<tr><td>Worker utilization</td><td class="num">10%</td><td class="num">3</td><td class="num">0</td><td class="num">0</td><td>0.64 of 7 measured; candidates not exercised</td></tr>
+<tr><td>Throughput</td><td class="num">10%</td><td class="num">4</td><td class="num">0</td><td class="num">0</td><td>1.62 rows/h measured, supply-bound; candidates not exercised</td></tr>
+<tr><td>Recovery / idempotency</td><td class="num">10%</td><td class="num">5</td><td class="num">7</td><td class="num">5</td><td>F4/F5 idempotent, F6 not (MyLoop); epoch CAS, already_reconciled (AWH); version CAS, retry without backoff or guard (SH)</td></tr>
+<tr><td>Observability</td><td class="num">5%</td><td class="num">7</td><td class="num">6</td><td class="num">7</td><td>events → throughput → this replay (MyLoop); KPIs over MCP, no HTTP (AWH); HTTP dashboard, unbounded tables (SH)</td></tr>
+<tr><td>Maintainability</td><td class="num">5%</td><td class="num">6</td><td class="num">3</td><td class="num">4</td><td>2.8k + 1.2k lines, one owner, vendored (MyLoop); 200k LOC, Windows a curated subset, tiny community (AWH); 74k LOC, several dead paths, one org (SH)</td></tr>
+<tr><td><b>Weighted total</b></td><td class="num">100%</td><td class="num"><b>5.7</b></td><td class="num"><b>4.5</b></td><td class="num"><b>3.3</b></td><td>MyLoop after steps 1–6 of section 10 projects to ≈ 7.0 (reliability 4 → 8, utilization 3 → 4)</td></tr>
+</table></div>
+
+<h2 id="s12">12 · The prior analysis, claim by claim</h2>
+<p>The comparison supplied mid-review was README-derived. Each load-bearing claim, checked against code:</p>
+<div class="scroll"><table>
+<tr><th>Claim</th><th>Verdict</th><th>What the code says</th></tr>
+<tr><td>The relevant Superharness is artificemachine/superharness (SQLite), not backmeupplz (tmux wrapper)</td><td><span class="tag impl">confirmed</span></td><td>hubj66 fork = upstream v1.84.1 minus one file; upstream head 3848877 (09-12). Zero <span class="k">tmux</span> references in either.</td></tr>
+<tr><td>AIWorkHub lifecycle pending → claimed → processing → review_ready → manager verifies</td><td><span class="tag impl">confirmed</span></td><td>7 canonical statuses + 22 terminal substatuses; the worker cannot mark done; <span class="k">AUTOMATIC_TARGET_ACCEPT_ENABLED = False</span></td></tr>
+<tr><td>AIWorkHub has write-scope collision checks</td><td><span class="tag part">partly</span></td><td>yes, but the enforcing guard is glob-blind and the DAG is advisory on the launch path</td></tr>
+<tr><td>AIWorkHub distinguishes measured from claimed (27.5% tokens, confounded)</td><td><span class="tag impl">confirmed</span></td><td>README line 190 says exactly that, "not eligible for a causal claim"</td></tr>
+<tr><td>AIWorkHub Source Graph attacks worker context cost</td><td><span class="tag doc">unverified benefit</span></td><td>code exists; the only benefit figure is the confounded pilot; not exercised here</td></tr>
+<tr><td>AIWorkHub is "still being hardened", don't replace cold</td><td><span class="tag impl">confirmed, stronger</span></td><td>cannot create tasks or launch workers on this machine at all as shipped</td></tr>
+<tr><td>Superharness: one SQLite DB, YAML never authoritative</td><td><span class="tag impl">confirmed</span></td><td><span class="k">engine/sqlite_only.py</span>; tests assert no YAML ingest on the read path</td></tr>
+<tr><td>Superharness fails startup rather than allow two state DBs</td><td><span class="tag doc">not found</span></td><td>no code matching that behaviour was located in src/</td></tr>
+<tr><td>Superharness dispatch lifecycle pending → launched → running → done with failed/stale/paused</td><td><span class="tag part">partly</span></td><td><span class="k">running</span> is never written in SQLite mode; its PID reclaim therefore never fires</td></tr>
+<tr><td>Superharness separates task state from execution-attempt state</td><td><span class="tag impl">confirmed</span></td><td>tasks vs inbox tables; a good pattern to borrow</td></tr>
+<tr><td>Guardian restarts components; heartbeat/liveness; stale + orphan cleanup</td><td><span class="tag part">partly</span></td><td>supervisor respawn yes; liveness is agent-self-reported pulses; orphan detection is log-mtime/time-based; the orphan process is not killed; Windows timeout kills the direct child only</td></tr>
+<tr><td>Transcript tailing, idle + absolute watchdogs</td><td><span class="tag doc">README only in this snapshot</span></td><td>the fork README advertises them; the inspector found effort-tier timeouts and lifecycle rules, not transcript-offset watchdogs, on the dispatch path</td></tr>
+<tr><td>Exclusive task ownership prevents double-claim</td><td><span class="tag impl">confirmed</span></td><td>atomic <span class="k">claim_next</span> with <span class="k">BEGIN IMMEDIATE</span>; chaos test 8 threads → one winner</td></tr>
+<tr><td>Superharness supports --blocked-by and dependency preflight</td><td><span class="tag part">partly</span></td><td>declared and stored; evaluated inconsistently; auto-dispatch never releases a dependent; the dependency test module is skipped wholesale</td></tr>
+<tr><td>Superharness lacks exclusive=stack / testProject equivalents</td><td><span class="tag impl">confirmed</span></td><td>not present; same for AIWorkHub</td></tr>
+<tr><td>"Superharness as substrate under MyLoop" (Option A) is attractive</td><td><span class="tag none">not supported by measurement</span></td><td>the substrate would replace the wave's in-session agents with detached <span class="k">claude -p --dangerously-skip-permissions</span> processes (a trust-model change), detect death 15 min late instead of on wave return, retry unchanged tickets (which MyLoop forbids), and buy at most the 13% lead-latency slice that a 20-line auto-dispatch buys anyway</td></tr>
+<tr><td>Run AIWorkHub as shadow scheduler against MyLoop's ReadySet</td><td><span class="tag impl">done by semantics</span></td><td>12 disagreements, all AIWorkHub false READY on exclusive resources; re-runnable against its real code once it runs on Windows</td></tr>
+</table></div>
+
+<h2 id="s13">13 · Method, confidence, caveats</h2>
+<ul>
+  <li><b>Sources.</b> MyLoop: every script under the skill (2,830 lines) and its 1,219-line lib read in full; 89 row records; 277 events; the board (436 rows, 207 open); MyLoopAnalysis.md; TaskUpdate.html (96 Queued, 5 Ticketed, 5 Started, 81 Complete at 09:43); the skill's own 18-test suite run on a scratch copy. Candidates: shallow clones at the stated heads; one fresh-context inspector each, 19 capabilities, file:line evidence; the lead re-read the eleven claims the verdict rests on. Both candidate test suites were executed here (results in section 2.2).</li>
+  <li><b>Not done, and why.</b> No candidate executed the backlog: AIWorkHub cannot create or launch on this host as shipped; Superharness would need Git Bash on PATH, an env escape and an untested launcher path, and the user's standing rules forbid detached agents running with permissions bypassed against the live repos. So no candidate throughput, utilization or token figure exists. The scorecard gives them 0 in those two categories rather than an estimate.</li>
+  <li><b>Replay limits.</b> Ticket readiness before 09-15 17:54 is not in the event log, so the window is 16 h and 39 closed rows. Rows dispatched without a <span class="k">ticket-check</span> event are treated as ready at dispatch (conservative: no lead latency charged). The "real dependency block" bucket includes gates waiting on their own unticketed input, which is partly supply in disguise. Candidate semantics are re-implementations from their code, not their code.</li>
+  <li><b>Crash injection limits.</b> Faults were planted at six chosen points plus torn files and a race; a real power cut can hit any byte. The scratch copies carried the live <span class="k">.loop</span> as of 09:34, with status-page writes disabled.</li>
+  <li><b>Confidence 0.85</b> in KEEP. The three legs (supply-bound seats, candidate false READY on exclusive resources, candidates not runnable here) are each independently measured; any one alone would forbid REPLACE under the stated threshold. Confidence in the exact percentages is lower (±5 points; one-window sample). Confidence that steps 1–3 of section 10 remove the stranding shapes is 0.9 (they are the standard remedies and the failures reproduce deterministically).</li>
+</ul>
+<p class="small">Final answer to the closing question. Same backlog, same machines, same Claude Code capacity, same models, same safety constraints: <b>no</b>, neither alternative finishes sooner or with fewer orchestration failures. AIWorkHub does not start; Superharness would release rows into a shared stack that MyLoop correctly holds, and would notice a dead worker later than the wave does. The partial answer is internal: atomic writes, a dispatch journal, auto-collect and auto-dispatch inside MyLoop, worth at most a 13% seat-capacity recovery and the removal of every stranding shape measured here.</p>
+<h2 id="s14">14 · Autoresearch For MyLoop</h2>
+<p>Addendum to the MyLoop replacement verdict (KEEP MYLOOP) and the hardening review. Question: can the experimental optimisation pattern of <span class="k">karpathy/autoresearch</span> become a capability that lets MyLoop improve MyLoop, without weakening correctness? Autoresearch is not an orchestrator and is not compared as one.</p>
+<h3>14.0 · What autoresearch actually is (fetched from the repository, not remembered)</h3>
+<p>Repository <span class="k">karpathy/autoresearch</span> (master, last pushed 2026-03-26): 1,019 lines of Python and 206 of Markdown. Three files matter. <span class="k">prepare.py</span> holds the fixed constants, data, tokenizer and the metric and "is read-only"; <span class="k">train.py</span> is "the only file you edit"; <span class="k">program.md</span> is the agent's instructions and "is edited and iterated on by the human" (README.md:13-15, program.md:25-31).</p>
+<table>
+<tr><th>Design element</th><th>What the repository says</th><th>Where</th></tr>
+<tr><td>Mutable surface</td><td>"Modify <span class="k">train.py</span> — this is the only file you edit. Everything is fair game"</td><td>program.md:26</td></tr>
+<tr><td>Immutable evaluator</td><td>"Modify <span class="k">prepare.py</span>. It is read-only ... The <span class="k">evaluate_bpb</span> function in <span class="k">prepare.py</span> is the ground truth metric" (under CANNOT)</td><td>program.md:29-31; prepare.py:339-341</td></tr>
+<tr><td>Fixed budget</td><td><span class="k">TIME_BUDGET = 300</span> seconds of training wall-clock, first 10 steps excluded, enforced in the loop</td><td>prepare.py:31; train.py:602-604</td></tr>
+<tr><td>Objective</td><td><span class="k">val_bpb</span>, lower is better, on a pinned validation shard</td><td>README.md:17; prepare.py:42-44, :343-365</td></tr>
+<tr><td>Keep rule</td><td>"If val_bpb improved (lower), you advance the branch ... If val_bpb is equal or worse, you git reset" — strictly lower, no tolerance</td><td>program.md:103-104</td></tr>
+<tr><td>Tie-break</td><td>"All else being equal, simpler is better ... An improvement of ~0 but much simpler code? Keep."</td><td>program.md:37</td></tr>
+<tr><td>Keep/revert mechanism</td><td>git commit BEFORE the run; keep = do nothing; revert = <span class="k">git reset</span>; the agent decides, no script arbitrates</td><td>program.md:94-104</td></tr>
+<tr><td>Ledger</td><td><span class="k">results.tsv</span>: commit, val_bpb, memory_gb, status (keep/discard/crash), description; untracked by git; never read back by the loop's steps</td><td>program.md:66-78, :101-102; .gitignore:22-23</td></tr>
+<tr><td>Cadence</td><td>"approx 12 experiments/hour and approx 100 experiments while you sleep", single H100</td><td>README.md:64, :23</td></tr>
+<tr><td>Unattended</td><td>"NEVER STOP ... The loop runs until the human interrupts you, period."</td><td>program.md:112</td></tr>
+<tr><td>Crash handling</td><td>a run with no <span class="k">val_bpb:</span> line crashed; kill at 10 min; log <span class="k">crash</span>, move on</td><td>program.md:101, :108-110</td></tr>
+<tr><td>Anti-cheat</td><td>prose only: no hash, no CI, no re-verification; the file boundary is the whole enforcement (<span class="k">train.py:26</span> imports from <span class="k">prepare.py</span>; nothing stops an edit)</td><td>program.md:29-31; grep of both files</td></tr>
+<tr><td>Context hygiene</td><td>"redirect everything — do NOT use tee or let output flood your context"; grep back two scalars</td><td>program.md:99-100</td></tr>
+</table>
+<p>Evidence it ran: branch <span class="k">exp/H100/mar8</span> carries a real <span class="k">results.tsv</span> of 126 experiments (23 keep, 102 discard, 1 crash) and a 2.83 % relative improvement of the metric over about a day; kept commits are single named knob moves ("RoPE base frequency 10K to 200K", "warmdown 0.7 to 0.75"). Two things the ledger also shows: a pure seed change (<span class="k">random seed 42 to 137</span>) scored 0.000695 worse and was DISCARDED as a regression, while several kept wins are smaller than that — the rule is finer than the run's own noise; and "one hypothesis per experiment" is a pattern in the ledger, not a written rule. The <span class="k">agenthub</span> branch is the author's multi-agent form: every result posted, only improvements pushed, the frontier as a git DAG with leaves and children.</p>
+<h3>14.1 · Which autoresearch concepts transfer cleanly</h3>
+<table>
+<tr><th>Concept</th><th>Transfers?</th><th>MyLoop form</th></tr>
+<tr><td>Tightly bounded mutable code</td><td>YES</td><td>a named list of files and knobs under the skill's <span class="k">scripts\</span> and <span class="k">foreman.json</span>; everything else read-only to the researcher</td></tr>
+<tr><td>Immutable evaluator</td><td>YES, and better enforced than the source</td><td>the replay scheduler, the crash + chaos suite (48.R11), <span class="k">Test-MyFableNext.ps1</span>, the graders' verdict semantics; hashed before every score, outside the mutable surface</td></tr>
+<tr><td>Reproducible experiment</td><td>YES for the scheduling, dispatch, collect and reconcile layers; NO for agent work</td><td>replay over a frozen workload is deterministic; a worker or author run is not, and needs a paired protocol</td></tr>
+<tr><td>Objective measurement</td><td>YES, lexicographic, not scalar</td><td>section 5</td></tr>
+<tr><td>Keep/revert decision</td><td>YES, and made by a script from the artifact, not by the researcher (the source lets the agent decide)</td><td>section 9</td></tr>
+<tr><td>Persistent experiment history</td><td>YES, and READ before proposing (the source writes it and never reads it; its multi-agent form fixes that)</td><td>append-only ledger, one artifact per experiment</td></tr>
+<tr><td>Autonomous repeated experimentation</td><td>YES inside the sandbox; NEVER into production</td><td>section 11; <span class="k">/loop</span> is the NEVER-STOP rule we already run</td></tr>
+<tr><td>No subjective acceptance</td><td>YES</td><td>the KEEP rule is computed; the researcher only proposes and interprets</td></tr>
+<tr><td>Commit-before-run crash safety</td><td>YES, without git</td><td>the experiment artifact's intent is written before the run, so a dead researcher leaves a labelled state (the same shape as 48.R5's journal)</td></tr>
+<tr><td>Context hygiene</td><td>YES, already the loop's shape</td><td>one fixed-size verdict line per trial (the <span class="k">WAVE-JSON:</span> pattern), the full log on disk</td></tr>
+<tr><td>Simplicity tie-break</td><td>YES, scoped</td><td>applies to code outside the invariant surface only; "fewer guards" must never read as "simpler"</td></tr>
+</table>
+<h3>14.2 · Which concepts do not transfer, and why</h3>
+<ul><li><b>One scalar.</b> Autoresearch minimises one number under one fixed budget. A loop has hard invariants (a false READY is not a slower loop, it is a wrong one) and several throughput figures that trade against each other. The answer is a lexicographic order with a hard-constraint gate on top, not a weighted sum.</li><li><b>"The only constraint is that the code runs without crashing" (program.md:33).</b> In a training run, not-crashing is a near complete proxy for validity. In a loop the dangerous failures do not crash: a lost lease, a double claim and a stranded row all complete "successfully" and may raise throughput. Validity must be a positive invariant check, or the optimiser learns to delete the safety.</li><li><b>A stateless, repeatable run and a keep rule finer than the noise.</b> The source discarded a seed change as a regression and kept deltas smaller than that. Only the scheduling layers are replayable here (deterministic, zero noise); anything an agent sees (author prompt, model routing, compression) must be measured live, paired, on matched rows, with a pre-registered decision rule and a minimum n — which is what the 09-15 Fable-vs-opus measurements did by hand.</li><li><b>Fixed wall-clock training time as the equaliser.</b> The MyLoop equivalent is a fixed WORKLOAD (same rows, dependencies, durations, outcomes), not a fixed time: two candidates must see identical work, then time or completed work is measured.</li><li><b>The agent edits the live file and commits.</b> The production skill folder is live under a running loop, commits are forbidden to agents by standing rule, and promotion is a reviewed row.</li><li><b>Prose-only anti-cheat.</b> With a scalar loss the incentive to tamper is low; when the objective is throughput and the constraints are invariants, "make it faster" and "weaken the check" are adjacent edits. This is the design choice replaced first: hashes, a runner that refuses out-of-surface paths, and the evaluator re-run from a pristine copy.</li></ul>
+<h3>14.3 · Immutable (the researcher cannot touch; hash-checked before every score; any diff = REJECT and the experiment is logged as tampered)</h3>
+<ul><li>the frozen workload bundle: <span class="k">events.jsonl</span> slice, compact row records, ticket frontmatter (after, exclusive, testProject, writeSet, est), recorded worker durations and outcomes, board order, with a manifest hash;</li><li>the replay scheduler and its shadow oracle for false READY (MyLoop semantics as the reference);</li><li><span class="k">tests\Test-MyFableNext.ps1</span>, <span class="k">tests\Test-LoopChaos.ps1</span> (48.R11), the crash labels and their expected end states;</li><li>the dependency fixtures and expected outcomes;</li><li>the graders' verdict semantics, the class check lists (<span class="k">checks\*.ps1</span>), the verifier requirement per class, the two human gates, the residual gate, the two-strike rule;</li><li>the evaluator (<span class="k">Measure-Fitness.ps1</span>), the hard-constraint list, the KEEP rule, the baseline records, the ledger's past entries;</li><li>estimates and calibration inputs: from the frozen workload, never from the candidate.</li></ul>
+<h3>14.4 · Initially mutable</h3>
+<ul><li><span class="k">Get-ReadySet.ps1</span> PACKING ORDER only (who wins a contested seat), never the legality tests;</li><li>the auto-dispatch policy in <span class="k">Sync-Board</span> (48.R9): when to refill, how many, backfill preference;</li><li><span class="k">Collect-Wave</span> timing and ordering; verify-stage batching;</li><li><span class="k">foreman.json</span> knobs: <span class="k">maxParallel</span>, <span class="k">monitorPollSeconds</span>, <span class="k">overdueFactor</span>, the calibration formula (class vs size band, per MyLoopAnalysis §5), <span class="k">workerModel</span>, <span class="k">verifierModel</span>, <span class="k">verifierModelByClass</span>;</li><li>ticket supply: author concurrency, prefetch depth, standing accepted-queue size, author prompt size and evidence-pack shape, self-test construction strategy;</li><li>prompt templates in <span class="k">PROMPTS.md</span> for worker, verifier and author, EXCEPT the rule blocks they carry (never-commit, write set, no subagents, report shape), which are immutable text;</li><li>context/output compression on worker shells (RTK or equivalent), as one experiment class.</li></ul>
+<p>Not mutable until a separate, stronger experiment class exists: dependency semantics, verification requirements, human gates, security constraints, grader correctness rules.</p>
+<h3>14.5 · The fitness function</h3>
+<p>Two experiment classes, because two kinds of evidence exist.</p>
+<p><b>Class A — replay experiments</b> (scheduler, dispatch, collect, reconcile, knobs). Deterministic and cheap: the evaluator drives the REAL scripts against a scratch <span class="k">.loop</span> with a simulated clock and recorded workers (a worker "returns" its recorded outcome after its recorded duration).</p>
+<p><b>Class B — live paired experiments</b> (authors, models, prompts, compression). Two arms on matched rows (same class, same clause-count band), a pre-registration file written before the first row runs, minimum n = 6 pairs, both arms in the same day.</p>
+<p>Lexicographic; a candidate is compared with best-known at the first level where they differ:</p>
+<table>
+<tr><th>Level</th><th>Measure</th><th>Rule</th></tr>
+<tr><td>L0 correctness (hard)</td><td>false_READY (against the shadow oracle), invalid_CLOSE (closed without the class's checks, verdict or residual), lost_work (a key that vanished, an attempt with no terminal state), duplicate_execution (two live attempts of one key), state_corruption (an unparseable authoritative file), unrecoverable_crash (a RECOVERY-REQUIRES-HUMAN the baseline did not produce), stale_epoch_write, dependency_violation, exclusive_collision, verification_bypass (a code or security row with no verdict; a check list shorter than the class's)</td><td>every count ZERO, else REJECT</td></tr>
+<tr><td>L1 reliability</td><td>reconcile repairs, manual interventions, retries per closed row, chaos-suite pass count</td><td>none worse than best-known</td></tr>
+<tr><td>L2 useful throughput</td><td>Class A: est-minutes of CORRECTLY closed rows per simulated wall hour over the whole workload (an incomplete workload = REJECT); legal-seat fill (Σ in flight ÷ Σ legal); READY→dispatch and DONE→collect latency. Class B: correct completed rows per wall hour on the paired rows; for authors, ACCEPTED tickets per hour weighted by downstream worker success (a ticket whose row is later rejected counts 0)</td><td>the primary must improve by a margin: A ≥ 2 % (replay noise is zero; the margin stops churn); B: paired median ≥ 15 % with a sign test at p ≤ 0.1</td></tr>
+<tr><td>L3 token efficiency</td><td>tokens per correct closed row; tokens per accepted successful ticket</td><td>not worse by more than 10 % unless L2 improved by more</td></tr>
+<tr><td>L4 operational simplicity</td><td>lines changed, knobs added, files added</td><td>tie-breaker only, and only outside the invariant surface</td></tr>
+</table>
+<p>Why est-minutes and not row count: the estimate is frozen in the workload, so a candidate cannot earn by preferring short rows; a row counts only when the evaluator observed it closed with every check its class requires. Why lexicographic and not weights: no measured exchange rate exists between a false READY and a minute of latency, and inventing one is how a scheduler learns to be fast and wrong. Why a margin on a deterministic replay: the source's ledger shows what a zero-tolerance rule does — kept deltas below the noise floor and a seed change logged as a regression.</p>
+<h3>14.6 · Metric gaming, and the defence for each</h3>
+<table>
+<tr><th>Gaming move</th><th>Defence</th></tr>
+<tr><td>less verification</td><td>verification_bypass is L0: the class check list and the verifier requirement are read from the immutable evaluator, never from the candidate</td></tr>
+<tr><td>skip difficult tasks</td><td>the workload is fixed and scored whole; an unclosed row is an incomplete experiment = REJECT</td></tr>
+<tr><td>prefer short rows</td><td>L2 counts frozen est-minutes, not rows</td></tr>
+<tr><td>under-report failures</td><td>outcomes are what the evaluator observed (grader exit codes, record states it read), never the candidate's logs</td></tr>
+<tr><td>change estimates</td><td><span class="k">est</span> comes from the frozen bundle; a candidate that writes estimates changes nothing the evaluator reads</td></tr>
+<tr><td>reduce test coverage</td><td>suite case count and grader clause count are pinned in the evaluator; fewer = REJECT</td></tr>
+<tr><td>delay accounting</td><td>the simulated clock is the evaluator's; live experiments stamp events from harness time</td></tr>
+<tr><td>avoid expensive dependency classes</td><td>fixed workload; the exclusive rows are in it</td></tr>
+<tr><td>change benchmark data or result interpretation</td><td>outside the mutable surface; hashed before scoring; any diff = REJECT, logged as tampered</td></tr>
+<tr><td>widen the mutable surface quietly</td><td>the sandbox runner diffs the candidate against best-known and refuses any changed path outside the list</td></tr>
+<tr><td>"simplify" by removing a guard</td><td>the simplicity tie-break is scoped to files outside the invariant surface; a guard removal is a diff inside it = REJECT</td></tr>
+</table>
+<h3>14.7 · Can the existing replay + crash + chaos infrastructure serve as the evaluator?</h3>
+<p>Partly today, fully after 48.R11. What exists: the shadow-replay script from the verdict session (27 epochs, MyLoop semantics as oracle; it lives in that session's scratchpad and must be rescued into the vault beside the verdict), <span class="k">Inject-Faults.ps1</span> (ten crash points, scratch copies), <span class="k">Test-MyFableNext.ps1</span> (18 cases), <span class="k">Get-Throughput.ps1</span> (every latency in section 5). What each lacks for evaluator duty: the replay simulates the scheduler and does not drive the real scripts; fault injection is by hand; the throughput report reads live events, not a simulated run.</p>
+<h3>14.8 · Missing benchmark infrastructure</h3>
+<ol><li><b>Frozen workload bundle</b> with a manifest hash: one script that cuts it from a live <span class="k">.loop</span> at a chosen window.</li><li><b>Loop simulator</b>: drives the real scripts on a scratch <span class="k">.loop</span> with a fake clock and recorded workers — the largest piece, and shared with 48.R11 (crash labels at "after worker DONE" need it).</li><li><b><span class="k">Measure-Fitness.ps1</span></b>: runs L0–L4, writes the experiment artifact, decides KEEP/DISCARD.</li><li><b>Sandbox runner</b>: copies best-known to <span class="k">exp-&lt;id&gt;\</span>, applies the candidate, verifies the immutable hashes, runs the evaluator, refuses any path under the production skill folder.</li><li><b>Ledger</b>: <span class="k">experiments.jsonl</span> append-only plus one artifact folder per experiment, and a <span class="k">Find-Experiment</span> query the researcher must run before proposing (the source's ledger is written and never read; its multi-agent form makes reading it step 1).</li><li><b>Paired live protocol</b> for Class B: row matching, pre-registration file, the sign test.</li></ol>
+<h3>14.9 · KEEP vs DISCARD</h3>
+<p>KEEP iff every L0 count is 0 AND no L1 figure is worse than best-known AND the L2 primary beats best-known by its margin AND L3 is within tolerance AND the immutable hashes match. Otherwise DISCARD, naming the first failing level. Both outcomes write the same artifact: id, parent baseline id, hypothesis (one sentence), files changed (diff hash), expected improvement, correctness result, crash result, chaos result, replay result, performance result, token result, decision, reason. The artifact's intent half (id, parent, hypothesis, expected improvement, diff hash) is written BEFORE the run — the commit-before-run idea — so a researcher that dies mid-experiment leaves a labelled state.</p>
+<h3>14.10 · Persisting best-known versions</h3>
+<p>Not git commits: agents never commit in this environment, and the skill folder is untracked on a share. Folder copies with a manifest: <span class="k">Loops\Autoresearch\best-known\</span> (scripts, <span class="k">foreman.json</span>, a hash manifest, the artifact that made it best); <span class="k">Loops\Autoresearch\exp-&lt;id&gt;\</span> per experiment, kept, never deleted (a DISCARD keeps its diff so the ledger can show what was tried). Best-known advances only by copying a KEEP experiment's folder over it and appending to the ledger. Every experiment starts from best-known, never from another experiment. The source's frontier-as-DAG (agenthub) is the right shape if two researchers ever run at once; one branch suffices for one.</p>
+<h3>14.11 · Promotion to production</h3>
+<p>A KEEP experiment becomes a MyLoop ROW: ticket with the hypothesis as WHY, the diff as the write set, a grader that re-asserts the evaluator's L0/L1 results against the LIVE scripts plus a self-test, the staging-copy landing, the blind verifier, the lead's read, the close. Nothing in the sandbox can write to the production skill folder; the runner refuses a path under it.</p>
+<h3>14.12 · Who runs the experiments</h3>
+<p>Evidence on record (MyLoopAnalysis §3, pre-registered on 09-15): Fable as verifier, −12 to −14 % tokens, faster, more findings; Fable as ticket author, +21 % tokens, −18 % wall, one ticket undelivered; opus everywhere by default since 09-13. The division that follows: <b>Fable</b> proposes the hypothesis (reads the ledger and the throughput report; low volume, high judgement), interprets the artifact, and reviews a promotion ticket. <b>Opus</b> implements the bounded diff in the sandbox — the author-shaped seat where Fable measured worse. <b>No model</b> runs the evaluator: it is a script. A cheaper model has no measured seat here yet. This is a hypothesis to test on the first ten experiments, not a setting.</p>
+<h3>14.13 · Cost</h3>
+<p>Build: six rows after 48.R11 — workload bundle (1), simulator (2, the largest), fitness + ledger (1), sandbox runner (1), researcher skill (1); about one and a half worker-days at the loop's measured 0.3–0.5× of estimate. Per experiment: Class A about 15 min wall and 250–400k tokens (a Fable read plus an opus diff); Class B a day of paired rows and their real tokens. The source runs 12 experiments an hour on one GPU; Class A here would run about 4 an hour, bounded by the chaos suite.</p>
+<h3>14.14 · Largest risks</h3>
+<p>Simulator fidelity (a scheduler that wins on recorded durations may lose on live ones — mitigated by promoting only through a real row); overfitting to one frozen workload (rotate bundles; a KEEP must hold on two); evaluator drift (the immutable set is hashed, and a change to it is itself a reviewed row); token burn on Class B; a researcher that edits production by path mistake (the runner refuses); and the temptation to widen the mutable surface into dependency semantics because that is where 27 % of blocked seats sit — that surface stays closed.</p>
+<h3>14.15 · First five experiments</h3>
+<ol><li>(A) Seat refill: dispatch the legal set immediately after <span class="k">Collect-Wave</span> returns vs on the next wake only. Expect READY→dispatch latency to fall; measures the 13 % lead-latency slice directly.</li><li>(A) ReadySet packing order: board order vs longest-<span class="k">after</span>-chain-first vs shortest-est backfill. Expect higher legal-seat fill with zero L0 change (legality untouched).</li><li>(B) Ticket authors 3 vs 4 concurrent at prefetch depth 6: accepted-and-successful tickets per hour, tokens per accepted ticket, lead-read minutes. The 45 % bucket.</li><li>(B) Verifier routing: Fable vs opus on security rows only. Tokens, wall, findings that survive the lead's read.</li><li>(B) Author evidence pack: full file:line pack (today) vs pointer-only. Tokens per accepted ticket and rejection rate.</li></ol>
+<p>Then, sixth: (B) worker-shell output compression (RTK) measured on total completed-work economics, never on shell bytes.</p>
+<h3>FINAL VERDICT</h3>
+<p><b>BUILD AFTER RELIABILITY HARDENING</b></p>
+<p>Evidence: the evaluator's hard-constraint layer IS the hardening programme's proof (48.R11's crash and chaos suites, the reconcile that makes stranded state deterministic); without it a candidate's stranding cannot be told from the baseline's, and the baseline's own reliability figures are non-zero today (4 hand-marked LOST attempts, 42 of 84 override closes). The orchestrator-addressable throughput slices (13 % lead latency, the collect wait) are being closed deterministically by 48.R8/48.R9 without experimentation. What remains — ticket supply at 45 % of seat capacity, model routing, prompt shape — is the Class B territory where a controlled, ledgered, paired protocol beats occasional hand measurement: the 09-15 Fable runs produced one real win and one real loss in the same evening, which only a repeatable process would catch every week. The source proves the loop shape works (126 experiments, 23 kept, unattended); its own ledger also proves the two things that must change for this domain — a keep rule wider than the noise, and an evaluator the agent cannot edit.</p>
+
+</div>

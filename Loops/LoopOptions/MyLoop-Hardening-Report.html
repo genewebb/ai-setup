@@ -1,0 +1,185 @@
+<title>MyLoop Hardening Report</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --paper:#F3F5F7; --panel:#FFFFFF; --ink:#1B2430; --muted:#5B6672; --rule:#D5DBE1;
+  --accent:#0F6E74; --accent-ink:#0B4F54; --accent-soft:#DDEFF0;
+  --bad:#B3261E; --bad-soft:#F8E1DF; --good:#2E7D32; --good-soft:#E1F0E2; --warn:#8A5A00; --warn-soft:#F6ECD2;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  --display:"Source Serif 4",Georgia,"Times New Roman",serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#12171C; --panel:#1A2128; --ink:#E7ECF0; --muted:#9AA6B2; --rule:#2C3640;
+  --accent:#5FC1C7; --accent-ink:#8FD8DC; --accent-soft:#12383B;
+  --bad:#F28B82; --bad-soft:#3A1F1D; --good:#81C995; --good-soft:#1E3322; --warn:#E3B54B; --warn-soft:#3A2E12;
+}}
+:root[data-theme="dark"]{
+  --paper:#12171C; --panel:#1A2128; --ink:#E7ECF0; --muted:#9AA6B2; --rule:#2C3640;
+  --accent:#5FC1C7; --accent-ink:#8FD8DC; --accent-soft:#12383B;
+  --bad:#F28B82; --bad-soft:#3A1F1D; --good:#81C995; --good-soft:#1E3322; --warn:#E3B54B; --warn-soft:#3A2E12;
+}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5;padding-inline:16px;padding-block:32px 64px}
+main{max-width:76rem;margin:0 auto}
+h1{font-family:var(--display);font-weight:700;font-size:2.1rem;line-height:1.15;margin:0 0 .35rem;text-wrap:balance}
+h2{font-family:var(--display);font-weight:600;font-size:1.45rem;margin:2.6rem 0 .8rem;padding-top:1rem;border-top:1px solid var(--rule);text-wrap:balance}
+h3{font-size:1.05rem;font-weight:600;margin:1.4rem 0 .4rem}
+p{max-width:68ch;margin:.5rem 0}
+.lede{color:var(--muted);font-size:1.05rem;max-width:70ch}
+.eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink);margin-bottom:.6rem}
+.verdict{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:1.4rem 0 0}
+.tile{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:12px 14px}
+.tile .n{font-family:var(--mono);font-size:1.5rem;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.tile .l{color:var(--muted);font-size:.85rem;margin-top:4px}
+.tile.good .n{color:var(--good)} .tile.bad .n{color:var(--bad)} .tile.accent .n{color:var(--accent-ink)}
+.tablewrap{overflow-x:auto;border:1px solid var(--rule);border-radius:6px;background:var(--panel);margin:.8rem 0}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{padding:8px 10px;text-align:left;vertical-align:top;border-bottom:1px solid var(--rule)}
+th{font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--paper)}
+tbody tr:last-child td{border-bottom:none}
+td.k,th.k{font-family:var(--mono);font-size:.84rem;white-space:nowrap}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.pill{display:inline-block;font-family:var(--mono);font-size:.74rem;font-weight:600;padding:2px 7px;border-radius:3px;white-space:nowrap}
+.pill.good{background:var(--good-soft);color:var(--good)} .pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.acc{background:var(--accent-soft);color:var(--accent-ink)}
+code{font-family:var(--mono);font-size:.86em;background:var(--accent-soft);color:var(--accent-ink);padding:1px 4px;border-radius:3px}
+pre{font-family:var(--mono);font-size:.82rem;background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:12px;overflow-x:auto}
+ul{padding-left:1.2rem;max-width:72ch} li{margin:.3rem 0}
+.note{border-left:3px solid var(--accent);background:var(--panel);padding:10px 14px;margin:1rem 0;max-width:72ch}
+.risk{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;max-width:80ch;margin:.6rem 0}
+.risk .sev{font-family:var(--mono);font-size:.74rem;font-weight:600;padding-top:3px}
+.sev.m{color:var(--warn)} .sev.l{color:var(--muted)} .sev.h{color:var(--bad)}
+footer{color:var(--muted);font-size:.85rem;margin-top:3rem;border-top:1px solid var(--rule);padding-top:1rem;max-width:72ch}
+@media (max-width:640px){ h1{font-size:1.6rem} body{font-size:15px} }
+</style>
+<main>
+<div class="eyebrow">MyLoop reliability hardening</div>
+<h1>Borrow the best, preserve what works: the hardening landed</h1>
+<p class="lede">Nine rows (48.R1–R7, R10, R11) turned MyLoop's file-based state into a killable, restartable loop: every write atomic, every shared file locked, every record versioned, every claim fenced by an epoch, every multi-file step journalled, every stranding shape repaired on the next wake, every dead worker found without a human, every state change looked up in one table, and a chaos suite that proves it under kill and race. The scheduler, the dependency rules and the verification discipline were not touched.</p>
+
+<div class="verdict">
+  <div class="tile good"><div class="n">27 / 27</div><div class="l">chaos cases pass on the hardened scripts</div></div>
+  <div class="tile bad"><div class="n">26 / 27</div><div class="l">of the same cases FAIL on the pre-hardening baseline (all 5 races bar one, all 4 shapes, and every crash case for want of a crash point)</div></div>
+  <div class="tile good"><div class="n">27 / 27</div><div class="l">skill test suite cases pass, 9 of them new</div></div>
+  <div class="tile accent"><div class="n">61</div><div class="l">grader clauses across 9 graders, each with a self-test</div></div>
+  <div class="tile accent"><div class="n">9 / 9</div><div class="l">rows blind-verified PASS_WITH_NOTES, every finding folded in or carried by name</div></div>
+  <div class="tile good"><div class="n">0</div><div class="l">refusals fired in the live loop so far (stale write, stale epoch, transition, lock wait)</div></div>
+</div>
+
+<h2>1 · What changed, row by row</h2>
+<p>Each row is one mechanism with one invariant, its own grader (a scripted judge with a self-test that proves it goes RED on the old scripts and on planted traps) and a blind verifier that re-ran everything from a fresh context.</p>
+<div class="tablewrap"><table>
+<thead><tr><th class="k">Row</th><th>Mechanism</th><th>Invariant it establishes</th><th>Grader</th><th class="num">Clauses</th><th class="num">Min</th></tr></thead>
+<tbody>
+<tr><td class="k">48.R1</td><td>Atomic state writes and quarantine. Every JSON write goes to a temp file, is flushed, then renamed over the target. Bytes that will not parse are moved to <code>rows/_quarantine</code>, never deleted, and named on the report.</td><td>A state file on disk is always the old valid version or the new valid version. One torn file costs one row, not the loop.</td><td class="k">hard-1</td><td class="num">5</td><td class="num">30</td></tr>
+<tr><td class="k">48.R2</td><td>Shared-state mutex. A named system mutex per shared file (<code>Global\myloop-&lt;sha1 of path&gt;</code>) wraps every read-modify-write of <code>dispatched.json</code>, <code>foreman-state.json</code>, <code>wave.json</code>, <code>started.json</code>; waits are recorded as events.</td><td>Two processes updating one shared file never lose an entry; <code>wave.json</code> is merged, not replaced.</td><td class="k">hard-2</td><td class="num">6</td><td class="num">25</td></tr>
+<tr><td class="k">48.R3</td><td>Row version (compare-and-set). Every record carries <code>version</code>; a write compares the version it read with the one on disk under the row lock and is refused as <code>STALE-WRITE</code> when they differ. <code>Update-Row</code> reloads and re-applies only its own change.</td><td>A writer holding an old copy of a record cannot overwrite newer state; a verdict, a LOST mark or a rejection landing during a long collect survives.</td><td class="k">hard-3</td><td class="num">5</td><td class="num">20</td></tr>
+<tr><td class="k">48.R4</td><td>Claim epoch fencing. Each dispatch allocates a monotonically increasing epoch from <code>foreman-state</code>; the attempt, <code>wave.json</code> and the worker's prompt carry it; collect, verdict, reject and LOST quote it and are refused (<code>STALE-EPOCH</code>) when it is not the current attempt's.</td><td>Only the attempt that holds the claim may advance the row; a late result from an attempt already declared dead lands nowhere.</td><td class="k">hard-4</td><td class="num">6</td><td class="num">20</td></tr>
+<tr><td class="k">48.R5</td><td>Dispatch and close journal. <code>journal.jsonl</code> is a write-ahead record: <code>dispatch-intent</code> before the first file, <code>dispatch-committed</code> after the last; the same pair around a close; refusals happen before the intent; a journal that cannot be written stops the step.</td><td>Every multi-file step has a recorded intent, so a crash between two files is a known shape, not a mystery.</td><td class="k">hard-5</td><td class="num">6</td><td class="num">25</td></tr>
+<tr><td class="k">48.R6</td><td>Reconcile <code>-Repair</code>. On every lead wake the report repairs what the journal proves: a dispatch with intent and no commit is rolled back, a missing dispatched entry rebuilt, a half-done close completed, a torn record reconstructed from the journal and the ticket, and dependency cycles named. Read-only by default and byte-identical without <code>-Repair</code>.</td><td>Stranding shapes F1, F6, F8, F9 heal on the next wake; whatever cannot be proven is listed as <code>RECOVERY-REQUIRES-HUMAN</code>, never guessed.</td><td class="k">hard-6</td><td class="num">9</td><td class="num">30</td></tr>
+<tr><td class="k">48.R7</td><td>Automatic LOST. A dispatched attempt records the dispatching process; the wake checks that process, the lead lock owner, the heartbeat and the wave result, and marks the attempt LOST with a reason (<code>lostWhy</code>) instead of printing OVERDUE for a human.</td><td>A dead worker is found by the loop itself; a LOST attempt always says why.</td><td class="k">hard-7</td><td class="num">9</td><td class="num">30</td></tr>
+<tr><td class="k">48.R10</td><td>Transition table and guard. <code>lib\RowStates.ps1</code> lists every allowed <code>from → to</code> with its owning script and condition; <code>Set-RowState</code> is the only writer of <code>state</code>, refuses anything not in the table (<code>TRANSITION-REFUSED</code>) and journals every transition.</td><td>No script can put a row into a state the table does not allow; the record and the journal agree on every change.</td><td class="k">hard-10</td><td class="num">8</td><td class="num">30</td></tr>
+<tr><td class="k">48.R11</td><td>Chaos suite. <code>tests\Test-LoopChaos.ps1</code> kills the scripts at 17 named points (<code>MYLOOP_CRASH_AT</code>), races 6 pairs of processes behind a start barrier, plants the 4 stranding shapes, and after each case runs a second repair that must find nothing left to repair. Blind-verified PASS_WITH_NOTES; its live grader run was GREEN on all seven clauses, the skill suite 27 of 27, the six races within 15 ms of each other, and all 17 crash trees walked with their bookkeeping intact.</td><td>Every crash point and every race has a case that fails on the old scripts and passes on the new ones.</td><td class="k">hard-11</td><td class="num">7</td><td class="num">60</td></tr>
+</tbody></table></div>
+
+<h2>2 · What was borrowed, and from where</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Mechanism</th><th>Source</th><th>Adaptation to MyLoop</th></tr></thead>
+<tbody>
+<tr><td>Row <code>version</code> compare-and-set</td><td>Superharness (row versioning on its task store)</td><td>A field on the JSON record, compared under the per-row lock rather than by a database; the refusal is an event and an error, never a silent retry.</td></tr>
+<tr><td>Claim epoch fencing</td><td>AIWorkHub (lease epochs on task claims)</td><td>One counter in <code>foreman-state</code>, one number on the attempt, quoted by the worker in its report and by every script that writes a result.</td></tr>
+<tr><td>Reservation-before-spawn journal</td><td>AIWorkHub (ledger written before the worker exists)</td><td>An append-only <code>journal.jsonl</code> with intent and committed pairs; the repair engine replays it instead of reading the ledger as truth.</td></tr>
+<tr><td>Temp-and-rename writes, named mutex, write-ahead intent, transition matrix, chaos testing</td><td>Standard practice; neither candidate did better on the file side</td><td>Applied to the 17 in-place write sites, the 4 shared files and the 10 lifecycle transitions the review had listed.</td></tr>
+<tr><td>Not borrowed</td><td>Either candidate's scheduler, SQLite, a daemon</td><td><code>Get-ReadySet</code> stays the only authority on what may run; the shadow replay in the verdict showed both candidate schedulers releasing 12 rows MyLoop rightly held.</td></tr>
+</tbody></table></div>
+
+<h2>3 · Crash matrix</h2>
+<p>Each label is a point where the process is killed mid-step. After the kill, a wake runs <code>Reconcile -Repair</code>; the case passes only if the loop's invariants hold (no torn file, no duplicate entry, no row stranded, no lost result) and a second repair pass finds nothing to do. Baseline is the byte-identical pre-hardening copy of the scripts.</p>
+<p class="lede">Read the baseline column with care: the old scripts carry no crash points at all, so every crash case fails there by construction ("the crash point never fired") rather than by a measured stranding. The like-for-like before-and-after evidence is the concurrency matrix and the planted shapes below, where the old scripts run the same scenario and lose.</p>
+<div class="tablewrap"><table>
+<thead><tr><th class="k">Crash point</th><th>Step</th><th>Baseline</th><th>Hardened</th></tr></thead>
+<tbody>
+<tr><td class="k">write-before-move</td><td>a state write killed between the temp file and the rename</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">dispatch-before-intent</td><td>a dispatch killed before the journal intent</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">dispatch-after-intent</td><td>after the intent, before any file</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">dispatch-after-snapshot</td><td>after the write-set snapshot</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">dispatch-after-entry</td><td>after the dispatched.json entry</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">dispatch-after-record</td><td>after the row record (the F1 stranding shape)</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">dispatch-after-wave</td><td>after wave.json, before the commit line</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">close-before-intent</td><td>a close killed before the journal intent</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">close-after-intent</td><td>after the intent, before the record</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">close-after-record</td><td>after the row record, before the board</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">close-after-board</td><td>after the board close (the F6 stranding shape)</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">close-after-actuals</td><td>after actuals.json, before the commit line</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">collect-after-status</td><td>a collect killed after its first write</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">collect-after-checks</td><td>after the checks ran, before the final write</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">verify-after-verdict</td><td>a verdict write killed mid-way</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">board-sync</td><td>the board sync killed mid-way</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td class="k">shared-file-replace</td><td>a shared file (dispatched.json) killed mid-replace</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+</tbody></table></div>
+
+<h2>4 · Concurrency matrix</h2>
+<p>Two or more processes are released together behind a barrier file; the case reads each process's own post-barrier stamp from disk and requires them within 200 ms, so a race that did not actually overlap is a failure, not a pass.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Race</th><th>What must hold</th><th>Baseline</th><th>Hardened</th></tr></thead>
+<tbody>
+<tr><td>dispatch, same key</td><td>one attempt, one epoch, one dispatched entry; the other call is refused</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td>dispatch, disjoint keys</td><td>both entries in dispatched.json, both rows in wave.json (the F10 shape)</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td>stale collector</td><td>a collect holding an old copy is refused; the newer state survives</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td>stale verifier</td><td>a verdict quoting a retired epoch lands nowhere</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td>old worker after re-dispatch</td><td>the dead attempt's result is refused; the new attempt is untouched</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span></td></tr>
+<tr><td>close versus repair</td><td>a close and a repair pass on the same row leave one consistent record</td><td><span class="pill good">PASS</span></td><td><span class="pill good">PASS</span></td></tr>
+</tbody></table></div>
+
+<h3>Planted stranding shapes</h3>
+<div class="tablewrap"><table>
+<thead><tr><th class="k">Shape</th><th>Planted state</th><th>Baseline</th><th>Hardened</th></tr></thead>
+<tbody>
+<tr><td class="k">F1</td><td>row record dispatched, no dispatched.json entry, no snapshot</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span> rolled back or entry rebuilt from the journal</td></tr>
+<tr><td class="k">F6</td><td>board closed, row still collected</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span> close completed</td></tr>
+<tr><td class="k">F8</td><td>row record truncated mid-file</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span> quarantined, reconstructed or named for a human</td></tr>
+<tr><td class="k">F9</td><td>dispatched.json truncated mid-file</td><td><span class="pill bad">FAIL</span></td><td><span class="pill good">PASS</span> quarantined and rebuilt from the records</td></tr>
+</tbody></table></div>
+
+<h2>5 · Performance</h2>
+<p>The wake path did not slow down. Three runs each, before and after, on the live loop (about 100 row records):</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Script</th><th class="num">Before</th><th class="num">After</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td><code>Reconcile-Rows.ps1</code> (read-only)</td><td class="num">2.5–3.0 s</td><td class="num">2.5–3.0 s</td><td>now also checks one process per dispatched row and reads the journal</td></tr>
+<tr><td><code>Get-ReadySet.ps1</code></td><td class="num">1.0–1.1 s</td><td class="num">1.0–1.1 s</td><td>unchanged code path</td></tr>
+<tr><td>a shared-file update under the mutex</td><td class="num">—</td><td class="num">&lt; 150 ms</td><td>measured by the R2 grader; a waiter behind a 3.5 s holder waited 3.5 s, no more</td></tr>
+<tr><td>a chaos suite run (27 cases)</td><td class="num">—</td><td class="num">about 15 min</td><td>sequential cases with real process kills and sleeps</td></tr>
+</tbody></table></div>
+<p>Live counters since the first hardened dispatch: <code>lock-wait</code> 0, <code>stale-write-refused</code> 0, <code>stale-epoch-refused</code> 0, <code>transition-refused</code> 0, <code>attempt-lost</code> 0, <code>epoch-unstated</code> 6 (the lead's hand collects of rows dispatched before epochs existed, allowed by design and recorded).</p>
+
+<h2>6 · How it was verified</h2>
+<ul>
+<li><strong>Staging, never in place.</strong> Every row was built in a cumulative staging copy of the scripts and landed by atomic copy only after its grader went GREEN against the staging folder and RED against the previous one. The pre-hardening copy is kept as the permanent baseline.</li>
+<li><strong>Grader plus self-test.</strong> Nine graders, 61 clauses. Each self-test proves the grader RED on the old scripts, GREEN on a model repair, and RED on the exact clause for three to five planted traps (a version that is bumped but never compared, a comparison outside the lock, a refusal that is only a warning, a re-dispatch that drops the version, and so on).</li>
+<li><strong>Blind verification per row.</strong> A fresh-context verifier re-ran the grader, the self-test, the suite and the diff for every row. All nine came back PASS_WITH_NOTES; every finding was either fixed in the next landing and re-confirmed by a run, or carried by name in section 7.</li>
+<li><strong>Cross-row regression sweep.</strong> Before the last landing every earlier grader was replayed over the final staging. The transition table (R10) made two earlier probes illegal (a verdict on a dispatched row, a second LOST mark); the table was kept as authoritative and the probes reshaped to legal lifecycles.</li>
+<li><strong>Findings that changed the code</strong> (all landed and re-verified): pause and lead-release writes under the lock; the regression selector no longer replays a grader because a three-letter file name appears in its prose; a build or test step fails only on a thrown error or a non-zero exit; a non-lead repair reports instead of throwing; a reconstructed record takes its seat from the ticket; a LOST mark always records why; a collect keeps a LOST or REJECTED status on the attempt and decides per write attempt whether its final write is a transition.</li>
+</ul>
+
+<h2>7 · Remaining risks</h2>
+<div class="risk">
+<span class="sev m">MEDIUM</span><span>48.R8 (wave-aware collect) and 48.R9 (accept-ticket and auto-dispatch) are parked. The <code>wave-null</code> LOST path and the transition table's <code>Collect-Wave.ps1</code> owner entry exist but nothing drives them yet; finished workers still wait for the lead's hand collect.</span>
+<span class="sev m">MEDIUM</span><span>Two skill test suites running at once produce load-induced false failures in the hard-3 collect-window probe (seen once by the R10 verifier, clean solo). The graders and the suite must run one at a time; nothing enforces that.</span>
+<span class="sev m">MEDIUM</span><span>The graders' detached process launches do not quote the vault path with spaces; every live run goes through the space-free alias, and a run pointed at the vault path fails as "the collect never reached the build step".</span>
+<span class="sev l">LOW</span><span><code>Set-RowField</code> can write any field by name and is dot-sourced everywhere; a future caller could bypass the transition guard invisibly to the grader's static clause. Declared reflection residual.</span>
+<span class="sev l">LOW</span><span>The version compare is skipped when the record file is absent or unparseable, so a quarantined record can be written back from a stale object with no event.</span>
+<span class="sev l">LOW</span><span>Cycle detection runs inside <code>Reconcile</code>; <code>Get-ReadySet</code> still reports edges only.</span>
+<span class="sev l">LOW</span><span><code>Add-LoopEvent</code> runs inside the critical section and can hold a lock about 2 s on a contended events file.</span>
+<span class="sev l">LOW</span><span>The board tool locks <code>started.json</code> under the dispatched.json lock name; correct today, breaks the one-lock-per-file rule.</span>
+<span class="sev l">LOW</span><span>The R5 test case names a close half it never asserts; <code>Close-Row.ps1</code> logic is duplicated between the skill and the in-repo tool; a never-cleared <code>allocatedEpoch</code> variable in the hard-4 grader is unreachable.</span>
+<span class="sev l">LOW</span><span>Race children from the chaos suite's pre-fix runs earlier in the day are still alive in temp (they waited on a barrier that was never released); post-fix runs leave none. They hold no live lock.</span>
+</div>
+
+<h2>8 · Architecture judgment</h2>
+<p>The KEEP MYLOOP verdict holds and is now stronger. File-based state with atomic writes, a per-file mutex, a record version, a claim epoch and a write-ahead journal gives this loop the durability the two candidates promised, at its scale (about a hundred records, at most seven workers) without a database, a daemon or a second scheduler. The mechanisms compose: the table decides what may change, the version decides whose copy is current, the epoch decides whose claim is live, the journal decides what a crash left behind, and the repair engine acts only on what the journal proves.</p>
+<p>What the hardening did not do, by design, is change throughput. Seat loss was measured as mostly supply-bound (no ticket ready) and lead-bound (a finished worker waiting for a hand collect); R8 and R9 address the second and remain parked, and the autoresearch programme that would optimise the first was scheduled to build only after this hardening.</p>
+<div class="note">The loop is paused after this report. Nothing is dispatched until released.</div>
+
+<footer>State of record: <code>.loop\rows\48.R*.json</code>, <code>.loop\journal.jsonl</code>, <code>.loop\metrics\events.jsonl</code>; scripts in <code>03 Shared\work-ai\skills\myloop\scripts</code> with staging copies alongside; baseline <code>scripts-stage-20260916-pre-hardening</code>. Companion documents in the same folder: the replacement verdict, the architecture review, the row lifecycle diagram, the autoresearch evaluation.</footer>
+</main>

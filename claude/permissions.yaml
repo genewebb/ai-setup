@@ -1,0 +1,169 @@
+# Claude Code permission rules shared by every machine (spec 4.3a, D20).
+#
+# Generated once by setup\Merge-PermissionSources.ps1 from the live settings, then maintained by hand.
+# Owner of permissions.allow / ask / deny in the generated ~\.claude\settings.json together with the
+# profile's '## Claude access' table (machine path allows). One owner per rule (R12).
+#
+# {Key} = a machine path from ProfileMachineConfig.md. In Read/Edit/Write rules it renders as //c/... ;
+# in Bash/PowerShell command rules it renders literally, once with '\' and once with '/'.
+# A rule whose {Key} is blank on a machine is skipped (a skipped deny is reported).
+#
+# The vault credentials folder: Edit is denied here; Read is blocked by the credentials-guard hook,
+# because any Read() deny rule makes Claude Code prompt on every 'cd <dir> && git ...' compound.
+allow:
+- Bash(*)
+- PowerShell(*)
+- mcp__filesystem
+- mcp__memory
+- mcp__azure-devops
+- mcp__profiseeMcpLocal
+- mcp__speedMcpLocal
+- mcp__speedMcpRemote
+- mcp__corpltr94_profisee
+- mcp__corpltr94_modelsource
+- mcp__speedmerchants-local-mssql
+- mcp__speedmerchants-prod-mssql
+- mcp__speedmerchants-prod-mssql-backup
+- mcp__sequential-thinking
+- mcp__context7
+- mcp__qdrant-work
+- mcp__qdrant-code
+- mcp__obsidian
+- Skill
+- WebFetch(domain:github.com)
+- WebFetch(domain:learn.microsoft.com)
+- WebFetch(domain:devblogs.microsoft.com)
+- WebFetch(domain:docs.anthropic.com)
+- WebFetch(domain:stackoverflow.com)
+- WebFetch(domain:code.claude.com)
+- WebFetch(domain:nuget.org)
+- WebFetch(domain:profisee.com)
+- WebFetch(domain:hub.docker.com)
+- WebFetch(domain:registry.npmjs.org)
+- WebFetch(domain:docs.firegiant.com)
+- WebFetch(domain:cursor.com)
+- WebSearch
+- mcp__agentgateway
+- mcp__chrome-devtools
+- mcp__kapture
+ask:
+- Bash(chgrp:*)
+- Bash(chmod:*)
+- Bash(chown:*)
+- Bash(del:*)
+- Bash(docker builder prune:*)
+- Bash(docker compose down:*)
+- Bash(docker compose rm:*)
+- Bash(docker container prune:*)
+- Bash(docker container rm:*)
+- Bash(docker image prune:*)
+- Bash(docker image rm:*)
+- Bash(docker kill:*)
+- Bash(docker network prune:*)
+- Bash(docker network rm:*)
+- Bash(docker push:*)
+- Bash(docker rm:*)
+- Bash(docker rmi:*)
+- Bash(docker stop:*)
+- Bash(docker system prune:*)
+- Bash(docker volume prune:*)
+- Bash(docker volume rm:*)
+- Bash(docker-compose down:*)
+- Bash(docker-compose rm:*)
+- Bash(gsudo:*)
+- Bash(kill:*)
+- Bash(killall:*)
+- Bash(obsidian command:*)
+- Bash(obsidian delete:*)
+- Bash(obsidian dev:cdp:*)
+- Bash(obsidian dev:debug:*)
+- Bash(obsidian dev:mobile:*)
+- Bash(obsidian devtools:*)
+- Bash(obsidian eval:*)
+- Bash(obsidian history:restore:*)
+- Bash(obsidian move:*)
+- Bash(obsidian plugin:disable:*)
+- Bash(obsidian plugin:enable:*)
+- Bash(obsidian plugin:install:*)
+- Bash(obsidian plugin:reload:*)
+- Bash(obsidian plugin:uninstall:*)
+- Bash(obsidian reload:*)
+- Bash(obsidian rename:*)
+- Bash(obsidian restart:*)
+- Bash(obsidian snippet:disable:*)
+- Bash(obsidian snippet:enable:*)
+- Bash(obsidian sync:restore:*)
+- Bash(obsidian theme:install:*)
+- Bash(obsidian theme:set:*)
+- Bash(obsidian theme:uninstall:*)
+- Bash(pkill:*)
+- Bash(rd:*)
+- Bash(sudo:*)
+- Bash(taskkill:*)
+- Bash(netsh advfirewall:*)
+- Bash(takeown:*)
+- Bash(icacls * /grant*)
+- Bash(icacls * /deny*)
+- Bash(icacls * /remove*)
+- Bash(icacls * /reset*)
+- Bash(icacls * /setowner*)
+- PowerShell(New-NetFirewallRule*)
+- PowerShell(Set-NetFirewallRule*)
+- PowerShell(Remove-NetFirewallRule*)
+- PowerShell(icacls*)
+- PowerShell(takeown*)
+deny:
+- Edit({VaultWorkRoot}\00 Credentials\**)
+- Bash(dd:*)
+- Bash(diskpart:*)
+- Bash(fdisk:*)
+- Bash(format:*)
+- Bash(halt:*)
+- Bash(init 0:*)
+- Bash(init 6:*)
+- Bash(mkfs:*)
+- Bash(poweroff:*)
+- Bash(reboot:*)
+- Bash(shutdown:*)
+- Bash(reg add:*)
+- Bash(reg delete:*)
+- Bash(reg import:*)
+- Bash(reg copy:*)
+- Bash(reg restore:*)
+- Bash(reg load:*)
+- Bash(reg unload:*)
+- Bash(regedit:*)
+- Bash(regini:*)
+- Bash(reg.exe add:*)
+- Bash(reg.exe delete:*)
+- PowerShell(reg add*)
+- PowerShell(reg delete*)
+- PowerShell(regedit*)
+- PowerShell(New-ItemProperty*)
+- PowerShell(Remove-ItemProperty*)
+- PowerShell(Set-ItemProperty*HK*)
+- PowerShell(*-Path HKLM:*)
+- PowerShell(*-Path HKCU:*)
+- PowerShell(*-Path HKEY*)
+- Bash(net user:*)
+- Bash(net localgroup:*)
+- Bash(schtasks /create:*)
+- Bash(schtasks /delete:*)
+- Bash(schtasks /change:*)
+- PowerShell(Stop-Computer*)
+- PowerShell(Restart-Computer*)
+- PowerShell(shutdown*)
+- PowerShell(shutdown.exe*)
+- PowerShell(reboot*)
+- PowerShell(poweroff*)
+- PowerShell(halt*)
+- PowerShell(diskpart*)
+- PowerShell(format.com*)
+- PowerShell(format.exe*)
+- PowerShell(fdisk*)
+- PowerShell(mkfs*)
+- PowerShell(dd *)
+- PowerShell(Format-Volume*)
+- PowerShell(Clear-Disk*)
+- PowerShell(Initialize-Disk*)
+- PowerShell(Remove-Partition*)

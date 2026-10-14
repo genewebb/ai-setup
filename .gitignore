@@ -1,0 +1,22 @@
+# Secrets never enter this repo. Machine secrets stay in {SecretsDir}.
+.claude.json
+*.secrets.json
+secrets/
+*.pfx
+*.pem
+*.key
+.env
+.env.*
+
+# Per-machine installer state and drift snapshots
+machine-config.state.json
+machine-config.lock
+machine-config.pending.json
+drift-*/
+
+# Caches and build output
+.cache/
+__pycache__/
+node_modules/
+*.log
+desktop-bundles/

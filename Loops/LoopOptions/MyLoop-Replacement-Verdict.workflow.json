@@ -1,0 +1,310 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "MyLoop Replacement Verdict",
+    "quality_profile": "showcase",
+    "locale": "en",
+    "views": [
+      {
+        "id": "row-path",
+        "label": "How a row moves",
+        "focus": [
+          "board",
+          "ticket",
+          "readyset",
+          "dispatch",
+          "wave",
+          "collect"
+        ],
+        "note": "The six stages every row passes; judgment stays with the lead at ticket and close."
+      },
+      {
+        "id": "seat-loss",
+        "label": "Where the 7 seats go",
+        "focus": [
+          "nosupply",
+          "deps",
+          "latency",
+          "stranded"
+        ],
+        "note": "Measured seat-minutes over 951 min: supply and real dependencies dominate; only lead latency is orchestrator-addressable."
+      },
+      {
+        "id": "candidates",
+        "label": "What each candidate replaces",
+        "focus": [
+          "awh",
+          "readyset",
+          "sh",
+          "dispatch"
+        ],
+        "note": "Both would take the scheduler stage and both lack the exclusive-resource class that decided 12 of 13 shadow disagreements."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "cand",
+      "label": "Candidate would replace the stage beneath it"
+    },
+    {
+      "id": "supply",
+      "label": "Ticket supply (lead + author agents)"
+    },
+    {
+      "id": "sched",
+      "label": "Scheduler + dispatch (scripts)"
+    },
+    {
+      "id": "exec",
+      "label": "Execution + proof (agents + scripts)"
+    },
+    {
+      "id": "loss",
+      "label": "Measured seat loss and crash points",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p-ticket",
+      "label": "Ticket",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "p-sched",
+      "label": "Schedule",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p-exec",
+      "label": "Execute + judge",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "board",
+    "ticket",
+    "readyset",
+    "dispatch",
+    "wave",
+    "collect"
+  ],
+  "nodes": [
+    {
+      "id": "board",
+      "lane": "supply",
+      "col": 0,
+      "type": "external",
+      "label": "Board row",
+      "sublabel": "200 of 207 unticketed",
+      "width": 140
+    },
+    {
+      "id": "ticket",
+      "lane": "supply",
+      "col": 1,
+      "type": "security",
+      "label": "Ticket + 2 gates",
+      "sublabel": "RED grader · lead read",
+      "tag": "human judgment",
+      "width": 140
+    },
+    {
+      "id": "readyset",
+      "lane": "sched",
+      "col": 2,
+      "type": "backend",
+      "label": "Get-ReadySet",
+      "sublabel": "5 dependency classes",
+      "width": 140
+    },
+    {
+      "id": "dispatch",
+      "lane": "sched",
+      "col": 3,
+      "type": "backend",
+      "label": "Dispatch-Row",
+      "sublabel": "refuses · snapshots",
+      "width": 140
+    },
+    {
+      "id": "wave",
+      "lane": "exec",
+      "col": 4,
+      "type": "messagebus",
+      "label": "Wave workers",
+      "sublabel": "≤7 agents · LOST",
+      "width": 140
+    },
+    {
+      "id": "collect",
+      "lane": "exec",
+      "col": 5,
+      "type": "security",
+      "label": "Collect + close",
+      "sublabel": "checks · blind verify",
+      "tag": "lead accepts",
+      "width": 150
+    },
+    {
+      "id": "nosupply",
+      "lane": "loss",
+      "col": 1,
+      "type": "database",
+      "label": "No ticket",
+      "sublabel": "44.6% of seat-min",
+      "tag": "largest",
+      "width": 140
+    },
+    {
+      "id": "deps",
+      "lane": "loss",
+      "col": 2,
+      "type": "database",
+      "label": "Dependency / gate",
+      "sublabel": "27.2% of seat-min",
+      "width": 150
+    },
+    {
+      "id": "latency",
+      "lane": "loss",
+      "col": 3,
+      "type": "database",
+      "label": "Lead latency",
+      "sublabel": "13.0% · row waited",
+      "tag": "fixable in-house",
+      "width": 140
+    },
+    {
+      "id": "stranded",
+      "lane": "loss",
+      "col": 5,
+      "type": "database",
+      "label": "Crash-strandable",
+      "sublabel": "F1 F6 F8 F9 F10",
+      "tag": "fix: atomic writes",
+      "width": 140
+    },
+    {
+      "id": "awh",
+      "lane": "cand",
+      "col": 2,
+      "type": "cloud",
+      "label": "AIWorkHub",
+      "sublabel": "no exclusive class",
+      "tag": "12 false READY",
+      "width": 150
+    },
+    {
+      "id": "sh",
+      "lane": "cand",
+      "col": 3,
+      "type": "cloud",
+      "label": "Superharness",
+      "sublabel": "deps only, no verify",
+      "tag": "13 false READY",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "board-ticket",
+      "from": "board",
+      "to": "ticket",
+      "label": "author agent",
+      "variant": "default"
+    },
+    {
+      "id": "ticket-ready",
+      "from": "ticket",
+      "to": "readyset",
+      "label": "accepted ticket",
+      "variant": "emphasis"
+    },
+    {
+      "id": "ready-dispatch",
+      "from": "readyset",
+      "to": "dispatch",
+      "variant": "default"
+    },
+    {
+      "id": "dispatch-wave",
+      "from": "dispatch",
+      "to": "wave",
+      "variant": "emphasis"
+    },
+    {
+      "id": "wave-collect",
+      "from": "wave",
+      "to": "collect",
+      "label": "report or LOST",
+      "variant": "default"
+    },
+    {
+      "id": "ticket-nosupply",
+      "from": "ticket",
+      "to": "nosupply",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "ready-deps",
+      "from": "readyset",
+      "to": "deps",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "dispatch-latency",
+      "from": "dispatch",
+      "to": "latency",
+      "label": "seat free, nobody dispatched",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "collect-stranded",
+      "from": "collect",
+      "to": "stranded",
+      "label": "kill mid-write",
+      "variant": "security",
+      "role": "error"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Verdict: KEEP MYLOOP",
+      "items": [
+        "Seats busy 9.1%; 45% idle on ticket supply, 27% on real dependencies",
+        "Any orchestrator swap can recover at most the 13% lead-latency slice",
+        "Neither candidate runs on this machine as shipped"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Shadow scheduler, 27 real epochs",
+      "items": [
+        "MyLoop: 0 rule-caused false BLOCKED; 3 unmodelled false READY (build, grader side effect, append merge)",
+        "AIWorkHub semantics: 12 false READY, all exclusive stack/warehouse",
+        "Superharness semantics: 13 false READY (12 exclusive + 1 same-file overlap)"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Harden in-house, ~1-2 days",
+      "items": [
+        "Atomic JSON writes + single-writer mutex (F8 F9 F10)",
+        "Dispatch journal + ordered commit (F1 F6); auto-LOST at 3× estimate",
+        "Auto-collect on wave return; auto-dispatch of accepted legal tickets"
+      ]
+    }
+  ]
+}

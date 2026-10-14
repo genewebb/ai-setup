@@ -1,0 +1,311 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "MyLoop Row Lifecycle",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "main-rail",
+        "label": "Happy path",
+        "focus": [
+          "ready",
+          "dispatched",
+          "collected",
+          "verdict",
+          "closed"
+        ],
+        "note": "One attempt of a row: dispatched under a claim epoch, collected with a version compare, closed through a journalled two-phase close."
+      },
+      {
+        "id": "attempt-endings",
+        "label": "Attempt endings",
+        "focus": [
+          "dispatched",
+          "lost",
+          "collected",
+          "rejected",
+          "closed"
+        ],
+        "note": "A lost or rejected attempt re-enters the ReadySet; only Dispatch-Row starts the next attempt, with a new claim epoch."
+      },
+      {
+        "id": "crash-repair",
+        "label": "Crash repair",
+        "focus": [
+          "intent_only",
+          "commit_no_entry",
+          "torn_record",
+          "ready",
+          "dispatched"
+        ],
+        "note": "Reconcile-Rows -Repair reads the journal and moves every stranded shape to one legal state; a second run repairs nothing."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Row record state (rows\\<key>.json)"
+    },
+    {
+      "id": "endings",
+      "label": "Attempt endings"
+    },
+    {
+      "id": "terminal",
+      "label": "Crash repair: Reconcile-Rows -Repair"
+    }
+  ],
+  "states": [
+    {
+      "id": "ready",
+      "type": "start",
+      "label": "Ready",
+      "sublabel": "no record yet",
+      "lane": "main",
+      "col": 0,
+      "step": "01",
+      "tag": "ReadySet"
+    },
+    {
+      "id": "dispatched",
+      "type": "active",
+      "label": "Dispatched",
+      "sublabel": "attempt N, epoch E",
+      "lane": "main",
+      "col": 1,
+      "step": "02",
+      "tag": "worker owns"
+    },
+    {
+      "id": "collected",
+      "type": "decision",
+      "label": "Collected",
+      "sublabel": "status + checks",
+      "lane": "main",
+      "col": 2,
+      "step": "03",
+      "tag": "lead owns"
+    },
+    {
+      "id": "verdict",
+      "type": "waiting",
+      "label": "Collected + verdict",
+      "sublabel": "verifier PASS / FAIL",
+      "lane": "main",
+      "col": 3,
+      "step": "04",
+      "tag": "same state"
+    },
+    {
+      "id": "closed",
+      "type": "success",
+      "label": "Closed",
+      "sublabel": "board, ledger, actuals",
+      "lane": "main",
+      "col": 4,
+      "step": "05",
+      "tag": "terminal"
+    },
+    {
+      "id": "lost",
+      "type": "failure",
+      "label": "Lost",
+      "sublabel": "dead pid, stale heartbeat",
+      "lane": "endings",
+      "col": 0,
+      "tag": "automatic"
+    },
+    {
+      "id": "rejected",
+      "type": "failure",
+      "label": "Rejected",
+      "sublabel": "sharpened ticket owed",
+      "lane": "endings",
+      "col": 1,
+      "tag": "lead"
+    },
+    {
+      "id": "intent_only",
+      "type": "waiting",
+      "label": "Intent, no commit",
+      "sublabel": "never committed",
+      "lane": "terminal",
+      "col": 0,
+      "tag": "rolled back"
+    },
+    {
+      "id": "commit_no_entry",
+      "type": "active",
+      "label": "Commit, no entry",
+      "sublabel": "no index entry",
+      "lane": "terminal",
+      "col": 1,
+      "tag": "entry rebuilt"
+    },
+    {
+      "id": "torn_record",
+      "type": "failure",
+      "label": "Torn record",
+      "sublabel": "journal replayed",
+      "lane": "terminal",
+      "col": 2,
+      "tag": "reconstructed"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t_dispatch",
+      "from": "ready",
+      "to": "dispatched",
+      "label": "Dispatch-Row",
+      "route": "straight",
+      "labelDy": -25
+    },
+    {
+      "id": "t_collect",
+      "from": "dispatched",
+      "to": "collected",
+      "label": "Collect-Row -Epoch E",
+      "route": "straight",
+      "labelDy": -30,
+      "labelDx": 45
+    },
+    {
+      "id": "t_verify",
+      "from": "collected",
+      "to": "verdict",
+      "label": "Collect-Row -Verifier",
+      "route": "straight",
+      "labelDy": -25,
+      "labelDx": 12
+    },
+    {
+      "id": "t_close",
+      "from": "verdict",
+      "to": "closed",
+      "label": "Close-Row",
+      "route": "straight",
+      "labelDy": 55
+    },
+    {
+      "id": "t_lost",
+      "from": "dispatched",
+      "to": "lost",
+      "label": "Reconcile-Rows: owner dead and overdue",
+      "variant": "security",
+      "labelDy": 30
+    },
+    {
+      "id": "t_relaunch",
+      "from": "lost",
+      "to": "ready",
+      "label": "ReadySet again: attempt N+1, epoch E+1",
+      "variant": "dashed",
+      "route": "bottom-channel",
+      "labelDx": 70
+    },
+    {
+      "id": "t_reject",
+      "from": "collected",
+      "to": "rejected",
+      "label": "Collect-Row -Reject",
+      "variant": "security"
+    },
+    {
+      "id": "t_resharpen",
+      "from": "rejected",
+      "to": "ready",
+      "label": "ReadySet again: sharpened ticket",
+      "variant": "dashed",
+      "route": "bottom-channel",
+      "channelY": 566,
+      "labelDx": 110
+    },
+    {
+      "id": "t_reopen",
+      "from": "closed",
+      "to": "dispatched",
+      "label": "REOPEN (printed loudly)",
+      "variant": "dashed",
+      "route": "top-channel"
+    },
+    {
+      "id": "t_rollback",
+      "from": "intent_only",
+      "to": "ready",
+      "label": "dispatch-rolled-back",
+      "variant": "emphasis",
+      "route": "bottom-channel"
+    },
+    {
+      "id": "t_rebuild",
+      "from": "commit_no_entry",
+      "to": "dispatched",
+      "label": "entry rebuilt from the record",
+      "variant": "emphasis",
+      "route": "auto",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [
+        [
+          640,
+          479
+        ],
+        [
+          640,
+          586
+        ],
+        [
+          20,
+          586
+        ],
+        [
+          20,
+          76
+        ],
+        [
+          248,
+          76
+        ]
+      ]
+    },
+    {
+      "id": "t_reconstruct",
+      "from": "torn_record",
+      "to": "closed",
+      "label": "rebuilt at the journal's last commit, else RECOVERY-REQUIRES-HUMAN",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "One guard for every move",
+      "items": [
+        "Set-RowState looks (from, to, by) up in lib\\RowStates.ps1 and refuses anything the table does not name",
+        "Write-Row compares the record's version: a stale writer gets STALE-WRITE, its bytes never land",
+        "A collect, verdict or reject must state the current claim epoch; an old attempt's result is refused"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Crash discipline",
+      "items": [
+        "Every dispatch and close writes an intent line to journal.jsonl before its first side effect and a committed line after its last",
+        "The row record is the commit point; a crash before it rolls back, a crash after it completes forward",
+        "Every state file is written temp, flush, rename; a torn file is quarantined, never parsed as truth"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Who may move a row",
+      "items": [
+        "Dispatch-Row alone creates attempts, also from lost, rejected and closed",
+        "Collect-Row alone moves to collected, records verdicts and rejects",
+        "Close-Row closes; Reconcile-Rows completes a crashed close, marks lost and reconstructs; Approve-Gate only approves gate rows"
+      ]
+    }
+  ]
+}

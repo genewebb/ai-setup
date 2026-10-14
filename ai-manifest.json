@@ -1,0 +1,36 @@
+{
+  "_comment": "Runtime inventory (spec R4, R13). Install-AIMachine.ps1 copies exactly this into {ClaudeHome}. Paths are corpus-relative. Every skill/agent/command folder is included unless listed in exclude.",
+  "version": 1,
+  "runtime": [
+    { "kind": "dir-each", "from": "skills", "to": "skills", "exclude": [ "myfable-foreman-prev-2026-09-13" ] },
+    { "kind": "file-each", "from": "agents", "to": "agents", "filter": "*.md" },
+    { "kind": "file-each", "from": "commands", "to": "commands", "filter": "*.md" },
+    { "kind": "tree", "from": "claude/scripts", "to": "scripts" },
+    { "kind": "tree", "from": "lib", "to": "lib" },
+    { "kind": "file", "from": "claude/CLAUDE.md", "to": "CLAUDE.md" },
+    { "kind": "file", "from": "claude/statusline.ps1", "to": "statusline.ps1" },
+    { "kind": "file", "from": "setup/ai.ps1", "to": "bin/ai.ps1" },
+    { "kind": "file", "from": "setup/Install-AIMachine.ps1", "to": "bin/Install-AIMachine.ps1" },
+    { "kind": "file", "from": "setup/Test-NoHardPaths.ps1", "to": "bin/Test-NoHardPaths.ps1" },
+    { "kind": "file", "from": "setup/Install-AIMcp.ps1", "to": "bin/Install-AIMcp.ps1" },
+    { "kind": "file", "from": "setup/Export-AISecrets.ps1", "to": "bin/Export-AISecrets.ps1" },
+    { "kind": "file", "from": "setup/Invoke-AIHarvest.ps1", "to": "bin/Invoke-AIHarvest.ps1" },
+    { "kind": "file", "from": "setup/Show-AIMachine.ps1", "to": "bin/Show-AIMachine.ps1" },
+    { "kind": "file", "from": "setup/Write-AIFile.ps1", "to": "bin/Write-AIFile.ps1" },
+    { "kind": "file", "from": "setup/Publish-KitFile.ps1", "to": "bin/Publish-KitFile.ps1" },
+    { "kind": "tree", "from": "claude", "to": "machine-config/claude", "filter": "*.json;*.yaml" }
+  ],
+  "unmanaged": [ "skills/synced", "skills/.trash" ],
+  "secretEnv": [
+    "SEQ_API_KEY",
+    "SM_SA_PASSWORD",
+    "SM_SUT_APIKEY",
+    "SM_SUT_URL",
+    "SM_WORKLOAD_APIKEY",
+    "SM_WORKLOAD_URL",
+    "SPEEDY_CENTRAL_CONNECTION",
+    "SPEEDY_CENTRAL_SETTINGS",
+    "AZURE_DEVOPS_PAT"
+  ],
+  "psModules": [ "powershell-yaml" ]
+}

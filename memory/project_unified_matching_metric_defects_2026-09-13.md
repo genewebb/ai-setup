@@ -1,0 +1,33 @@
+---
+name: project_unified_matching_metric_defects_2026-09-13
+description: "Review of UnifiedMatchingApiExecution rows (3a WE 100007336) + 3b logs 2026-09-13: timestamps from Profisee DB tagged local -04:00 (E2E +4h), DbaCount/EntityWidth 0, RequestAttributeCount 122 fallback, Endpoint label Records/<table>, Environment SMVM2 on a local run; per-record metrics only persist when the single ProcessBatchJob ends"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: d6e5bf36-22ce-4192-9050-0ede6455c319
+  modified: 2026-09-14T20:23:43.678Z
+---
+
+**Verified on 100,000 3a rows**: status/lookup/timing columns internally consistent (rounding only). Create/Match/Golden/Survive null = correct for LookupOnly.
+
+**2026-09-13 16:xx EDT - FIXED in source (uncommitted, Debug build clean to C:\tmp\build_matching_check):** A `MatchingMetricsCollector.AsUtc` (SpecifyKind Utc); B `MatchingIterationContext.DbaAttributeCount/EntityWidth` fed from `_dbaAttCount`/`GetEffectiveEntityWidth` into PerRecord+BatchLoad strategies; C `RequestAttributeCount = payload.Count` on both lookup paths (creates keep the AttributeCount fallback = full record); D `BuildEndpointUrl` -> `{host}/matching/{strategy}/lookup` for lookups, `{host}/Records/{table}` otherwise. F (SimulatedUserCount) NOT changed - awaiting user.
+**Template 10000160 "Matching 1M" rewritten via /speedmerchants REST** (script `Update-Matching1MTemplate.ps1` in session scratchpad; backup `C:\tmp\matching1m_template_backup`): all 37 steps Target*=CORPLTR94; steps 21/25/32 CustomParm TimeLimit=01:00:00; 25/32 ScenarioRuntime.MaxHangfireScenarioServersCount=20 (top-level copy is dead). 37/37 byte-identical read-back. Execution 10000190 keeps its OLD copied configs.
+**2026-09-14: template now 40 steps.** Step 14 (strategy-on PUT, autoMatch/autoSurvive) copied in as new steps 21/26/34 (before 3a/3b/3c) because the strategy gets disabled between scenarios (StrategyDisabler, see below). `{{STEP:N}}` tokens (keyed by ExecutionOrder, `StepReferenceResolver`) remapped: 3b 25->27, 3c 32->35. Script `Insert-StrategyOnSteps.ps1` (session 36fb0eef scratchpad); backup `C:\tmp\matching1m_template_backup_2026-09-14` (37-step state). Old step numbers quoted below are PRE-insert.
+**2026-09-14 11:50 EDT: template now 43 steps.** Step 7 (Enable Strategy Then Run: PATCH `v1/Matching/RetailClient {status:1}` + POST `processActions [IncludeSurvivorship]`) copied to new 15/28/37, right after each continuous-on PUT (14/27/36), because PUT /Strategies always saves Status=0 ([[reference_matching_put_strategies_forces_disabled]]). Tokens now: 3a none; S2 `{{STEP:16}}`, 3b `{{STEP:29}}`, 3c `{{STEP:38}}`, S1 `{{STEP:7}}`. **16:2x EDT: 44 steps** — user added enable copy at 23 (before 3a) in the UI; UI does NOT remap `{{STEP:N}}` on insert. Remapped 3b 29->30, 3c 38->39 (script `Remap-StepTokens.ps1`, session 7cb23a63; backup of pre-remap 44-step state `C:\tmp\matching1m_template_backup_2026-09-14c`). Final tokens: S1 7, S2 16, 3b 30, 3c 39. Script `Insert-EnableRunSteps.ps1` (session 7cb23a63 scratchpad); backup of 40-step state `C:\tmp\matching1m_template_backup_2026-09-14b`.
+
+**Rerun = execution 10000192** (started 20:19 UTC 9/13 from reset Profisee, 1,000,000 RetailClient rows). Verified 16:45 EDT: all 37 copied step configs CORPLTR94, 0 SMVM refs, 21/25/32 = 20 servers + TimeLimit 01:00:00; deployed `C:\Deploy\TestAuto\web\Plugins\TestAuto.Matching.dll` built 16:01 contains AsUtc/DbaAttributeCount; TestAuto.Web.exe started 16:10. Step 8 poller: Profisee matching Hangfire (`profisee.matchingjobs.Job`) scores first, then ClusterRecordsAsync jobs of 100K ids (2 concurrent, rest AwaitingSemaphore); `[Match Status]` only fills during clustering. Watcher script `watch_exec10000192.ps1` in session scratchpad. Seq receiving again.
+Step 8 (scenario 1 match 1M) took 50 min; result MatchStatus 3=945,901 / 7=12,471 / NULL=41,628 (6 cluster jobs show Deleted, NULLs spread across all id ranges - undiagnosed). Step 15 (BatchLoad, WE 100007411) 17:22-18:05 EDT: 200 rows, 100,000 req/resp, all 201, DbaCount 50, EntityWidth 122, Endpoint `CORPLTR94/Records/RetailClient`, Environment CORPLTR94 - fixes B/D/E VERIFIED live. New minor: BatchLoadStrategy never sets ResponseTimeMs (all 0; ElapsedTime_Ms is populated).
+**Scenario 1 matching actually FAILED**: Profisee Matching log (`C:\Program Files\Profisee\Master Data Maestro Server\26.2.0\Services\Matching\LogFiles\SystemLog.log`, NOT in Seq) - cluster job 2141 (ids 500001-600000) could not acquire distributed entity lock (15/30/45s, result -1) across 3 Hangfire attempts (2 cluster jobs concurrent), 183 gHasValue deadlock WRNs; 17:15:27 EDT `StrategyDisabler: Job 2141 failed. Cancelling strategy`. Strategy history (matching.tMatchingStrategy_History; StatusID via meta.tStrategyStatus: 100 ERROR, 99 CANCELED, 98 FINISHED) went ERROR->CANCELED. TestAuto MatchingStrategyPollingScenario treats that as idle -> step 8 "Complete" (silent failure). After step 14 set AutoMatch/AutoSurvive=1 no matching jobs ran: 15,000 scenario-2 creates all NULL Match Status, last [Match DateTime] 21:13:56 UTC.
+
+**Defects found (see fix status above)**
+- `MatchingMetricsCollector.GetRecordTimestamp`/`Wait*Async` (`:208,273,311,353`) return SQL `DateTime` Kind=Unspecified; the UTC value lands in `DateTimeOffset?` as LOCAL (-04:00). 3b log: `CreateRequestTime=17:15:43.54+00:00` vs `CreateTransactionTime=17:15:43.557-04:00`. `PopulateDerivedDurations` E2E = SurviveTxn(-04:00) - LookupRequest(+00:00) -> ~+14,400,000 ms. Match/Survivorship durations unaffected (same offset both ends). Profisee `$EnterDTM`/`$LastChgDTM` are UTC (seen 19:23 while local 15:23).
+- `PerRecordStrategy.cs:59,68` DbaCount/EntityWidth from `ScenarioDataShape` (0) - scenario itself counted DbaCount 50 / 122 attributes.
+- `MetricRequestBase.RequestAttributeCount` getter falls back to `AttributeCount` (122) when unset; lookup payload is 7-8 attributes.
+- `UnifiedMatchingScenario.BuildEndpointUrl` (`:308`) always `{TargetApplicationServer}/Records/{table}` even for Matching lookup POST.
+- `SimulatedUserCount` = `MaxConcurrentBatchesPerHangfireScenarioServer` (1) while WorkloadExecution says 20 - semantic question for the user.
+
+**Config**: workflow 10000190 ScenarioEnvironment TargetEnvironment=`SMVM2` although it runs locally -> Environment column mislabelled. 3b/3c runtime 1 server/1 batch/BatchSize 1, TimeLimit 0, IterationLimit 100000.
+
+**Persistence**: details accumulate in memory (`PerRecordStrategy.cs:113`) and are returned once in the batch summary (`UnifiedMatchingScenario.cs:300`); stopping a job loses them.
+
+Related: [[project_matching_3a_step21_hang_2026-09-13]].

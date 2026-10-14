@@ -1,0 +1,12 @@
+# PSGallery modules each machine needs, by edition. install.ps1 installs any that are missing (CurrentUser).
+# Own modules (Gene.*) are in pwsh\PowerShell\Modules and copied, not listed here.
+PowerShell BurntToast
+PowerShell ExchangeOnlineManagement
+PowerShell Microsoft.PowerShell.SecretManagement
+PowerShell Microsoft.PowerShell.SecretStore
+PowerShell posh-git
+PowerShell powershell-yaml
+WindowsPowerShell Microsoft.PowerShell.SecretManagement
+WindowsPowerShell Microsoft.PowerShell.SecretStore
+WindowsPowerShell PSReadLine
+WindowsPowerShell posh-git

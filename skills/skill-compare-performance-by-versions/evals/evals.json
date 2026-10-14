@@ -1,0 +1,26 @@
+{
+  "skill_name": "skill-compare-performance-by-versions",
+  "evals": [
+    {
+      "id": 0,
+      "name": "two-version-classic",
+      "prompt": "Compare CRUD performance between 26R1 and 26R2P and write me the comparison doc.",
+      "expected_output": "Markdown report with Batch CRUD and User CRUD tables (26R1 and 26R2P columns + delta), a Wins/Regressions summary. Numbers must match perfDashboard data (e.g. Batch Create 10 Rules ~12,487 -> ~9,217 ms).",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "three-version-trend",
+      "prompt": "I want to see how create/update/delete performance has trended across 25R4, 26R1, and 26R2P. Make me a comparison report.",
+      "expected_output": "Markdown report with one metric column per version (25R4, 26R1, 26R2P) in chronological order, delta vs baseline 25R4, both Batch and User sections, common-runs aggregation.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "regression-framed",
+      "prompt": "did 26R2P regress anything vs 26R1? give me the perf comparison report.",
+      "expected_output": "Markdown report comparing 26R1 vs 26R2P; Summary calls out the User CRUD write regressions (~18-21% slower create/update) and the batch read/write wins. Root-cause section only if opted in (unattended: data+summary still produced).",
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "version": "2026-10-06 list prices, claude-api skill table; cache write 5m = 1.25x input, 1h = 2x input; claude-opus-5 and claude-sonnet-5 added (rows were unpriced)",
+  "unit": "USD per 1M tokens",
+  "models": {
+    "claude-opus-5-5":   { "in": 4.00,  "out": 20.00, "cacheRead": 0.20, "cacheWrite5m": 5.00,  "cacheWrite1h": 8.00 },
+    "claude-opus-5":     { "in": 5.00,  "out": 25.00, "cacheRead": 0.50, "cacheWrite5m": 6.25,  "cacheWrite1h": 10.00 },
+    "claude-sonnet-5":   { "in": 2.00,  "out": 10.00, "cacheRead": 0.20, "cacheWrite5m": 2.50,  "cacheWrite1h": 4.00 },
+    "claude-fable-5-1":  { "in": 10.00, "out": 50.00, "cacheRead": 0.25, "cacheWrite5m": 12.50, "cacheWrite1h": 20.00 },
+    "claude-sonnet-5-5": { "in": 2.00,  "out": 10.00, "cacheRead": 0.20, "cacheWrite5m": 2.50,  "cacheWrite1h": 4.00 },
+    "claude-haiku-4-5":  { "in": 1.00,  "out": 5.00,  "cacheRead": 0.10, "cacheWrite5m": 1.25,  "cacheWrite1h": 2.00 }
+  }
+}

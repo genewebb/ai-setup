@@ -1,0 +1,14 @@
+# Test-NoHardPaths.ps1 allowlist: one glob per line, relative to the corpus root. Keep each entry justified.
+docs\machine-config-design.md        # design record: cites the paths measured on the laptop on 2026-09-30
+setup\tests\*                         # resolver/gate tests use deliberately fake drives (X:, Y:, Z:)
+claude\scripts\tests\*                # guard fixtures: the literal path IS the input under test
+setup\Test-NoHardPaths.ps1            # the gate itself: the config convention string and its regexes
+Loops\*                               # history: loop analysis and planning records
+link-to-ai.ps1                        # superseded by Install-AIMachine.ps1; archived in the R17 retirement step
+Set-SkillProfile.ps1                  # superseded by Install-AIMachine.ps1; archived in the R17 retirement step
+skills\archify\test\*                                  # vendored (archify upstream) test fixtures
+skills\ui-ux-pro-max\data\*                            # vendored framework data: sample values from the upstream stack guides
+memory\*                              # auto-memory: records machine facts, paths are the content (not installed by the corpus manifest)
+stream-host\*                         # per-host operator scripts, placed by install.ps1 into the profile's StreamHostDir
+pwsh\*                                # PowerShell profiles: machine paths resolved there by design
+tools\Promote-ToWork.ps1              # help example names a clone path

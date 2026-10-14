@@ -1,0 +1,92 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Speedy Pit Wall</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#f3f5f8; --panel:#ffffff; --ink:#18202b; --muted:#5a6778; --line:#d9dfe7;
+  --accent:#d9480f; --planned:#9aa6b5; --ticketing:#7f93c4; --ticketed:#3b6fd6; --building:#e0a100; --built:#7c4dd6;
+  --integrated:#1b9e77; --done:#137a5b; --blocked:#c92a2a; --warn-bg:#fff4e0; --warn-ink:#8a5200;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f141b; --panel:#171e28; --ink:#e6ebf2; --muted:#93a0b1; --line:#2a3442;
+  --accent:#ff7a3d; --planned:#6b7787; --ticketing:#4a72b8; --ticketed:#6c9bff; --building:#f2c14e; --built:#a98bff;
+  --integrated:#3fc79a; --done:#2fae83; --blocked:#ff6b6b; --warn-bg:#33270f; --warn-ink:#f2c14e;
+  color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0f141b; --panel:#171e28; --ink:#e6ebf2; --muted:#93a0b1; --line:#2a3442;
+  --accent:#ff7a3d; --planned:#6b7787; --ticketing:#4a72b8; --ticketed:#6c9bff; --building:#f2c14e; --built:#a98bff;
+  --integrated:#3fc79a; --done:#2fae83; --blocked:#ff6b6b; --warn-bg:#33270f; --warn-ink:#f2c14e;
+  color-scheme:dark;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Source Sans 3",system-ui,sans-serif;padding:0 16px}
+.wrap{max-width:1180px;margin:0 auto;padding-block:26px 56px;display:grid;gap:22px}
+h1,h2{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;margin:0;letter-spacing:.01em;text-wrap:balance}
+h1{font-size:2.1rem}
+h2{font-size:1.2rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:10px;border-bottom:3px solid var(--accent);padding-bottom:10px}
+header .meta{color:var(--muted);font-size:.85rem;font-family:"JetBrains Mono",monospace}
+section{display:grid;gap:10px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 16px;display:grid;gap:8px}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;display:grid;gap:2px}
+.tile b{font-family:"Barlow Condensed",sans-serif;font-size:1.9rem;line-height:1;font-variant-numeric:tabular-nums}
+.tile span{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+a.tile{text-decoration:none;color:inherit}
+a.tile:hover{border-color:var(--accent)}
+.tile.owner{border-color:var(--accent)}
+.tile.owner b{color:var(--accent)}
+.tile.stall{border-color:var(--accent)}
+.tile.stall b{color:var(--accent)}
+.bar{display:flex;height:13px;border-radius:3px;overflow:hidden;background:var(--line)}
+.bar i{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.78rem;color:var(--muted)}
+.legend em{font-style:normal}
+.legend s{text-decoration:none;display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.groups{display:grid;gap:12px}
+.grp .top{display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:space-between;align-items:baseline}
+.grp .name{font-weight:600}
+.eta{font-family:"Barlow Condensed",sans-serif;font-size:1.45rem;font-weight:700}
+.eta small{font-family:"Source Sans 3",sans-serif;font-size:.75rem;font-weight:400;color:var(--muted)}
+.pill{display:inline-block;padding:1px 7px;border-radius:3px;font:600 11px "JetBrains Mono",monospace;color:#fff;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+.s-planned{background:var(--planned)}.s-ticketing{background:var(--ticketing)}.s-ticketed{background:var(--ticketed)}.s-building{background:var(--building);color:#1a1300}
+.s-built{background:var(--built)}.s-integrated{background:var(--integrated)}.s-done{background:var(--done)}.s-blocked{background:var(--blocked)}.s-retired{background:var(--done);opacity:.45}
+.s-released{background:var(--accent)}.s-closed{background:var(--done)}.s-planning{background:var(--planned)}
+.scroll{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;vertical-align:top;padding:6px 9px;border-bottom:1px solid var(--line)}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+td.id{font-family:"JetBrains Mono",monospace;white-space:nowrap}
+td.num{font-family:"JetBrains Mono",monospace;white-space:nowrap;font-variant-numeric:tabular-nums}
+tr.crit td.id::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:2px}
+tr.over td.num{color:var(--blocked);font-weight:600}
+.note{color:var(--muted);font-size:12px;max-width:52ch}
+.flag{background:var(--warn-bg);color:var(--warn-ink);border-radius:4px;padding:8px 12px;font-weight:600;font-size:.9rem}
+.flag.dry{border-left:4px solid var(--accent);color:var(--accent)}
+ul.q{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+ul.q li{border-left:3px solid var(--line);padding-left:10px;font-size:.9rem}
+ul.q li.warn{border-left-color:var(--building)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;align-items:start}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:600 12px "JetBrains Mono",monospace;border:1px solid var(--line);border-radius:3px;padding:2px 7px}
+.empty{color:var(--muted);font-style:italic}
+a{color:var(--ticketed)}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+details>summary{cursor:pointer;color:var(--muted);font-size:.85rem}
+td.name{font-weight:600}
+td.bar-cell{min-width:190px}
+/* Priority categories carries 16 columns since the pipeline-stage split; compact it so it fits the 1180px column
+   without a horizontal scroll: tighter cells, a narrower bar, and the rate/finish sub-lines allowed to wrap. */
+table.cats th,table.cats td{padding:6px 5px}
+table.cats th{letter-spacing:.02em}
+table.cats td.bar-cell{min-width:96px}
+table.cats td.num div,table.cats td div{white-space:normal}
+table.cats td.name{min-width:150px}
+td.bar-cell .bar{height:10px;margin-bottom:3px}
+.pct{font-family:"Barlow Condensed",sans-serif;font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums}
+tr.total td{border-top:2px solid var(--line);font-weight:700}
+@media (max-width:640px){h1{font-size:1.6rem}.wrap{padding-block:18px 40px}}
+</style></head><body><div class="wrap">

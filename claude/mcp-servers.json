@@ -1,0 +1,152 @@
+{
+  "_comment": "MCP server templates (R15). {Key} = profile value; {secret:<id>} = a value moved by Export-AISecrets / Install-AIMachine -SecretsFile. No secret value is ever stored here.",
+  "servers": {
+    "speedMcpRemote": {
+      "type": "http",
+      "url": "https://profiseecloud.dev/speedmerchantstest/mcp",
+      "headers": {
+        "x-api-key": "{secret:speedMcpRemote/headers.x-api-key}"
+      }
+    },
+    "azure-devops": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "cursor-azure-devops-mcp",
+        "--azure-org-url",
+        "https://profisee.visualstudio.com",
+        "--azure-token",
+        "{secret:azure-devops/args.5}"
+      ],
+      "env": {}
+    },
+    "memory": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "env": {
+        "MEMORY_FILE_PATH": "%USERPROFILE%\\ai\\memory\\memory.jsonl"
+      }
+    },
+    "profiseeMcpLocal": {
+      "type": "http",
+      "url": "https://corpltr94.corp.profisee.com/profisee/mcp",
+      "headers": {
+        "x-api-key": "{secret:profiseeMcpLocal/headers.x-api-key}"
+      }
+    },
+    "speedMcpLocal": {
+      "type": "http",
+      "url": "https://corpltr94.corp.profisee.com/speedmerchants/mcp",
+      "headers": {
+        "x-api-key": "{secret:speedMcpLocal/headers.x-api-key}"
+      }
+    },
+    "obsidian": {
+      "type": "http",
+      "url": "https://127.0.0.1:27124/mcp/",
+      "headers": {
+        "Authorization": "{secret:obsidian/headers.Authorization}"
+      }
+    },
+    "corpltr94_modelsource": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "mcp-alchemy==2025.8.15.91819",
+        "--with",
+        "pyodbc",
+        "--with",
+        "mcp<2",
+        "--refresh-package",
+        "mcp-alchemy",
+        "mcp-alchemy"
+      ],
+      "env": {
+        "DB_URL": "{secret:corpltr94_modelsource/env.DB_URL}"
+      }
+    },
+    "corpltr94_profisee": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "mcp-alchemy==2025.8.15.91819",
+        "--with",
+        "pyodbc",
+        "--with",
+        "mcp<2",
+        "--refresh-package",
+        "mcp-alchemy",
+        "mcp-alchemy"
+      ],
+      "env": {
+        "DB_URL": "{secret:corpltr94_profisee/env.DB_URL}"
+      }
+    },
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-filesystem",
+        "{ReposRoot}",
+        "{ScratchRoot}",
+        "{DocumentationDir}",
+        "{PowershellScriptsDir}"
+      ],
+      "env": {}
+    },
+    "speedmerchants-prod-mssql": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "mcp-alchemy==2025.8.15.91819",
+        "--with",
+        "pyodbc",
+        "--with",
+        "mcp<2",
+        "--refresh-package",
+        "mcp-alchemy",
+        "mcp-alchemy"
+      ],
+      "env": {
+        "DB_URL": "{secret:speedmerchants-prod-mssql/env.DB_URL}"
+      }
+    },
+    "speedmerchants-local-mssql": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "mcp-alchemy==2025.8.15.91819",
+        "--with",
+        "pyodbc",
+        "--with",
+        "mcp<2",
+        "--refresh-package",
+        "mcp-alchemy",
+        "mcp-alchemy"
+      ],
+      "env": {
+        "DB_URL": "{secret:speedmerchants-local-mssql/env.DB_URL}"
+      }
+    }
+  },
+  "secrets": [
+    "speedMcpRemote/headers.x-api-key",
+    "azure-devops/args.5",
+    "profiseeMcpLocal/headers.x-api-key",
+    "speedMcpLocal/headers.x-api-key",
+    "obsidian/headers.Authorization",
+    "corpltr94_modelsource/env.DB_URL",
+    "corpltr94_profisee/env.DB_URL",
+    "speedmerchants-prod-mssql/env.DB_URL",
+    "speedmerchants-local-mssql/env.DB_URL"
+  ]
+}

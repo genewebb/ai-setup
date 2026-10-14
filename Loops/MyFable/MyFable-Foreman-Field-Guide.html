@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyFable Foreman Field Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body { margin: 0; }
+svg { max-width: 100%; }
+:root {
+  --ground: #EDF0EC;
+  --surface: #F8FAF7;
+  --band: #E3E8E3;
+  --ink: #17201C;
+  --ink-2: #3A4540;
+  --muted: #5A6660;
+  --rule: #C9D1CB;
+  --you: #D0480F;
+  --lead: #3056C8;
+  --scripts: #00917F;
+  --worker: #A86A00;
+  --verifier: #8A3FD1;
+  --good: #1F7A3A;
+  --warn: #9A5B00;
+  --bad: #B42318;
+  --display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #121815; --surface: #1A221E; --band: #202a25;
+    --ink: #E4EAE6; --ink-2: #C3CDC7; --muted: #9AA7A0; --rule: #2E3934;
+    --you: #DB6A22; --lead: #5B82E0; --scripts: #17A08F; --worker: #B08405; --verifier: #9670E0;
+    --good: #4CB86E; --warn: #D9A03A; --bad: #F0705F;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #121815; --surface: #1A221E; --band: #202a25;
+  --ink: #E4EAE6; --ink-2: #C3CDC7; --muted: #9AA7A0; --rule: #2E3934;
+  --you: #DB6A22; --lead: #5B82E0; --scripts: #17A08F; --worker: #B08405; --verifier: #9670E0;
+  --good: #4CB86E; --warn: #D9A03A; --bad: #F0705F;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.6;
+  padding: 0 20px;
+}
+.wrap { max-width: 1100px; margin: 0 auto; padding-block: 48px 96px; display: grid; gap: 72px; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.05; }
+h1 { font-size: clamp(48px, 8vw, 84px); font-weight: 700; letter-spacing: -0.01em; text-transform: uppercase; }
+h2 { font-size: 38px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.01em; }
+h3 { font-size: 23px; font-weight: 600; letter-spacing: 0.01em; }
+p { margin: 0; }
+.stack { display: grid; gap: 16px; }
+.stack-lg { display: grid; gap: 28px; }
+.label {
+  font-family: var(--display); font-weight: 600; font-size: 15px;
+  text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);
+}
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+code { background: var(--band); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }
+a { color: var(--lead); }
+:focus-visible { outline: 3px solid var(--lead); outline-offset: 2px; }
+
+/* header */
+header { display: grid; gap: 24px; }
+.lede { font-size: 20px; line-height: 1.5; max-width: 60ch; color: var(--ink-2); }
+.lede strong { color: var(--ink); font-weight: 600; }
+.cast { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0; border-top: 2px solid var(--ink); }
+.cast > div { padding: 14px 16px 16px 0; display: grid; gap: 4px; align-content: start; border-bottom: 1px solid var(--rule); }
+.who { display: flex; align-items: center; gap: 8px; font-family: var(--display); font-size: 21px; font-weight: 600; text-transform: uppercase; }
+.sw { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.cast p { font-size: 14px; color: var(--ink-2); line-height: 1.45; }
+.toc { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 14px; }
+.toc a { color: var(--ink-2); text-decoration: none; border-bottom: 1px solid var(--rule); }
+.toc a:hover { color: var(--ink); border-color: var(--ink); }
+
+/* actor colour tokens for SVG and chips */
+.c-you { --c: var(--you); } .c-lead { --c: var(--lead); } .c-scripts { --c: var(--scripts); }
+.c-worker { --c: var(--worker); } .c-verifier { --c: var(--verifier); }
+.c-bad { --c: var(--bad); } .c-muted { --c: var(--muted); }
+.sw.c-you, .sw.c-lead, .sw.c-scripts, .sw.c-worker, .sw.c-verifier { background: var(--c); }
+
+/* figures */
+figure { margin: 0; display: grid; gap: 12px; }
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; }
+.scroll svg { display: block; width: 100%; height: auto; min-width: 900px; }
+.scroll svg.narrow { min-width: 620px; }
+figcaption { font-size: 14px; color: var(--muted); max-width: 80ch; }
+svg text { font-family: var(--body); fill: var(--ink); }
+svg .t-title { font-size: 13.5px; font-weight: 600; }
+svg .t-sub { font-size: 11.5px; fill: var(--muted); }
+svg .t-arrow { font-size: 11.5px; fill: var(--ink-2); font-style: italic; }
+svg .t-lane { font-family: var(--display); font-size: 17px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+svg .t-lane-sub { font-size: 11px; fill: var(--muted); }
+svg .band { fill: var(--band); }
+svg .box { fill: color-mix(in oklab, var(--c) 11%, var(--surface)); stroke: var(--c); stroke-width: 1.6; }
+svg .box.ghost { fill: var(--surface); stroke: var(--muted); stroke-dasharray: 5 4; }
+svg .num { fill: var(--c); }
+svg .num-t { fill: #fff; font-size: 11px; font-weight: 600; }
+svg .flow { fill: none; stroke: var(--ink-2); stroke-width: 1.6; }
+svg .flow.back { stroke: var(--bad); stroke-dasharray: 6 4; }
+svg .flow.poll { stroke: var(--scripts); stroke-dasharray: 2 4; stroke-width: 2; }
+svg .ah { fill: var(--ink-2); }
+svg .ah-back { fill: var(--bad); }
+svg .ah-poll { fill: var(--scripts); }
+svg .grid { stroke: var(--rule); stroke-width: 1; }
+svg .axis-t { font-size: 11.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+svg .link { stroke: var(--rule); stroke-width: 3; }
+svg .est { fill: var(--surface); stroke: var(--muted); stroke-width: 2; }
+svg .act { fill: var(--ink); stroke: var(--surface); stroke-width: 2; }
+svg .ratio { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+svg .row-hit { fill: transparent; }
+svg g.drow:hover .row-hit { fill: var(--band); }
+
+/* steps list */
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); gap: 0 40px; counter-reset: s; }
+ol.steps li { display: grid; grid-template-columns: 34px 1fr; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--rule); font-size: 15px; }
+ol.steps .n { width: 26px; height: 26px; border-radius: 50%; background: var(--c); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 600; margin-top: 1px; }
+ol.steps b { font-weight: 600; }
+
+/* refusal list */
+.guards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 20px; }
+.guard { border-top: 3px solid var(--scripts); padding-top: 12px; display: grid; gap: 6px; align-content: start; }
+.guard h3 { font-size: 20px; }
+.guard p { font-size: 14.5px; color: var(--ink-2); }
+
+/* tables */
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th { text-align: left; font-family: var(--display); font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 8px 12px 8px 0; border-bottom: 2px solid var(--ink); white-space: nowrap; }
+td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td strong { font-weight: 600; }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.every { color: var(--verifier); }
+.pill.batch { color: var(--worker); }
+.pill.none { color: var(--muted); }
+
+/* compare (overlap) */
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.case { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 18px; display: grid; gap: 12px; align-content: start; }
+.case .ws { font-family: var(--mono); font-size: 13px; display: grid; gap: 4px; }
+.case .ws span { overflow-wrap: anywhere; }
+.case .ws mark { background: color-mix(in oklab, var(--worker) 24%, transparent); color: inherit; padding: 0 2px; border-radius: 2px; }
+.verdict { font-weight: 600; font-size: 14px; display: flex; gap: 8px; align-items: baseline; }
+.verdict.no { color: var(--bad); }
+.verdict.yes { color: var(--good); }
+.case p { font-size: 14px; color: var(--ink-2); }
+
+/* chart */
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13.5px; color: var(--ink-2); align-items: center; }
+.legend span { display: inline-flex; gap: 7px; align-items: center; }
+.dot-est { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--muted); background: var(--surface); }
+.dot-act { width: 12px; height: 12px; border-radius: 50%; background: var(--ink); }
+.figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0; border-top: 2px solid var(--ink); }
+.figs div { padding: 12px 16px 12px 0; border-bottom: 1px solid var(--rule); display: grid; gap: 2px; }
+.figs .big { font-family: var(--display); font-size: 40px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.figs .cap { font-size: 13.5px; color: var(--ink-2); }
+
+/* improvements */
+ol.fixes { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: f; }
+ol.fixes > li { counter-increment: f; display: grid; grid-template-columns: 56px 1fr; gap: 8px 16px; padding: 22px 0; border-bottom: 1px solid var(--rule); }
+ol.fixes > li::before { content: counter(f, decimal-leading-zero); font-family: var(--display); font-size: 34px; font-weight: 600; color: var(--muted); line-height: 1; font-variant-numeric: tabular-nums; }
+.fix { display: grid; gap: 10px; }
+.fix-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; }
+.fix h3 { font-size: 24px; }
+.ev { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 3px; white-space: nowrap; }
+.ev.seen { background: color-mix(in oklab, var(--bad) 14%, var(--surface)); color: var(--bad); }
+.ev.code { background: color-mix(in oklab, var(--lead) 14%, var(--surface)); color: var(--lead); }
+.ev.risk { background: color-mix(in oklab, var(--warn) 16%, var(--surface)); color: var(--warn); }
+.nowthen { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 28px; font-size: 15px; }
+.nowthen p b { display: block; font-family: var(--display); font-size: 14px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; }
+.src { font-size: 13px; color: var(--muted); }
+
+/* tailoring */
+.recipes td:first-child { min-width: 170px; }
+.hooks { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.hooks div { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; font-size: 14px; display: grid; gap: 4px; align-content: start; }
+.hooks code { font-size: 12.5px; }
+
+/* glossary */
+dl.gloss { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 32px; margin: 0; }
+dl.gloss div { padding: 10px 0; border-bottom: 1px solid var(--rule); display: grid; gap: 2px; }
+dl.gloss dt { font-weight: 600; }
+dl.gloss dd { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+
+footer { font-size: 13.5px; color: var(--muted); display: grid; gap: 8px; border-top: 2px solid var(--ink); padding-top: 16px; }
+
+@media (max-width: 560px) {
+  .wrap { gap: 56px; padding-block: 32px 64px; }
+  h2 { font-size: 32px; }
+  ol.fixes > li { grid-template-columns: 1fr; }
+  .lede { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <span class="label">How the <span class="mono">/myfable</span> skill works</span>
+  <h1>MyFable Foreman</h1>
+  <p class="lede">A way to work through a long list of coding tasks with AI helpers. <strong>One session plans each job and judges the result. Cheaper workers do the job. Scripts do the paperwork.</strong> Nothing counts as done until a check that was failing before the work starts is passing after it.</p>
+  <div class="cast" aria-label="Who does what">
+    <div class="c-you"><span class="who"><span class="sw c-you"></span>You</span><p>Approve the human gates. Nothing past a gate runs until you say so.</p></div>
+    <div class="c-lead"><span class="who"><span class="sw c-lead"></span>Lead session</span><p>Writes each ticket and its check, reads the results, accepts or rejects. Nothing else.</p></div>
+    <div class="c-scripts"><span class="who"><span class="sw c-scripts"></span>Scripts</span><p>Refuse unsafe dispatches, run the checks, keep the records, rebuild the board.</p></div>
+    <div class="c-worker"><span class="who"><span class="sw c-worker"></span>Workers</span><p>Opus agents, up to 7 at once. Each does one ticket and reports back.</p></div>
+    <div class="c-verifier"><span class="who"><span class="sw c-verifier"></span>Verifier</span><p>A fresh agent that never saw the worker's reasoning and assumes the work is broken.</p></div>
+  </div>
+  <nav class="toc" aria-label="Sections">
+    <a href="#loop">The loop</a><a href="#life">A task's life</a><a href="#refusals">What gets refused</a><a href="#proof">Proof by kind of task</a><a href="#parallel">Running in parallel</a><a href="#record">What the record shows</a><a href="#better">How to make it better</a><a href="#tailor">Tailoring it to new work</a><a href="#words">Words used here</a>
+  </nav>
+</header>
+
+<!-- ============ LOOP ============ -->
+<section id="loop" class="stack-lg">
+  <div class="stack prose">
+    <span class="label">One turn, start to finish</span>
+    <h2>The loop</h2>
+    <p>Each task on the board is a <b>row</b>. A turn takes one row (or several that can't collide) from "ticket written" to "closed". Read the picture left to right; each horizontal band is one of the five players above.</p>
+  </div>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1260 520" role="img" aria-label="Swimlane diagram: the lead writes a ticket; Dispatch-Row checks it and either refuses or accepts; the lead launches a worker and a monitor; the monitor polls the check until it passes; Collect-Row runs the checks and prints a verdict sheet; the lead reads and decides; code and security rows go to a blind verifier; Close-Row closes the row; at a gate, you approve before the next batch.">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+        <marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-back"/></marker>
+        <marker id="ahp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-poll"/></marker>
+      </defs>
+
+      <!-- lanes -->
+      <rect class="band" x="0" y="20" width="1260" height="100"/>
+      <rect class="band" x="0" y="220" width="1260" height="100"/>
+      <rect class="band" x="0" y="420" width="1260" height="100"/>
+      <g class="c-you"><rect x="0" y="20" width="5" height="100" style="fill:var(--c)"/><text class="t-lane" x="16" y="68">You</text><text class="t-lane-sub" x="16" y="86">approves gates</text></g>
+      <g class="c-lead"><rect x="0" y="120" width="5" height="100" style="fill:var(--c)"/><text class="t-lane" x="16" y="168">Lead</text><text class="t-lane-sub" x="16" y="186">plans, reads, decides</text></g>
+      <g class="c-scripts"><rect x="0" y="220" width="5" height="100" style="fill:var(--c)"/><text class="t-lane" x="16" y="268">Scripts</text><text class="t-lane-sub" x="16" y="286">guard + bookkeeping</text></g>
+      <g class="c-worker"><rect x="0" y="320" width="5" height="100" style="fill:var(--c)"/><text class="t-lane" x="16" y="368">Worker</text><text class="t-lane-sub" x="16" y="386">opus, one ticket</text></g>
+      <g class="c-verifier"><rect x="0" y="420" width="5" height="100" style="fill:var(--c)"/><text class="t-lane" x="16" y="468">Verifier</text><text class="t-lane-sub" x="16" y="486">fresh eyes</text></g>
+
+      <!-- flows (drawn under boxes) -->
+      <path class="flow" d="M210,198 V270 H304" marker-end="url(#ah)"/>
+      <path class="flow back" d="M370,242 V170 H278" marker-end="url(#ahb)"/>
+      <text class="t-arrow" x="324" y="162" text-anchor="middle">refused</text>
+      <path class="flow" d="M432,270 H450 V170 H464" marker-end="url(#ah)"/>
+      <text class="t-arrow" x="456" y="224">accepted</text>
+      <path class="flow" d="M592,170 H608 V370 H624" marker-end="url(#ah)"/>
+      <path class="flow" d="M608,270 H624" marker-end="url(#ah)"/>
+      <circle cx="608" cy="270" r="3.5" class="ah"/>
+      <text class="t-arrow" x="614" y="214">launch both</text>
+      <path class="flow poll" d="M690,298 V338" marker-end="url(#ahp)"/>
+      <text class="t-arrow" x="698" y="324">runs the check</text>
+      <path class="flow" d="M752,270 H784" marker-end="url(#ah)"/>
+      <text class="t-arrow" x="770" y="262" text-anchor="middle">wake</text>
+      <path class="flow" d="M690,398 V412 H850 V302" marker-end="url(#ah)"/>
+      <text class="t-arrow" x="770" y="436" text-anchor="middle">report: DONE / BLOCKED / …</text>
+      <path class="flow" d="M850,242 V202" marker-end="url(#ah)"/>
+      <text class="t-arrow" x="858" y="226">verdict sheet</text>
+      <path class="flow" d="M912,170 H930 V470 H944" marker-end="url(#ah)"/>
+      <text class="t-arrow" x="938" y="336">code / security</text>
+      <path class="flow" d="M1072,470 H1090 V270 H1104" marker-end="url(#ah)"/>
+      <text class="t-arrow" x="1096" y="384">pass</text>
+      <path class="flow" d="M880,142 V124 H1130 V238" marker-end="url(#ah)"/>
+      <text class="t-arrow" x="1005" y="116" text-anchor="middle">accept (mockup, doc)</text>
+      <path class="flow back" d="M820,142 V104 H250 V138" marker-end="url(#ahb)"/>
+      <text class="t-arrow" x="535" y="96" text-anchor="middle">reject (or verifier fails it): sharpen the ticket, next attempt</text>
+      <path class="flow" d="M1200,242 V102" marker-end="url(#ah)"/>
+      <text class="t-arrow" x="1194" y="176" text-anchor="end">gate?</text>
+      <text class="t-arrow" x="1170" y="314" text-anchor="middle">then the next row</text>
+
+      <!-- boxes -->
+      <g class="c-lead"><rect class="box" x="148" y="142" width="124" height="56" rx="5"/><text class="t-title" x="210" y="166" text-anchor="middle">Write the ticket</text><text class="t-sub" x="210" y="184" text-anchor="middle">+ its check + self-test</text><circle class="num" cx="148" cy="142" r="10"/><text class="num-t" x="148" y="146" text-anchor="middle">1</text></g>
+      <g class="c-scripts"><rect class="box" x="308" y="242" width="124" height="56" rx="5"/><text class="t-title" x="370" y="266" text-anchor="middle">Dispatch-Row</text><text class="t-sub" x="370" y="284" text-anchor="middle">safety refusals</text><circle class="num" cx="308" cy="242" r="10"/><text class="num-t" x="308" y="246" text-anchor="middle">2</text></g>
+      <g class="c-lead"><rect class="box" x="468" y="142" width="124" height="56" rx="5"/><text class="t-title" x="530" y="166" text-anchor="middle">Launch</text><text class="t-sub" x="530" y="184" text-anchor="middle">publish board first</text><circle class="num" cx="468" cy="142" r="10"/><text class="num-t" x="468" y="146" text-anchor="middle">3</text></g>
+      <g class="c-scripts"><rect class="box" x="628" y="242" width="124" height="56" rx="5"/><text class="t-title" x="690" y="266" text-anchor="middle">Monitor</text><text class="t-sub" x="690" y="284" text-anchor="middle">polls every 60 s</text><circle class="num" cx="628" cy="242" r="10"/><text class="num-t" x="628" y="246" text-anchor="middle">4</text></g>
+      <g class="c-worker"><rect class="box" x="628" y="342" width="124" height="56" rx="5"/><text class="t-title" x="690" y="366" text-anchor="middle">Do the work</text><text class="t-sub" x="690" y="384" text-anchor="middle">only in its write set</text><circle class="num" cx="628" cy="342" r="10"/><text class="num-t" x="628" y="346" text-anchor="middle">5</text></g>
+      <g class="c-scripts"><rect class="box" x="788" y="242" width="124" height="56" rx="5"/><text class="t-title" x="850" y="266" text-anchor="middle">Collect-Row</text><text class="t-sub" x="850" y="284" text-anchor="middle">runs class checks</text><circle class="num" cx="788" cy="242" r="10"/><text class="num-t" x="788" y="246" text-anchor="middle">6</text></g>
+      <g class="c-lead"><rect class="box" x="788" y="142" width="124" height="56" rx="5"/><text class="t-title" x="850" y="166" text-anchor="middle">Read &amp; decide</text><text class="t-sub" x="850" y="184" text-anchor="middle">sheet, report, diff</text><circle class="num" cx="788" cy="142" r="10"/><text class="num-t" x="788" y="146" text-anchor="middle">7</text></g>
+      <g class="c-verifier"><rect class="box" x="948" y="442" width="124" height="56" rx="5"/><text class="t-title" x="1010" y="466" text-anchor="middle">Blind re-check</text><text class="t-sub" x="1010" y="484" text-anchor="middle">assumes it's broken</text><circle class="num" cx="948" cy="442" r="10"/><text class="num-t" x="948" y="446" text-anchor="middle">8</text></g>
+      <g class="c-scripts"><rect class="box" x="1108" y="242" width="124" height="56" rx="5"/><text class="t-title" x="1170" y="266" text-anchor="middle">Close-Row</text><text class="t-sub" x="1170" y="284" text-anchor="middle">records + board</text><circle class="num" cx="1108" cy="242" r="10"/><text class="num-t" x="1108" y="246" text-anchor="middle">9</text></g>
+      <g class="c-you"><rect class="box" x="1108" y="42" width="124" height="56" rx="5"/><text class="t-title" x="1170" y="66" text-anchor="middle">Gate</text><text class="t-sub" x="1170" y="84" text-anchor="middle">loop stops for you</text><circle class="num" cx="1108" cy="42" r="10"/><text class="num-t" x="1108" y="46" text-anchor="middle">10</text></g>
+    </svg>
+    </div>
+    <figcaption>Solid arrows are the normal path. Red dashed arrows send work back: a refused dispatch, or a rejected result. The dotted teal arrow is the monitor running the row's check once a minute; when it passes, the session wakes up.</figcaption>
+  </figure>
+
+  <ol class="steps">
+    <li class="c-lead"><span class="n">1</span><span><b>Write the ticket.</b> One file, <code>.loop\PLAN-&lt;key&gt;.md</code>. The top block tells the scripts the kind of task, its check, its estimate and which files it may touch. The body tells the worker what to do. The lead also writes a <b>check</b> (grader) that fails right now, and a <b>self-test</b> proving the check can tell wrong work from right work.</span></li>
+    <li class="c-scripts"><span class="n">2</span><span><b>Dispatch-Row.ps1</b> refuses the whole batch if anything is unsafe (see below). If it's happy, it writes the row record, marks the row Started, rebuilds the board, and prints the exact worker prompt and monitor command.</span></li>
+    <li class="c-lead"><span class="n">3</span><span><b>Launch.</b> Publish the updated board, then start one opus worker and one monitor per row. Arm <code>/loop</code> as a slow backup alarm.</span></li>
+    <li class="c-scripts"><span class="n">4</span><span><b>Monitor</b> runs the row's check every minute. The moment it passes, the session wakes. (A finished background agent alone doesn't reliably wake a quiet session. That was measured on 9/9, and it's why the monitor exists.)</span></li>
+    <li class="c-worker"><span class="n">5</span><span><b>The worker</b> reads the ticket, changes only files in its write set, runs the check until it passes, and reports. It never commits, never starts other agents, never publishes.</span></li>
+    <li class="c-scripts"><span class="n">6</span><span><b>Collect-Row.ps1</b> records the report, runs the checks for that kind of task, and prints one <b>verdict sheet</b>. It never accepts anything.</span></li>
+    <li class="c-lead"><span class="n">7</span><span><b>Read and decide.</b> The worker's report is a claim, not proof. The lead reads the sheet, the report and the changes. Reject means a sharper ticket and another attempt. A third attempt on an unchanged ticket isn't allowed.</span></li>
+    <li class="c-verifier"><span class="n">8</span><span><b>Blind verifier</b> for code and security rows. It gets the original ticket and the changes, never the worker's reasoning. Its verdict is evidence. Acceptance is still the lead's call.</span></li>
+    <li class="c-scripts"><span class="n">9</span><span><b>Close-Row.ps1</b> requires a "residual" answer (<code>none</code>, or the row that carries the rest). It then records actual minutes, writes a one-line board status and rebuilds the board and the two vault status pages. After that comes a compact prompt: y/n, and no answer in 60 seconds means no.</span></li>
+    <li class="c-you"><span class="n">10</span><span><b>Gate.</b> At a gate row the loop stops. For mockups, the whole batch is published as one page for you to review. Only your words, run through <code>Approve-Gate.ps1</code>, unlock the rows behind it.</span></li>
+  </ol>
+</section>
+
+<!-- ============ LIFE ============ -->
+<section id="life" class="stack-lg">
+  <div class="stack prose">
+    <span class="label">States in <span class="mono">rows\&lt;key&gt;.json</span></span>
+    <h2>A task's life</h2>
+    <p>Every row has one JSON record, written only by the scripts. It's the single source of truth, and the ledger and board are rebuilt from it. Here are the states a row can be in, and which script moves it between them.</p>
+  </div>
+  <figure>
+    <div class="scroll">
+    <svg class="narrow" viewBox="0 0 960 240" role="img" aria-label="State diagram: ticket written, then dispatched, collected, closed. From dispatched a row can become lost and be re-dispatched. From collected a row can be rejected and dispatched again as a new attempt.">
+      <defs>
+        <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+        <marker id="ah2b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-back"/></marker>
+      </defs>
+      <path class="flow" d="M160,82 H246" marker-end="url(#ah2)"/><text class="t-arrow" x="203" y="72" text-anchor="middle">Dispatch-Row</text>
+      <path class="flow" d="M390,82 H476" marker-end="url(#ah2)"/><text class="t-arrow" x="433" y="72" text-anchor="middle">Collect-Row</text>
+      <path class="flow" d="M620,82 H716" marker-end="url(#ah2)"/><text class="t-arrow" x="668" y="72" text-anchor="middle">Close-Row</text>
+      <path class="flow back" d="M300,108 V160" marker-end="url(#ah2b)"/><text class="t-arrow" x="292" y="140" text-anchor="end">-MarkLost</text>
+      <path class="flow" d="M340,164 V112" marker-end="url(#ah2)"/><text class="t-arrow" x="348" y="140">re-dispatch</text>
+      <path class="flow back" d="M580,108 V160" marker-end="url(#ah2b)"/><text class="t-arrow" x="588" y="140">-Reject</text>
+      <path class="flow" d="M480,178 L396,110" marker-end="url(#ah2)"/>
+
+      <g class="c-lead"><rect class="box ghost" x="20" y="56" width="140" height="52" rx="26"/><text class="t-title" x="90" y="79" text-anchor="middle">ticket written</text><text class="t-sub" x="90" y="96" text-anchor="middle">no record yet</text></g>
+      <g class="c-worker"><rect class="box" x="250" y="56" width="140" height="52" rx="26"/><text class="t-title" x="320" y="79" text-anchor="middle">dispatched</text><text class="t-sub" x="320" y="96" text-anchor="middle">worker running</text></g>
+      <g class="c-scripts"><rect class="box" x="480" y="56" width="140" height="52" rx="26"/><text class="t-title" x="550" y="79" text-anchor="middle">collected</text><text class="t-sub" x="550" y="96" text-anchor="middle">checks ran, lead reads</text></g>
+      <g class="c-lead"><rect class="box" x="720" y="56" width="150" height="52" rx="26"/><text class="t-title" x="795" y="79" text-anchor="middle">closed</text><text class="t-sub" x="795" y="96" text-anchor="middle">accepted, board updated</text></g>
+      <g class="c-bad"><rect class="box" x="230" y="164" width="140" height="52" rx="26"/><text class="t-title" x="300" y="187" text-anchor="middle">lost</text><text class="t-sub" x="300" y="204" text-anchor="middle">worker vanished</text></g>
+      <g class="c-bad"><rect class="box" x="480" y="164" width="140" height="52" rx="26"/><text class="t-title" x="550" y="187" text-anchor="middle">rejected</text><text class="t-sub" x="550" y="204" text-anchor="middle">sharpen ticket, retry</text></g>
+      <g class="c-you"><rect class="box" x="720" y="164" width="150" height="52" rx="26"/><text class="t-title" x="795" y="187" text-anchor="middle">gate: approved</text><text class="t-sub" x="795" y="204" text-anchor="middle">Approve-Gate, your word</text></g>
+    </svg>
+    </div>
+    <figcaption>A retry never overwrites history: each attempt is appended to the row's <code>attempts</code> list, and a rejection is stored with its reason. Gate rows are a separate kind of record, created only when you approve.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ REFUSALS ============ -->
+<section id="refusals" class="stack-lg">
+  <div class="stack prose">
+    <span class="label">Dispatch-Row.ps1, before any worker starts</span>
+    <h2>What gets refused</h2>
+    <p>These are the rules that used to live in the lead's head and now live in a script. If any row in the batch breaks one, <b>nothing</b> in the batch is dispatched.</p>
+  </div>
+  <div class="guards">
+    <div class="guard"><h3>The check already passes</h3><p>If the grader is green before any work, the row would "close" having done nothing. Checks must fail first, for the reason the ticket states.</p></div>
+    <div class="guard"><h3>The self-test fails</h3><p>A check that can't tell a wrong stub from a correct one proves nothing. The named self-test must pass.</p></div>
+    <div class="guard"><h3>Workers could collide</h3><p>Two rows in the batch, or a new row and one already running, list write sets that might touch the same file.</p></div>
+    <div class="guard"><h3>A gate is still closed</h3><p>The row names a gate (<code>afterGate</code>) that you haven't approved yet.</p></div>
+    <div class="guard"><h3>Too many, or malformed</h3><p>More than 7 keys; missing key, class, grader, estimate or write set; a class other than mockup, doc, code or security; the row already running.</p></div>
+  </div>
+</section>
+
+<!-- ============ PROOF ============ -->
+<section id="proof" class="stack-lg">
+  <div class="stack prose">
+    <span class="label">scripts\checks\&lt;class&gt;.ps1</span>
+    <h2>Proof depends on the kind of task</h2>
+    <p>Not every task deserves the same scrutiny. A static HTML mockup can't leak a password to production; a login change can. Each row picks a <b>class</b>, and the class decides which checks run and whether a verifier is needed.</p>
+  </div>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>Class</th><th>Use it for</th><th>Scripted checks</th><th>Verifier</th><th>Lead reads</th></tr></thead>
+    <tbody>
+      <tr><td><strong>mockup</strong></td><td>Clickable screen designs, no real code</td><td>check passes · every CSS class exists in the shared stylesheet · the sample data file actually runs · no real hostnames or secrets · repos untouched</td><td><span class="pill batch">once per batch</span></td><td>ticket vs. output, gaps list</td></tr>
+      <tr><td><strong>doc</strong></td><td>Written docs, notes, plans</td><td>check passes · nothing changed outside the write set</td><td><span class="pill none">none</span></td><td>the whole thing</td></tr>
+      <tr><td><strong>code</strong></td><td>Anything that builds and runs</td><td>check passes · build succeeds · tests pass with a minimum count (a filter that runs zero tests fails) · only allowed files changed · changed-file list</td><td><span class="pill every">every row</span></td><td>verdict sheet + diff</td></tr>
+      <tr><td><strong>security</strong></td><td>Secrets, auth, anything exposed</td><td>all of code's checks, plus every <code>crosscheck</code> command must pass, each named for the property it proves (e.g. "anonymous POST is refused")</td><td><span class="pill every">every row</span></td><td>sheet + diff + each crosscheck</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ============ PARALLEL ============ -->
+<section id="parallel" class="stack-lg">
+  <div class="stack prose">
+    <span class="label">Up to seven workers at once</span>
+    <h2>Running in parallel</h2>
+    <p>Workers can run side by side only if they can't write to the same file. The script decides this with a deliberately cautious test: it takes each write-set pattern, cuts it off at the first <code>*</code>, and treats the rows as colliding if one leftover path starts with the other. In practice, that looks like this:</p>
+  </div>
+  <div class="compare">
+    <div class="case">
+      <span class="label">Different folders</span>
+      <div class="ws"><span>A: <mark>src/Web/Secrets/</mark>*.cs</span><span>B: <mark>src/Web/Cards/</mark>*.cs</span></div>
+      <div class="verdict yes">✓ Runs in parallel</div>
+      <p>Neither leftover path starts with the other.</p>
+    </div>
+    <div class="case">
+      <span class="label">Same folder, different files</span>
+      <div class="ws"><span>A: <mark>ui/kit/</mark>*.html</span><span>B: <mark>ui/kit/</mark>NOTES.md</span></div>
+      <div class="verdict no">✕ Refused</div>
+      <p>Refused even though <code>.html</code> and <code>.md</code> never meet. A wildcard in a folder blocks every other row that writes anywhere in that folder.</p>
+    </div>
+    <div class="case">
+      <span class="label">Hidden shared file</span>
+      <div class="ws"><span>A: src/Web/Secrets/*.cs</span><span>B: src/Web/Cards/*.cs</span><span>both must also edit <mark>tests/CENSUS-INVENTORY.md</mark></span></div>
+      <div class="verdict no">✕ Can't really run together</div>
+      <p>The worker rules require every new test file to be recorded in the census file. Leave it out of both write sets and one worker gets blocked. Put it in both and dispatch refuses.</p>
+    </div>
+  </div>
+  <p class="prose">Rules of thumb from the skill: code rows fan out only when their write sets don't overlap <b>and</b> they don't share a test project. When in doubt, run them one after another, because a collision costs more than the wait. One board publish per fan-out, one monitor per worker, collect them in whatever order they finish.</p>
+</section>
+
+<!-- ============ RECORD ============ -->
+<section id="record" class="stack-lg">
+  <div class="stack prose">
+    <span class="label">Measured, speedmerchants <span class="mono">.loop\rows</span>, 13 Sep 10:50</span>
+    <h2>What the record shows</h2>
+    <p>Seven rows have closed under MyFable so far. These are their real row records, not examples. Row 52.P1.4 was still running when this was written.</p>
+  </div>
+  <div class="figs">
+    <div><span class="big">0.30×</span><span class="cap">actual time vs. estimate across all 7 rows (162 of 537 min)</span></div>
+    <div><span class="big">4</span><span class="cap">real defects the blind verifier found, each forcing a retry (3 on 52.P1.3c, 1 on 52.P1.3d)</span></div>
+    <div><span class="big">1</span><span class="cap">worker lost to a session restart (52.P1.3b, attempt 1)</span></div>
+    <div><span class="big">1</span><span class="cap">close that needed an override for a stale baseline (52.P1.3b)</span></div>
+  </div>
+  <figure>
+    <div class="legend" aria-hidden="true"><span><i class="dot-est"></i>Estimate</span><span><i class="dot-act"></i>Actual (all attempts)</span><span>Right-hand figure = actual ÷ estimate</span></div>
+    <div class="scroll">
+    <svg class="narrow" viewBox="0 0 720 300" role="img" aria-label="Estimate versus actual minutes for seven closed rows. Every row finished well under its estimate: 52.P1.1a 8 of 81, 52.P1.1b 19 of 68, 52.P1.1c 18 of 54, 52.P1.3a 13 of 77, 52.P1.3b 25 of 95, 52.P1.3c 49 of 63 across four attempts, 52.P1.3d 30 of 99.">
+      <!-- x scale: 0..100 min -> 150..640 (4.9 px/min) -->
+      <g>
+        <line class="grid" x1="150" y1="24" x2="150" y2="258"/><line class="grid" x1="248" y1="24" x2="248" y2="258"/><line class="grid" x1="346" y1="24" x2="346" y2="258"/><line class="grid" x1="444" y1="24" x2="444" y2="258"/><line class="grid" x1="542" y1="24" x2="542" y2="258"/><line class="grid" x1="640" y1="24" x2="640" y2="258"/>
+        <text class="axis-t" x="150" y="276" text-anchor="middle">0</text><text class="axis-t" x="248" y="276" text-anchor="middle">20</text><text class="axis-t" x="346" y="276" text-anchor="middle">40</text><text class="axis-t" x="444" y="276" text-anchor="middle">60</text><text class="axis-t" x="542" y="276" text-anchor="middle">80</text><text class="axis-t" x="640" y="276" text-anchor="middle">100</text>
+        <text class="axis-t" x="395" y="294" text-anchor="middle">minutes</text>
+      </g>
+      <g class="drow"><title>52.P1.1a (mockup): estimate 81 min, actual 8 min, 2 attempts</title><rect class="row-hit" x="0" y="26" width="720" height="30"/><line class="link" x1="189.2" y1="41" x2="546.9" y2="41"/><circle class="est" cx="546.9" cy="41" r="5.5"/><circle class="act" cx="189.2" cy="41" r="6"/><text class="axis-t" x="10" y="45">52.P1.1a · mockup</text><text class="ratio" x="710" y="45" text-anchor="end">0.10×</text></g>
+      <g class="drow"><title>52.P1.1b (mockup): estimate 68 min, actual 19 min, 1 attempt</title><rect class="row-hit" x="0" y="59" width="720" height="30"/><line class="link" x1="243.1" y1="74" x2="483.2" y2="74"/><circle class="est" cx="483.2" cy="74" r="5.5"/><circle class="act" cx="243.1" cy="74" r="6"/><text class="axis-t" x="10" y="78">52.P1.1b · mockup</text><text class="ratio" x="710" y="78" text-anchor="end">0.28×</text></g>
+      <g class="drow"><title>52.P1.1c (mockup): estimate 54 min, actual 18 min, 1 attempt</title><rect class="row-hit" x="0" y="92" width="720" height="30"/><line class="link" x1="238.2" y1="107" x2="414.6" y2="107"/><circle class="est" cx="414.6" cy="107" r="5.5"/><circle class="act" cx="238.2" cy="107" r="6"/><text class="axis-t" x="10" y="111">52.P1.1c · mockup</text><text class="ratio" x="710" y="111" text-anchor="end">0.33×</text></g>
+      <g class="drow"><title>52.P1.3a (code): estimate 77 min, actual 13 min, 1 attempt</title><rect class="row-hit" x="0" y="125" width="720" height="30"/><line class="link" x1="213.7" y1="140" x2="527.3" y2="140"/><circle class="est" cx="527.3" cy="140" r="5.5"/><circle class="act" cx="213.7" cy="140" r="6"/><text class="axis-t" x="10" y="144">52.P1.3a · code</text><text class="ratio" x="710" y="144" text-anchor="end">0.17×</text></g>
+      <g class="drow"><title>52.P1.3b (code): estimate 95 min, actual 25 min, 2 attempts (first lost to a restart)</title><rect class="row-hit" x="0" y="158" width="720" height="30"/><line class="link" x1="272.5" y1="173" x2="615.5" y2="173"/><circle class="est" cx="615.5" cy="173" r="5.5"/><circle class="act" cx="272.5" cy="173" r="6"/><text class="axis-t" x="10" y="177">52.P1.3b · code</text><text class="ratio" x="710" y="177" text-anchor="end">0.26×</text></g>
+      <g class="drow"><title>52.P1.3c (code): estimate 63 min, actual 49 min, 4 attempts (26 + 9 + 9 + 5)</title><rect class="row-hit" x="0" y="191" width="720" height="30"/><line class="link" x1="390.1" y1="206" x2="458.7" y2="206"/><circle class="est" cx="458.7" cy="206" r="5.5"/><circle class="act" cx="390.1" cy="206" r="6"/><text class="axis-t" x="10" y="210">52.P1.3c · code</text><text class="axis-t" x="380" y="210" text-anchor="end">4 attempts</text><text class="ratio" x="710" y="210" text-anchor="end">0.78×</text></g>
+      <g class="drow"><title>52.P1.3d (code): estimate 99 min, actual 30 min, 2 attempts</title><rect class="row-hit" x="0" y="224" width="720" height="30"/><line class="link" x1="297" y1="239" x2="635.1" y2="239"/><circle class="est" cx="635.1" cy="239" r="5.5"/><circle class="act" cx="297" cy="239" r="6"/><text class="axis-t" x="10" y="243">52.P1.3d · code</text><text class="ratio" x="710" y="243" text-anchor="end">0.30×</text></g>
+    </svg>
+    </div>
+    <figcaption>Every row came in under its estimate, most by two-thirds or more. The one close to its estimate, 52.P1.3c, is the one the verifier sent back three times. Retries, not the work itself, are where time goes.</figcaption>
+  </figure>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>Row</th><th>Class</th><th class="num">Est</th><th class="num">Actual</th><th class="num">Attempts</th><th>Verifier</th><th>What happened</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">52.P1.1a</td><td>mockup</td><td class="num">81</td><td class="num">8</td><td class="num">2</td><td>exempt</td><td>First attempt stopped after 1 min; moved over from the old loop's ledger</td></tr>
+      <tr><td class="mono">52.P1.1b</td><td>mockup</td><td class="num">68</td><td class="num">19</td><td class="num">1</td><td>—</td><td>Same batch as 1c</td></tr>
+      <tr><td class="mono">52.P1.1c</td><td>mockup</td><td class="num">54</td><td class="num">18</td><td class="num">1</td><td>pass w/ notes</td><td>Batch verifier recorded here</td></tr>
+      <tr><td class="mono">52.P1.3a</td><td>code</td><td class="num">77</td><td class="num">13</td><td class="num">1</td><td>pass w/ notes</td><td>Clean first time</td></tr>
+      <tr><td class="mono">52.P1.3b</td><td>code</td><td class="num">95</td><td class="num">25</td><td class="num">2</td><td>pass w/ notes</td><td>Attempt 1 lost to a restart; closed with an override because the file-change baseline predated 3a</td></tr>
+      <tr><td class="mono">52.P1.3c</td><td>code</td><td class="num">63</td><td class="num">49</td><td class="num">4</td><td>pass w/ notes</td><td>Verifier caught: empty passphrase threw; correct passphrase charged to lockout; revealed secret left on screen after a refusal</td></tr>
+      <tr><td class="mono">52.P1.3d</td><td>code</td><td class="num">99</td><td class="num">30</td><td class="num">2</td><td>pass w/ notes</td><td>Verifier caught: read-only JSON pane accepted and saved typing</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ============ BETTER ============ -->
+<section id="better" class="stack-lg">
+  <div class="stack prose">
+    <span class="label">Ranked, most valuable first</span>
+    <h2>How to make it better</h2>
+    <p>Each suggestion is tagged by how we know it's a problem. <span class="ev seen">seen</span> means it already happened in a real record. <span class="ev code">in the code</span> means the scripts provably behave this way today. <span class="ev risk">risk</span> means it's reasoned from the design and hasn't been seen yet.</p>
+  </div>
+  <ol class="fixes">
+    <li><div class="fix">
+      <div class="fix-head"><h3>Re-run earlier rows' checks when a row closes</h3><span class="ev seen">seen</span></div>
+      <div class="nowthen">
+        <p><b>Today</b>Collect-Row runs only <em>this</em> row's check. A row can quietly break a check an earlier row made green, and still close green.</p>
+        <p><b>Change</b>At collect, find closed rows whose write sets touch this row's changed files and re-run their checks. Keep the daily full sweep as a backstop.</p>
+      </div>
+      <p class="src">Evidence: <span class="mono">checks\*.ps1</span> run only <span class="mono">$row.grader</span>. Under the previous loop, 7 once-green checks were found broken after 3 days of closes (memory note, 8 Sep).</p>
+    </div></li>
+    <li><div class="fix">
+      <div class="fix-head"><h3>Refresh the change baseline after every accepted code row</h3><span class="ev seen">seen</span></div>
+      <div class="nowthen">
+        <p><b>Today</b>The "only allowed files changed" check compares against <span class="mono">BASELINE.json</span>. When that baseline is older than the last closed row, the previous row's files show up as violations.</p>
+        <p><b>Change</b>Close-Row retakes the baseline after it accepts a code or security row. The existing rule is kept: never after a <em>failed</em> row.</p>
+      </div>
+      <p class="src">Evidence: 52.P1.3b closed with <span class="mono">-Override</span>: "BASELINE.json iteration 187 predates closed row 52.P1.3a".</p>
+    </div></li>
+    <li><div class="fix">
+      <div class="fix-head"><h3>Calibrate estimates, then derive the alarms from them</h3><span class="ev seen">seen</span></div>
+      <div class="nowthen">
+        <p><b>Today</b>Rows ran at 0.30× their estimates. The "overdue" flag fires at 3× the estimate, which is roughly 10× real time. The monitor gives up after a fixed 120 polls (2 hours) no matter the row's size.</p>
+        <p><b>Change</b>Keep a per-class factor from actuals (Close-Row already writes <span class="mono">actuals.json</span>). Base "overdue" and the monitor timeout on the calibrated estimate.</p>
+      </div>
+      <p class="src">Evidence: <span class="mono">Reconcile-Rows.ps1:25</span> (3× est), <span class="mono">Dispatch-Row.ps1:120</span> (120 polls, 60 s).</p>
+    </div></li>
+    <li><div class="fix">
+      <div class="fix-head"><h3>Don't collect a row until the worker has reported</h3><span class="ev risk">risk</span></div>
+      <div class="nowthen">
+        <p><b>Today</b>The monitor wakes the session when the check turns green, which can happen before the worker is done (it may still be writing notes or tidying). Collect-Row accepts an empty status.</p>
+        <p><b>Change</b>Make <span class="mono">-Status</span> required on the collect form. A green monitor then means "look for the report", not "start judging".</p>
+      </div>
+      <p class="src">Evidence: <span class="mono">Collect-Row.ps1:9</span> allows <span class="mono">''</span>. No recorded case of an early collect yet.</p>
+    </div></li>
+    <li><div class="fix">
+      <div class="fix-head"><h3>Turn "no third try on the same ticket" into a script check</h3><span class="ev code">in the code</span></div>
+      <div class="nowthen">
+        <p><b>Today</b>The skill forbids a third attempt on unchanged input, but only the lead's discipline enforces it.</p>
+        <p><b>Change</b>Store a hash of the ticket and check with each attempt. Dispatch-Row refuses attempt 2+ if both are unchanged.</p>
+      </div>
+      <p class="src">Evidence: <span class="mono">Dispatch-Row.ps1</span> has no attempt limit. 52.P1.3c went to 4 attempts; each one did change the ticket (C13, C14, C15), so it was legitimate.</p>
+    </div></li>
+    <li><div class="fix">
+      <div class="fix-head"><h3>Make the gate insist on the batch verifier</h3><span class="ev code">in the code</span></div>
+      <div class="nowthen">
+        <p><b>Today</b>Approve-Gate records approval without checking that the mockup batch was verified. In the record, the verdict sits on one row of the batch, so the record alone can't show the whole batch was covered.</p>
+        <p><b>Change</b>Store the batch verdict on a batch record. Approve-Gate refuses if any row behind the gate lacks one.</p>
+      </div>
+      <p class="src">Evidence: <span class="mono">Approve-Gate.ps1</span> (18 lines, no checks). Rows 1a exempt, 1b blank, 1c pass with notes.</p>
+    </div></li>
+    <li><div class="fix">
+      <div class="fix-head"><h3>Handle files every row must touch</h3><span class="ev risk">risk</span></div>
+      <div class="nowthen">
+        <p><b>Today</b>Shared "append a line" files (the test census, <span class="mono">sample-data.js</span>) either block parallel runs or cause blocked deviations.</p>
+        <p><b>Change</b>Add an <span class="mono">appendOnly:</span> list to the ticket. Workers write their lines to a side file, and Close-Row merges them. Overlap checks ignore these files.</p>
+      </div>
+      <p class="src">Evidence: PROMPTS.md code rules ("a test file you add must be classified in tests/CENSUS-INVENTORY.md"). Mockup rules allow appending keys to sample-data.js.</p>
+    </div></li>
+    <li><div class="fix">
+      <div class="fix-head"><h3>Move project-specific values into a per-repo config</h3><span class="ev code">in the code</span></div>
+      <div class="nowthen">
+        <p><b>Today</b>The scripts assume this programme: both speedy repos as defaults, a secrets pattern naming your machines, a .NET-only test summary, a helper path inside the old loop skill, and board scripts under <span class="mono">.loop\tools</span>.</p>
+        <p><b>Change</b>Add a <span class="mono">.loop\foreman.json</span> with repos, secret patterns, test-summary pattern, board commands and the status page name and key pattern. The scripts read it and fall back to today's values.</p>
+      </div>
+      <p class="src">Evidence: <span class="mono">Dispatch-Row.ps1:91</span>, <span class="mono">checks\mockup.ps1:43</span>, <span class="mono">checks\code.ps1:15</span>, <span class="mono">Collect-Row.ps1:16</span>, <span class="mono">RowCommon.ps1:110–123</span>.</p>
+    </div></li>
+    <li><div class="fix">
+      <div class="fix-head"><h3>Bring the docs in line with the model decision</h3><span class="ev code">in the code</span></div>
+      <div class="nowthen">
+        <p><b>Today</b>SKILL.md says Fable plans and verifies. On 12 Sep at 22:09 you switched the session to opus, with one ticket written ahead. Collect-Row still stamps every verifier verdict as "fable".</p>
+        <p><b>Change</b>Update principle 1 and the verifier header. Pass the verifier model as a parameter so the record says what actually ran.</p>
+      </div>
+      <p class="src">Evidence: SKILL.md principle 1, PROMPTS.md § Verifier, <span class="mono">Collect-Row.ps1:37</span>.</p>
+    </div></li>
+    <li><div class="fix">
+      <div class="fix-head"><h3>Work out minutes instead of typing them</h3><span class="ev code">in the code</span></div>
+      <div class="nowthen">
+        <p><b>Today</b>Close-Row requires <span class="mono">-Minutes</span> by hand, even though each attempt already stores when it was dispatched and collected.</p>
+        <p><b>Change</b>Default to the sum of attempt durations. Keep <span class="mono">-Minutes</span> as an override.</p>
+      </div>
+      <p class="src">Evidence: <span class="mono">Close-Row.ps1:10</span>, <span class="mono">Collect-Row.ps1:49</span> (collectedAt).</p>
+    </div></li>
+  </ol>
+</section>
+
+<!-- ============ TAILOR ============ -->
+<section id="tailor" class="stack-lg">
+  <div class="stack prose">
+    <span class="label">Setting it up for a new list of tasks</span>
+    <h2>Tailoring it to new work</h2>
+    <p>The skill is built around one question per task: <b>can you write a check that fails now and passes when the job is done?</b> If yes, everything else is just choosing the right class, write set and gates. If no, the task isn't ready to be a row yet.</p>
+  </div>
+
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1100 330" role="img" aria-label="Decision tree for sorting a task: if you cannot write a failing check, split the task or add a measure class. Otherwise: if it changes running code and touches secrets, auth or exposure, it is security; if it changes running code otherwise, code; if it is a visual prototype, mockup; else doc.">
+      <defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+      <!-- questions -->
+      <g class="c-lead">
+        <rect class="box" x="20" y="130" width="200" height="66" rx="5"/><text class="t-title" x="120" y="156" text-anchor="middle">Can you write a check</text><text class="t-title" x="120" y="174" text-anchor="middle">that fails right now?</text>
+        <rect class="box" x="300" y="130" width="200" height="66" rx="5"/><text class="t-title" x="400" y="156" text-anchor="middle">Does it change code</text><text class="t-title" x="400" y="174" text-anchor="middle">that builds and runs?</text>
+        <rect class="box" x="590" y="40" width="210" height="66" rx="5"/><text class="t-title" x="695" y="66" text-anchor="middle">Secrets, auth, or anything</text><text class="t-title" x="695" y="84" text-anchor="middle">reachable from outside?</text>
+        <rect class="box" x="590" y="220" width="210" height="66" rx="5"/><text class="t-title" x="695" y="246" text-anchor="middle">Is it a screen design</text><text class="t-title" x="695" y="264" text-anchor="middle">to look at, not ship?</text>
+      </g>
+      <!-- answers -->
+      <g class="c-verifier"><rect class="box" x="900" y="14" width="180" height="46" rx="23"/><text class="t-title" x="990" y="42" text-anchor="middle">security</text></g>
+      <g class="c-verifier"><rect class="box" x="900" y="86" width="180" height="46" rx="23"/><text class="t-title" x="990" y="114" text-anchor="middle">code</text></g>
+      <g class="c-worker"><rect class="box" x="900" y="194" width="180" height="46" rx="23"/><text class="t-title" x="990" y="222" text-anchor="middle">mockup</text></g>
+      <g class="c-muted"><rect class="box" x="900" y="266" width="180" height="46" rx="23"/><text class="t-title" x="990" y="294" text-anchor="middle">doc</text></g>
+      <g class="c-bad"><rect class="box ghost" x="20" y="260" width="200" height="56" rx="5"/><text class="t-title" x="120" y="283" text-anchor="middle">Not a row yet</text><text class="t-sub" x="120" y="301" text-anchor="middle">split it, or add a class</text></g>
+      <!-- arrows -->
+      <path class="flow" d="M220,163 H296" marker-end="url(#ah3)"/><text class="t-arrow" x="258" y="155" text-anchor="middle">yes</text>
+      <path class="flow" d="M120,196 V256" marker-end="url(#ah3)"/><text class="t-arrow" x="128" y="232">no</text>
+      <path class="flow" d="M500,150 H540 V73 H586" marker-end="url(#ah3)"/><text class="t-arrow" x="548" y="112">yes</text>
+      <path class="flow" d="M500,176 H540 V253 H586" marker-end="url(#ah3)"/><text class="t-arrow" x="548" y="220">no</text>
+      <path class="flow" d="M800,62 H840 V37 H896" marker-end="url(#ah3)"/><text class="t-arrow" x="868" y="30" text-anchor="middle">yes</text>
+      <path class="flow" d="M800,84 H840 V109 H896" marker-end="url(#ah3)"/><text class="t-arrow" x="868" y="102" text-anchor="middle">no</text>
+      <path class="flow" d="M800,242 H840 V217 H896" marker-end="url(#ah3)"/><text class="t-arrow" x="868" y="210" text-anchor="middle">yes</text>
+      <path class="flow" d="M800,264 H840 V289 H896" marker-end="url(#ah3)"/><text class="t-arrow" x="868" y="282" text-anchor="middle">no</text>
+    </svg>
+    </div>
+    <figcaption>Sort every task this way before writing tickets. The answer picks the checks and the verifier cadence from the proof table above.</figcaption>
+  </figure>
+
+  <div class="stack">
+    <h3>Worked setups: example task lists, not real plans</h3>
+    <div class="tbl">
+    <table class="recipes">
+      <thead><tr><th>If your list is…</th><th>Class</th><th>Write sets &amp; parallel</th><th>Gates</th><th>Watch out for</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Five new screens</strong> for a UI redesign</td><td>mockup, one batch</td><td>One named file per screen, not <code>kit/*.html</code>, so they can run side by side. Shared sample data goes on the append-only list (fix 07), or runs as its own first row.</td><td>One gate after the batch. You review a single published page.</td><td>A broken quote in the sample data file blanks every screen at once; the class check runs it under node for exactly this reason.</td></tr>
+        <tr><td><strong>Refresh six skill docs</strong></td><td>doc</td><td>One file each, all 6 in parallel (limit 7).</td><td>None, unless a doc sets a rule others follow.</td><td>No verifier, so the check has to do more: require each claim to cite a file and line.</td></tr>
+        <tr><td><strong>One feature</strong>: API, UI and tests</td><td>code</td><td>Split by layer. Rows sharing a test project run one after another.</td><td>A gate before the UI rows if the API shape needs your sign-off.</td><td>Set <code>testFloor</code> to the current test count, so a filter that silently selects nothing fails.</td></tr>
+        <tr><td><strong>Secrets or login change</strong></td><td>security</td><td>Serial. Narrow write sets.</td><td>A gate before, and a gate after.</td><td>Each <code>crosscheck</code> line names the property it proves, and tests from outside the box, not just localhost.</td></tr>
+        <tr><td><strong>Performance measurement</strong> (e.g. a dial-up run)</td><td>none fits yet</td><td>Usually serial, because runs share one environment.</td><td>A gate on the measurement plan.</td><td>"Fails now, passes later" doesn't fit a measurement. A new <code>measure</code> class could check that a results file exists, has the required fields, and is newer than the code it measured.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="stack">
+    <h3>Where to change things</h3>
+    <p class="prose">Most tailoring happens in the ticket. Adding a new class of task touches exactly these places:</p>
+    <div class="hooks">
+      <div><b>Ticket frontmatter</b><span>class, grader, selfTest, est, writeSet, afterGate, batch, build, test, testFloor, crosscheck, repos</span></div>
+      <div><b>New check list</b><code>scripts\checks\&lt;class&gt;.ps1</code><span>prints <code>CHECK name PASS|FAIL detail</code> lines</span></div>
+      <div><b>Worker rules</b><code>PROMPTS.md § CLASS_BLOCK — &lt;class&gt;</code><span>and the name mapping at <code>Dispatch-Row.ps1:116</code></span></div>
+      <div><b>Allowed classes</b><code>Dispatch-Row.ps1:42</code></div>
+      <div><b>Verifier cadence</b><code>Collect-Row.ps1:64</code> (message) and <code>Close-Row.ps1:22</code> (enforced)</div>
+      <div><b>Status pages</b><span>new template in <code>_template\</code>, then <code>Write-TaskUpdate.ps1 -Name -KeyPattern</code></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GLOSSARY ============ -->
+<section id="words" class="stack-lg">
+  <div class="stack prose">
+    <span class="label">Plain meanings</span>
+    <h2>Words used here</h2>
+  </div>
+  <dl class="gloss">
+    <div><dt>Row</dt><dd>One task on the board, with a key like <code>52.P1.3c</code>. Integer rows like <code>60</code> are human gates.</dd></div>
+    <div><dt>Ticket</dt><dd><code>.loop\PLAN-&lt;key&gt;.md</code>. The top block is for the scripts, the body is for the worker.</dd></div>
+    <div><dt>Grader (check)</dt><dd>A script that exits 0 only when the task is truly done. It must fail before work starts.</dd></div>
+    <div><dt>Self-test</dt><dd>Proof that the grader fails on a wrong stub and passes on a correct one.</dd></div>
+    <div><dt>Write set</dt><dd>The files a worker is allowed to change. Touching anything else is a deviation.</dd></div>
+    <div><dt>Verdict sheet</dt><dd>Collect-Row's printout: one PASS/FAIL line per check.</dd></div>
+    <div><dt>Verifier</dt><dd>A fresh agent that re-checks the work from the ticket alone and assumes it's broken.</dd></div>
+    <div><dt>Residual</dt><dd>At close: "none", or the key of an existing row that carries what's left.</dd></div>
+    <div><dt>Deviation</dt><dd><em>note</em> passes and gets logged. <em>blocked</em> means the ticket was wrong: fix it, no failure counted. <em>scope</em> means the worker overstepped: fail and roll back.</dd></div>
+    <div><dt>Board</dt><dd>The schedule Artifact plus two vault pages (TaskUpdate.html and the section plan), all rebuilt by the scripts.</dd></div>
+    <div><dt>Ledger</dt><dd><code>.foreman\ledger.md</code>, a generated view of the row records. Never edited by hand.</dd></div>
+    <div><dt>Gate</dt><dd>A stop point. Only your approval, via Approve-Gate.ps1, lets the rows after it run.</dd></div>
+  </dl>
+</section>
+
+<footer>
+  <span>Sources: <span class="mono">work-ai\skills\myfable-foreman\</span> SKILL.md, PROMPTS.md and every script in <span class="mono">scripts\</span> and <span class="mono">scripts\checks\</span>; <span class="mono">~\.claude\commands\myfable.md</span>; row records in <span class="mono">speedmerchants\.loop\rows\</span>; memory notes on the model switch (12 Sep) and the criteria regression gap (8 Sep). Read 13 Sep 2026.</span>
+  <span>Line numbers refer to the files as read that day. Suggestions tagged "risk" haven't been observed yet.</span>
+</footer>
+
+</div>
+
+</body>
+</html>

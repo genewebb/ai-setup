@@ -1,0 +1,23 @@
+---
+name: project-speedy-machines-credentials-requirements
+description: "Speedy Machines + Credentials as first-class items 2026-10-12 - Gene's decisions, 3-FEAT plan, same author/copy/commit pattern as multi-user"
+metadata:
+  node_type: memory
+  type: project
+  originSessionId: e6692ca4-4cf5-4b6c-9bc6-113c26f431a3
+  modified: 2026-10-13T02:43:14.718Z
+---
+
+Goal (Gene 2026-10-12): Machines and Credentials become first-class items picked in steps/workloads instead of per-step userId/password/host fields. Follows the multi-user pattern [[project-speedy-multiuser-requirements]] (author in laptop worktree, copy to SMVMTR1, Gene commits; conflicts with READY artifacts recorded + amended at approval).
+
+**Decisions (Gene):** credential secrets = shared vault (installation-owned) + personal (own Secrets), refs shared:/mine:, bare = shared (library-scope rule). Machine = host only (name, FQDN, OS, ports, tags, default credential name); Environment (Profisee instance) separate, points at machine + base URL + api-key credential; worker hosts stay separate. Day-one kinds: windows, sql, oauth-client, api-key. Old inline userId/password/secretName fields KEPT alongside picker; if both set, CREDENTIAL WINS (inline ignored, greyed). Shared credentials: Curator edits, Operator uses (never sees secret fields), Admin reveals (audited). Test action via capability preflight (WinRM open, SQL open, token fetch, api-key probe). Split: FEAT-MACHINES-001 -> FEAT-CREDENTIALS-001 -> FEAT-CREDENTIAL-USE-001, authored in that order.
+
+**Round 3-4 (Gene):** runner: scope added (shared items may use runner:<name> = runner's personal credential; refused if missing); allowlist stays separate (machine save warns); topology machine picks accept machine refs; machine wins over inline host. PERSONAL credentials = ONE per-account list (NOT inside Secrets profiles); ONE shared vault; mine: credential in someone else's personal item refused unless owner or Admin (audited); SQL kind = login AND windows-as-credential (impersonation, new code).
+
+**Status:** FEAT-MACHINES-001 DRAFT digest 029bcfce (12 REQ/8 AC, agent author-claude-machcred-r1, IDs REQ 1-40/AC 1-60/VERIFY 1-10/Q 1-20) copied to SMVMTR1 10/12. FEAT-CREDENTIALS-001 DRAFT (digest b46d1cdb, 15 REQ/9 AC, domain CRED) and FEAT-CREDENTIAL-USE-001 DRAFT (digest ee6375c6, 12 REQ/9 AC, domain CREDUSE) all 3 committed on SMVMTR1 783ab9e (Gene, 10/12 17:05). Author choices: credential stores = DATA-SECRETS local-tier payloads; rename rewrites refs except runner:; precedence step credential > inline > machine default-credential; {{$cred:<ref>.<field>}} token (oauth .token); OAuth token cached per run until 60 s before expiry; CLU/Curl out of scope. Worker transit FACT: coordinator resolves secrets, sends entitled Inputs over mTLS, worker memory-only + masked (WorkerDispatchService.BuildPayloadAsync, REQ-FLEETCHAN-016) -> credentials reuse it.
+
+**Review r1 (10/12 19:45):** MACHINES clean review: 3 HIGH, all applied (Gene picked recommended). Dropped REQ-MACHINES-008/AC-007 allowlist warning (allowlist only guards workload TargetUrl; retired in ids), dropped winrm-port/https (steps fixed WSMan 5985; decision winrm-fixed), last-test stored outside machine file (new REQ-013/AC-009). MACHINES digest 1ba368f3, CREDUSE re-pinned 99f0f90e. Copied to SMVMTR1 by APPENDING to its ids.yaml (another session requirements-session-g13-g14 was mid amendment pass there: LIBSCOPE now 8eed329c, so MACHINES/CREDENTIALS LIBSCOPE pins stale -> refresh after that session commits). Laptop ids.yaml now DIVERGES from TR1 order: re-sync from TR1 HEAD before next authoring. Gene committed fixes 82fdf53; then the g13-g14 session committed G13 b883afc (ROLES/LIBSCOPE/RUNMU/CLIACC READY) and G14 6c15c60 (MACHINES 9b75be7d / CRED 8ebe6aaf / CREDUSE 3730ff14 READY + amendment pass, LIBSCOPE pins now 5698455c). All 7 READY WITHOUT a clean review of their current revision (validator 2 errors each). TR1 corpus 856 errors after the passes: cascade of stale pins (~500) + stale approvals (~235) on amended READY artifacts (step FEATs, secrets...).
+
+**Why:** today machines are strings (RunProfile.Machines List<string>), credentials are loose step fields (StepFieldSchema WindowsTargetFields), secret entries have no type (sensitivity guessed from names, SecretKeyNames.cs). No OAuth token code exists.
+
+**How to apply:** ~13 READY artifacts to amend at approval (SECRETS-STORE, DATA-SECRETS, API-SECRETS, SECRETS-EDITOR+UX, VALUE-SOURCES, PROFILES-LIBRARY, IDENTITY target-credential, STEP-WINDOWS/DATABASE/PROCESS/SQL, LIBRARY-SCOPE item kinds). Unverified hurdle: how secrets reach worker hosts over mTLS today.

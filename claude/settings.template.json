@@ -1,0 +1,69 @@
+{
+  "_comment": "Owned by setup\\Install-AIMachine.ps1 (spec 4.3, R12): hooks, statusLine, and the env keys listed in envOwned. {ClaudeHome} and other {Key} tokens are replaced with this machine's profile values, with forward slashes. Every other settings.json property is preserved as it is.",
+  "env": {
+    "CLAUDE_CODE_TMPDIR": "{ScratchRoot}",
+    "TEMP": "{ScratchRoot}\\temp",
+    "TMP": "{ScratchRoot}\\temp"
+  },
+  "hooks": {
+    "Stop": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/claude-done.ps1" } ] },
+      { "matcher": "", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id rationalization-watch", "timeout": 10 } ] },
+      { "matcher": "", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id context-watch", "timeout": 10 } ] }
+    ],
+    "SessionStart": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id session-context-nudge", "timeout": 10 } ] },
+      { "matcher": "", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/cowsay-greeting.ps1", "timeout": 10 } ] },
+      { "matcher": "", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id remember-hook-timeout", "timeout": 10 } ] },
+      { "matcher": "", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id machine-paths", "timeout": 15 } ] }
+    ],
+    "Notification": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/claude-waiting.ps1" } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Bash|PowerShell", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/test-loop-autoapprove.ps1" } ] },
+      { "matcher": "Bash|PowerShell", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id destructive-path-guard", "timeout": 10 } ] },
+      { "matcher": "Bash|PowerShell", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id git-guard", "timeout": 15 } ] },
+      { "matcher": "Read|Grep|Glob|Edit|Write|NotebookEdit|Bash|PowerShell", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id credentials-guard", "timeout": 10 } ] }
+    ],
+    "WorktreeCreate": [
+      { "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/worktree-create.ps1", "timeout": 60 } ] }
+    ],
+    "WorktreeRemove": [
+      { "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/worktree-remove.ps1", "timeout": 60 } ] }
+    ],
+    "SessionEnd": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": ": session-end-budget-extender # raises the outer SessionEnd abort budget to this timeout. Needed together with the timeout on the remember plugin SessionEnd hook that remember-hook-timeout.ps1 keeps in place", "shell": "bash", "timeout": 15 } ] }
+    ],
+    "UserPromptSubmit": []
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "pwsh -NoProfile -File {ClaudeHome}/statusline.ps1",
+    "padding": 0
+  },
+  "seed": {
+    "_comment": "Written only when the property is ABSENT (a fresh machine, R13). Never overwritten; not owned.",
+    "enabledPlugins": {
+      "claude-code-setup@claude-plugins-official": true,
+      "code-review@claude-plugins-official": true,
+      "context7@claude-plugins-official": true,
+      "skill-creator@claude-plugins-official": true,
+      "superpowers@claude-plugins-official": true,
+      "frontend-design@claude-plugins-official": true,
+      "code-simplifier@claude-plugins-official": true,
+      "github@claude-plugins-official": true,
+      "claude-md-management@claude-plugins-official": true,
+      "handoff@apurvbazari-plugins": true,
+      "remember@claude-plugins-official": true,
+      "caveman@caveman": true
+    },
+    "extraKnownMarketplaces": {
+      "apurvbazari-plugins": { "source": { "source": "github", "repo": "apurvbazari/claude-plugins" } },
+      "caveman": { "source": { "source": "github", "repo": "JuliusBrussee/caveman" } }
+    },
+    "env": { "CLAUDE_CODE_USE_POWERSHELL_TOOL": "1" },
+    "defaultMode": "auto",
+    "model": "opus"
+  }
+}

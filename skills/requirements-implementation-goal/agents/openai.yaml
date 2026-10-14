@@ -1,0 +1,4 @@
+interface:
+  display_name: "Requirements Implementation Goal"
+  short_description: "Turn approved requirements into a Claude goal"
+  default_prompt: "Use $requirements-implementation-goal to prepare a complete Claude goal and implementation handoff for the selected requirements area."

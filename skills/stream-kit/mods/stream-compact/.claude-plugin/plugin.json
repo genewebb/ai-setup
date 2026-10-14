@@ -1,0 +1,1 @@
+{ "name": "stream-compact", "version": "0.1.0", "description": "Keeps a long stream-kit session small: after a turn, compacts once context fill reaches STREAM_COMPACT_PCT.", "author": { "name": "Gene Webb" } }

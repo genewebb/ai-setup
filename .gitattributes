@@ -1,0 +1,2 @@
+# Store every file byte-for-byte: some kit scripts must stay LF, others are CRLF. No conversion on any machine.
+* -text
