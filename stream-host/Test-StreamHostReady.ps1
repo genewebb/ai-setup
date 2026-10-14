@@ -64,8 +64,11 @@ foreach ($port in 5310, 5311, 5343, 5672, 14400, 15672, 15692) {
 }
 
 # --- skills and shared drive
-$q = Test-Path 'Q:\Work\Work\03 Shared\work-ai\skills'
-Add-Row ($(if ($q) { 'PASS' } else { 'WARN' })) 'Q: vault share (skills source)' ($(if ($q) { 'reachable' } else { 'not mapped: fine when Copy-StreamToHost.ps1 copied the skills locally' }))
+$aiRoot = $null
+$mcLib = Join-Path $env:USERPROFILE '.claude\lib\MachineConfig.psm1'
+if (Test-Path $mcLib) { Import-Module $mcLib -Force -DisableNameChecking; try { $aiRoot = Get-AIPath AIWorkRoot } catch { } }
+$q = $aiRoot -and (Test-Path (Join-Path $aiRoot '.git')) -and (Test-Path (Join-Path $aiRoot 'skills'))
+Add-Row ($(if ($q) { 'PASS' } else { 'WARN' })) 'ai-setup clone (skills source)' ($(if ($q) { $aiRoot } else { "AIWorkRoot '$aiRoot' is not an ai-setup git clone: clone it and run install.ps1" }))
 $kit = Join-Path $env:USERPROFILE '.claude\skills\stream-kit\scripts\Get-StreamStatus.ps1'
 Add-Row ($(if (Test-Path $kit) { 'PASS' } else { 'FAIL' })) 'stream-kit skill linked' ($(if (Test-Path $kit) { (Get-Item (Split-Path (Split-Path $kit))).Target ?? 'local copy' } else { 'missing: link ~\.claude\skills (mklink /D, not /J)' }))
 foreach ($s in 'stream-plan', 'stream-author', 'stream-build', 'stream-integrate', 'stream-status') {

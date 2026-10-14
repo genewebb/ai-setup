@@ -25,6 +25,8 @@ Gene 10/14/2026: replace Q:/share corpus + machine-sync 3-way + Write-AIFile cor
 
 **State 2026-10-14 18:40:** seed pushed (6df0e34, Gene ran commit+push); laptop profile AIWorkRoot -> `C:\devops\repos\ai-setup`; real install.ps1 (memory junction) NOT run: auto-mode classifier blocked it (Data Exfiltration) and the seed commit (Sensitive-Source Provenance): Gene runs those himself. Docs retired locally (machine-sync stub, machine-config rules, ai-repo-management rewrite), unpublished. Promotion target = Martin ai-profisee. Other machines: roll out when next used.
 
+**CUTOVER COMPLETE 2026-10-14 19:05:** laptop + CORPVM17 both run from the clone (AIWorkRoot = C:\devops\repos\ai-setup, memory junction -> repo memory\, CORPVM17 StreamHostDir = C:\tmp\stream-host). Old copies DELETED after verified archives in C:\DataArchive\ai-setup-retire-20261014 (q-work-ai, deploymyai-corpus incl old .git, q-speedy-requirements): Q: work-ai, D:\DeployMyAI\corpus, CORPVM17 C:\AIWork\work-ai, Q: speedy\requirements. Rest of D:\DeployMyAI kept. Laptop memory.pre-git-20261014-185408 kept until 2026-10-21, then delete. install.ps1 must run as the account that runs Claude (agenewe); from a Claude prompt use ! with FORWARD slashes. Other machines: clone + profile AIWorkRoot + install when next used.
+
 **Why:** "no more complicated sync": pull + one install script on every machine (laptop, CORPVM17, SMVMTR1...).
 **How to apply:** seed from Q: work-ai once Q: reconnects; reconcile CORPVM17 stream edits by clone + copy live
 files over + git diff. Supersedes [[project-machine-sync-skill-2026-10-01]] and the Q: publish path in

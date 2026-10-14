@@ -26,7 +26,7 @@ $script:DefaultConfigPath = 'C:\Deploy\Setup\ProfileMachineConfig.md'
 $script:AIKeys = @(
     'AIWorkRoot', 'ClaudeHome', 'WorktreesRoot', 'ScratchRoot', 'StatusPageDir', 'VaultWorkRoot',
     'VaultPersonalRoot', 'SecretsDir', 'ArchiveRoot', 'TestedClaudeVersion', 'TranscriptRetentionDays',
-    'AllowTempInRepo', 'SkillsLinkRoot', 'DeployRoot'
+    'AllowTempInRepo', 'SkillsLinkRoot', 'DeployRoot', 'StreamHostDir'
 )
 $script:RequiredKeys = @('AIWorkRoot', 'ScratchRoot', 'WorktreesRoot', 'ReposRoot')
 # Keys whose value is not a path (never tested for existence, never rendered into access rules).

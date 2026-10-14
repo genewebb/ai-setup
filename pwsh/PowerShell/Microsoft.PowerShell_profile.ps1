@@ -36,7 +36,7 @@ $global:GeneMachineDefaults = [ordered]@{
 $global:GeneMachineAIKeys = @(
     'AIWorkRoot', 'ClaudeHome', 'WorktreesRoot', 'ScratchRoot', 'StatusPageDir', 'VaultWorkRoot',
     'VaultPersonalRoot', 'SecretsDir', 'ArchiveRoot', 'TestedClaudeVersion', 'TranscriptRetentionDays',
-    'AllowTempInRepo', 'SkillsLinkRoot', 'DeployRoot'
+    'AllowTempInRepo', 'SkillsLinkRoot', 'DeployRoot', 'StreamHostDir'
 )
 
 function Read-GeneMachineConfig {
