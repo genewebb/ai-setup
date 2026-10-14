@@ -8,6 +8,8 @@ metadata:
   modified: 2026-10-06T11:23:03.363Z
 ---
 
+> **SUPERSEDED 2026-10-14:** AI setup now syncs through the private git repo genewebb/ai-setup (install.ps1 / publish.ps1). See [[project-ai-setup-private-git-repo-2026-10-14]]. Kept as history.
+
 Built 10/1 at Gene's request ("simple skill, source and target, SMVMTR1 to CORPLTR94 or vice versa").
 - Script `{DeployRoot}\steps\Sync-Machine.ps1` (DeployRoot = D:\DeployMyAI on laptop, new profile key, spec R40), helper `steps\SyncBase.ps1`, machine paths `D:\DeployMyAI\machines.json`, base per pair/item in `sync-base\`, backups in `sync-backup\<stamp>`. Tests `steps\tests\Sync-Machine.Tests.ps1` 7/7.
 - Stage-Machine.ps1 now refuses to mirror over target edits since the last stage/sync (or no base) unless -Force; records base after staging. Build machine = $env:COMPUTERNAME.

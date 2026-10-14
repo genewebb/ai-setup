@@ -122,7 +122,7 @@ Get-ChildItem "$env:USERPROFILE\AI\skills" -Directory -Force |
   Select-Object Name, LastWriteTime
 ```
 
-A native dir is **not** a GC candidate — it is a **migration** candidate. It exists only in the read location: not Obsidian-synced, not in the linker, no copy anywhere. Deleting one destroys the only copy. Migrate it per `ai-repo-management` (copy to vault → register → remove native → run linker), never trash it.
+A native dir is **not** a GC candidate — it is a **migration** candidate. It exists only in the read location: not Obsidian-synced, not in the linker, no copy anywhere. Deleting one destroys the only copy. Move it into the ai-setup clone per `ai-repo-management`, never trash it.
 
 ### Usage signal — which skills are actually invoked
 
@@ -257,7 +257,7 @@ removed entry verbatim in `gc_log.md`, then remove it.
   *existence*. Run the audit on what survives GC.
 - `context-budget` — quantifies what GC then reclaims. Run it first to rank.
 - `permissions-yaml` — the only correct path for permission changes.
-- `ai-repo-management` — the linker, junctions, and skill placement rules.
+- `ai-repo-management` — where skills live (ai-setup clone) and how changes reach machines.
 
 ---
 

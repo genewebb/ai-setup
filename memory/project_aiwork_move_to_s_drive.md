@@ -8,6 +8,8 @@ metadata:
   modified: 2026-09-15T12:42:45.183Z
 ---
 
+> **SUPERSEDED 2026-10-14:** AI setup now syncs through the private git repo genewebb/ai-setup (install.ps1 / publish.ps1). See [[project-ai-setup-private-git-repo-2026-10-14]]. Kept as history.
+
 Gene decided 2026-09-15 to move the AI setup off the Obsidian vault (`Q:\Work\Work\03 Shared\work-ai`) onto `S:\AIWork` ("the real destination, no two copies and setups") and share it with one machine on that network plus three on another network. **CORPLTR94 cannot map S: (firewall); the tree goes over an RDP session.** A first idea of `Z:\PerformanceTesting\AIWork` was withdrawn the same morning.
 
 **Guide:** `C:\Bits\AIWork-Migration-and-Sync.md` (Phases A-D, verification, traps, four appendix scripts).

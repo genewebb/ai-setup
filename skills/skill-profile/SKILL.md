@@ -141,6 +141,6 @@ Category and Status columns. Regenerate rather than hand-editing it.
 
 ## Related
 
-- `ai-repo-management` — where skills live, the linker, junction integrity
+- `ai-repo-management` — where skills live (ai-setup clone), install and publish
 - `config-gc` — drift and cleanup across the three skill locations
 - `context-budget` — measuring everything else loaded into a session

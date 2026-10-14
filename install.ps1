@@ -39,12 +39,20 @@ foreach ($n in "WhatIf", "Check", "AcceptDrift", "SecretsFile") { if ($PSBoundPa
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 function Step([string]$m) { Write-Host "== $m" -ForegroundColor Cyan }
 
+# 0. right account: the runtime, memory junction and PowerShell profiles belong to the account that runs Claude
+Import-Module (Join-Path $repo 'lib\MachineConfig.psm1') -Force -DisableNameChecking
+$keys = (Get-AIMachineProfile).Keys
+$claudeHome = [IO.Path]::GetFullPath($keys['ClaudeHome'])
+if (-not $claudeHome.StartsWith([IO.Path]::GetFullPath($HOME) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "This machine's ClaudeHome is $claudeHome but you are $env:USERDOMAIN\$env:USERNAME (home $HOME). Run install.ps1 as the account that runs Claude."
+}
+
 # 1. pull
 if (-not $NoPull) {
     Step 'git pull'
     git -C $repo pull --ff-only
     if ($LASTEXITCODE -ne 0) {
-        throw "git pull --ff-only failed: unpublished local commits or a diverged branch. Run publish.ps1 first, then re-run install."
+        throw "git pull --ff-only failed (git's message is above). Unpublished local commits or a diverged branch: run publish.ps1 first. Ownership or credential errors: fix as git says, then re-run."
     }
 }
 
@@ -54,9 +62,6 @@ $global:LASTEXITCODE = 0
 & (Join-Path $repo 'setup\Install-AIMachine.ps1') -CorpusRoot $repo @InstallerArgs
 $installerExit = $LASTEXITCODE
 if ($installerExit -notin 0, $null) { Write-Warning "Install-AIMachine exited $installerExit; continuing with memory, PowerShell and stream-host." }
-
-Import-Module (Join-Path $repo 'lib\MachineConfig.psm1') -Force -DisableNameChecking
-$keys = (Get-AIMachineProfile).Keys
 
 # 3. memory junction
 Step 'memory'

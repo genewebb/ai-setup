@@ -23,6 +23,8 @@ Gene 10/14/2026: replace Q:/share corpus + machine-sync 3-way + Write-AIFile cor
 - GitHub plugin MCP is authed as GeneWebbProfisee, NOT genewebb: repo creation + first push (GCM browser login,
   non-elevated terminal) are Gene's.
 
+**State 2026-10-14 18:40:** seed pushed (6df0e34, Gene ran commit+push); laptop profile AIWorkRoot -> `C:\devops\repos\ai-setup`; real install.ps1 (memory junction) NOT run: auto-mode classifier blocked it (Data Exfiltration) and the seed commit (Sensitive-Source Provenance): Gene runs those himself. Docs retired locally (machine-sync stub, machine-config rules, ai-repo-management rewrite), unpublished. Promotion target = Martin ai-profisee. Other machines: roll out when next used.
+
 **Why:** "no more complicated sync": pull + one install script on every machine (laptop, CORPVM17, SMVMTR1...).
 **How to apply:** seed from Q: work-ai once Q: reconnects; reconcile CORPVM17 stream edits by clone + copy live
 files over + git diff. Supersedes [[project-machine-sync-skill-2026-10-01]] and the Q: publish path in

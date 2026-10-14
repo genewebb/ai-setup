@@ -59,8 +59,10 @@ promotes the ones the user wants into the shared `permissions.yaml`, written wit
 ## Rules
 - Never hand-edit `{ClaudeHome}\settings.json` owned properties (permissions, hooks, statusLine, the `AI_*`, `TEMP`,
   `TMP`, `CLAUDE_CODE_TMPDIR` env keys, `cleanupPeriodDays`). Change the profile or the corpus, then apply.
-- Edit a shared file in the corpus, not in `{ClaudeHome}`. Corpus writes go through
-  `{ClaudeHome}\bin\Write-AIFile.ps1` (or `Publish-KitFile.ps1` for kit files); a vault folder is written through the
-  Obsidian API, never directly.
+- The corpus `{AIWorkRoot}` is a local clone of the private `ai-setup` git repo. Edit a shared file there directly,
+  never in `{ClaudeHome}`. Send changes with `{AIWorkRoot}\publish.ps1`; take changes made elsewhere with
+  `{AIWorkRoot}\install.ps1` (git pull + this installer + memory, PowerShell and stream-host). Git replaces the old
+  machine-sync and Q: publish routes. A vault folder is still written through the Obsidian API
+  (`Write-AIFile.ps1`), never directly.
 - Machine values never go into shared files. A new machine path is a new profile key; refer to it as `{Key}`.
 - `Test-NoHardPaths.ps1 -Root {AIWorkRoot}` must report 0 before a corpus change is published.
