@@ -84,7 +84,11 @@ $update = "$PSScriptRoot\Update-Task.ps1"
 $focusSet = Get-FocusSet $doc
 $allBuilt = @($doc.tasks | Where-Object { $_.state -eq 'built' -and ($Task -eq '' -or $_.id -eq $Task) })
 foreach ($nf in @($allBuilt | Where-Object { -not $focusSet.Contains([string]$_.id) })) { "NOT-FOCUS $($nf.id) (built; waits for its group $($nf.group) to become focus)" }
-$ready = @($allBuilt | Where-Object { $focusSet.Contains([string]$_.id) })
+# Applied in PRIORITY order (lib\Streams.ps1 Get-PriorityRankMap: the focus groups as written in config.json), board
+# order inside a group (owner ruling 2026-10-14).
+$prio = Get-PriorityRankMap $doc $P
+$boardAt = @{}; $bo = 0; foreach ($x in $doc.tasks) { $boardAt[[string]$x.id] = ++$bo }
+$ready = @($allBuilt | Where-Object { $focusSet.Contains([string]$_.id) } | Sort-Object @{ e = { if ($prio.ContainsKey([string]$_.group)) { $prio[[string]$_.group] } else { [int]::MaxValue } } }, @{ e = { $boardAt[[string]$_.id] } })
 # A folder delivered in place is re-hashed against the fingerprint its hand-off wrote, and every difference is REPORTED
 # with the file that changed. It never refuses: a correction after hand-off can be right (kit item
 # IN-20260930120446-f9f5). A row handed off before the fingerprint shipped has no manifest and lands unremarked.

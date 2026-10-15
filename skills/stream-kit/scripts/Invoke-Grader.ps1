@@ -75,13 +75,36 @@ $code = 0
 $proc = $null
 $timedOut = ''
 if ($TimeoutSeconds -le 0) { $TimeoutSeconds = if ($env:STREAM_GRADER_TIMEOUT_SECONDS) { [int]$env:STREAM_GRADER_TIMEOUT_SECONDS } else { 3600 } }
+# The child's redirect files get a name of their own per run (<log>.<pid>-<hex>.part/.err/.in), never the fixed <log>.part.
+# A grader's own children inherit those handles: on 2026-10-14 MSBuild nodes (/nodeReuse:true) and a speedy-web.dll the
+# G6.R1F2 check started outlived the grader, still holding G6.R1F2.grader.wt.txt.part and .in, and three pre-stages of
+# that row threw "being used by another process" on the fixed names, each counted as a failed run (kit item
+# IN-20261015040606-fb72). So after the child exits nothing writes to those files again: they are read with
+# FileShare.ReadWrite (Read-SharedLines), appended to the log, and deleted when they can be; a file a stray holder still
+# has open is left behind, never a failure.
+function Read-RedirectText([string] $Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return '' }
+    Invoke-IoRetry { (@(Read-SharedLines $Path) -join [Environment]::NewLine) }
+}
+function Remove-RedirectFile([string] $Path) {
+    if (Test-Path -LiteralPath $Path) { try { [IO.File]::Delete($Path) } catch { } }
+}
+# Redirect files an earlier run of this task and label had to leave behind go once their holder has let go (a held
+# file refuses the delete). Only files older than 2 minutes, so no run that is just starting loses its own.
+foreach ($old in @(Get-ChildItem -LiteralPath $P.Logs -Filter "$Task.grader.$Label.txt.*" -File -ErrorAction SilentlyContinue)) {
+    if ($old.Name -match '\.(part|err|in)$' -and $old.LastWriteTimeUtc -lt [DateTime]::UtcNow.AddMinutes(-2)) { Remove-RedirectFile $old.FullName }
+}
 try {
     foreach ($g in $scripts) {
-        $part = "$log.part"
+        $tmp = "$log.$PID-$([guid]::NewGuid().ToString('N').Substring(0, 6))"
+        $part = "$tmp.part"
+        $err = ''
+        $in = ''
+        $tail = ''
         if ($BeatSession) {
             # A child process, so this session can beat the integrator lock while the grader runs.
-            $err = "$log.err"
-            $in = "$log.in"
+            $err = "$tmp.err"
+            $in = "$tmp.in"
             [IO.File]::WriteAllText($in, '')
             $proc = Start-Process -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $g, '-Root', $Root) -PassThru -NoNewWindow -RedirectStandardOutput $part -RedirectStandardError $err -RedirectStandardInput $in
             $every = if ($env:STREAM_BEAT_SECONDS) { [int]$env:STREAM_BEAT_SECONDS } else { 30 }
@@ -103,21 +126,19 @@ try {
                 } catch { Write-Warning "BEAT-SKIPPED $Task ${BeatSession}: $(("$_" -split "`n")[0])" }
             }
             $one = $proc.ExitCode
-            # The child's redirect handles can still be closing when it reports its exit, so these steps retry a
-            # sharing violation (Invoke-IoRetry, kit item IN-20261004143050-5968).
-            if ((Test-Path $err) -and (Get-Item $err).Length -gt 0) { Invoke-IoRetry { [IO.File]::AppendAllText($part, [IO.File]::ReadAllText($err) + [Environment]::NewLine) } }
-            if (Test-Path $err) { try { Invoke-IoRetry { [IO.File]::Delete($err) } } catch { } }
-            if (Test-Path $in) { try { Invoke-IoRetry { [IO.File]::Delete($in) } } catch { } }
-            if ($timedOut) { Invoke-IoRetry { [IO.File]::AppendAllText($part, $timedOut + [Environment]::NewLine) }; $one = 8 }
+            # The child's redirect handles can still be closing when it reports its exit, so the reads retry a sharing
+            # violation (Invoke-IoRetry, kit item IN-20261004143050-5968).
+            $tail = Read-RedirectText $err
+            if ($timedOut) { $tail = "$tail$(if ($tail) { [Environment]::NewLine })$timedOut"; $one = 8 }
         } else {
             & pwsh -NoProfile -File $g -Root $Root *> $part
             $one = $LASTEXITCODE
         }
         if ($scripts.Count -gt 1) { Add-LineTo $log "== $(Split-Path -Leaf (Split-Path $g)) $(Split-Path -Leaf $g) exit $one" }
-        if (Test-Path -LiteralPath $part) {
-            Invoke-IoRetry { [IO.File]::AppendAllText($log, [IO.File]::ReadAllText($part) + [Environment]::NewLine) }
-            Invoke-IoRetry { [IO.File]::Delete($part) }
-        }
+        $body = Read-RedirectText $part
+        if ($tail) { $body = "$body$(if ($body) { [Environment]::NewLine })$tail" }
+        if ($body -or (Test-Path -LiteralPath $part)) { Invoke-IoRetry { [IO.File]::AppendAllText($log, $body + [Environment]::NewLine) } }
+        foreach ($f in @($part, $err, $in)) { if ($f) { Remove-RedirectFile $f } }
         if ($one -ne 0 -and $code -eq 0) { $code = $one }
         if ($timedOut) { $code = 8; break }
     }

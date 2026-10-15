@@ -5,7 +5,8 @@
 # Order: integration fix tasks first (origin "integration": a failed suite added them, and the group cannot close until
 # they land; ranked by chain alone a one-step fix in a nearly finished group always sorts last and starves), then the
 # GROUP's position in tasks.json (the owner's category order: Reference Data, Backup, Steps, Workflows, TestAuto, Dial
-# Up and Dial Down), then the longest remaining chain (the critical path) inside that group, then board order.
+# Up and Dial Down; since 2026-10-14 the focus groups first, in the order focus.groups is written - lib\Streams.ps1
+# Get-PriorityRankMap), then the longest remaining chain (the critical path) inside that group, then board order.
 # The group key was added on 2026-09-30: all six groups were released within four hours, so ranking by chain alone
 # spread every session across all six at once and no category ever finished first. It cannot starve a session, because
 # the focus rule below bounds it: with no claimable work in the focus group a session reads NONE. It cannot pick an
@@ -99,9 +100,9 @@ $held = [Collections.Generic.List[string]]::new()
     # Which rows a live inbox hold is working on. One read per inbox, no new state on the board.
     $busy = Get-InboxHeldRows $P
     $chain = Get-ChainMinutes $doc
-    $grank = @{}; $gi = 0
-    foreach ($g in $doc.groups) { $grank[$g.id] = $gi++ }
-    $erank = if ($Role -eq 'author') { Get-EffectiveGroupRank $doc } else { @{} }
+    # Group rank = the owner's focus.groups order first, then board order (lib\Streams.ps1 Get-PriorityRankMap).
+    $grank = Get-PriorityRankMap $doc $P
+    $erank = if ($Role -eq 'author') { Get-EffectiveGroupRank $doc $grank } else { @{} }
     if ($Task) {
         $one = @($doc.tasks | Where-Object { $_.id -eq $Task })
         if ($one.Count -ne 1) { $refusals.Add("REFUSED-TASK $Task : no task with that id is on the board"); return $null }

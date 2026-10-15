@@ -638,9 +638,11 @@ function Get-ChainMinutes($doc) {
 # touched by an author on 10-02 - 17 ticketed rows, 0 claimable for over 2 h (owner ruling, kit item
 # IN-20261002153754-be85). A dependent that has already landed (integrated or done) waits on nothing and lends no rank.
 # Returns id -> @{ rank = <int>; own = <int>; via = <dependent id whose group set the rank, or ''> }.
-function Get-EffectiveGroupRank($doc) {
+# -RankMap (group id -> rank) replaces board order as the group rank; the claim sort passes Get-PriorityRankMap so the
+# owner's focus.groups order decides. Without it the rank is the board index, which Get-FocusSet and Activation read.
+function Get-EffectiveGroupRank($doc, $RankMap = $null) {
     $grank = @{}; $gi = 0
-    foreach ($g in $doc.groups) { $grank[$g.id] = $gi++ }
+    if ($RankMap) { $grank = $RankMap } else { foreach ($g in $doc.groups) { $grank[$g.id] = $gi++ } }
     $byId = @{}; foreach ($t in $doc.tasks) { $byId[$t.id] = $t }
     $dependents = @{}
     foreach ($t in $doc.tasks) {
@@ -1077,8 +1079,11 @@ function Get-StreamConfig($P = $null) {
 # groups were ticketed and built against earlier-group code that was still moving.
 # THE OWNER SETS THE FOCUS BY HAND (owner ruling 2026-10-06) in .streams\config.json:
 #     "focus": { "groups": ["G4"] }          one group        "focus": { "groups": ["G4", "G6"] }   more than one
-# The list is read in BOARD order whatever order it is written in; a listed group that is closed or not on the board is
-# dropped; an empty list, or a list with nothing left in it, means the automatic rule, and `source` says which applied.
+# The list is read in the order it is WRITTEN, which is the owner's priority order (owner ruling 2026-10-14: focus
+# ["G14","G13","G6"] is worked G14 first and shown in that order on the status page; until then the list was re-sorted
+# into board order and the written order was lost). `groups` and `priority` both hold that order (`priority` is kept for
+# callers that read it). A listed group that is closed or not on the board is dropped, a repeat is listed once; an empty
+# list, or a list with nothing left in it, means the automatic rule, and `source` says which applied.
 # Returns @{ groups = [string[]]; source = 'config' | 'auto' | 'auto (config focus.groups [...] ...)' }.
 function Get-FocusGroups($doc, $P = $null) {
     $closed = @{}; foreach ($g in $doc.groups) { if ([string]$g.state -eq 'closed') { $closed[[string]$g.id] = $true } }
@@ -1089,8 +1094,9 @@ function Get-FocusGroups($doc, $P = $null) {
         $want = @($cfg.focus.groups | ForEach-Object { [string]$_ } | Where-Object { $_ })
     }
     if ($want.Count) {
-        $chosen = @(foreach ($g in $doc.groups) { if ([string]$g.id -in $want -and -not $closed.ContainsKey([string]$g.id)) { [string]$g.id } })
-        if ($chosen.Count) { return @{ groups = $chosen; source = 'config' } }
+        $onBoard = @{}; foreach ($g in $doc.groups) { $onBoard[[string]$g.id] = $true }
+        $chosen = @($want | Where-Object { $onBoard.ContainsKey($_) -and -not $closed.ContainsKey($_) } | Select-Object -Unique)
+        if ($chosen.Count) { return @{ groups = $chosen; priority = $chosen; source = 'config' } }
         return @{ groups = $auto; source = "auto (config focus.groups [$($want -join ', ')] are all closed or not on the board)" }
     }
     @{ groups = $auto; source = 'auto' }
@@ -1123,6 +1129,17 @@ function Get-FocusSet($doc, $P = $null) {
         if ($erank[$t.id] -and $in.ContainsKey($groupAt[$erank[$t.id].rank])) { [void]$set.Add([string]$t.id) }
     }
     , $set
+}
+# FOCUS PRIORITY (owner ruling 2026-10-14, coordinator-13c4c8a7): the claim sort's group rank. The owner wrote focus
+# ["G13","G14","G6"] to put G13 first, but every rank read board order, so G6 still sorted first. Focus groups rank
+# 0..k-1 in the order focus.groups is WRITTEN; every other group ranks after them in board order. The focus SET is
+# unchanged (Get-FocusSet); only the order of rows inside it moves. Returns group id -> int.
+function Get-PriorityRankMap($doc, $P = $null) {
+    $first = @((Get-FocusGroups $doc $P).groups)
+    $m = @{}; $i = 0
+    foreach ($id in $first) { if (-not $m.ContainsKey([string]$id)) { $m[[string]$id] = $i++ } }
+    foreach ($g in $doc.groups) { if (-not $m.ContainsKey([string]$g.id)) { $m[[string]$g.id] = $i++ } }
+    $m
 }
 
 # GATE ROWS need no ticket: a planned gate of the focus set (its own group, or a later group a focus row waits on)

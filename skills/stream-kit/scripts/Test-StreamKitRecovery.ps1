@@ -2219,7 +2219,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Remove-Item Env:\STREAM_BEAT_SECONDS -ErrorAction SilentlyContinue
     $log70 = Join-Path $r70 '.streams\logs\G1.E.grader.err70.txt'
     $text70 = if (Test-Path $log70) { Get-Content -Raw $log70 } else { '' }
-    Case 'beat grader: stdout and stderr both land in the log, and no .part or .err is left' ((-not $gErr70) -and $text70 -match 'PASS C1' -and $text70 -match 'ERRLINE-70' -and -not (Test-Path "$log70.part") -and -not (Test-Path "$log70.err")) "err='$gErr70' log='$($text70 -replace '\s+', ' ')'"
+    Case 'beat grader: stdout and stderr both land in the log, and no .part or .err is left' ((-not $gErr70) -and $text70 -match 'PASS C1' -and $text70 -match 'ERRLINE-70' -and -not (Get-ChildItem -Path "$log70.*" -ErrorAction SilentlyContinue)) "err='$gErr70' log='$($text70 -replace '\s+', ' ')'"
     # ---- 71. every runner session runs on the applied machine config (kit item IN-20261004143031-d21b), and the check
     # that applies it runs once per -LaunchCheckMinutes, not once per unit (ai's Install-AIMachine.ps1 -Launch took 111 s
     # per launch on SMVMTR1, 2026-10-04). (a) DryRun names the ai launcher's check; (b) two units run the ai launcher once,
@@ -3855,7 +3855,7 @@ exit 1
     $gc104 = if (Test-Path $pid104) { Get-Process -Id ([int](Get-Content $pid104)) -ErrorAction SilentlyContinue } else { $null }
     $log104 = Join-Path $r104 '.streams\logs\G1.A.grader.red.txt'
     Case '104a a hung beating grader ends at its limit as GRADER-TIMEOUT exit 8, not RED' ($c104 -eq 8 -and ($o104 -join ' ') -match 'GRADER-TIMEOUT G1\.A' -and $sw104.Elapsed.TotalSeconds -lt 45) "exit=$c104 secs=$([int]$sw104.Elapsed.TotalSeconds) out=$(($o104 | Select-Object -Last 2) -join ' | ')"
-    Case '104b the timeout ends the grader''s whole process tree and logs GRADER-TIMEOUT' (-not $gc104 -and (Test-Path $log104) -and @((Get-Content $log104) -match '^GRADER-TIMEOUT').Count -gt 0 -and -not (Test-Path "$log104.part") -and -not (Test-Path "$log104.in")) "grandchild=$(if ($gc104) { $gc104.Id } else { 'gone' }) log=$(Test-Path $log104)"
+    Case '104b the timeout ends the grader''s whole process tree and logs GRADER-TIMEOUT' (-not $gc104 -and (Test-Path $log104) -and @((Get-Content $log104) -match '^GRADER-TIMEOUT').Count -gt 0 -and -not (Get-ChildItem -Path "$log104.*" -ErrorAction SilentlyContinue)) "grandchild=$(if ($gc104) { $gc104.Id } else { 'gone' }) log=$(Test-Path $log104)"
     if ($gc104) { Stop-Process -Id $gc104.Id -Force -ErrorAction SilentlyContinue }
 
     # 104c: the grader's stdin is an empty file, so a child that reads input (npx's install prompt, Read-Host) gets
@@ -4399,6 +4399,49 @@ if ($args[0] -eq 'test' -and $env:STUB116_NOMATCH -eq '1') { 'No test matches th
     [void](& "$S\Send-InboxItem.ps1" -Repo $r119 -To stream-build -From owner -Kind request -Ask 'rebuild P' -Task G2.P -Force)
     $g119c = @(& "$S\Start-StreamRunner.ps1" -Repo $r119 -Role build -DryRun)
     Case '119c spill inbox: builders still ignore an item about a spill ticket outside the focus' (-not (($g119c -join "`n") -match '(?m)^GATE inbox')) ($g119c -join '|')
+
+    # ---- 120. FOCUS PRIORITY (owner ruling 2026-10-14): focus.groups is a priority order. The owner wrote
+    # ["G13","G14","G6"] to put G13 first, but the claim ranked every row by board order, so G6 still went first. With
+    # focus ["G2","G1"] a builder and an author take the G2 row ahead of the G1 row; the focus set itself is unchanged.
+    $r120 = New-Repo 'r120' @{ 'G1.A' = (ContentGrader 'G1.A' 'ok') }; $repos += $r120
+    foreach ($n120 in 'G1.P', 'G2.B', 'G2.P') { Set-Content (Join-Path $r120 "$n120.txt") "$n120 base" }
+    git -C $r120 add G1.P.txt G2.B.txt G2.P.txt; git -C $r120 commit -q -m 'priority files'
+    $d120 = J $r120
+    $d120.groups += [ordered]@{ id = 'G2'; name = 'S'; state = 'released'; origin = 'import' }
+    foreach ($n120 in 'G1.P', 'G2.B', 'G2.P') {
+        Set-Content (Join-Path $r120 ".streams\tickets\$n120.md") "ticket $n120"
+        Set-Content (Join-Path $r120 ".streams\graders\$n120.ps1") (ContentGrader $n120 'ok')
+        $d120.tasks += [ordered]@{ id = $n120; group = $n120.Substring(0, 2); title = $n120; why = @('AC-1'); kind = 'code'; writeSet = @("$n120.txt"); dependsOn = @(); estMinutes = 5
+            artifacts = [ordered]@{ ticket = ".streams\tickets\$n120.md"; grader = ".streams\graders\$n120.ps1"; patch = $null; verdict = $null }; state = $(if ($n120 -eq 'G2.B') { 'ticketed' } else { 'planned' }); claim = $null; history = @() }
+    }
+    $d120 | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $r120 '.streams\tasks.json') -Encoding utf8
+    Set-Content -LiteralPath (Join-Path $r120 '.streams\config.json') -Encoding utf8 -Value '{ "focus": { "groups": ["G2", "G1"] } }'
+    $b120 = & "$S\Claim-Task.ps1" -Repo $r120 -Role build -Session build-120 | ConvertFrom-Json
+    Case '120a focus priority: a builder takes the first-listed focus group row ahead of an earlier board group' ($b120.id -eq 'G2.B') "got $($b120.id)"
+    $a120 = & "$S\Claim-Task.ps1" -Repo $r120 -Role author -Session author-120 | ConvertFrom-Json
+    Case '120b focus priority: an author takes the first-listed focus group row ahead of an earlier board group' ($a120.id -eq 'G2.P' -and -not (T $r120 'G2.P').Contains('spill')) "got $($a120.id)"
+    $c120 = & "$S\Claim-Task.ps1" -Repo $r120 -Role build -Session build-120b | ConvertFrom-Json
+    Case '120c focus priority: the later-listed focus group stays in the focus set' ($c120.id -eq 'G1.A') "got $($c120.id)"
+
+    # ---- 121. A grader's child that outlives it keeps the grader's redirect files open (kit item IN-20261015040606-fb72).
+    # On 2026-10-14 MSBuild nodes and a web host started by the G6.R1F2 check held G6.R1F2.grader.wt.txt.part and .in, and
+    # three pre-stages of the row threw "being used by another process" on those fixed names. Here the grader starts a
+    # child that inherits its handles and sleeps 12 s; two beating runs of the same task and label back to back must both
+    # end cleanly with the verdict in the log.
+    $pid121 = Join-Path $Scratch 'stray121.pid'
+    $g121 = "param([string]`$Root)`n`$s = Start-Process pwsh -PassThru -NoNewWindow -ArgumentList '-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep 12'`nSet-Content -LiteralPath '$pid121' -Value `$s.Id`n'PASS C1'`n[Console]::Error.WriteLine('ERRLINE-121')`nexit 0"
+    $r121 = New-Repo 'r121' @{ 'G1.S' = $g121 }; $repos += $r121
+    $env:STREAM_BEAT_SECONDS = '1'
+    $res121 = foreach ($n121 in 1, 2) {
+        $e121 = ''; $o121 = @()
+        try { $o121 = @(& "$S\Invoke-Grader.ps1" -Repo $r121 -Task G1.S -Root $r121 -Label wt -BeatSession build-121 -BeatTask G1.S 2>&1) } catch { $e121 = ("$_" -split "`n")[0].Trim() }
+        [pscustomobject]@{ code = $LASTEXITCODE; err = $e121; out = ($o121 -join ' ') }
+    }
+    Remove-Item Env:\STREAM_BEAT_SECONDS -ErrorAction SilentlyContinue
+    $log121 = Join-Path $r121 '.streams\logs\G1.S.grader.wt.txt'
+    $text121 = if (Test-Path $log121) { Get-Content -Raw $log121 } else { '' }
+    Case '121 a stray child holding the grader''s redirect files never fails the next run of that task' (-not $res121[0].err -and -not $res121[1].err -and $res121[1].code -eq 0 -and $res121[1].out -notmatch 'being used by another process' -and $text121 -match 'PASS C1' -and $text121 -match 'ERRLINE-121') "1: code=$($res121[0].code) err='$($res121[0].err)' 2: code=$($res121[1].code) err='$($res121[1].err)' out='$($res121[1].out)' log='$($text121 -replace '\s+', ' ')'"
+    foreach ($s121 in @(Get-Content -LiteralPath $pid121 -ErrorAction SilentlyContinue)) { Stop-Process -Id ([int]$s121) -Force -ErrorAction SilentlyContinue }
 } catch {
     "FAIL harness: $_ at $($_.InvocationInfo.PositionMessage)"; $fails++
 } finally {

@@ -253,7 +253,7 @@ $groups = foreach ($g in $doc.groups) {
 # A queued group behind an undated focus group, or behind a focus that landed nothing in the widest window, is
 # undated: there is no measured capacity to price it at, and inventing one is the error this replaced.
 $focusIds = @((Get-FocusGroups $doc $P).groups)
-$focusGroups = @($groups | Where-Object { $_.id -in $focusIds })
+$focusGroups = @(foreach ($fid in $focusIds) { $groups | Where-Object { $_.id -eq $fid } })
 $capacity = 0.0; $poolRows = 0
 foreach ($fg in $focusGroups) { $capacity += [double]$groupRaw[[string]$fg.id].tasksPerHour; $poolRows += [int]$groupRaw[[string]$fg.id].togoCount }
 # THE FOCUS POOL. The focus groups share one capacity, so the last of them cannot finish later than every focus row to

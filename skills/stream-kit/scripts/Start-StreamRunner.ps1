@@ -421,7 +421,10 @@ function Invoke-PreStageGuarded([string] $Session) {
         # A lock wait that timed out (tasks.json or an inbox) is contention, not a broken pre-stage: 16 runners restarted
         # together on 2026-10-10 and 10 of them lost the tasks.json race and backed off 900 s (kit item
         # IN-20261010172833-eff6). The caller retries it after a short jittered wait instead.
-        $g.Busy = $first -match 'lock busy for \d+s'
+        # A file another process holds open ("being used by another process") is contention too: on 2026-10-14 three
+        # pre-stages of G6.R1F2 threw on a grader log a stray MSBuild node held, and two builders sat out 900 s and
+        # 1800 s backoffs beside 7 claimable rows (kit item IN-20261015040606-fb72).
+        $g.Busy = $first -match 'lock busy for \d+s|being used by another process'
         $g.Failed = "$(if ($g.Busy) { 'PRESTAGE-BUSY' } else { 'PRESTAGE-FAILED' }) $Session : $first"
         $lines.Add($g.Failed)
         try { foreach ($f in @(Clear-SessionClaims $P $Session $runnerId "released by the runner: pre-stage of $Session failed")) { $lines.Add("RELEASED $f") } } catch { }

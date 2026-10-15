@@ -74,7 +74,7 @@ if ($gm -and $gm['forecast'] -is [Collections.IDictionary]) {
 
 # ---- order: open rows in claim order, then landed rows by integration time ----
 $chain = Get-ChainMinutes $doc
-$erank = Get-EffectiveGroupRank $doc
+$erank = Get-EffectiveGroupRank $doc (Get-PriorityRankMap $doc $P)
 $boardOrder = @{}; $o = 0; foreach ($x in $doc.tasks) { $boardOrder[[string]$x.id] = ++$o }
 function Get-LastAt($t, [string] $To) { $h = @($t.history | Where-Object { $_ -and $_.to -eq $To -and $_.at } | Select-Object -Last 1); if ($h.Count) { [string]$h[0].at } else { '' } }
 function Get-LastBy($t, [string] $To) { $h = @($t.history | Where-Object { $_ -and $_.to -eq $To } | Select-Object -Last 1); if ($h.Count) { [string]$h[0].by } else { '' } }

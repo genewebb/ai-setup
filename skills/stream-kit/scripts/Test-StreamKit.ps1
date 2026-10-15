@@ -586,7 +586,12 @@ try {
     Case 'owner focus: the build selector offers the named group only, labelled from the config' ((@($clC.ids) -contains 'C2.FIX') -and (@($clC.ids) -contains 'C2.L1') -and -not (@($clC.ids) | Where-Object { $_ -like 'C1.*' }) -and $clC.focusGroup -eq 'C2' -and $clC.focusSource -eq 'config') "ids=$($clC.ids -join ',') focus=$($clC.focusGroup) src=$($clC.focusSource)"
     Set-Content -LiteralPath $cfgF -Encoding utf8 -Value '{ "focus": { "groups": ["C2", "C1"] } }'
     $fo2 = Get-FocusGroups (J $cr) $cP
-    Case 'owner focus: two groups are read in board order and labelled C1+C2' ((@($fo2.groups) -join ',') -eq 'C1,C2' -and (Get-FocusLabel (J $cr) $cP) -eq 'C1+C2' -and (Get-FocusSet (J $cr) $cP).Contains('C1.S1')) "groups=$($fo2.groups -join ',')"
+    # Owner ruling 2026-10-14: the list is read in the order it is WRITTEN (the priority order), not re-sorted to board order.
+    Case 'owner focus: two groups are read in written order and labelled C2+C1' ((@($fo2.groups) -join ',') -eq 'C2,C1' -and (Get-FocusLabel (J $cr) $cP) -eq 'C2+C1' -and (Get-FocusGroup (J $cr) $cP) -eq 'C2' -and (Get-FocusSet (J $cr) $cP).Contains('C1.S1')) "groups=$($fo2.groups -join ',')"
+    $pr2 = Get-PriorityRankMap (J $cr) $cP
+    Case 'owner focus: priority rank puts the written-first group ahead of the board-first one' ($pr2['C2'] -eq 0 -and $pr2['C1'] -eq 1) "C2=$($pr2['C2']) C1=$($pr2['C1'])"
+    Set-Content -LiteralPath $cfgF -Encoding utf8 -Value '{ "focus": { "groups": ["C2", "C1", "C2"] } }'
+    Case 'owner focus: a group written twice is listed once' ((@((Get-FocusGroups (J $cr) $cP).groups) -join ',') -eq 'C2,C1') "groups=$((Get-FocusGroups (J $cr) $cP).groups -join ',')"
     Set-Content -LiteralPath $cfgF -Encoding utf8 -Value '{ "focus": { "groups": ["ZZ"] } }'
     $fo3 = Get-FocusGroups (J $cr) $cP
     Case 'owner focus: a list with no open board group in it falls back to the automatic rule and says so' ((@($fo3.groups) -join ',') -eq 'C1' -and $fo3.source.StartsWith('auto (config focus.groups [ZZ] are all closed')) "groups=$($fo3.groups -join ',') src=$($fo3.source)"
