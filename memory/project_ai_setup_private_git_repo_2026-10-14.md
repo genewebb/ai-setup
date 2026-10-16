@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: f0454aab-598a-49d1-b5bc-df925330f846
-  modified: 2026-10-14T18:18:00.318Z
+  modified: 2026-10-15T00:16:37.003Z
 ---
 
 Gene 10/14/2026: replace Q:/share corpus + machine-sync 3-way + Write-AIFile corpus writes with ONE private git repo,
@@ -26,6 +26,10 @@ Gene 10/14/2026: replace Q:/share corpus + machine-sync 3-way + Write-AIFile cor
 **State 2026-10-14 18:40:** seed pushed (6df0e34, Gene ran commit+push); laptop profile AIWorkRoot -> `C:\devops\repos\ai-setup`; real install.ps1 (memory junction) NOT run: auto-mode classifier blocked it (Data Exfiltration) and the seed commit (Sensitive-Source Provenance): Gene runs those himself. Docs retired locally (machine-sync stub, machine-config rules, ai-repo-management rewrite), unpublished. Promotion target = Martin ai-profisee. Other machines: roll out when next used.
 
 **CUTOVER COMPLETE 2026-10-14 19:05:** laptop + CORPVM17 both run from the clone (AIWorkRoot = C:\devops\repos\ai-setup, memory junction -> repo memory\, CORPVM17 StreamHostDir = C:\tmp\stream-host). Old copies DELETED after verified archives in C:\DataArchive\ai-setup-retire-20261014 (q-work-ai, deploymyai-corpus incl old .git, q-speedy-requirements): Q: work-ai, D:\DeployMyAI\corpus, CORPVM17 C:\AIWork\work-ai, Q: speedy\requirements. Rest of D:\DeployMyAI kept. Laptop memory.pre-git-20261014-185408 kept until 2026-10-21, then delete. install.ps1 must run as the account that runs Claude (agenewe); from a Claude prompt use ! with FORWARD slashes. Other machines: clone + profile AIWorkRoot + install when next used.
+
+**Push gotcha (10/14 20:16):** `git push` / publish.ps1 run from Claude (`!` or Bash tool) HANGS at
+`git-credential-manager get` (sign-in prompt never shows). Run publish.ps1 in a normal terminal window on the laptop:
+that pushed 9e59310 fine. Claude can commit; the user runs the push.
 
 **Why:** "no more complicated sync": pull + one install script on every machine (laptop, CORPVM17, SMVMTR1...).
 **How to apply:** seed from Q: work-ai once Q: reconnects; reconcile CORPVM17 stream edits by clone + copy live

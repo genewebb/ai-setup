@@ -13,7 +13,6 @@
     ],
     "SessionStart": [
       { "matcher": "", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id session-context-nudge", "timeout": 10 } ] },
-      { "matcher": "", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/cowsay-greeting.ps1", "timeout": 10 } ] },
       { "matcher": "", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id remember-hook-timeout", "timeout": 10 } ] },
       { "matcher": "", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id machine-paths", "timeout": 15 } ] }
     ],
