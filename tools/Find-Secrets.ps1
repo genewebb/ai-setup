@@ -5,7 +5,8 @@
 
 .DESCRIPTION
     A guard, not a proof: it catches the common shapes (tokens, keys, connection-string passwords, private keys).
-    Prints nothing and returns nothing when clean. Values are never echoed, only file, line and rule.
+    Prints nothing and returns nothing when clean. A value is never echoed whole: each hit carries file, line, rule
+    and Match, the matched text with its middle masked, so the owner can tell a test fixture from a real key.
 #>
 [CmdletBinding()]
 param(
@@ -26,6 +27,12 @@ $rules = [ordered]@{
     'ado-pat-assign'    = '(?i)(pat|token|apikey|api_key|secret)\s*[:=]\s*["'']?[A-Za-z0-9+/]{40,}'
 }
 
+# Keeps the first 6 and last 3 characters (enough to recognise a test fixture's fake value or a key's prefix) and masks the rest.
+function Hide-Middle([string]$Text) {
+    if ($Text.Length -le 10) { return $Text.Substring(0, [Math]::Min(3, $Text.Length)) + '***' }
+    $Text.Substring(0, 6) + ('*' * [Math]::Min(20, $Text.Length - 9)) + $Text.Substring($Text.Length - 3)
+}
+
 $paths = if ($Files) { $Files | ForEach-Object { Join-Path $Root $_ } }
          else { Get-ChildItem -LiteralPath $Root -Recurse -File | Where-Object FullName -notmatch '[\\/]\.git[\\/]' | ForEach-Object FullName }
 
@@ -36,8 +43,9 @@ foreach ($p in $paths) {
     foreach ($line in [IO.File]::ReadLines($p)) {
         $n++
         foreach ($r in $rules.GetEnumerator()) {
-            if ($line -match $r.Value) {
-                [pscustomobject]@{ File = [IO.Path]::GetRelativePath($Root, $p); Line = $n; Rule = $r.Key }
+            $m = [regex]::Match($line, $r.Value)
+            if ($m.Success) {
+                [pscustomobject]@{ File = [IO.Path]::GetRelativePath($Root, $p); Line = $n; Rule = $r.Key; Match = Hide-Middle $m.Value }
             }
         }
     }

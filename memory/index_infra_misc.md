@@ -25,3 +25,8 @@ Moved out of MEMORY.md to keep the index under its read limit; each line keeps i
 - [PS single-pair array flattens: $p[0] is a CHAR, corrupted a file](reference_powershell_single_pair_array_flattens.md) — use @( ,@(a,b) ); restore via transcript + re-corrupt byte-exact check
 - [SMVMTR1 CIM from laptop: WinRM Kerberos fails, use -Protocol Dcom session](reference_smvmtr1_cim_needs_dcom.md)
 - [pwsh RAM % via GC (no WMI) + claude.exe process tree](reference_pwsh_ram_pct_and_claude_process_tree.md)
+- [Claude CLI: -n = name only, --bg/attach, budget -p only, mod command.run untested](reference_claude_cli_session_flags.md)
+- [AI setup moving work-ai -> S:\AIWork](project_aiwork_move_to_s_drive.md) — .claude.json holds a plain-text PAT, never copy it
+- [Write-VaultFile: binaries need image/png or octet-stream, text/* corrupts](reference_write_vaultfile_binary_content_type.md) — hash the Q: file after every binary put
+- [Teams paste = inline-styled HTML (Edge, Ctrl+A/C) + chart PNG; confirmed 10/10](reference_teams_paste_inline_html.md)
+- [Prod speedmerchants -> local via BACPAC: D:\PowershellScripts\Restore-ProdSpeedmerchantsLocal.ps1; SqlPackage >=170.5.96, 6 traps](reference_prod_speedmerchants_to_local_bacpac.md)

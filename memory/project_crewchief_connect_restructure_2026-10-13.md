@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 931c7707-55f3-4c93-8567-14e05809a86b
-  modified: 2026-10-14T16:04:38.906Z
+  modified: 2026-10-15T05:01:57.797Z
 ---
 
 Restructure QA's `C:\Deploy\CrewChief\web\data\workloads\cz-perf-tests` (source chosen over perf-test-groups) into a new workload folder `connect` (kebab enforced). Originals untouched; copies only (broken ref `ServerNames:RemoteSQLDatabaseServerNameFQDN` fixed in copies only). Backups of CrewChief data + secrets exist.
@@ -47,5 +47,9 @@ SIZE GLOBAL + PROD 10/13 late:
 - Prod detail rows join tTestAutoWorkflowDetail.Workflow = tTestAutoWorkflow.ID (not Code); detail Name is server-composed "<workflow name> <display name> 26R3".
 
 SECRETS GAP FIXED 10/14: after Gene's 11:43 reimport on SMVMTR1, ALL connect workloads already resolved; the only "Secret not set" were QA legacy workloads (cz-perf-tests 01, perf-test-groups 01/90, 26r3-sql-profisee-perf-tests) using ServerNames:RemoteSQLDatabaseServerName[FQDN]. QA's newer chunfu_connect_crewchief.json renamed those away; QA's crewchief-secrets_chunfu_original.json still has them (CORPDTR3). Build-ConnectSecrets.ps1 now carries over from BOTH QA files (newer wins). Live SMVMTR1 file replaced (diff = exactly +2 keys; backup .bak-20261014-120422). Isolated repro technique: copy SMVMTR1 data folder to scratch, CREWCHIEF_SECRETS_FOLDER + CREWCHIEF_LOCAL_SECRETS_MASTER temp env, `crewchief secrets import` (master piped twice) + `crewchief validate all --data-folder` (validate shows only FIRST missing ref per workload; static-diff tokens for full list). WinRM to SMVMTR1 fails (Kerberos 0x80090311).
+
+CAPABILITY RED FIX 10/14: remote box steps (AppPoolStep/ServiceControlStep to SMVM1) with blank Run-As = preflight RemoteRunAs Failed (hard block). Generator `EnvironmentSettings.BoxRunAs` (SMVMTR1 only) sets UserCredentials:AdminUser/AdminPassword + CredSSP (QA/26r3-set-apikey pattern). Deployed 11 files + restored api-keys (Gene had deleted it on BOTH machines; Gene chose restore on SMVMTR1). Writing \\SMVMTR1 needs Gene's approval (auto-mode classifier: Modify Shared Resources). Dry-run technique: copy SMVMTR1 workloads/folders/reference-kv to scratch, run generator -DataFolder scratch -QaFolder scratch\workloads\cz-perf-tests (laptop cz-perf-tests lacks 26r3-perf-tests-01), hash-diff.
+
+10/15 (SMVMTR1): **SMVM2 runs another test: nothing against SMVM2 NOW (Gene). Keep the SMVM2 work, never delete it; ONLY the Profisee To Profisee test may use SMVM2, OK later if it touches no existing SMVM2 entity and at most 1000 records.** Generator split (both envs): Main track (bootstrap, connect-setup, api-key-set-all, prepare-all) never reaches the target; P2P track = `connect\profisee-to-profisee\` (connect-profisee-to-profisee-bootstrap: [target key/domains Local], target-create, connect-setup; connect-profisee-to-profisee-connect-setup: P2P SC + P2P Export strategy) and the P2P prepares call it. TestAuto keeps the P2P workflows. connect-api-key-set-main rebuilt on security\26r3-set-apikey pattern (stop W3SVC+WAS on app server, SetApiKey, start WAS+W3SVC SAME server, verify 200) - Step 2 passed 00:39. QA 26r3-set-apikey bug: IisReset target BLANK = iisreset ran on SMVMTR1, left SMVM1 IIS stopped. Standard key: [[feedback_standard_api_key_all_test_servers]].
 
 Related: [[project_crewchief_connect_import_apikey_globals]] [[index_crewchief]] [[reference_profisee_gateway_401_echoes_api_key]]

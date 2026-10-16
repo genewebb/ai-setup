@@ -162,9 +162,14 @@ else. Session id (2026-10-05, priority-focus-design 3.5): the `session: <id>` in
 5. A change to a role's contract goes into that role's `SKILL.md` the same way, with its version bumped.
 6. Close each item with `done` (what changed, and the test results) or `declined` (why).
 7. Report on EVERY tick, an idle one too (owner ruling 2026-10-10). Check the kit inbox (`-Open`) and this session's
-   own notifications (`ReadNotifications`). Then report: the number of open items; each item this session holds, with
-   its step (staged, suites running, publishing); and what the session is working on now, or `idle`. A tick that
-   reports nothing cannot be told apart from a dead session.
+   own notifications. Then report: the number of open items; each item this session holds, with its step (staged,
+   suites running, publishing); and what the session is working on now, or `idle`. A tick that reports nothing cannot
+   be told apart from a dead session.
+   Notifications are optional. `ReadNotifications` exists only in some Claude Code builds and sessions (it is absent
+   on CORPVM17, 2026-10-16). If it is listed as a deferred tool, load it with `ToolSearch` (`select:ReadNotifications`)
+   and call it. If no such tool exists, skip the check and write `notifications: n/a` in the report. A missing tool is
+   not an error, not a blocker and not a kit inbox item: never ask the owner to fix it, and never repeat it as a
+   complaint on later ticks. The kit inbox is the channel that matters.
 
 ## `/stream-kit test`
 
