@@ -2802,7 +2802,7 @@ function psql {
 function addLinux {
     [CmdletBinding(PositionalBinding=$false)]
     param(
-        [string]$User = 'root',
+        [string]$User = 'gene',
         [string]$HostAddress = '138.68.42.81',
         [string]$KeyFile = (Join-Path $HOME '.ssh\do_droplet_ed25519'),
         [switch]$Desktop,
@@ -2815,8 +2815,9 @@ function addLinux {
 
     if (Test-HelpRequested -ShowHelp:$ShowHelp -RemainingArgs $RemoteCommand) {
         Write-Usage "addLinux [-User <name>] [-HostAddress <ip>] [-KeyFile <path>] [-Desktop [-DesktopLocalPort <port>]] [<remote command>] [-h|--help]" @(
-            "SSH into the DigitalOcean Ubuntu droplet (default root@138.68.42.81, SFO2, 2 GB)."
-            "Uses passphrase-less key $HOME\.ssh\do_droplet_ed25519 (public half in root's and gene's authorized_keys)."
+            "SSH into the DigitalOcean Ubuntu droplet (default gene@138.68.42.81, SFO2, 2 GB)."
+            "Root SSH login is disabled; gene has passwordless sudo, e.g. addLinux 'sudo apt update'."
+            "Uses passphrase-less key $HOME\.ssh\do_droplet_ed25519."
             "Anything after the options runs as a one-off remote command, e.g. addLinux uptime"
             ""
             "-Desktop  Opens a hidden SSH tunnel localhost:$DesktopLocalPort -> droplet xrdp (3389), then"
