@@ -2796,6 +2796,65 @@ function psql {
     Push-SqlScripts @PassThruArgs
 }
 
+# -----------------------------
+# Linux droplet (DigitalOcean, Ubuntu 24.04 LTS)
+# -----------------------------
+function addLinux {
+    [CmdletBinding(PositionalBinding=$false)]
+    param(
+        [string]$User = 'root',
+        [string]$HostAddress = '159.223.100.95',
+        [string]$KeyFile = (Join-Path $HOME '.ssh\do_droplet_ed25519'),
+        [switch]$Desktop,
+        [int]$DesktopLocalPort = 13389,
+        [Alias('h','help')]
+        [switch]$ShowHelp,
+        [Parameter(ValueFromRemainingArguments=$true)]
+        $RemoteCommand
+    )
+
+    if (Test-HelpRequested -ShowHelp:$ShowHelp -RemainingArgs $RemoteCommand) {
+        Write-Usage "addLinux [-User <name>] [-HostAddress <ip>] [-KeyFile <path>] [-Desktop [-DesktopLocalPort <port>]] [<remote command>] [-h|--help]" @(
+            "SSH into the DigitalOcean Ubuntu droplet (default root@159.223.100.95)."
+            "Uses passphrase-less key $HOME\.ssh\do_droplet_ed25519 (public half in root's and gene's authorized_keys)."
+            "Anything after the options runs as a one-off remote command, e.g. addLinux uptime"
+            ""
+            "-Desktop  Opens a hidden SSH tunnel localhost:$DesktopLocalPort -> droplet xrdp (3389), then"
+            "          launches Remote Desktop to it. Log in as gene. RDP is never exposed to the internet."
+            "          Stop the tunnel with the Stop-Process command it prints."
+        )
+        return
+    }
+
+    Assert-PathExists $KeyFile
+    $baseArgs = @('-i', $KeyFile, '-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=accept-new')
+
+    if ($Desktop) {
+        $tunnelArgs = $baseArgs + @('-N', '-o', 'ExitOnForwardFailure=yes', '-L', "${DesktopLocalPort}:localhost:3389", "$User@$HostAddress")
+        $tunnel = Start-Process ssh -ArgumentList $tunnelArgs -WindowStyle Hidden -PassThru
+
+        $ready = $false
+        for ($i = 0; $i -lt 30 -and -not $ready -and -not $tunnel.HasExited; $i++) {
+            $client = [System.Net.Sockets.TcpClient]::new()
+            try { $ready = $client.ConnectAsync('127.0.0.1', $DesktopLocalPort).Wait(500) -and $client.Connected } catch { $ready = $false }
+            finally { $client.Dispose() }
+            if (-not $ready) { Start-Sleep -Milliseconds 500 }
+        }
+        if (-not $ready) {
+            if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force }
+            throw "Desktop tunnel did not come up on localhost:$DesktopLocalPort (port in use, or SSH failed - try plain addLinux first)."
+        }
+
+        Start-Process mstsc -ArgumentList "/v:localhost:$DesktopLocalPort"
+        Write-Host "Tunnel up (ssh PID $($tunnel.Id)). Log in as gene. Stop it with: Stop-Process -Id $($tunnel.Id)" -ForegroundColor Green
+        return
+    }
+
+    $sshArgs = $baseArgs + @("$User@$HostAddress")
+    if ($RemoteCommand) { $sshArgs += $RemoteCommand }
+    ssh @sshArgs
+}
+
 function gpush {
     [CmdletBinding()]
     param(
