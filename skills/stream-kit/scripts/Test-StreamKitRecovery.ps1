@@ -2139,6 +2139,36 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case 'integrated-while-made dependency: the base holds its change once, with a SKIPPED note' ((-not $err66) -and ((Get-Content -Raw (Join-Path $wt66 'G1.A.txt')) -match '^A done\s*$') -and (($o66 -join ' ') -match 'SKIPPED dependency patch G1\.A\.patch')) "$($o66 -join ' | ')"
     Case 'integrated-while-made dependency: the base fingerprint is recorded' ((-not $err66) -and (T $r66 'G1.B').base.head) "base=$((T $r66 'G1.B').base | ConvertTo-Json -Compress)"
 
+    # ---- 66e. an EMPTY untracked main-tree file where a built dependency's patch creates the file is dropped from the
+    # new tree, and the patch applies (kit item IN-20261016122702-3601: a 0-byte untracked FamilyFactory.cs failed every
+    # G7.T020 pre-stage on G7.T019.patch with "already exists in working directory"). A NON-empty untracked copy may be
+    # work, so it still fails, and the main tree's own copy is never touched.
+    $v66 = @{}
+    foreach ($k in @('e', 'f')) {
+        # G1.A's patch CREATES New66.cs (the fixture's G1.A.txt is tracked, so a plain Build only modifies a file).
+        $rv = New-Repo "r66$k" ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok'); 'G1.B' = (ContentGrader 'G1.B' 'ok') }); $repos += $rv
+        $dv = J $rv
+        ($dv.tasks | Where-Object { $_.id -eq 'G1.A' }).writeSet = @('G1.A.txt', 'New66.cs')
+        ($dv.tasks | Where-Object { $_.id -eq 'G1.B' }).dependsOn = @('G1.A')
+        Set-Content -Path (Join-Path $rv '.streams\tasks.json') -Encoding utf8 -Value ($dv | ConvertTo-Json -Depth 50)
+        [void](& "$S\Claim-Task.ps1" -Repo $rv -Role build -Session "build-66${k}a" -Task G1.A)
+        $wa = & "$S\New-TaskWorktree.ps1" -Repo $rv -Task G1.A -Session "build-66${k}a" -WorktreeRoot (Join-Path $Scratch "wt66${k}a") | Select-Object -Last 1
+        Set-Content (Join-Path $wa 'G1.A.txt') 'A done'; Set-Content (Join-Path $wa 'New66.cs') 'class New66 {}'
+        & "$S\Export-TaskPatch.ps1" -Repo $rv -Task G1.A -Worktree $wa | Out-Null
+        & "$S\Update-Task.ps1" -Repo $rv -Task G1.A -Role build -Session "build-66${k}a" -To built -Release -Artifacts @{ patch = '.streams\patches\G1.A.patch'; verdict = 'PASS' } | Out-Null
+        # The main tree then gains an untracked New66.cs: empty (e) or holding work (f).
+        [IO.File]::WriteAllText((Join-Path $rv 'New66.cs'), $(if ($k -eq 'e') { '' } else { 'owner work' }))
+        [void](& "$S\Claim-Task.ps1" -Repo $rv -Role build -Session "build-66${k}b" -Task G1.B)
+        $rootv = Join-Path $Scratch "wt66$k"
+        $ev = ''; $ov = @()
+        try { $ov = @(& "$S\New-TaskWorktree.ps1" -Repo $rv -Task G1.B -Session "build-66${k}b" -WorktreeRoot $rootv 2>&1) } catch { $ev = ("$_" -split "`n")[0].Trim() }
+        $v66[$k] = @{ repo = $rv; wt = (Join-Path $rootv 'G1.B'); err = $ev; out = ($ov -join ' | ') }
+    }
+    $e66 = $v66['e']; $f66 = $v66['f']
+    Case '66e an empty untracked main copy of a file a dependency patch creates is dropped: the tree is made and holds the patch content' ((-not $e66.err) -and (Test-Path (Join-Path $e66.wt 'New66.cs')) -and ((Get-Content -Raw (Join-Path $e66.wt 'New66.cs')) -match '^class New66 \{\}\s*$') -and ($e66.out -match 'DROPPED empty untracked main-tree copy of New66\.cs')) "err='$($e66.err)' out=$($e66.out)"
+    Case '66e the main tree keeps its own empty copy' ((Test-Path (Join-Path $e66.repo 'New66.cs')) -and (Get-Item (Join-Path $e66.repo 'New66.cs')).Length -eq 0) "main copy exists=$(Test-Path (Join-Path $e66.repo 'New66.cs'))"
+    Case '66f a NON-empty untracked main copy is never dropped: New-TaskWorktree still fails on it' (($f66.err -match 'already exists') -and ($f66.out -notmatch 'DROPPED')) "err='$($f66.err)' out=$($f66.out)"
+
 
 
     # ---- Start-StreamRunner: fresh session per unit of work (owner ruling 2026-10-04) ----
@@ -3971,6 +4001,7 @@ if ($Mode -eq 'retest') { exit 0 } else { exit 1 }
     $bin107 = Join-Path $Scratch 'npx107'; New-Item -ItemType Directory -Path $bin107 -Force | Out-Null
     Set-Content -Path (Join-Path $bin107 'npx.ps1') -Encoding utf8 -Value @'
 $retest = $args[0] -ne 'tier2'
+if ($retest) { $args | Set-Content (Join-Path (Split-Path $env:PLAYWRIGHT_JSON_OUTPUT_NAME) 'npx-args.txt') }
 $st = if ($retest -and $env:STREAM_T107 -eq 'on-P7') { 'expected' } else { 'unexpected' }
 $specs = @(@{ title = 'signs in through the self-signed stack'; file = 'y.spec.ts'; tests = @(@{ status = $st; results = @(@{ duration = 1 }) }) })
 @{ suites = @(@{ title = 'y.spec.ts'; file = 'y.spec.ts'; specs = $specs; suites = @() }) } | ConvertTo-Json -Depth 10 | Set-Content $env:PLAYWRIGHT_JSON_OUTPUT_NAME
@@ -3992,6 +4023,10 @@ if ($st -eq 'expected') { exit 0 } else { "STREAM_T107='$env:STREAM_T107'"; exit
     $res107 = if (Test-Path (Join-Path $prd7 'run-P7-1.results.json')) { @((Get-Content -Raw (Join-Path $prd7 'run-P7-1.results.json') | ConvertFrom-Json).tests) } else { @() }
     $flaky107 = @($res107 | Where-Object { $_.outcome -eq 'flaky' }).Count
     Case '107 a re-run keeps the env its leg sets, so the failed test re-runs and counts as flaky' ($flaky107 -eq 1 -and $cmd107.Count -eq 1 -and $cmd107[0] -like "`$env:STREAM_T107='on-P7'*" -and @([regex]::Matches($cmd107[0], 'PLAYWRIGHT_JSON_OUTPUT_NAME')).Count -eq 1) "flaky=$flaky107 of $($res107.Count) cmd=$($cmd107 -join ' || ') run=$($s107 -join ' | ')"
+    # 107b (kit item IN-20261016100941-a15f): run-G14-2's Playwright retest passed '--reporter=json line' because npx was
+    # npx.ps1 and the reporter list was unquoted. The fake npx above is a .ps1 too, and records the args it received.
+    $args107 = @(if ($rt107) { $o107 = @($rt107.legs | Where-Object { $_.step -eq 'leg' } | ForEach-Object { [string]$_.outDir })[0]; if ($o107 -and (Test-Path (Join-Path $o107 'npx-args.txt'))) { Get-Content (Join-Path $o107 'npx-args.txt') } })
+    Case '107b a Playwright re-run through npx.ps1 receives --reporter=json,line as one argument' ($args107 -contains '--reporter=json,line' -and $cmd107.Count -eq 1 -and $cmd107[0] -like "*'--reporter=json,line'*") "args=$($args107 -join ' | ') cmd=$($cmd107 -join ' || ')"
 
     # 108 (kit item IN-20261010151453-fc3c): G4 could not close. Two run-G4-3 failures had fix rows that never land:
     # G4.R1F15 was RETIRED (measured green alone) and G4.R1F18 was retired after the OWNER exempted its test. Tier 3
@@ -4141,7 +4176,7 @@ if ($st -eq 'expected') { exit 0 } else { "STREAM_T107='$env:STREAM_T107'"; exit
 
     # ---- 112. A pre-stage that loses the tasks.json lock race is retried after a short wait, not backed off as a failed
     # run (kit item IN-20261010172833-eff6: 16 runners restarted together on 2026-10-10, 10 lost the race to two
-    # holders and slept 900 s). A live holder keeps the lock for 5 s against a 2 s lock wait; the build runner must log
+    # holders and slept 900 s). A live holder keeps the lock for 20 s against a 2 s lock wait (5 s was too short on a loaded host: the runner took 8 s from GATE to PRESTAGE and met no lock, kit item IN-20261016112522-9948); the build runner must log
     # BUSY-RETRY, no BACKOFF, and still launch its unit once the lock is free.
     $r112 = New-Repo 'runner112' ([ordered]@{ 'G1.L' = (ContentGrader 'G1.L' 'done') }); $repos += $r112
     $cl112 = Join-Path $Scratch 'claude-stub112.ps1'
@@ -4151,7 +4186,7 @@ if ($st -eq 'expected') { exit 0 } else { "STREAM_T107='$env:STREAM_T107'"; exit
     $ai112 = Join-Path $Scratch 'ai-stub112.ps1'; Set-Content -LiteralPath $ai112 -Value @('exit 0')
     $lock112 = Join-Path $r112 '.streams\tasks.json.lock'; $ready112 = "$lock112.ready"
     $cmd112 = "`$fs = [IO.File]::Open('$lock112', 'CreateNew', 'Write', 'Read'); `$b = [Text.Encoding]::UTF8.GetBytes('{""session"":""holder-112""}'); `$fs.Write(`$b, 0, `$b.Length); `$fs.Flush(); " +
-        "Set-Content -LiteralPath '$ready112' -Value x; Start-Sleep -Milliseconds 5000; `$fs.Dispose(); Remove-Item -LiteralPath '$lock112' -Force"
+        "Set-Content -LiteralPath '$ready112' -Value x; Start-Sleep -Milliseconds 20000; `$fs.Dispose(); Remove-Item -LiteralPath '$lock112' -Force"
     $h112 = Start-Process pwsh -PassThru -WindowStyle Hidden -ArgumentList '-NoProfile', '-NonInteractive', '-Command', $cmd112
     $w112 = 0; while (-not (Test-Path $ready112) -and $w112 -lt 200) { Start-Sleep -Milliseconds 100; $w112++ }
     $env:STREAM_RUNNER_AI = $ai112; $env:STREAM_RUNNER_CLAUDE = $cl112

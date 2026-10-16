@@ -82,6 +82,20 @@ foreach ($pp in $depPatches) {
     if ($LASTEXITCODE -ne 0) {
         & git -C $wt apply --check --reverse --binary --whitespace=nowarn $full 2>&1 | Out-Null
         if ($LASTEXITCODE -eq 0) { $notes.Add("SKIPPED dependency patch $(Split-Path -Leaf $full): the base already holds it (integrated while this tree was made)"); continue }
+        # An EMPTY untracked main-tree file where this patch creates the file is dropped from the tree before the
+        # apply. A 0-byte src/Domain/TestData/Mutation/FamilyFactory.cs sat untracked in the main tree, step 2 copied it
+        # into every tree, and G7.T019.patch (which creates it) failed every G7.T020 pre-stage with "already exists in
+        # working directory" (kit item IN-20261016122702-3601). An empty copy holds no work; a non-empty one may, so it
+        # still fails as before. Only this worktree's copy is removed, never the main tree's.
+        $dropped = [Collections.Generic.List[string]]::new()
+        $created = @(& git -C $wt apply --summary $full 2>$null | ForEach-Object { if ($_ -match '^\s*create mode \d+ (.+)$') { $Matches[1].Trim() } })
+        foreach ($c in $created) {
+            $cp = Join-Path $wt $c
+            if (($untracked -contains $c) -and (Test-Path -LiteralPath $cp -PathType Leaf) -and (Get-Item -LiteralPath $cp).Length -eq 0) {
+                Remove-Item -LiteralPath $cp -Force; $dropped.Add($c)
+            }
+        }
+        if ($dropped.Count) { $notes.Add("DROPPED empty untracked main-tree copy of $($dropped -join ', ') from this tree: dependency patch $(Split-Path -Leaf $full) creates it") }
     }
     [void](Invoke-Git $wt @('apply', '--binary', '--whitespace=nowarn', $full))
     $applied.Add($pp)

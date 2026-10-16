@@ -210,7 +210,10 @@ foreach ($suite in @($want | Where-Object { -not ([string]$_['test']).StartsWith
             $files = (@($batch | ForEach-Object { $_.file } | Where-Object { $_ } | Select-Object -Unique)) -join ' '
             $v = $vars.Clone(); $v['grep'] = $grep; $v['files'] = $files; $v['leg'] = $bLeg; $v['out'] = $bOut
             if ($ld -and $ld['retestCommand']) { $envPre + (Expand-SuiteCommand ([string]$ld['retestCommand']) $v) }
-            else { "$envPre`$env:PLAYWRIGHT_JSON_OUTPUT_NAME = $(& $sq (Join-Path $bOut 'results.json')); Set-Location -LiteralPath $(& $sq (Join-Path $snap $proj)); npx playwright test $files --reporter=json,line --grep $(& $sq $grep)" }
+            # The reporter list is quoted: where npx resolves to npx.ps1, PowerShell reads a bare json,line as an array and
+            # passes '--reporter=json line', and Playwright stops on "Cannot find module 'json line'" (run-G14-2; kit item
+            # IN-20261016100941-a15f).
+            else { "$envPre`$env:PLAYWRIGHT_JSON_OUTPUT_NAME = $(& $sq (Join-Path $bOut 'results.json')); Set-Location -LiteralPath $(& $sq (Join-Path $snap $proj)); npx playwright test $files '--reporter=json,line' --grep $(& $sq $grep)" }
         }
         $batches = [Collections.Generic.List[object]]::new(); $cur = [Collections.Generic.List[object]]::new()
         foreach ($it in $items) {

@@ -21,7 +21,7 @@
 #     "legs":  [ { "name": "Tests.Unit", "kind": "dotnet", "project": "tests\\Tests.Unit",
 #                  "command": "dotnet test tests\\Tests.Unit --no-build --logger trx --results-directory {runDir}\\Tests.Unit" },
 #                { "name": "Playwright", "kind": "playwright", "project": "tests\\Tests.E2E",
-#                  "command": "$env:PLAYWRIGHT_JSON_OUTPUT_NAME='{runDir}\\Playwright\\results.json'; npx --prefix tests\\Tests.E2E playwright test --reporter=json,line" } ],
+#                  "command": "$env:PLAYWRIGHT_JSON_OUTPUT_NAME='{runDir}\\Playwright\\results.json'; npx --prefix tests\\Tests.E2E playwright test '--reporter=json,line'" } ],
 #     "after": [ { "name": "web", "command": "docker compose -f compose.yaml up -d --build --wait web", "workDir": "repo" } ] }
 #   Placeholders: {repo} {snapshot} {runDir} {run} {group}. dotnet legs write trx under {runDir}\<leg>\, Playwright legs
 #   a json report; Export-SuiteResults.ps1 reads both.
