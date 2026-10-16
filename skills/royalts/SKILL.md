@@ -34,7 +34,7 @@ description: >
 ```powershell
 Install-Module RoyalDocument.PowerShell -Scope CurrentUser -Repository PSGallery   # once; official, Royal Apps GmbH
 & "{ClaudeHome}\skills\royalts\scripts\New-RoyalSshTunnelDocument.ps1" -Path '<docs dir>\Linux Droplet.rtsz' `
-    -HostAddress 159.223.100.95 -User gene -KeyFile '{SecretsDir}\do_droplet\do_droplet_ed25519' -Rdp -Name Droplet
+    -HostAddress 138.68.42.81 -User gene -KeyFile '{SecretsDir}\do_droplet\do_droplet_ed25519' -Rdp -Name Droplet
 & "{ClaudeHome}\skills\royalts\scripts\Show-RoyalDocument.ps1" -Path '<docs dir>\Linux Droplet.rtsz'
 ```
 

@@ -26,7 +26,7 @@
 - UI: [mockups first](feedback_ui_mockups_before_implementing.md) · [RadzenSwitch](feedback_radzenswitch_not_selectbar.md) · [no blur-to-commit](feedback_no_blur_to_commit_ui.md) · [parity before new](feedback_ui_parity_before_new.md)
 - [ANY UI design/update: ui-ux-pro-max + mockups at a gate BEFORE code](feedback_ui_port_characterise_and_uxreview.md)
 - [ADO MCP = Microsoft @azure-devops/mcp, PAT as base64 any:pat; wit_work_item; Cursor removed 10/12](reference_ado_mcp_microsoft_pat.md)
-- [DO droplet 159.223.100.95 Ubuntu 24.04: `addLinux` profile cmd WORKS, root + ~\.ssh\do_droplet_ed25519 (no passphrase); DO console paste needs `true; cmd #`](reference_do_droplet_addlinux.md)
+- [DO droplet 138.68.42.81 (SFO2, 2 GB, recreated 10/16): `addLinux` + `-Desktop`, key ~\.ssh\do_droplet_ed25519, rebuild script D:\repos\Linux\setup-droplet.sh, Royal TS doc; skill royalts](reference_do_droplet_addlinux.md)
 - [Key Repos](project_repos.md) · [workspace start](project_workspace_start_convention.md)
 - Sub-indexes: [CrewChief](index_crewchief.md) · [TestAuto](index_testauto.md) · [Profisee/Connect/Matching](index_profisee_platform.md) · [Claude harness](index_claude_harness.md) · [Infra/shell/misc](index_infra_misc.md) · [vNext/Speedy plan, build, testing, stream kit](index_vnext_plan_design.md) · [Speedy requirements](index_speedy_requirements.md) (stream kit + MyLoop lines moved there 10/16)
 - [\\SMVMTR1\d$ Access denied from Claude = cached-logon session lost its TGT; fix `cmdkey /add:SMVMTR1 /user:corp\agenewe /pass`](reference_smvmtr1_smb_access_denied_cached_logon.md)
