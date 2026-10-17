@@ -169,7 +169,7 @@ else {
         throw "git pull --ff-only failed (git's message is above). Unpublished local commits or a diverged branch: run publish.ps1 first. Ownership or credential errors: fix as git says, then re-run."
     }
     $after = git -C $repo rev-parse HEAD
-    $summary.Add($(if ($before -eq $after) { "pull: already up to date ($($after.Substring(0,7)))" } else { "pull: $before.Substring(0,7) -> $($after.Substring(0,7)), $(@(git -C $repo rev-list --count "$before..$after")) commit(s)" }))
+    $summary.Add($(if ($before -eq $after) { "pull: already up to date ($($after.Substring(0,7)))" } else { "pull: $($before.Substring(0,7)) -> $($after.Substring(0,7)), $(@(git -C $repo rev-list --count "$before..$after")) commit(s)" }))
     # The pull may have changed the lib this script loaded; the installer below imports it again itself.
     Import-Module (Join-Path $repo 'lib\MachineConfig.psm1') -Force -DisableNameChecking
 }
