@@ -115,6 +115,7 @@ $held = [Collections.Generic.List[string]]::new()
         elseif ($t.kind -notin $kinds) { $refusals.Add("REFUSED-TASK $Task : $Role does not claim a $($t.kind) task$(if ($t.kind -eq 'gate') { ' - a gate row is advanced to ticketed with no claim by any author claim' })") }
         elseif (Test-ClaimLive $t) { $refusals.Add("REFUSED-TASK $Task : $($t.claim.role) $($t.claim.session) holds it, beat $($t.claim.beat)") }
         elseif ($Role -eq 'build' -and -not (Test-DepsAt $doc $t @('built', 'integrated', 'done'))) { $refusals.Add("REFUSED-TASK $Task : a dependency is not built yet ($($t.dependsOn -join ', '))") }
+        elseif ($Role -eq 'build' -and -not (Test-DepsBaseReady $doc $t)) { $refusals.Add("REFUSED-TASK $Task : a built dependency sits on a dependency that is no longer built, so its patch cannot be stacked ($($t.dependsOn -join ', '))") }
         if ($refusals.Count) { return $null }
         if ($busy.Contains($t.id)) { $script:held.Add("$Task is named by $($busy[$t.id]); -Task overrides that skip, so re-read the item and the row's artifacts before writing") }
         $now = Get-Now

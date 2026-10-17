@@ -2200,6 +2200,63 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case '66e the main tree keeps its own empty copy' ((Test-Path (Join-Path $e66.repo 'New66.cs')) -and (Get-Item (Join-Path $e66.repo 'New66.cs')).Length -eq 0) "main copy exists=$(Test-Path (Join-Path $e66.repo 'New66.cs'))"
     Case '66f a NON-empty untracked main copy is never dropped: New-TaskWorktree still fails on it' (($f66.err -match 'already exists') -and ($f66.out -notmatch 'DROPPED')) "err='$($f66.err)' out=$($f66.out)"
 
+    # ---- 66g. A BASE IS NEVER LAID WHILE ANOTHER HOLDER HAS THE MAIN TREE. On 2026-10-17 Builder 4's pre-stage listed
+    # main's untracked files while the integrator had G9.T010's patch applied for its grader (kit item
+    # IN-20261017025015-83de). New-TaskWorktree now reads main under main-grader.lock; a busy lock throws with the text a
+    # runner reads as PRESTAGE-BUSY ('lock busy for <n>s'), and no tree is made.
+    $r66g = New-Repo 'r66g' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok') }); $repos += $r66g
+    [void](& "$S\Claim-Task.ps1" -Repo $r66g -Role build -Session build-66g)
+    $root66g = Join-Path $Scratch 'wt66g'
+    $held66g = [IO.FileStream]::new((Join-Path $r66g '.streams\main-grader.lock'), [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::Read, 4096, [IO.FileOptions]::DeleteOnClose)
+    $b66g = [Text.Encoding]::UTF8.GetBytes('integrate G1.X apply pid 1 at test'); $held66g.Write($b66g, 0, $b66g.Length); $held66g.Flush()
+    $prevWait66g = $env:STREAM_MAIN_LOCK_WAIT_SECONDS; $env:STREAM_MAIN_LOCK_WAIT_SECONDS = '1'
+    $err66g = ''
+    try { [void](& "$S\New-TaskWorktree.ps1" -Repo $r66g -Task G1.A -Session build-66g -WorktreeRoot $root66g 2>&1) } catch { $err66g = ("$_" -split "`n")[0].Trim() }
+    finally {
+        $held66g.Dispose()
+        if ($null -eq $prevWait66g) { Remove-Item Env:\STREAM_MAIN_LOCK_WAIT_SECONDS -ErrorAction SilentlyContinue } else { $env:STREAM_MAIN_LOCK_WAIT_SECONDS = $prevWait66g }
+    }
+    Case '66g a held main-grader.lock stops the base: New-TaskWorktree throws the runner''s BUSY text and makes no tree' (($err66g -match 'lock busy for \d+s') -and -not (Test-Path (Join-Path $root66g 'G1.A'))) "err='$err66g' tree=$(Test-Path (Join-Path $root66g 'G1.A'))"
+
+    # ---- 66h. AN UNTRACKED FILE THAT IS GONE BY COPY TIME IS SKIPPED, NOT FATAL. The listed file was removed between the
+    # list and the copy ("Could not find file ...ExistingDataInspector.cs", same item). The hook seam deletes it in that
+    # window; the tree is made without it, the output names it, and the main-tree lock is free afterwards.
+    $r66h = New-Repo 'r66h' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok') }); $repos += $r66h
+    Set-Content (Join-Path $r66h 'vanish66.txt') 'listed, then removed before the copy'
+    Set-Content (Join-Path $r66h 'stay66.txt') 'listed and still there'
+    $hook66h = Join-Path $Scratch 'hook66h.ps1'
+    Set-Content $hook66h "Remove-Item -LiteralPath '$(Join-Path $r66h 'vanish66.txt')' -Force"
+    [void](& "$S\Claim-Task.ps1" -Repo $r66h -Role build -Session build-66h)
+    $err66h = ''; $o66h = @()
+    $env:STREAM_TEST_WORKTREE_HOOK = $hook66h
+    try { $o66h = @(& "$S\New-TaskWorktree.ps1" -Repo $r66h -Task G1.A -Session build-66h -WorktreeRoot (Join-Path $Scratch 'wt66h') 2>&1) } catch { $err66h = ("$_" -split "`n")[0].Trim() }
+    finally { Remove-Item Env:\STREAM_TEST_WORKTREE_HOOK -ErrorAction SilentlyContinue }
+    $wt66h = Join-Path $Scratch 'wt66h\G1.A'
+    Case '66h a vanished untracked file is skipped with a note and the tree is made' ((-not $err66h) -and (Test-Path (Join-Path $wt66h 'stay66.txt')) -and -not (Test-Path (Join-Path $wt66h 'vanish66.txt')) -and (($o66h -join ' ') -match 'SKIPPED untracked main-tree file\(s\) gone before the copy: vanish66\.txt')) "err='$err66h' out=$($o66h -join ' | ')"
+    Case '66h the main-tree lock is released once the base is laid' ((-not $err66h) -and -not (Test-Path (Join-Path $r66h '.streams\main-grader.lock'))) "lock exists=$(Test-Path (Join-Path $r66h '.streams\main-grader.lock'))"
+
+    # ---- 66i. A BUILT DEPENDENCY WHOSE OWN DEPENDENCY IS NO LONGER BUILT IS NOT A BASE. A is building again (bounced),
+    # B is built on A's old patch, C depends on B. C's base would stack B.patch without A's, so C is not claimable;
+    # once A is integrated it is (kit item IN-20261017100037-aa62, G9.T026 over G9.T011 over G9.T010).
+    $r66i = New-Repo 'r66i' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok'); 'G1.B' = (ContentGrader 'G1.B' 'ok'); 'G1.C' = (ContentGrader 'G1.C' 'ok') }); $repos += $r66i
+    $set66i = {
+        param([string] $aState)
+        $d = J $r66i
+        foreach ($t in $d.tasks) {
+            if ($t.id -eq 'G1.A') { $t.state = $aState }
+            if ($t.id -eq 'G1.B') { $t.state = 'built'; $t.dependsOn = @('G1.A') }
+            if ($t.id -eq 'G1.C') { $t.state = 'ticketed'; $t.dependsOn = @('G1.B') }
+        }
+        Set-Content -LiteralPath (Join-Path $r66i '.streams\tasks.json') -Encoding utf8 -Value ($d | ConvertTo-Json -Depth 50)
+    }
+    & $set66i 'building'
+    $c66i = (@(& "$S\Claim-Task.ps1" -Repo $r66i -Role build -Session build-66i 2>&1) -join ' ')
+    $k66i = (@(& "$S\Claim-Task.ps1" -Repo $r66i -Role build -Session build-66i -Task G1.C 2>&1) -join ' ')
+    Case '66i a row over a built dependency whose own dependency went back to building is not claimable' (($c66i -match 'NONE') -and ($c66i -notmatch '"G1\.C"') -and ($k66i -match 'REFUSED-TASK G1\.C : a built dependency sits on a dependency that is no longer built')) "claim=$($c66i.Substring(0, [Math]::Min(200, $c66i.Length))) task=$($k66i.Substring(0, [Math]::Min(200, $k66i.Length)))"
+    & $set66i 'integrated'
+    $c66i2 = (@(& "$S\Claim-Task.ps1" -Repo $r66i -Role build -Session build-66i 2>&1) -join ' ')
+    Case '66i once that dependency is integrated the row is claimable again' ($c66i2 -match '"G1\.C"') "claim=$($c66i2.Substring(0, [Math]::Min(200, $c66i2.Length)))"
+
 
 
     # ---- Start-StreamRunner: fresh session per unit of work (owner ruling 2026-10-04) ----
@@ -2425,22 +2482,25 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $ai75 = Join-Path $Scratch 'ai-stub75.ps1'; Set-Content -LiteralPath $ai75 -Value @('exit 0')
     $cl75 = Join-Path $Scratch 'claude-stub75.ps1'
     $pid75 = Join-Path $Scratch 'claude-stub75.child.txt'
+    # The limit is 45 s, not 6 s, and the stub and its child sleep 300 s. On the 2026-10-17 host at 100% CPU the stub
+    # took more than 6 s to start its child and write the pid, so the unit was ended before the pid existed (child=0).
+    # Ending well inside 150 s still proves the runner cut the 300 s session short.
     Set-Content -LiteralPath $cl75 -Value @(
-        "`$c = Start-Process pwsh -PassThru -WindowStyle Hidden -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 120'"
+        "`$c = Start-Process pwsh -PassThru -WindowStyle Hidden -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 300'"
         "`$c.Id | Set-Content -LiteralPath '$pid75'"
-        'Start-Sleep -Seconds 120')
+        'Start-Sleep -Seconds 300')
     $env:STREAM_RUNNER_AI = $ai75; $env:STREAM_RUNNER_CLAUDE = $cl75
     $o75 = @()
     $t75 = Measure-Command {
-        $job75 = Start-ThreadJob -ScriptBlock { param($s, $r) & "$s\Start-StreamRunner.ps1" -Repo $r -Role kit -Live -IntervalSeconds 1 -UnitTimeoutSeconds 6 -MaxRuns 1 } -ArgumentList $S, $r75
-        $w75 = 0; while ($w75 -lt 400 -and -not (@(Receive-Job $job75 -Keep) -match 'BACKOFF')) { Start-Sleep -Milliseconds 100; $w75++ }
+        $job75 = Start-ThreadJob -ScriptBlock { param($s, $r) & "$s\Start-StreamRunner.ps1" -Repo $r -Role kit -Live -IntervalSeconds 1 -UnitTimeoutSeconds 45 -MaxRuns 1 } -ArgumentList $S, $r75
+        $w75 = 0; while ($w75 -lt 1500 -and -not (@(Receive-Job $job75 -Keep) -match 'BACKOFF')) { Start-Sleep -Milliseconds 100; $w75++ }
         $o75 = @(Receive-Job $job75 -Keep); Stop-Job $job75 -ErrorAction SilentlyContinue; Remove-Job $job75 -Force -ErrorAction SilentlyContinue
     }
     Remove-Item Env:\STREAM_RUNNER_AI, Env:\STREAM_RUNNER_CLAUDE -ErrorAction SilentlyContinue
     $child75 = if (Test-Path $pid75) { [int](Get-Content -Raw $pid75) } else { 0 }
     $alive75 = $child75 -and (Get-Process -Id $child75 -ErrorAction SilentlyContinue)
     if ($alive75) { Stop-Process -Id $child75 -Force -ErrorAction SilentlyContinue }
-    Case 'runner -Live: a session past its limit is ended with its children and logged TIMEOUT' ((($o75 -join "`n") -match ' EXIT TIMEOUT +FAILED -> ') -and $child75 -and -not $alive75 -and $t75.TotalSeconds -lt 40) "child=$child75 alive=$([bool]$alive75) seconds=$([int]$t75.TotalSeconds) out=$($o75 -join ' | ')"
+    Case 'runner -Live: a session past its limit is ended with its children and logged TIMEOUT' ((($o75 -join "`n") -match ' EXIT TIMEOUT +FAILED -> ') -and $child75 -and -not $alive75 -and $t75.TotalSeconds -lt 150) "child=$child75 alive=$([bool]$alive75) seconds=$([int]$t75.TotalSeconds) out=$($o75 -join ' | ')"
 
     # ---- 75q. Usage limit in a -Live unit (kit item IN-20261010205318-5308). The account's quota rejection is one
     # synthetic transcript line and the session then idles at its prompt; four author units sat to their TIMEOUT and a
@@ -2464,10 +2524,13 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
         "`$i = [array]::IndexOf(`$args, '--session-id'); `$sid = if (`$i -ge 0) { `$args[`$i + 1] } else { 'none' }"
         "`$t = Join-Path '$(Join-Path $proj75q 'D--some-repo')' (`$sid + '.jsonl')"
         "Set-Content -LiteralPath `$t -Value '{""type"":""user"",""message"":{""content"":""go""}}'"
-        "Start-Sleep -Milliseconds 1500"
-        "Add-Content -LiteralPath `$t -Value '$((& $rej75q $reset75q) -replace "'", "''")'"
+        # The child is started and its pid written BEFORE the rejection line. Written after it, the runner (checking
+        # every 1 s) could end the unit before a loaded host had started the child, and the case read child=0
+        # (2026-10-17, host at 100% CPU).
         "`$c = Start-Process pwsh -PassThru -WindowStyle Hidden -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 120'"
         "`$c.Id | Set-Content -LiteralPath '$pid75q'"
+        "Start-Sleep -Milliseconds 1500"
+        "Add-Content -LiteralPath `$t -Value '$((& $rej75q $reset75q) -replace "'", "''")'"
         'Start-Sleep -Seconds 120')
     $env:STREAM_RUNNER_AI = $ai75q; $env:STREAM_RUNNER_CLAUDE = $cl75q; $env:STREAM_CLAUDE_PROJECTS = $proj75q; $env:STREAM_RUNNER_QUOTA_CHECK_SECONDS = '1'
     $o75q = @()
@@ -2680,8 +2743,10 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
         'Start-Sleep -Seconds 120')
     $env:STREAM_RUNNER_AI = $ai83; $env:STREAM_RUNNER_CLAUDE = $cl83
     try {
-        $job83 = Start-ThreadJob -ScriptBlock { param($s, $r) & "$s\Start-StreamRunner.ps1" -Repo $r -Role kit -Live -IntervalSeconds 1 -UnitTimeoutSeconds 6 -MaxRuns 1 } -ArgumentList $S, $r83
-        $null = Wait-Job $job83 -Timeout 60
+        # A 60 s unit limit, not 6 s: on a loaded host the stub's pwsh took longer than 6 s to start and write its result,
+        # so the unit timed out with no result and the case read FAILED plus a backoff (2026-10-17, host at 100% CPU).
+        $job83 = Start-ThreadJob -ScriptBlock { param($s, $r) & "$s\Start-StreamRunner.ps1" -Repo $r -Role kit -Live -IntervalSeconds 1 -UnitTimeoutSeconds 60 -MaxRuns 1 } -ArgumentList $S, $r83
+        $null = Wait-Job $job83 -Timeout 240
         $o83 = @(Receive-Job $job83 -Keep); Stop-Job $job83 -ErrorAction SilentlyContinue; Remove-Job $job83 -Force -ErrorAction SilentlyContinue
         $d83 = @(& "$S\Start-StreamRunner.ps1" -Repo $r83 -Role build -Live -DryRun)
     } finally { Remove-Item Env:\STREAM_RUNNER_AI, Env:\STREAM_RUNNER_CLAUDE -ErrorAction SilentlyContinue }
@@ -2837,9 +2902,9 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
         "Set-Content -LiteralPath '$tab87' -Value `$env:STREAM_UNIT_TAB"
         'Start-Sleep -Seconds 1'
         "Set-Content -LiteralPath (`$env:STREAM_UNIT_OUT + '.waiting.json') -Value '{""waiting"":true,""since"":1,""count"":1,""tool"":""Bash"",""reason"":""destructive-path-guard: stub87""}'"
-        'Start-Sleep -Seconds 4'
+        'Start-Sleep -Seconds 20'
         "Get-ChildItem (Join-Path '$r87' '.streams\runners') -Filter 'runner-*.json' | ForEach-Object { Get-Content -Raw `$_.FullName } | Set-Content -LiteralPath '$st87'"
-        'Start-Sleep -Seconds 4'
+        'Start-Sleep -Seconds 20'
         "Set-Content -LiteralPath (`$env:STREAM_UNIT_OUT + '.waiting.json') -Value '{""waiting"":false,""at"":2}'"
         'Start-Sleep -Seconds 2'
         "Set-Content -LiteralPath `$env:STREAM_UNIT_OUT -Value '{""result"":""stub87 built"",""is_error"":false,""num_turns"":2,""total_cost_usd"":0,""outcome"":""built""}'"
@@ -2849,8 +2914,11 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $env:STREAM_RUNNER_AI = $ai87; $env:STREAM_RUNNER_CLAUDE = $cl87; $env:STREAM_RUNNER_WSH = $wz87; $env:WAVETERM_BLOCKID = 'block85'
     Remove-Item Env:\WEZTERM_PANE -ErrorAction SilentlyContinue
     try {
-        $job87 = Start-ThreadJob -ScriptBlock { param($s, $r) & "$s\Start-StreamRunner.ps1" -Repo $r -Role kit -Live -IntervalSeconds 1 -UnitTimeoutSeconds 4 -MaxRuns 1 -Tab 'Builder 9' } -ArgumentList $S, $r87
-        $null = Wait-Job $job87 -Timeout 90
+        # 30 s limit against 40 s waiting on the prompt: the wait alone still outlasts the limit, so the case still proves
+        # that waiting time is not counted. The old 4 s limit left no room for a cold pwsh start on a loaded host, and the
+        # unit ended TIMEOUT before its result (2026-10-17, host at 100% CPU).
+        $job87 = Start-ThreadJob -ScriptBlock { param($s, $r) & "$s\Start-StreamRunner.ps1" -Repo $r -Role kit -Live -IntervalSeconds 1 -UnitTimeoutSeconds 30 -MaxRuns 1 -Tab 'Builder 9' } -ArgumentList $S, $r87
+        $null = Wait-Job $job87 -Timeout 300
         $o87 = @(Receive-Job $job87 -Keep); Stop-Job $job87 -ErrorAction SilentlyContinue; Remove-Job $job87 -Force -ErrorAction SilentlyContinue
     } finally {
         Remove-Item Env:\STREAM_RUNNER_AI, Env:\STREAM_RUNNER_CLAUDE, Env:\STREAM_RUNNER_WSH -ErrorAction SilentlyContinue
@@ -3783,7 +3851,17 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $cl101 = Join-Path $Scratch 'claude-stub101.ps1'; Set-Content -LiteralPath $cl101 -Value @('exit 0')
     $env:STREAM_RUNNER_AI = $ai101; $env:STREAM_RUNNER_CLAUDE = $cl101; $env:STREAM_FREE_MB_TEST = '100'
     $p101 = Start-Process pwsh -ArgumentList '-NoProfile', '-File', "$S\Start-StreamRunner.ps1", '-Repo', $r101, '-Role', 'build', '-IntervalSeconds', '1' -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $Scratch 'runner101.out.txt')
-    Start-Sleep -Seconds 8
+    # Wait for the runner's first GATE line, not a fixed 8 s: on a loaded host (CPU 100%, 2026-10-17) the runner took
+    # longer than 8 s to reach its loop, found the STOP file first and never gated, so 101b failed and the config.json
+    # read below threw. The wait ends at 120 s; a runner that never gates still fails 101b.
+    $out101File = Join-Path $Scratch 'runner101.out.txt'
+    $gateBy101 = (Get-Date).AddSeconds(120)
+    while ((Get-Date) -lt $gateBy101 -and -not $p101.HasExited) {
+        $seen101 = try { $fs101 = [IO.FileStream]::new($out101File, 'Open', 'Read', 'ReadWrite'); try { [IO.StreamReader]::new($fs101).ReadToEnd() } finally { $fs101.Dispose() } } catch { '' }
+        if ($seen101 -match 'GATE ') { break }
+        Start-Sleep -Milliseconds 500
+    }
+    Start-Sleep -Seconds 2
     Set-Content (Join-Path $run101 'STOP-build') 'test 101'
     if (-not $p101.WaitForExit(60000)) { Stop-Process -Id $p101.Id -Force -ErrorAction SilentlyContinue }
     Remove-Item Env:\STREAM_FREE_MB_TEST -ErrorAction SilentlyContinue
@@ -3792,11 +3870,15 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $m101b = & "$S\Get-StreamStatus.ps1" -Repo $r101 -Json | ConvertFrom-Json
     Case '101b a pre-stage that claims nothing leaves no idle beat, so no ghost builder is counted' (($out101 -match 'GATE ') -and $beats101.Count -eq 0 -and [int]$m101b.sessions.build.live -eq 0) "beats=$(@($beats101 | ForEach-Object { $_.Name }) -join ',') live=$($m101b.sessions.build.live) out=$(& $short $out101 300)"
     # (c) twelve processes take the tasks lock 120 times each; none may throw.
+    # Each racer waits up to 300 s for the lock, not the default 15 s. The case proves the lock never throws access
+    # denied; on the 2026-10-17 host at 100% CPU, one racer of twelve waited past 15 s and threw "tasks.json lock busy
+    # for 15s", which is the lock working, not the defect this case is about (seen in two kit item 83de suite runs).
     $lk101 = Join-Path $Scratch 'lock101'; New-Item -ItemType Directory -Path $lk101 -Force | Out-Null
     Set-Content (Join-Path $lk101 'tasks.json') '{"tasks":[],"groups":[]}'
     $st101 = Join-Path $Scratch 'lockstress101.ps1'
     Set-Content -LiteralPath $st101 -Value @(
         'param([string] $Lib, [string] $Dir)'
+        '$env:STREAM_TASKS_LOCK_WAIT_SECONDS = ''300'''
         '. (Join-Path $Lib ''Streams.ps1'')'
         '$P = @{ Lock = (Join-Path $Dir ''tasks.json.lock''); Tasks = (Join-Path $Dir ''tasks.json''); Decisions = (Join-Path $Dir ''decisions.md'') }'
         '$n = 0; for ($i = 0; $i -lt 120; $i++) { try { [void](Invoke-TasksLocked $P "s$PID" { param($doc) $null }) } catch { $n++; "THREW $($_.Exception.Message)" } }'

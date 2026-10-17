@@ -59,7 +59,7 @@ try {
     Write-AtomicText $recFile ($rec | ConvertTo-Json)
     [void](Invoke-Git $Repo @('worktree', 'add', '--detach', $wt, $sha))
     $diff = Join-Path $P.Logs "$name.base-main.patch"
-    Add-MainBase $Repo $wt $sha $diff $untracked
+    $goneUntracked = @(Add-MainBase $Repo $wt $sha $diff $untracked)
     foreach ($i in $CopyIgnored) {
         $src = Join-Path $Repo $i
         $dst = Join-Path $wt $i
@@ -83,7 +83,7 @@ try {
     if (Test-Path -LiteralPath $tj) { [IO.File]::Copy($tj, (Join-Path $snapStreams 'tasks.json'), $true) }
     [void](Invoke-Git $wt @('add', '-A'))
     $dirty = @(& git -C $wt diff --cached --name-only $sha | Where-Object { $_ }).Count
-    $rec.state = 'ready'; $rec.dirty = $dirty; $rec.untracked = $untracked.Count; $rec.readyAt = (Get-Now)
+    $rec.state = 'ready'; $rec.dirty = $dirty; $rec.untracked = $untracked.Count - $goneUntracked.Count; $rec.goneUntracked = $goneUntracked.Count; $rec.readyAt = (Get-Now)
     Write-AtomicText $recFile ($rec | ConvertTo-Json)
 } catch {
     $rec.state = 'failed'; $rec.error = "$_"

@@ -26,10 +26,21 @@ $wt = Join-Path $WorktreeRoot $name
 # sat at a8edaaf, its recorded head said 95de2f1, and G3.T045 (committed between the two reads) arrived as its
 # untracked test file without its two ValueEditor.razor edits (kit item IN-20261001203252-2789). Diffing the main tree
 # against this pinned commit carries anything committed after it as part of the dirty diff, so nothing is lost.
+# Main is read under .streams\main-grader.lock, as New-SuiteSnapshot.ps1 reads it, from the pinned commit to the last
+# untracked copy. Unlocked, a base could be laid while an integrator's patch sat applied on main for its grader: on
+# 2026-10-17 Builder 4 listed G9.T010's untracked files mid-apply, the patch was reversed grader-suspect, and the copy
+# died "Could not find file" (kit item IN-20261017025015-83de); had it not died, the tree would have carried a patch
+# that never landed. The wait is short (60 s, STREAM_MAIN_LOCK_WAIT_SECONDS overrides): a busy main tree throws
+# "main-grader.lock busy for <n>s", which a runner's pre-stage reads as PRESTAGE-BUSY and retries with no backoff.
+$mainWait = if ("$env:STREAM_MAIN_LOCK_WAIT_SECONDS" -match '^\d+$') { [int]$env:STREAM_MAIN_LOCK_WAIT_SECONDS } else { 60 }
+$mainLock = Enter-MainTreeLock $P "worktree $name for $Task by $Session" $mainWait
+if (-not $mainLock) { throw "main-grader.lock busy for ${mainWait}s: held by $(Get-MainTreeLockHolder $P); no worktree made for $Task" }
+try {
 $baseSha = (Invoke-Git $Repo @('rev-parse', 'HEAD')) | Select-Object -First 1
 $untracked = Get-MainUntracked $Repo
 
 [void](Invoke-Git $Repo @('worktree', 'add', '--detach', $wt, $baseSha))
+} catch { $mainLock.Dispose(); throw }
 # From here the tree exists. If anything below fails before the tree is recorded on the task, the tree is marked
 # abandoned in worktrees.md, so it is visible and the reaper takes it. Before 2026-10-04 such a tree was recorded
 # nowhere, and a builder's retry made <task>-2 and -3 beside it (G3.T170, kit item IN-20261004204921-2c98).
@@ -48,12 +59,17 @@ function Get-Hash([byte[]] $b) { [BitConverter]::ToString($sha.ComputeHash($b)).
 # and kept both trees forever (kit item IN-20261002073838-76a8). Staged, a failed tree reads EMPTY and is reaped.
 try {
 # 1-2. main tree's uncommitted tracked changes, then its untracked non-ignored files (listed above)
+$notes = [Collections.Generic.List[string]]::new()
 $mainDiff = Join-Path $P.Logs "$name.base-main.patch"
-Add-MainBase $Repo $wt $baseSha $mainDiff $untracked
+$gone = @(Add-MainBase $Repo $wt $baseSha $mainDiff $untracked)
+$mainLock.Dispose()
+if ($gone.Count) {
+    $untracked = @($untracked | Where-Object { $gone -notcontains $_ })
+    $notes.Add("SKIPPED untracked main-tree file(s) gone before the copy: $($gone -join ', ')")
+}
 
 # 3. dependency patches that are built but not in the main tree yet, in dependency order
 $depPatches = [Collections.Generic.List[string]]::new()
-$notes = [Collections.Generic.List[string]]::new()
 $seen = @{}
 function Add-Deps($id) {
     foreach ($d in @((Get-Task $doc $id).dependsOn)) {
@@ -101,6 +117,7 @@ foreach ($pp in $depPatches) {
     $applied.Add($pp)
 }
 } catch {
+    $mainLock.Dispose()
     # Stage the partial base, then fail as before. Plain git, not Invoke-Git: a second error must not hide the first.
     & git -C $wt add -A 2>&1 | Out-Null
     throw
@@ -130,6 +147,7 @@ if ($code -eq 3) {
 $recorded = $true
 Add-LineTo $P.Worktrees ("- {0} | {1} | {2} | building" -f $Task, $wt, (Get-Now))
 } catch {
+    $mainLock.Dispose()
     if (-not $recorded) {
         $why = ("$_" -split "`n")[0].Trim() -replace '\|', '/'
         try { Add-LineTo $P.Worktrees ("- {0} | {1} | {2} | abandoned (New-TaskWorktree failed before the tree was recorded: {3})" -f $Task, $wt, (Get-Now), $why) } catch { }

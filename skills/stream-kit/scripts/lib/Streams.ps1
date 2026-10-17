@@ -202,16 +202,24 @@ function Get-MainUntracked([string] $Repo) {
 }
 # Lays the main tree's diff against $BaseSha (saved to $DiffFile) and the listed untracked files onto worktree $Wt.
 # Diffing against the pinned commit carries anything committed after it as part of the dirty diff, so nothing is lost.
+# Returns the listed untracked files that were gone by copy time. A file listed and then removed before the copy is not
+# main's any more: on 2026-10-17 Builder 4's pre-stage died "Could not find file ...ExistingDataInspector.cs" when the
+# integrator reversed G9.T010's patch between the list and the copy (kit item IN-20261017025015-83de). It is skipped,
+# not copied, so the base matches main as it now stands.
 function Add-MainBase([string] $Repo, [string] $Wt, [string] $BaseSha, [string] $DiffFile, [string[]] $Untracked) {
     & git -C $Repo diff $BaseSha --binary --output=$DiffFile
     if ($LASTEXITCODE -ne 0) { throw "git diff $BaseSha failed in $Repo" }
     if ((Get-Item $DiffFile).Length -gt 0) { [void](Invoke-Git $Wt @('apply', '--binary', '--whitespace=nowarn', $DiffFile)) }
+    $gone = [Collections.Generic.List[string]]::new()
     foreach ($u in @($Untracked)) {
         $dst = Join-Path $Wt $u
         $dir = Split-Path $dst
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-        [IO.File]::Copy((Join-Path $Repo $u), $dst, $true)
+        try { [IO.File]::Copy((Join-Path $Repo $u), $dst, $true) }
+        catch [IO.FileNotFoundException], [IO.DirectoryNotFoundException] { $gone.Add($u) }
     }
+    # No leading comma: callers wrap the result in @(), which does not unwrap a comma-wrapped array.
+    $gone.ToArray()
 }
 
 # SUITE SNAPSHOTS (New-SuiteSnapshot.ps1). One record per snapshot in .streams\suites\<name>.json. The watchdog keeps
@@ -712,8 +720,23 @@ function Test-DepsAt($doc, $Task, [string[]] $States) {
 # claimable count is exactly the rows a build claim would offer.
 $script:BuildKinds = @('code', 'docs', 'mockup')
 $script:BuildReadyStates = @('built', 'integrated', 'done')
+# A BUILT dependency counts only while its own base is whole: every dependency of it is integrated or done, or is
+# itself built on a whole base. A built row's patch was cut on top of its own built dependencies' patches, and
+# New-TaskWorktree.ps1 stacks only the dependencies that are still built. On 2026-10-17 G9.T010 was bounced
+# grader-suspect and went back to building, so G9.T026's base stacked G9.T011.patch without G9.T010's, and every
+# pre-stage failed "patch does not apply" at MutationRunOrchestrator.cs:84 (kit item IN-20261017100037-aa62).
+function Test-DepsBaseReady($doc, $Task, $Seen = @()) {
+    foreach ($d in @($Task.dependsOn)) {
+        if (-not $d -or $Seen -contains $d) { continue }
+        $dt = Get-Task $doc $d
+        if ($dt.state -in @('integrated', 'done')) { continue }
+        if ($dt.state -ne 'built') { return $false }
+        if (-not (Test-DepsBaseReady $doc $dt (@($Seen) + $d))) { return $false }
+    }
+    $true
+}
 function Test-BuildReady($doc, $Task) {
-    $Task.state -eq 'ticketed' -and $Task.kind -in $script:BuildKinds -and (Test-DepsAt $doc $Task $script:BuildReadyStates)
+    $Task.state -eq 'ticketed' -and $Task.kind -in $script:BuildKinds -and (Test-DepsBaseReady $doc $Task)
 }
 
 # Session liveness, shared by Get-StreamStatus.ps1 (the board and its claimable buffer) and any script that counts
