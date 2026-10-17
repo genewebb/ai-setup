@@ -2,4 +2,4 @@
 # systemDrive: only when the machine profile is not on C:.
 machines:
   SMVMTR1:
-    users: [CORP\agenewe]
+    users: [CORP\genewe]
