@@ -416,7 +416,7 @@ foreach ($root in $roots) {
         # dead the moment it is superseded, and a task that bounced back to planned or ticketed will be given a fresh
         # tree when it is re-claimed. Both were leaking ~500 MB each until the disk filled.
         # A copy is superseded only by a tree that EXISTS. When this host's worktrees moved from C: to D: the trees
-        # moved but the tasks kept recording C:\devops\worktrees\..., a path that is gone, and at 15:35Z on
+        # moved but the tasks kept recording C:\devops\worktrees\..., a path that is gone, and at 15:35Z on  # history
         # 2026-10-01 the watchdog reaped nine D: trees as "superseded copy; the task records C:\...": the tree it
         # deleted WAS the task's tree. Salvage-before-reap kept the content, but a building or built task must not lose
         # its tree to a stale record, so a missing recorded path falls through to the state rules below instead.

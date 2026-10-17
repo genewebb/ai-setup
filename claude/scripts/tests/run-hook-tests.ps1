@@ -425,6 +425,133 @@ Test-Hook -Name 'dpg: reachable through the dispatcher' `
     -Json (New-BashJson 'rm -rf C:\Users\agenewe\Documents\stuff') `
     -Expect { param($o) $o -match '"permissionDecision":\s*"ask"' }
 
+# --- scoped-autoapprove ---------------------------------------------------
+# Policy (Gene 2026-10-17): work inside the repo/scratch roots never waits on a permission prompt; a call that reaches
+# outside them, or acts by name (pkill, docker rm, taskkill /IM), keeps its prompt. Every yes is logged. Each case logs
+# into a folder of its own and removes it.
+$saa = Join-Path $scriptsDir 'scoped-autoapprove.ps1'
+$repoCwd = "$rpW\speedmerchants"
+function New-PermJson {
+    param([string]$Tool, [hashtable]$ToolInput, $Cwd = $repoCwd)
+    $o = @{ session_id = 'test-' + [guid]::NewGuid().ToString('N').Substring(0, 8); hook_event_name = 'PermissionRequest'; tool_name = $Tool; tool_input = $ToolInput }
+    if ($null -ne $Cwd) { $o.cwd = $Cwd }
+    $o | ConvertTo-Json -Compress -Depth 5
+}
+function New-SaaLogDir { $d = Join-Path $env:TEMP ('saa-' + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $d -Force | Out-Null; $d }
+$saaAllow  = { param($o) ($o -match '"hookEventName":\s*"PermissionRequest"') -and ($o -match '"behavior":\s*"allow"') }
+$saaSilent = { param($o) $o.Trim() -eq '' }
+
+$saaDir = New-SaaLogDir
+Test-Hook -Name 'saa: a redirect into the repo from the repo is allowed and logged' `
+    -ScriptPath $saa -Json (New-PermJson 'Bash' @{ command = "echo hi > $rpF/speedmerchants/.streams/logs/x.txt && cat $rpF/speedmerchants/.streams/logs/x.txt" }) `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } `
+    -Expect { param($o) (& $saaAllow $o) -and ((Get-ChildItem $saaDir -Filter '*.log' | Get-Content) -match '^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d ALLOW unit=- session=test-\w+ tool=Bash cwd=.* :: echo hi >') }
+Remove-Item -LiteralPath $saaDir -Recurse -Force
+
+$saaDir = New-SaaLogDir
+Test-Hook -Name 'saa: a Monitor loop polling a grader by PID and tailing a repo log is allowed' `
+    -ScriptPath $saa -Json (New-PermJson 'Monitor' @{ command = "while kill -0 45500 || tasklist //FI `"PID eq 45500`" | grep -q 45500; do sleep 15; done; tail -c 1500 $rpF/speedmerchants/.streams/logs/G9.T029.grader.red-check.txt" }) `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaAllow
+Remove-Item -LiteralPath $saaDir -Recurse -Force
+
+$saaDir = New-SaaLogDir
+Test-Hook -Name 'saa: PowerShell with a variable, reading and removing under scratch, is allowed' `
+    -ScriptPath $saa -Json (New-PermJson 'PowerShell' @{ command = "`$v = Get-Content $scW\x\a.json -Raw; Remove-Item $scW\x\b -Recurse -Force; `$v.Length" } -Cwd "$scW\x") `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaAllow
+Remove-Item -LiteralPath $saaDir -Recurse -Force
+
+$saaDir = New-SaaLogDir
+Test-Hook -Name 'saa: a kill by PID is allowed (only a kill by name keeps its prompt)' `
+    -ScriptPath $saa -Json (New-PermJson 'Bash' @{ command = 'kill -9 4242; taskkill /PID 4242 /T /F' }) `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaAllow
+Remove-Item -LiteralPath $saaDir -Recurse -Force
+
+$saaDir = New-SaaLogDir
+Test-Hook -Name 'saa: an outside path inside a heredoc body is data, the call is allowed' `
+    -ScriptPath $saa -Json (New-PermJson 'Bash' @{ command = "cat <<'EOF' > $rpF/speedmerchants/notes.md`nsee $usersW\OTHERU~1\x`nEOF" }) `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaAllow
+Remove-Item -LiteralPath $saaDir -Recurse -Force
+
+$saaDir = New-SaaLogDir
+Test-Hook -Name 'saa: an Edit under the worktrees root is allowed' `
+    -ScriptPath $saa -Json (New-PermJson 'Edit' @{ file_path = "$wtW\G9.T001\src\Web\Program.cs"; old_string = 'a'; new_string = 'b' } -Cwd "$wtW\G9.T001") `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaAllow
+Remove-Item -LiteralPath $saaDir -Recurse -Force
+
+# Owner 2026-10-17: a folder the agents routinely read or write OUTSIDE the repo and scratch areas (an access row with
+# the edit right but not the delete right, such as a vault or the deploy folder) is treated the same for the yes.
+$editOnlyRow = (Get-AIMachineProfile).Access | Where-Object { $_.Path -and 'edit' -in $_.Access -and 'delete' -notin $_.Access -and 'deny' -notin $_.Access } | Select-Object -First 1
+if ($editOnlyRow) {
+    $saaDir = New-SaaLogDir
+    Test-Hook -Name "saa: a write into an edit-right access row outside repo/scratch is allowed ($($editOnlyRow.Path))" `
+        -ScriptPath $saa -Json (New-PermJson 'PowerShell' @{ command = "Set-Content -LiteralPath '$($editOnlyRow.Path.TrimEnd('\'))\x\status.md' -Value 'ok'" }) `
+        -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaAllow
+    Remove-Item -LiteralPath $saaDir -Recurse -Force
+}
+$readOnlyRow = (Get-AIMachineProfile).Access | Where-Object { $_.Path -and 'read' -in $_.Access -and 'edit' -notin $_.Access -and 'deny' -notin $_.Access } | Select-Object -First 1
+if ($readOnlyRow) {
+    $saaDir = New-SaaLogDir
+    Test-Hook -Name "saa: a read under a read-right access row is allowed ($($readOnlyRow.Path))" `
+        -ScriptPath $saa -Json (New-PermJson 'Read' @{ file_path = "$($readOnlyRow.Path.TrimEnd('\'))\x\notes.md" }) `
+        -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaAllow
+    Remove-Item -LiteralPath $saaDir -Recurse -Force
+}
+
+$saaDir = New-SaaLogDir
+$saaOut = Join-Path $saaDir 'unit-result.json'
+Test-Hook -Name 'saa: inside a stream unit the yes is also logged beside the unit result, tagged with the unit' `
+    -ScriptPath $saa -Json (New-PermJson 'Bash' @{ command = 'dotnet test tests/Tests.Unit --no-build' }) `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir; STREAM_UNIT_OUT = $saaOut; STREAM_UNIT_SESSION = 'build-202610171500-ab12' } `
+    -Expect { param($o) (& $saaAllow $o) -and (Test-Path "$saaOut.approvals.log") -and ((Get-Content "$saaOut.approvals.log") -match 'ALLOW unit=build-202610171500-ab12 .* tool=Bash .* :: dotnet test') }
+Remove-Item -LiteralPath $saaDir -Recurse -Force
+
+$saaDir = New-SaaLogDir
+Test-Hook -Name 'saa: a path under another account''s profile keeps its prompt' `
+    -ScriptPath $saa -Json (New-PermJson 'Bash' @{ command = "cat $usersW\OTHERU~1\Documents\notes.txt" }) `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } `
+    -Expect { param($o) (& $saaSilent $o) -and -not (Get-ChildItem $saaDir -Filter '*.log') }
+Remove-Item -LiteralPath $saaDir -Recurse -Force
+
+$saaDir = New-SaaLogDir
+Test-Hook -Name 'saa: a working directory outside the roots keeps its prompt, even for a harmless command' `
+    -ScriptPath $saa -Json (New-PermJson 'Bash' @{ command = 'echo hi' } -Cwd 'C:\Windows\Temp') `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaSilent
+Remove-Item -LiteralPath $saaDir -Recurse -Force
+
+$saaDir = New-SaaLogDir
+Test-Hook -Name 'saa: a payload with no working directory keeps its prompt (fail closed)' `
+    -ScriptPath $saa -Json (New-PermJson 'Bash' @{ command = 'echo hi' } -Cwd $null) `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaSilent
+Remove-Item -LiteralPath $saaDir -Recurse -Force
+
+$saaDir = New-SaaLogDir
+foreach ($c in @('pkill -f python', 'sudo killall dotnet', 'taskkill /F /IM dotnet.exe', 'Stop-Process -Name dotnet -Force', 'Get-Process testhost | Stop-Process -Force', 'docker compose down', 'docker rm -f speedy-sql', 'netsh advfirewall set allprofiles state off', 'icacls C:\devops\repos\x /grant Everyone:F', 'schtasks /delete /tn x /f', 'net user guest /active:yes', "cd $rpF/speedmerchants && docker system prune -af")) {
+    Test-Hook -Name "saa: acts by name or machine-wide, the prompt stays: $c" `
+        -ScriptPath $saa -Json (New-PermJson 'Bash' @{ command = $c }) `
+        -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaSilent
+}
+Test-Hook -Name 'saa: a UNC target keeps its prompt' `
+    -ScriptPath $saa -Json (New-PermJson 'Bash' @{ command = 'cp \\server\share\x.txt .' }) `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaSilent
+Test-Hook -Name 'saa: a Write outside the roots keeps its prompt' `
+    -ScriptPath $saa -Json (New-PermJson 'Write' @{ file_path = 'C:\Windows\System32\drivers\etc\hosts'; content = 'x' }) `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaSilent
+Test-Hook -Name 'saa: a tool that is neither a command nor a file tool is left alone' `
+    -ScriptPath $saa -Json (New-PermJson 'WebFetch' @{ url = 'https://example.org' }) `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaSilent
+Test-Hook -Name 'saa: nothing was logged for a kept prompt' `
+    -ScriptPath $saa -Json (New-PermJson 'Bash' @{ command = 'pkill -f python' }) `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } `
+    -Expect { param($o) -not (Get-ChildItem $saaDir -Filter '*.log') }
+Remove-Item -LiteralPath $saaDir -Recurse -Force
+
+$saaDir = New-SaaLogDir
+Test-Hook -Name 'saa: reachable through the dispatcher' `
+    -ScriptPath $dispatch -ArgumentList @('-Id', 'scoped-autoapprove') `
+    -Json (New-PermJson 'Bash' @{ command = "git -C $rpF/speedmerchants status --porcelain" }) `
+    -Env @{ CLAUDE_AUTOAPPROVE_LOG_DIR = $saaDir } -Expect $saaAllow
+Remove-Item -LiteralPath $saaDir -Recurse -Force
+
 # --- remember-hook-timeout ----------------------------------------------
 # Self-heal of the remember plugin's SessionEnd hook timeout. Each case builds
 # its own throwaway plugins dir (installed_plugins.json + hooks/hooks.json) and

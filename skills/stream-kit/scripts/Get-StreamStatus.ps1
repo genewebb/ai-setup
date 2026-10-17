@@ -728,7 +728,7 @@ foreach ($k in $disks.Keys) {
 # IN-20261009132301-e0a4). A goal is an acceptance clause (`- id: AC-...` under the top-level `acceptance:` key) of a
 # READY requirement file under <repo>\docs\requirements. Templates (DRAFT), worked examples (REVIEW) and retired
 # features are not goals; every group scope excludes "anything not READY" too. The folder is resolved from the repo
-# root first: tasks.json `requirements` held C:\devops\repos\speedmerchants\docs\requirements, which does not exist on
+# root first: tasks.json `requirements` held C:\devops\repos\speedmerchants\docs\requirements, which does not exist on  # history
 # SMVMTR1, where the corpus is on D:.
 # A clause is PLANNED when any board row names its id, in the row's why, title or tests or in the ticket the row
 # carries (measured 2026-10-09: row text named 648 of 955 clauses, row text plus tickets 649). `why` is an ARRAY on

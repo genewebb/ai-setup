@@ -214,10 +214,10 @@ do the held item's work (an item). Never run them again.
    Its verdict goes to `.streams\verdicts\<task>.md`, auto-accepted decisions listed in it.
    - **Give the verifier its paths in forward-slash form, and tell it to quote every path in the Bash tool.** The
      verifier's Bash tool is Git Bash, run in the repo root, where an unquoted backslash is an escape. On 2026-10-04 a
-     G3.T057 verifier ran `pwsh ... > D:\tmp\claude\...\scratchpad\verify-run.txt` unquoted: bash stripped every
+     G3.T057 verifier ran `pwsh ... > D:\tmp\claude\...\scratchpad\verify-run.txt` unquoted: bash stripped every <!-- history -->
      backslash, the drive colon became U+F03A, and the grader output landed in the main tree's root as
      `D<U+F03A>tmpclaude...verify-run.txt` (kit item IN-20261004224625-9f42). Put this line in the verifier prompt:
-     "In Bash, write Windows paths with forward slashes (`D:/tmp/...`) and quote them; never redirect to a backslash
+     "In Bash, write Windows paths with forward slashes (`D:/tmp/...`) and quote them; never redirect to a backslash <!-- example-path -->
      path. Write scratch output only under `<scratchpad, forward slashes>`."
    - **THE BUILDER writes that file, not the verifier.** `foreman-verifier` holds Read, Glob, Grep and Bash only and
      its own contract forbids writes, so it returns the verdict text and the builder persists it verbatim. The file

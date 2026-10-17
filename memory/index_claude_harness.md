@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 36fb0eef-6e00-4263-8243-c6afdfbf3c20
-  modified: 2026-09-14T15:05:46.090Z
+  modified: 2026-10-17T19:15:35.091Z
 ---
 
 Hooks, permissions, statusline, skills maintenance and session conventions. Moved out of MEMORY.md 2026-09-10 to keep the index under its read limit; nothing was dropped.
@@ -19,3 +19,4 @@ Hooks, permissions, statusline, skills maintenance and session conventions. Move
 - [Skill linker needs mklink /D, not /J](reference_skill_linker_needs_symlinks_not_junctions.md) — linker RETIRED 10/1 (Install-AIMachine copies)
 - [Claude needs-input flash in WezTerm = preferredNotifChannel terminal_bell + visual_bell; hooks can't emit BEL](reference_claude_wezterm_attention_bell.md)
 - [destructive-path-guard "(/c)" prompt = cmd switch false positive; hook ask beats allow; C:\tmp\Patch-DestructivePathGuard.ps1](reference_destructive_path_guard_cmd_switch_false_positive.md)
+- **[PermissionRequest hook scoped-autoapprove 10/17: in-scope prompts (repo/scratch/access rows) answered yes + logged; auto mode drops Bash(*), PreToolUse allow can't beat ask](reference_permissionrequest_hook_scoped_autoapprove_2026-10-17.md)**

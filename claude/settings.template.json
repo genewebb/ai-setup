@@ -25,6 +25,9 @@
       { "matcher": "Bash|PowerShell", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id git-guard", "timeout": 15 } ] },
       { "matcher": "Read|Grep|Glob|Edit|Write|NotebookEdit|Bash|PowerShell", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id credentials-guard", "timeout": 10 } ] }
     ],
+    "PermissionRequest": [
+      { "matcher": "Bash|PowerShell|Monitor|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep", "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/hook-dispatch.ps1 -Id scoped-autoapprove", "timeout": 15 } ] }
+    ],
     "WorktreeCreate": [
       { "hooks": [ { "type": "command", "command": "pwsh -NoProfile -WindowStyle Hidden -File {ClaudeHome}/scripts/worktree-create.ps1", "timeout": 60 } ] }
     ],

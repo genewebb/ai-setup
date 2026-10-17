@@ -5,7 +5,7 @@
     password is stored (EffectiveHasPassword) and the key FILE path.
 
 .EXAMPLE
-    .\Show-RoyalDocument.ps1 -Path 'D:\RemoteDesktops\Linux Droplet.rtsz'
+    .\Show-RoyalDocument.ps1 -Path '<documents folder>\Linux Droplet.rtsz'
 #>
 [CmdletBinding()]
 param(

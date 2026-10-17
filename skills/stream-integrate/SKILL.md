@@ -1,6 +1,6 @@
 ---
 name: stream-integrate
-description: v0.16. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes, even while a suite run is going, and each cycle first handles the oldest open item in its inbox (.streams\inbox\stream-integrate.md), then applies each built, verified patch to the dirty main tree as soon as it is ready and re-runs that task's grader there. When a whole group is integrated it starts one Tier 2 run (Start-SuiteRun.ps1, in a snapshot of main, so main stays open), the scripts screen flaky tests and attribute failures to fix tasks, a Tier 3 retest runs only the failed tests once the fixes land, and Test-GroupClose.ps1 says when the group may close; then it activates the next group (Activate-Group.ps1). Use for /stream-integrate (run under /loop), /stream-integrate once, /stream-integrate gate <task> pass|fail "<note>", /stream-integrate status.
+description: v0.17. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes, even while a suite run is going, and each cycle first handles the oldest open item in its inbox (.streams\inbox\stream-integrate.md), then applies each built, verified patch to the dirty main tree as soon as it is ready and re-runs that task's grader there. When a whole group is integrated it starts one Tier 2 run (Start-SuiteRun.ps1, in a snapshot of main, so main stays open), the scripts screen flaky tests and attribute failures to fix tasks, a Tier 3 retest runs only the failed tests once the fixes land, and Test-GroupClose.ps1 says when the group may close; then it activates the next group (Activate-Group.ps1). Use for /stream-integrate (run under /loop), /stream-integrate once, /stream-integrate gate <task> pass|fail "<note>", /stream-integrate status.
 ---
 
 # stream-integrate
@@ -16,8 +16,11 @@ committed as soon as its grader passes on main, so the main tree's history only 
 
 **Fresh context (preferred; owner ruling 2026-10-04).** Instead of `/loop`, run this role from a plain terminal with
 `pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {SpeedyRepo} -Role integrate`.
-The runner starts a new headless Claude session for every cycle (every 10 minutes), so nothing carries over from the last one's
-context. Each runner session gets its session id and the headless rules in its system prompt:
+The runner launches a new headless Claude session only when its gate finds work (owner ruling 2026-10-17): an open
+inbox item, a built focus row the drain can apply (`Get-Claimable` integrate), a focus group in `integrating`, or this
+runner's own integrator lock still beating (a suite or drain in flight). Otherwise it shows an idle report (why idle,
+when it looks again) and watches `tasks.json` and its inbox file at no token cost. Nothing carries over from one unit
+to the next. Each runner session gets its session id and the headless rules in its system prompt:
 - run one cycle;
 - never call ScheduleWakeup;
 - never end the turn while its own work is still running;

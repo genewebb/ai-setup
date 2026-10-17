@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 4eaf3a67-0962-4b85-944f-423808a7f83f
-  modified: 2026-08-01T20:32:10.367Z
+  modified: 2026-10-17T19:15:34.411Z
 ---
 
 Claude Code permission rules are evaluated **deny, then ask, then allow. First match wins,
@@ -36,6 +36,9 @@ So there are only three real options for "mostly silent, occasionally prompt":
 1. Remove from `ask` → blanket allow, no guardrail.
 2. Remove from `ask` + a `PreToolUse` guard hook → scoped, ~20 lines.
 3. Leave the `ask` rule → keep prompting.
+4. (2026-10-17) A `PermissionRequest` hook: fires when the prompt WOULD open and can answer it `allow`, so the
+   ask rule can stay. This is what scoped-autoapprove.ps1 does
+   ([[reference_permissionrequest_hook_scoped_autoapprove_2026-10-17]]).
 
 **Applied 2026-08-01** (ReducePromptCost item 3): option 1 for `Stop-Service` /
 `Restart-Service`. `New-Service`, `Remove-Service`, `Set-Service` stay in `deny`, so

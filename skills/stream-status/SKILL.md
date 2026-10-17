@@ -1,6 +1,6 @@
 ---
 name: stream-status
-description: v0.7. Stream kit skill 5 of 5. It runs unattended every 15 minutes and never prompts, and works its own inbox at least every 10 minutes. It reads .streams\ and republishes one live status page per repo (groups, tasks by state, claims, the owner queue, ETA, open inbox items per role), then prints a 7-line terminal summary that opens with a heartbeat line (session working, own inbox count). It is also the watchdog: it breaks stale claims and a dead integrator lock so work flows again. Each cycle it works its own inbox (.streams\inbox\stream-status.md) within its write rules and scans all six role inboxes for stuck items. It replaces the MyLoop 15-minute update prompt. Use for /stream-status (run under /loop 15m), /stream-status once, and /stream-status inbox (run under /loop 10m: works its own inbox every 10 minutes).
+description: v0.8. Stream kit skill 5 of 5. It runs unattended every 15 minutes and never prompts, and works its own inbox at least every 10 minutes. It reads .streams\ and republishes one live status page per repo (groups, tasks by state, claims, the owner queue, ETA, open inbox items per role), then prints a 7-line terminal summary that opens with a heartbeat line (session working, own inbox count). It is also the watchdog: it breaks stale claims and a dead integrator lock so work flows again. Each cycle it works its own inbox (.streams\inbox\stream-status.md) within its write rules and scans all six role inboxes for stuck items. It replaces the MyLoop 15-minute update prompt. Use for /stream-status (run under /loop 15m), /stream-status once, and /stream-status inbox (run under /loop 10m: works its own inbox every 10 minutes).
 ---
 
 # stream-status
@@ -17,8 +17,13 @@ a dead session.
 
 **Fresh context (preferred; owner ruling 2026-10-04).** Instead of `/loop`, run this role from a plain terminal with
 `pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {SpeedyRepo} -Role status`.
-The runner starts a new headless Claude session for every tick (every 15 minutes), so nothing carries over from the last one's
-context. Each runner session gets its session id and the headless rules in its system prompt:
+**The runner runs the tick itself, as scripts, with no model call (owner ruling 2026-10-17).** Every 15 minutes it runs
+`Invoke-Watchdog`, `Get-StreamStatus`, `Build-StatusPage`, `Get-StreamCost` + `Build-CostPage`, `Build-PriorityPage`,
+`Archive-TaskHistory` (first tick of each UTC day) and `Activate-Group` for a focus group without an activation record,
+and prints one `STATUS-TICK` heartbeat line. A script that fails prints `TICK-FAILED` and files a stream-kit `bug` item
+once. A Claude session is launched only when `.streams\inbox\stream-status.md` holds an open item, as
+`/stream-status inbox`, so the model works only the inbox, never the page. Nothing carries over from one unit to the
+next. Each runner session gets its session id and the headless rules in its system prompt:
 - run one cycle;
 - never call ScheduleWakeup;
 - never end the turn while its own work is still running;

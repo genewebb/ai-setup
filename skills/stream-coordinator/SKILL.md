@@ -1,6 +1,6 @@
 ---
 name: stream-coordinator
-description: v0.3. Stream kit supervisor. It runs unattended under /loop and never prompts. Each tick it reads the whole board and every inbox, then keeps work flowing. It works the kit inbox (fix, test, publish), stands in for stream-plan when no planner session is live (write-set and dependsOn revisions through Revise-Task.ps1, blocked-task release, follow-up tasks), and diagnoses stuck flow: dead or silent sessions, stale work to salvage, starved fix tasks, false flags, and memory pressure. It logs one tick line per run and notifies the owner only for a decision only the owner can make. Use for /stream-coordinator (run under /loop 20m; every tick works the inboxes), /stream-coordinator once, and /stream-coordinator blockers.
+description: v0.4. Stream kit supervisor. It runs unattended under /loop and never prompts. Each tick it reads the whole board and every inbox, then keeps work flowing. It works the kit inbox (fix, test, publish), stands in for stream-plan when no planner session is live (write-set and dependsOn revisions through Revise-Task.ps1, blocked-task release, follow-up tasks), and diagnoses stuck flow: dead or silent sessions, stale work to salvage, starved fix tasks, false flags, and memory pressure. It logs one tick line per run and notifies the owner only for a decision only the owner can make. Use for /stream-coordinator (run under /loop 20m; every tick works the inboxes), /stream-coordinator once, and /stream-coordinator blockers.
 ---
 
 # stream-coordinator
@@ -18,8 +18,12 @@ testing.
 
 **Fresh context (preferred; owner ruling 2026-10-04).** Instead of `/loop`, run this role from a plain terminal with
 `pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {SpeedyRepo} -Role coordinator`.
-The runner starts a new headless Claude session for every tick (every 20 minutes), so nothing carries over from the last one's
-context. Each runner session gets its session id and the headless rules in its system prompt:
+The runner launches a new headless Claude session only when its gate finds work (owner ruling 2026-10-17): an open
+kit or plan inbox item with no live kit runner or planner to take it (the coordinator has no inbox of its own); free RAM under 6 GB
+(memory pressure); a change in the status flags since the last look; the first review after the runner starts; or the
+periodic review every 2 hours (`STREAM_COORDINATOR_REVIEW_SECONDS`). Otherwise it shows an idle report and watches its
+inbox file at no token cost. Nothing carries over from one unit to the next. Each runner session gets its session id and
+the headless rules in its system prompt:
 - run one cycle;
 - never call ScheduleWakeup;
 - never end the turn while its own work is still running;

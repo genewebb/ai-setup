@@ -2,6 +2,8 @@
 docs\machine-config-design.md        # design record: cites the paths measured on the laptop on 2026-09-30
 setup\tests\*                         # resolver/gate tests use deliberately fake drives (X:, Y:, Z:)
 claude\scripts\tests\*                # guard fixtures: the literal path IS the input under test
+skills\stream-kit\scripts\Test-StreamKit.ps1           # kit suite fixtures: a deliberately missing root and incident records are the input under test
+skills\stream-kit\scripts\Test-StreamKitRecovery.ps1   # same: transcript fixtures with fake drive paths, and the incident a case replays
 setup\Test-NoHardPaths.ps1            # the gate itself: the config convention string and its regexes
 Loops\*                               # history: loop analysis and planning records
 link-to-ai.ps1                        # superseded by Install-AIMachine.ps1; archived in the R17 retirement step

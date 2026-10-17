@@ -1,7 +1,7 @@
 # RoyalDocument.PowerShell reference
 
 Verified against RoyalDocument.PowerShell 7.3.50415.0 (PSGallery, Royal Apps GmbH) with Royal TS V7
-(`C:\Program Files\Royal TS V7\RoyalTS.exe`). The module is NOT shipped in the Royal TS install folder;
+(default install `C:\Program Files\Royal TS V7\RoyalTS.exe`). The module is NOT shipped in the Royal TS install folder; <!-- example-path -->
 install it from PSGallery.
 
 ## Discover, do not guess

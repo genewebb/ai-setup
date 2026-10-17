@@ -64,6 +64,12 @@ function New-Repo([string] $name, [Collections.IDictionary] $graders) {
     & "$S\Add-Tasks.ps1" -Repo $repo -Role plan -Session plan-1 -File $f | Out-Null
     $repo
 }
+# A timed role (integrate, plan, kit, coordinator, status) launches a unit only when its gate finds work (owner ruling
+# 2026-10-17). A case that needs one live unit of such a role opens the gate with one open inbox item; timed roles do
+# not take items at launch, so the item stays open for every later launch in the same repo.
+function Open-Gate([string] $repo, [string] $to) {
+    [void](& "$S\Send-InboxItem.ps1" -Repo $repo -To $to -From test-gate -Kind request -Ask 'test: open the gate for a live unit')
+}
 # Claims, builds (writes $content into <id>.txt), runs the grader in the worktree, exports and hands off as built.
 function Build([string] $repo, [string] $id, [string] $content, [string] $sess) {
     $c = & "$S\Claim-Task.ps1" -Repo $repo -Role build -Session $sess | ConvertFrom-Json
@@ -225,6 +231,21 @@ try {
     Case 'widening onto an integrated task''s file is accepted' ($code -eq 0 -and ((T $r7 $c2.id).writeSet -contains "$landed.txt")) ("exit $code $o; landed=$landed state=$((T $r7 $landed).state)")
     $o = & "$S\Update-Task.ps1" -Repo $r7 -Task $c2.id -Role build -Session build-8 -AddWriteSet "$open.txt"; $code = $LASTEXITCODE
     Case 'widening onto an unordered open task''s file is refused' ($code -eq 7 -and -not ((T $r7 $c2.id).writeSet -contains "$open.txt")) ("exit $code $o")
+
+    # ---- 8c2. AUTHOR WIDENING (owner ruling 2026-10-17, "authors widen their own set"): 234 of 291 author blocks on the
+    # speedmerchants board were write-set leaks found by the skeptic, each costing a unit and a plan round. An author
+    # widens its claimed row the way a builder does, under the same overlap rule; the plan role still has Revise-Task.
+    $r7a = New-Repo 'r7a' @{ 'G1.N' = (ContentGrader 'G1.N' 'done'); 'G1.O' = (ContentGrader 'G1.O' 'done') }; $repos += $r7a
+    $d7a = J $r7a; foreach ($x in $d7a.tasks) { $x.state = 'planned'; $x.claim = $null }; $d7a | ConvertTo-Json -Depth 50 | Set-Content (Join-Path $r7a '.streams\tasks.json')
+    $ca = & "$S\Claim-Task.ps1" -Repo $r7a -Role author -Session author-7 | ConvertFrom-Json
+    $otherA = @('G1.N', 'G1.O' | Where-Object { $_ -ne $ca.id })[0]
+    $o = & "$S\Update-Task.ps1" -Repo $r7a -Task $ca.id -Role author -Session author-7 -AddWriteSet 'docs/new-page.md' -Note 'the ticket needs a help page'; $code = $LASTEXITCODE
+    $dec7a = if (Test-Path (Join-Path $r7a '.streams\decisions.md')) { Get-Content (Join-Path $r7a '.streams\decisions.md') -Raw } else { '' }
+    Case 'author widening onto a free file is accepted and logged to decisions.md' ($code -eq 0 -and ((T $r7a $ca.id).writeSet -contains 'docs/new-page.md') -and ($dec7a -match 'write set widened \(auto-accepted\): docs/new-page.md')) ("exit $code $o")
+    $o = & "$S\Update-Task.ps1" -Repo $r7a -Task $ca.id -Role author -Session author-7 -AddWriteSet "$otherA.txt"; $code = $LASTEXITCODE
+    Case 'author widening onto an unordered open task''s file is refused' ($code -eq 7 -and -not ((T $r7a $ca.id).writeSet -contains "$otherA.txt")) ("exit $code $o")
+    $o = & "$S\Update-Task.ps1" -Repo $r7a -Task $ca.id -Role plan -Session plan-7 -AddWriteSet 'x.txt'; $code = $LASTEXITCODE
+    Case 'widening by the plan role is still refused' ($code -eq 2 -and (($o -join ' ') -match 'REFUSED -AddWriteSet')) ("exit $code $o")
 
     # ---- 8d. status liveness: a builder seen only through a fresh claim beat, and an integrator only through a fresh
     #          lock beat, are not flagged as absent (history is 2 hours old)
@@ -2303,11 +2324,52 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     [void](& "$S\Claim-Task.ps1" -Repo $r67 -Role build -Session build-67)
     $b67b = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role build -DryRun)
     Case 'runner: a live claim on the only row leaves a builder IDLE' (($b67b -join "`n") -match '(?m)^IDLE nothing to take for build') "$($b67b -join ' | ')"
+    # IDLE REPORT (owner request 2026-10-17): an idle runner says what it is offered, why nothing is claimable, what its
+    # last unit did and when it looks again, instead of one cryptic line.
+    Case 'runner idle report: the author names the focus and released groups, says no planned row exists, and when it looks again' ((($a67 -join "`n") -match '(?m)^  priorities : focus G1 \(.*\); released groups: G1') -and (($a67 -join "`n") -match '(?m)^  why idle   : no planned row anywhere on the board') -and (($a67 -join "`n") -match '(?m)^  last unit  : none yet from this runner') -and (($a67 -join "`n") -match '(?m)^  next look  : on any tasks.json or stream-author inbox write \(checked every 5 s\), else at \d\d:\d\d:\d\d \(300 s\)')) "$($a67 -join ' | ')"
+    # A build claim moves the row to 'building': the report says no ticketed row is left AND names the row a live builder is on.
+    Case 'runner idle report: the builder says no ticketed row is left and names the row a live builder is building' ((($b67b -join "`n") -match '(?m)^  why idle   : no ticketed build row anywhere on the board: waiting for an author to ticket one') -and (($b67b -join "`n") -match '(?m)^             : 1 row\(s\) being built now by live builders \(G1\.R\)')) "$($b67b -join ' | ')"
     [void](& "$S\Send-InboxItem.ps1" -Repo $r67 -To stream-build -From test-67 -Kind request -Ask 'retry G1.R' -Task G1.R)
     $b67c = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role build -DryRun)
     Case 'runner: an open inbox item gates a build launch even with nothing claimable' (($b67c -join "`n") -match '(?m)^GATE inbox 1 actionable') "$($b67c -join ' | ')"
+    # TIMED GATES (owner ruling 2026-10-17, token review): integrate launches only for an actionable item, a built focus
+    # row, an integrating group or its own live lock; plan and kit only for an item; status is a script tick with a unit
+    # only for an item; the coordinator for items nobody live owns, changed flags, low RAM, its first or periodic review.
     $i67 = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role integrate -DryRun)
-    Case 'runner: a timed role is never gated and keeps an integ- session' ((($i67 -join "`n") -match '(?m)^RUN /stream-integrate once repo: ') -and (($i67 -join "`n") -notmatch '(?m)^(GATE|IDLE)') -and (($i67 -join "`n") -match '(?m)^SESSION integ-\d{12}-[0-9a-f]{4}$')) "$($i67 -join ' | ')"
+    Case 'runner: an integrate runner with no built row, no integrating group and no item is IDLE with the report, and keeps an integ- session' ((($i67 -join "`n") -match '(?m)^IDLE nothing to take for integrate') -and (($i67 -join "`n") -match '(?m)^  why idle   : stream-integrate inbox: no open item') -and (($i67 -join "`n") -match '(?m)^             : no built row in the focus set') -and (($i67 -join "`n") -match '(?m)^             : no group integrating') -and (($i67 -join "`n") -notmatch '(?m)^RUN ') -and (($i67 -join "`n") -match '(?m)^CONFIG ') -and (($i67 -join "`n") -match '(?m)^SESSION integ-\d{12}-[0-9a-f]{4}$')) "$($i67 -join ' | ')"
+    $doc67 = J $r67
+    foreach ($t in $doc67.tasks) { if ($t.id -eq 'G1.R') { $t.state = 'built'; $t.claim = $null } }
+    Set-Content -LiteralPath (Join-Path $r67 '.streams\tasks.json') -Encoding utf8 -Value ($doc67 | ConvertTo-Json -Depth 50)
+    $i67b = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role integrate -DryRun)
+    Case 'runner: a built focus row gates an integrate launch' ((($i67b -join "`n") -match '(?m)^GATE built 1 \(G1\.R\) focus G1') -and (($i67b -join "`n") -match '(?m)^RUN /stream-integrate once repo: ')) "$($i67b -join ' | ')"
+    foreach ($t in $doc67.tasks) { if ($t.id -eq 'G1.R') { $t.state = 'integrated' } }
+    foreach ($g in $doc67.groups) { if ($g.id -eq 'G1') { $g.state = 'integrating' } }
+    Set-Content -LiteralPath (Join-Path $r67 '.streams\tasks.json') -Encoding utf8 -Value ($doc67 | ConvertTo-Json -Depth 50)
+    $i67c = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role integrate -DryRun)
+    Case 'runner: an integrating group gates an integrate launch (suites, fix tasks, close)' (($i67c -join "`n") -match '(?m)^GATE group G1 integrating') "$($i67c -join ' | ')"
+    foreach ($g in $doc67.groups) { if ($g.id -eq 'G1') { $g.state = 'released' } }
+    Set-Content -LiteralPath (Join-Path $r67 '.streams\tasks.json') -Encoding utf8 -Value ($doc67 | ConvertTo-Json -Depth 50)
+    $k67 = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role kit -DryRun)
+    Case 'runner: a kit runner with an empty inbox is IDLE and says so' ((($k67 -join "`n") -match '(?m)^IDLE nothing to take for kit') -and (($k67 -join "`n") -match '(?m)^  why idle   : stream-kit inbox: no open item') -and (($k67 -join "`n") -match '(?m)^  next look  : on any stream-kit inbox write \(checked every 5 s\), else at \d\d:\d\d:\d\d \(600 s\)') -and (($k67 -join "`n") -notmatch '(?m)^RUN ')) "$($k67 -join ' | ')"
+    $kSent67 = "$(& "$S\Send-InboxItem.ps1" -Repo $r67 -To stream-kit -From test-67 -Kind bug -Ask 'Claim-Task prints a warning twice')"
+    $kId67 = ($kSent67 -split ' ')[1]
+    $k67b = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role kit -DryRun)
+    Case 'runner: an open kit item gates a kit launch' ((($k67b -join "`n") -match '(?m)^GATE inbox 1 actionable \(IN-') -and (($k67b -join "`n") -match '(?m)^RUN /stream-kit inbox repo: ')) "$($k67b -join ' | ')"
+    $s67 = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role status -DryRun)
+    Case 'runner: the status role is a script tick, and with no open item launches no unit' ((($s67 -join "`n") -match '(?m)^TICK every 900 s, scripts only \(no model call\): Invoke-Watchdog, Get-StreamStatus, Build-StatusPage') -and (($s67 -join "`n") -match '(?m)^IDLE no open stream-status inbox item: no unit') -and (($s67 -join "`n") -notmatch '(?m)^RUN ')) "$($s67 -join ' | ')"
+    [void](& "$S\Send-InboxItem.ps1" -Repo $r67 -To stream-status -From test-67 -Kind request -Ask 'keep the claim on G1.R' -Task G1.R)
+    $s67b = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role status -DryRun)
+    Case 'runner: an open status item gates a status unit that works the inbox only' ((($s67b -join "`n") -match '(?m)^GATE inbox 1 actionable \(IN-') -and (($s67b -join "`n") -match '(?m)^RUN /stream-status inbox repo: ')) "$($s67b -join ' | ')"
+    # The coordinator has no inbox of its own: it works the kit inbox and stands in for plan. The kit item filed above
+    # is still open and no kit runner is live, so the coordinator stands in for kit; once it is closed, the first review.
+    $env:STREAM_RUNNER_FREE_RAM_GB = '32'
+    $c67a = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role coordinator -DryRun)
+    Case 'runner: a coordinator runner stands in for kit when a kit item is open and no kit runner is live' ((($c67a -join "`n") -match '(?m)^GATE stands in for kit : 1 open stream-kit item\(s\) and no live kit session') -and (($c67a -join "`n") -match '(?m)^RUN /stream-coordinator once repo: ')) "$($c67a -join ' | ')"
+    [void](& "$S\Set-InboxItem.ps1" -Repo $r67 -Skill stream-kit -Id $kId67 -By test-67 -Status taken -Note 'test')
+    [void](& "$S\Set-InboxItem.ps1" -Repo $r67 -Skill stream-kit -Id $kId67 -By test-67 -Status declined -Note 'test: closed so the coordinator gate moves on')
+    $c67 = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role coordinator -DryRun)
+    Remove-Item Env:\STREAM_RUNNER_FREE_RAM_GB -ErrorAction SilentlyContinue
+    Case 'runner: a coordinator runner takes its first review when it starts' ((($c67 -join "`n") -match '(?m)^GATE first review since the runner started') -and (($c67 -join "`n") -match '(?m)^RUN /stream-coordinator once repo: ')) "$($c67 -join ' | ')"
     # ---- Start-StreamRunner: one planner per repo (kit item IN-20261004133725-ad1f) ----
     # A plan runner must not launch beside a live plan* session. A fresh taken stream-plan hold by another planner
     # makes it IDLE. With no other planner it runs.
@@ -2318,14 +2380,16 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     foreach ($t68 in $doc68.tasks) { foreach ($h68 in @($t68.history)) { $h68.at = $old68 } }
     Set-Content -Path (Join-Path $r68 '.streams\tasks.json') -Encoding utf8 -Value ($doc68 | ConvertTo-Json -Depth 50)
     $p68a = @(& "$S\Start-StreamRunner.ps1" -Repo $r68 -Role plan -DryRun)
-    Case 'runner: with no other planner a plan runner runs' (($p68a -join "`n") -match '(?m)^RUN /stream-plan inbox repo: ') "$($p68a -join ' | ')"
+    Case 'runner: with no other planner and no open item a plan runner is IDLE (its gate, not the planner guard)' ((($p68a -join "`n") -match '(?m)^IDLE nothing to take for plan') -and (($p68a -join "`n") -match '(?m)^  why idle   : stream-plan inbox: no open item') -and (($p68a -join "`n") -notmatch 'IDLE live planner')) "$($p68a -join ' | ')"
     $sent68 = @(& "$S\Send-InboxItem.ps1" -Repo $r68 -To stream-plan -From author-68 -Kind request -Ask 'widen G1.P' -Task G1.P) -join ' '
     $id68 = if ($sent68 -match 'SENT (\S+)') { $Matches[1] } else { '' }
+    $p68s = @(& "$S\Start-StreamRunner.ps1" -Repo $r68 -Role plan -DryRun)
+    Case 'runner: with no other planner an open stream-plan item gates a plan launch' ((($p68s -join "`n") -match "(?m)^GATE inbox 1 actionable \($id68\)") -and (($p68s -join "`n") -match '(?m)^RUN /stream-plan inbox repo: ')) "$($p68s -join ' | ')"
     [void](& "$S\Set-InboxItem.ps1" -Repo $r68 -Skill stream-plan -Id $id68 -Status taken -By plan-x68)
     $p68b = @(& "$S\Start-StreamRunner.ps1" -Repo $r68 -Role plan -DryRun)
     Case 'runner: a fresh taken plan hold by another planner keeps a plan runner IDLE' (($p68b -join "`n") -match '(?m)^IDLE live planner plan-x68$') "$($p68b -join ' | ')"
     $b68 = @(& "$S\Start-StreamRunner.ps1" -Repo $r68 -Role integrate -DryRun)
-    Case 'runner: the planner guard does not touch other roles' (($b68 -join "`n") -match '(?m)^RUN /stream-integrate once') "$($b68 -join ' | ')"
+    Case 'runner: the planner guard does not touch other roles' ((($b68 -join "`n") -match '(?m)^IDLE nothing to take for integrate') -and (($b68 -join "`n") -notmatch 'IDLE live planner')) "$($b68 -join ' | ')"
     # ---- 69. an append to decisions.md waits out a short sharing violation (kit item IN-20261004140930-2c5d). On
     # 2026-10-04 Integrate-Patch's decisions.md append threw "being used by another process" right after a clean apply of
     # G3.T283, and the self-reverse cost a whole apply and grader cycle. Fixture: another process holds the file with
@@ -2365,12 +2429,31 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $log70 = Join-Path $r70 '.streams\logs\G1.E.grader.err70.txt'
     $text70 = if (Test-Path $log70) { Get-Content -Raw $log70 } else { '' }
     Case 'beat grader: stdout and stderr both land in the log, and no .part or .err is left' ((-not $gErr70) -and $text70 -match 'PASS C1' -and $text70 -match 'ERRLINE-70' -and -not (Get-ChildItem -Path "$log70.*" -ErrorAction SilentlyContinue)) "err='$gErr70' log='$($text70 -replace '\s+', ' ')'"
+    # ---- STATUS TICK (owner ruling 2026-10-17): one status tick runs the watchdog, the terminal lines, the status, cost
+    # and priority pages, the daily archive and the focus group's activation as scripts and prints ONE heartbeat line;
+    # no Claude unit is launched when the stream-status inbox is empty. -MaxRuns 1 stops after one tick.
+    $rST = New-Repo 'runnerST' ([ordered]@{ 'G1.S' = (ContentGrader 'G1.S' 'done') }); $repos += $rST
+    $markST = Join-Path $Scratch 'claude-st-called.txt'
+    $clST = Join-Path $Scratch 'claude-st.ps1'
+    Set-Content -LiteralPath $clST -Encoding utf8 -Value "Set-Content -LiteralPath '$markST' -Value 'called'; '{""type"":""result"",""result"":""UNIT-OUTCOME: idle""}'"
+    Remove-Item -LiteralPath $markST -ErrorAction SilentlyContinue
+    $savedST = $env:STREAM_RUNNER_CLAUDE; $env:STREAM_RUNNER_CLAUDE = $clST
+    $oST = @(); $eST = ''
+    try { $oST = @(& "$S\Start-StreamRunner.ps1" -Repo $rST -Role status -IntervalSeconds 1 -MaxRuns 1 2>&1 | ForEach-Object { "$_" }) } catch { $eST = ("$_" -split "`n")[0] }
+    finally { if ($null -ne $savedST) { $env:STREAM_RUNNER_CLAUDE = $savedST } else { Remove-Item Env:\STREAM_RUNNER_CLAUDE -ErrorAction SilentlyContinue } }
+    $tickST = @($oST | Where-Object { $_ -match '^\S+ STATUS-TICK ' })
+    Case 'status tick: one tick prints one STATUS-TICK heartbeat with the watchdog, inbox, page, cost, priority, archive and activation notes' ((-not $eST) -and $tickST.Count -eq 1 -and $tickST[0] -match '^\S+ STATUS-TICK status-\S+ \d+s \| Watchdog QUIET: no stale claim\. \| Own inbox: no open items\. \| page: .+ \| cost: .+ \| priority: .+ \| archive: .+ \| activation: G1 ') "err='$eST' lines=$($oST.Count) tick=$($tickST -join ' || ') out=$(($oST | Select-Object -Last 6) -join ' | ')"
+    Case 'status tick: the status page is written, the archive day is recorded, the focus group is activated, and no unit was launched' ((Test-Path (Join-Path $rST '.streams\status.html')) -and (Test-Path (Join-Path $rST '.streams\runners\status-archive.day')) -and (Test-Path (Join-Path $rST '.streams\plans\G1.activation.json')) -and -not (Test-Path -LiteralPath $markST) -and (($oST -join "`n") -notmatch '(?m)^\S+ RUN ')) "page=$(Test-Path (Join-Path $rST '.streams\status.html')) day=$(Test-Path (Join-Path $rST '.streams\runners\status-archive.day')) act=$(Test-Path (Join-Path $rST '.streams\plans\G1.activation.json')) called=$(Test-Path -LiteralPath $markST)"
+    Case 'status tick: the runner header says the role is a script tick with a unit only for an inbox item' (($oST -join "`n") -match '(?m)^RUNNER runner-status-\S+ role status mode print every 1 s \(script tick; a unit only for an open inbox item\)') "$(($oST | Select-Object -First 2) -join ' | ')"
+
     # ---- 71. every runner session runs on the applied machine config (kit item IN-20261004143031-d21b), and the check
     # that applies it runs once per -LaunchCheckMinutes, not once per unit (ai's Install-AIMachine.ps1 -Launch took 111 s
     # per launch on SMVMTR1, 2026-10-04). (a) DryRun names the ai launcher's check; (b) two units run the ai launcher once,
     # as `ai.ps1 --version`, and start claude directly with the -p command and session; (c) claude's JSON result is read
     # as a clean run.
     $r71 = New-Repo 'runner71' ([ordered]@{ 'G1.L' = (ContentGrader 'G1.L' 'done') }); $repos += $r71
+    # An open integrate item passes the gate (2026-10-17), so DryRun reaches its RUN line.
+    [void](& "$S\Send-InboxItem.ps1" -Repo $r71 -To stream-integrate -From test-71 -Kind request -Ask 'drain the built rows now')
     $d71 = @(& "$S\Start-StreamRunner.ps1" -Repo $r71 -Role integrate -DryRun)
     Case 'runner: DryRun names the launch check through the ai launcher under ClaudeHome\bin' (($d71 -join "`n") -match '(?m)^CHECK the launch check runs .+\\bin\\ai\.ps1 --version every 60 min$' -and ($d71 -join "`n") -match '(?m)^RUN /stream-integrate once repo: ') "$($d71 -join ' | ')"
     $ai71 = Join-Path $Scratch 'ai-stub71.ps1'
@@ -2403,6 +2486,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
         "'{""type"":""result"",""result"":""nothing open in the kit inbox\nUNIT-OUTCOME: idle"",""is_error"":false,""num_turns"":1,""total_cost_usd"":0,""session_id"":""S71I""}'"
         'exit 0')
     $env:STREAM_RUNNER_AI = $ai71; $env:STREAM_RUNNER_CLAUDE = $cl71i
+    Open-Gate $r71 stream-kit
     $o71i = @(); $e71i = ''
     try { $o71i = @(& "$S\Start-StreamRunner.ps1" -Repo $r71 -Role kit -IntervalSeconds 1 -MaxRuns 1) } catch { $e71i = ("$_" -split "`n")[0] }
     Remove-Item Env:\STREAM_RUNNER_AI, Env:\STREAM_RUNNER_CLAUDE -ErrorAction SilentlyContinue
@@ -2432,7 +2516,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     # ---- 73. Start-StreamRunner -Stream (EnhanceStream A2): the -p session runs with --output-format stream-json, the
     # runner prints one short line per tool call and message as they arrive, keeps every raw event in a .jsonl, and
     # reads the final result event as the unit's result.
-    $r73 = New-Repo 'runner73' ([ordered]@{ 'G1.S' = (ContentGrader 'G1.S' 'done') }); $repos += $r73
+    $r73 = New-Repo 'runner73' ([ordered]@{ 'G1.S' = (ContentGrader 'G1.S' 'done') }); $repos += $r73; Open-Gate $r73 stream-status
     $ai73 = Join-Path $Scratch 'ai-stub73.ps1'; Set-Content -LiteralPath $ai73 -Value @('exit 0')
     $cl73 = Join-Path $Scratch 'claude-stub73.ps1'
     $args73 = Join-Path $Scratch 'claude-stub73.args.json'
@@ -2462,7 +2546,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     # ---- 74. Start-StreamRunner -Live (EnhanceStream G): an interactive session per unit with Remote Control named
     # after the session, the stream-unit mod, the rules as a file and the command as the starting prompt; the mod's
     # result file (STREAM_UNIT_OUT) is the unit's result. A session that exits without calling unit_done is a failed run.
-    $r74 = New-Repo 'runner74' ([ordered]@{ 'G1.V' = (ContentGrader 'G1.V' 'done') }); $repos += $r74
+    $r74 = New-Repo 'runner74' ([ordered]@{ 'G1.V' = (ContentGrader 'G1.V' 'done') }); $repos += $r74; Open-Gate $r74 stream-kit
     $ai74 = Join-Path $Scratch 'ai-stub74.ps1'; Set-Content -LiteralPath $ai74 -Value @('exit 0')
     $cl74 = Join-Path $Scratch 'claude-stub74.ps1'
     $args74 = Join-Path $Scratch 'claude-stub74.args.json'
@@ -2490,7 +2574,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case 'runner -Live: the mod''s result file is the unit result' ($s74 -and $s74.lastResult -eq 'stub74 idle' -and $s74.mode -eq 'live' -and (($o74 -join "`n") -match ' EXIT 0 outcome idle turns 1 cost 0\.02 ok -> ')) "state=$($s74 | ConvertTo-Json -Compress) out=$($o74 -join ' | ')"
     $env:STUB74_SKIP_RESULT = '1'
     $o74b = @(); $e74b = ''
-    $r74b = New-Repo 'runner74b' ([ordered]@{ 'G1.W' = (ContentGrader 'G1.W' 'done') }); $repos += $r74b
+    $r74b = New-Repo 'runner74b' ([ordered]@{ 'G1.W' = (ContentGrader 'G1.W' 'done') }); $repos += $r74b; Open-Gate $r74b stream-kit
     if (-not $e74) {
         # MaxRuns 1 stops before the backoff sleep would run: the loop checks MaxRuns first. The backoff is asserted
         # by its BACKOFF line, so the case must not wait 900 s: -UnitTimeoutSeconds keeps the run itself short.
@@ -2505,7 +2589,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
 
     # ---- 75. Start-StreamRunner -Live: a session past -UnitTimeoutSeconds is ended, with everything it started, and
     # logged TIMEOUT. An interactive session can hang (a prompt nobody answers); the -p modes cannot.
-    $r75 = New-Repo 'runner75' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r75
+    $r75 = New-Repo 'runner75' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r75; Open-Gate $r75 stream-kit
     $ai75 = Join-Path $Scratch 'ai-stub75.ps1'; Set-Content -LiteralPath $ai75 -Value @('exit 0')
     $cl75 = Join-Path $Scratch 'claude-stub75.ps1'
     $pid75 = Join-Path $Scratch 'claude-stub75.child.txt'
@@ -2539,7 +2623,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $f75q = try { & { . "$S\lib\Streams.ps1"; @{ hit = Find-QuotaRejection @('{"type":"user"}', (& $rej75q 1791665400), '{oops'); soft = Find-QuotaRejection @($soft75q, $user75q) } } } catch { @{ err = ("$_" -split "`n")[0] } }
     Case 'usage limit: a rejected quota line is found with its reset time and type; a soft 429 and a user line that only mention the fields are not' ($f75q['hit'] -and $f75q.hit.resetsAt -eq [DateTimeOffset]::FromUnixTimeSeconds(1791665400).UtcDateTime -and $f75q.hit.type -eq 'five_hour' -and $f75q.hit.text -match 'session limit' -and -not $f75q['soft'] -and -not $f75q['err']) "hit=$($f75q['hit'] | ConvertTo-Json -Compress) soft=$($f75q['soft'] | ConvertTo-Json -Compress) err=$($f75q['err'])"
 
-    $r75q = New-Repo 'runner75q' ([ordered]@{ 'G1.Q' = (ContentGrader 'G1.Q' 'done') }); $repos += $r75q
+    $r75q = New-Repo 'runner75q' ([ordered]@{ 'G1.Q' = (ContentGrader 'G1.Q' 'done') }); $repos += $r75q; Open-Gate $r75q stream-kit
     $proj75q = Join-Path $Scratch 'projects75q'; New-Item -ItemType Directory -Path (Join-Path $proj75q 'D--some-repo') -Force | Out-Null
     $ai75q = Join-Path $Scratch 'ai-stub75q.ps1'; Set-Content -LiteralPath $ai75q -Value @('exit 0')
     $cl75q = Join-Path $Scratch 'claude-stub75q.ps1'
@@ -2636,7 +2720,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case 'runner: ended runner units are not live; the live runner unit and a /loop session are' ($m77.sessions.build.live -eq 2 -and $ids77 -eq 'build-77b,build-77e') "live=$($m77.sessions.build.live) ids=$ids77"
     # ---- 78. Start-StreamRunner -Tab: the runner records the terminal tab it runs in, and stops alone on
     # STOP-tab-<tab> (or STOP-<runner id>), deleting that file as it exits; a runner of another tab is not stopped.
-    $r78 = New-Repo 'runner78' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r78
+    $r78 = New-Repo 'runner78' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r78; Open-Gate $r78 stream-integrate
     $ai78 = Join-Path $Scratch 'ai-stub78.ps1'; $cl78 = Join-Path $Scratch 'claude-stub78.ps1'
     Set-Content -LiteralPath $ai78 -Value @("'ai: applied revision STUB78'", 'exit 0')
     Set-Content -LiteralPath $cl78 -Value @("'{""type"":""result"",""result"":""stub78 ok"",""is_error"":false,""num_turns"":1,""total_cost_usd"":0}'", 'exit 0')
@@ -2762,7 +2846,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     # ---- 83. a -Live unit that wrote its result and then ran past its limit is a TIMEOUT, but NOT a failed run: no
     # backoff (kit item IN-20261004205649-446f, G3.T170 'built' and then 900 s of backoff). The default build unit limit
     # is 5400 s, above the 2700 s that killed two-verifier builds.
-    $r83 = New-Repo 'runner83' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r83
+    $r83 = New-Repo 'runner83' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r83; Open-Gate $r83 stream-kit
     $ai83 = Join-Path $Scratch 'ai-stub83.ps1'; Set-Content -LiteralPath $ai83 -Value @('exit 0')
     $cl83 = Join-Path $Scratch 'claude-stub83.ps1'
     Set-Content -LiteralPath $cl83 -Value @(
@@ -2890,7 +2974,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     # 86. A -Live unit that wrote its result and then sat at the prompt (the mod's /exit swallowed by a background-task
     # notice) idled two builders until the build limit (kit item IN-20261005013311-b5a0). The runner ends it, with what it
     # started, -ResultGraceSeconds after the result lands, logs RESULT-GRACE as an ok run and does not back off.
-    $r86 = New-Repo 'runner86' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r86
+    $r86 = New-Repo 'runner86' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r86; Open-Gate $r86 stream-kit
     $ai86 = Join-Path $Scratch 'ai-stub86.ps1'; Set-Content -LiteralPath $ai86 -Value @('exit 0')
     $cl86 = Join-Path $Scratch 'claude-stub86.ps1'
     $pid86 = Join-Path $Scratch 'claude-stub86.child.txt'
@@ -2919,7 +3003,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     # <result>.waiting.json says waiting, the unit timeout is paused, the Wave block is retitled '<tab> - NEEDS YOU' and badged, the state
     # says 'waiting on owner' and owner\questions.md gets one ESCALATE line; once answered the title goes back and the
     # line is re-written RESOLVED. The unit sees STREAM_UNIT_TAB. The stub waits 8 s on a 4 s limit and still ends ok.
-    $r87 = New-Repo 'runner87' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r87
+    $r87 = New-Repo 'runner87' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r87; Open-Gate $r87 stream-kit
     $ai87 = Join-Path $Scratch 'ai-stub87.ps1'; Set-Content -LiteralPath $ai87 -Value @('exit 0')
     $cl87 = Join-Path $Scratch 'claude-stub87.ps1'; $tab87 = Join-Path $Scratch 'claude-stub87.tab.txt'
     $wz87 = Join-Path $Scratch 'wsh-stub87.ps1'; $wzLog87 = Join-Path $Scratch 'wsh-stub87.log'
@@ -2965,7 +3049,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     # ---- 88. the same waiting signal in a Windows Terminal tab (WT_SESSION): the runner retitles the tab through the
     # console title: '<tab>' at start and again before and after each unit (every pwsh started in the console, such as the
     # launch check's, retitles it), '<tab> - NEEDS YOU' on a prompt and '<tab>' once answered, whatever Wave or WezTerm env the tab inherited.
-    $r88 = New-Repo 'runner88' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r88
+    $r88 = New-Repo 'runner88' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r88; Open-Gate $r88 stream-kit
     $ai88 = Join-Path $Scratch 'ai-stub88.ps1'; Set-Content -LiteralPath $ai88 -Value @('exit 0')
     $cl88 = Join-Path $Scratch 'claude-stub88.ps1'; $log88 = Join-Path $Scratch 'wt-title88.log'
     Set-Content -LiteralPath $cl88 -Value @(
@@ -4097,7 +4181,7 @@ if ($Mode -eq 'retest') { exit 0 } else { exit 1 }
     # loop stopped, and the watchdog broke its claim at 10:00Z while the session still waited. The runner pauses the
     # unit timeout on a prompt, so it now beats the unit's claims too. Fixture: the stub claims a row, opens a prompt,
     # reads the claim's beat, waits 5 s (beat every 1 s), reads it again, answers and ends.
-    $r106 = New-Repo 'runner106' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r106
+    $r106 = New-Repo 'runner106' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r106; Open-Gate $r106 stream-kit
     $ai106 = Join-Path $Scratch 'ai-stub106.ps1'; Set-Content -LiteralPath $ai106 -Value @('exit 0')
     $cl106 = Join-Path $Scratch 'claude-stub106.ps1'; $b106 = Join-Path $Scratch 'claude-stub106.beats.txt'
     $readBeat106 = "((Get-Content -Raw (Join-Path '$r106' '.streams\tasks.json') | ConvertFrom-Json -DateKind String).tasks | Where-Object { `$_.id -eq 'G1.T' }).claim.beat"
@@ -4236,7 +4320,7 @@ if ($st -eq 'expected') { exit 0 } else { "STREAM_T107='$env:STREAM_T107'"; exit
     # 110 (kit item IN-20261010153049-6849): a unit that ran its cycle and reported outcome 'failed' through unit_done
     # (the mod writes is_error=true for it) and exited 0 was treated as a failed LAUNCH: BACKOFF 900 s, so two build
     # runners idled 15 min each with 20 rows claimable. A reported outcome with exit 0 is a run, not a launch failure.
-    $r110 = New-Repo 'runner110' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r110
+    $r110 = New-Repo 'runner110' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r110; Open-Gate $r110 stream-kit
     $ai110 = Join-Path $Scratch 'ai-stub110.ps1'; Set-Content -LiteralPath $ai110 -Value @('exit 0')
     $cl110 = Join-Path $Scratch 'claude-stub110.ps1'
     Set-Content -LiteralPath $cl110 -Value @(

@@ -1,6 +1,6 @@
 ---
 name: stream-author
-description: v0.10. Stream kit skill 2 of 5. It runs unattended and never prompts. Each cycle it first takes the oldest open item in its inbox (.streams\inbox\stream-author.md, to rewrite a ticket or grader, including for a ticketed task no builder has claimed), then claims released tasks from .streams\tasks.json, writes a short ticket whose acceptance clauses state WHAT must be true (with REQ/AC ids and the write set), optionally a static grader, has one skeptic subagent try to break them, and then marks the task ticketed for builders. It runs no RED check and builds nothing; the builder proves RED in its own worktree and chooses the tests. When nothing is ready it sleeps and re-checks. Use for /stream-author (run under /loop), /stream-author once, /stream-author status.
+description: v0.11. Stream kit skill 2 of 5. It runs unattended and never prompts. Each cycle it first takes the oldest open item in its inbox (.streams\inbox\stream-author.md, to rewrite a ticket or grader, including for a ticketed task no builder has claimed), then claims released tasks from .streams\tasks.json, writes a short ticket whose acceptance clauses state WHAT must be true (with REQ/AC ids and the write set), optionally a static grader, has one skeptic subagent try to break them, and then marks the task ticketed for builders. It runs no RED check and builds nothing; the builder proves RED in its own worktree and chooses the tests. When nothing is ready it sleeps and re-checks. Use for /stream-author (run under /loop), /stream-author once, /stream-author status.
 ---
 
 # stream-author
@@ -223,7 +223,11 @@ PRE-STAGED UNIT: when your command carries `packet:`, steps 0, 1 and 2 are DONE 
    - a requirement clause with no acceptance clause, or an acceptance clause that is not observable or not testable;
    - a clause whose stated "false today" reason is wrong, judged from the code and the grader TEXT, not from a run;
    - a grader check a wrong change could pass;
-   - a write-set leak (the change needs a file outside the set);
+   - a write-set leak (the change needs a file outside the set). This one the author FIXES rather than blocks on:
+     widen the row's own write set with `Update-Task.ps1 -Role author -AddWriteSet <file[,file]> -Note "<why>"`
+     (auto-accepted, logged to `decisions.md`; owner ruling 2026-10-17, after 234 of 291 author blocks were leaks).
+     Only a `WRITESET-OVERLAP` refusal (exit 7: the file belongs to another open, unordered task) blocks the task,
+     with the overlapping task named in the history;
    - a test the ticket names that is not atomic or uses fixtures from outside the repo.
 
    The author fixes each finding or records why it is not one. There is one skeptic round. A finding that still
@@ -260,8 +264,9 @@ PRE-STAGED UNIT: when your command carries `packet:`, steps 0, 1 and 2 are DONE 
   `.streams\inbox\*.md`, and task fields
   `state / claim / artifacts / history` through the lock.
 - Never edits product code or tests. Graders read the tree; they never change it.
-- Never changes a task's write set, `why` or `dependsOn`. A wrong one marks the task `blocked` with the reason, for
-  `/stream-plan revise`.
+- Never changes a task's `why` or `dependsOn`, and never narrows or rewrites its write set. A wrong one marks the task
+  `blocked` with the reason, for `/stream-plan revise`. The one write-set change it makes is widening its own claimed
+  row with `-AddWriteSet` (step 7), which the script refuses when the file belongs to another open task.
 - An `import`ed task that arrives `ticketed` is not re-authored, except through an inbox item (step 0).
 - Inbox items: only through `Set-InboxItem.ps1` and `Send-InboxItem.ps1` (append-only, under the inbox lock).
 - Never redirects a command's output into the repo. An `errs.txt` sat untracked in the main tree root on 2026-09-29

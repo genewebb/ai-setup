@@ -58,11 +58,11 @@ Token form: `{{$ref:target-machines/server-names:ApplicationServerName}}`. The `
 >
 > The same build must also move CrewChief's own by-name reads to reference data: `WebUI:HostName`, `WebUI:ExecutionMachine`, `Documentation:RepoBrowserBaseUrl`, `Profisee:CLU:Path`, `DirectoryPaths:ScriptDirectory`, the Home page `ServerNames` strip, the `RestClients:Connect:BaseUrl` ConnEx fallback, and bare-name `ConnectionStrings:<name>` lookups.
 
-## Tools (D:\PowershellScripts\CrewChiefConnect)
+## Tools ({PowershellScriptsDir}\CrewChiefConnect)
 
 | Script | Does |
 |---|---|
-| `Build-ConnectReferenceData.ps1 -OutputFolder <reference-kv> [-RealSecretsFile <secrets.json>]` | Reads the secrets-format source (default: the masked `C:\Deploy\Secrets\crewchief-connect-secrets-structure.json`). It then:<br>- writes the reference-data files, and refuses to overwrite one unless `-Force`;<br>- writes the slim secrets file, with masked values kept masked and pure `{{Section:Key}}` values shown;<br>- writes the token map `connect-reference-map.json`.<br>`-RealSecretsFile` is read only for masked-but-not-sensitive values (`ConnectRuntime:ProfiseeDBName`, `UserCredentials:AzureFileShareName`). Never prints a secret. |
+| `Build-ConnectReferenceData.ps1 -OutputFolder <reference-kv> [-RealSecretsFile <secrets.json>]` | Reads the secrets-format source (default: the masked `{SecretsDir}\crewchief-connect-secrets-structure.json`). It then:<br>- writes the reference-data files, and refuses to overwrite one unless `-Force`;<br>- writes the slim secrets file, with masked values kept masked and pure `{{Section:Key}}` values shown;<br>- writes the token map `connect-reference-map.json`.<br>`-RealSecretsFile` is read only for masked-but-not-sensitive values (`ConnectRuntime:ProfiseeDBName`, `UserCredentials:AzureFileShareName`). Never prints a secret. |
 | `Convert-WorkloadSecretsToReference.ps1 -DataFolder <data> [-Include workloads\x] [-Apply]` | Rewrites `{{$config:<moved key>}}` to `{{$ref:...}}` from the map. It is report-only by default. With `-Apply` it backs up every changed file and then fails if any moved key is still referenced. |
 
 The mapping lives in `Get-Target`, `$ReferencePointers` and the configuration bindings inside `Build-ConnectReferenceData.ps1`. Change it there, never in the outputs.

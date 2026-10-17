@@ -3,7 +3,8 @@
 # (CLAIM-LOST), so a session that slept past its limit stops instead of overwriting the new owner's work. One exception:
 # an author holding a live taken stream-author item that names a ticketed, unclaimed row may set that row's -Artifacts
 # (alone) without a claim; anything else on such a row is REFUSED (exit 2).
-# -AddWriteSet (build only): the builder's auto-accepted widening of its own write set. Refused whole (exit 7,
+# -AddWriteSet (author and build): the unit's auto-accepted widening of its own claimed row's write set (authors since
+# the owner ruling of 2026-10-17: 234 of 291 author blocks were write-set leaks). Refused whole (exit 7,
 # WRITESET-OVERLAP, nothing written) when a new path overlaps the write set of another task that could still collide at
 # integration. A task that has landed (integrated or done) or is on this task's dependsOn chain (either way) is already
 # ordered against it and never refuses the widening. Each widening is logged in decisions.md.
@@ -23,7 +24,7 @@ param(
 . "$PSScriptRoot\lib\Streams.ps1"
 $P = Get-StreamPaths (Resolve-Path $Repo).Path
 
-if ($AddWriteSet.Count -and $Role -ne 'build') { Write-Output "REFUSED -AddWriteSet is for the build role only"; exit 2 }
+if ($AddWriteSet.Count -and $Role -notin @('author', 'build')) { Write-Output "REFUSED -AddWriteSet is for the author and build roles only (the plan role uses Revise-Task.ps1)"; exit 2 }
 # <file[,file]> is what this script's own help promises, and a shell hands that over as ONE string, so split it here
 # rather than storing a path that matches nothing (see Expand-PathList).
 $AddWriteSet = @(Expand-PathList $AddWriteSet)

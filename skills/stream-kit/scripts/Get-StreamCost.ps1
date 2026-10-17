@@ -4,7 +4,7 @@
 # .streams\cost\cursor.json (one entry per full path), prices each deduplicated assistant message (lib\Cost.ps1) with
 # .streams\cost\prices.json (copied from cost-prices.json beside this script on first run), attributes it, appends to
 # .streams\cost\ledger.jsonl and rewrites .streams\cost\summary.json. The project folder is the repo path with EACH
-# non-alphanumeric character as '-' (D:\devops\repos\speedmerchants -> D--devops-repos-speedmerchants). -ProjectsRoot
+# non-alphanumeric character as '-' (D:\devops\repos\speedmerchants -> D--devops-repos-speedmerchants). -ProjectsRoot  # example-path
 # defaults to CLAUDE_CONFIG_DIR\projects (the stream account's own folder), else ~\.claude\projects; a missing project
 # folder prints NO-PROJECT <path> instead of a silent zero.
 # Attribution:

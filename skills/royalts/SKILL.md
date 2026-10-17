@@ -25,7 +25,7 @@ description: >
   with `CORP\genewe:(R)` for Royal TS. Not on D: (NAS share; NTFS ACLs do not apply there).
 - Find where the documents live from Royal TS's own recent-documents list (do not hard-code a drive):
   ```powershell
-  Select-String -Path 'C:\Users\genewe\AppData\Roaming\code4ward\code4ward.RoyalTS.UserPreferences.config' -Pattern '[A-Za-z]:\\[^"<|}]*\.rtsz' -AllMatches |
+  Select-String -Path "$env:APPDATA\code4ward\code4ward.RoyalTS.UserPreferences.config" -Pattern '[A-Za-z]:\\[^"<|}]*\.rtsz' -AllMatches |
       ForEach-Object { $_.Matches.Value } | Sort-Object -Unique
   ```
 

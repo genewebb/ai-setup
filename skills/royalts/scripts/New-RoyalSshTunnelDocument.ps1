@@ -5,8 +5,8 @@
     the gateway. No passwords are written; the RDP credential is created with only a username.
 
 .EXAMPLE
-    .\New-RoyalSshTunnelDocument.ps1 -Path 'D:\RemoteDesktops\Linux Droplet.rtsz' -HostAddress 159.223.100.95 `
-        -User gene -KeyFile 'C:\Deploy\Secrets\do_droplet\do_droplet_ed25519' -Rdp
+    .\New-RoyalSshTunnelDocument.ps1 -Path '<documents folder>\Linux Droplet.rtsz' -HostAddress 159.223.100.95 `
+        -User gene -KeyFile '{SecretsDir}\do_droplet\do_droplet_ed25519' -Rdp
 #>
 [CmdletBinding()]
 param(

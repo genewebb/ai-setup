@@ -1,6 +1,6 @@
 ---
 name: stream-plan
-description: v0.10. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
+description: v0.11. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
 ---
 
 # stream-plan
@@ -75,8 +75,10 @@ Start it once per repo, in its own session:
 
 **Fresh context (preferred; owner ruling 2026-10-04).** Instead of `/loop`, run this role from a plain terminal with
 `pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {SpeedyRepo} -Role plan`.
-The runner starts a new headless Claude session for every inbox check (every 10 minutes), so nothing carries over from the last one's
-context. Each runner session gets its session id and the headless rules in its system prompt:
+The runner launches a new headless Claude session only when `.streams\inbox\stream-plan.md` holds an actionable item
+and no other planner is live (owner ruling 2026-10-17); otherwise it shows an idle report and watches the inbox file at
+no token cost. Nothing carries over from one unit to the next. Each runner session gets its session id and the headless
+rules in its system prompt:
 - run one cycle;
 - never call ScheduleWakeup;
 - never end the turn while its own work is still running;
