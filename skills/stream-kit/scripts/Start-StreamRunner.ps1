@@ -244,6 +244,29 @@ function Get-WaitingDeps($doc, $Task) {
     if ($open.Count) { $open -join ', ' } else { 'a built dependency whose own base is no longer whole' }
 }
 function Format-Local([datetime] $Utc) { $Utc.ToLocalTime().ToString('HH:mm:ss') }
+# TAB LINES IN PLAIN WORDS (owner 2026-10-17: "This is cryptic ... it should also show the next time it will poll").
+# Every line the tab prints starts with LOCAL time (the idle report already spoke local time, so one tab showed two
+# clocks), each code line (GATE, START-JITTER, EXIT ... FAILED, BACKOFF) is followed by an indented line saying what it
+# means, and every wait says the clock time of the next look. The codes stay first on their line: the suites and the
+# owner grep for them.
+function Get-TabNow { (Get-Date).ToString('HH:mm:ss') }
+function Get-TabAt([int] $Seconds) { (Get-Date).AddSeconds($Seconds).ToString('HH:mm:ss') }
+function Get-GatePlain([string] $Why) {
+    switch -Regex ($Why) {
+        '^claimable (\d+) \(([^)]+)\)' { return "$($Matches[1]) ticketed row(s) are ready to build; this runner claims the first ($($Matches[2])) and starts a build session" }
+        '^planned (\d+) \(([^)]+)\)' { return "$($Matches[1]) planned row(s) need a ticket; this runner claims the first ($($Matches[2])) and starts an author session" }
+        '^inbox (\d+) actionable \(([^)]+)\)' { return "$($Matches[1]) open $inboxSkill inbox item(s); a session works them, $($Matches[2]) first" }
+        '^built (\d+) \(([^)]+)\)' { return "$($Matches[1]) built row(s) wait to be applied to main; a session integrates them, $($Matches[2]) first" }
+        '^group .* integrating' { return 'a group is in its integration phase (suites, fix tasks, close); a session drives it' }
+        '^integrator lock live' { return "this integrator's own run is still in flight; a session follows it up" }
+        '^stands in for' { return 'nobody is serving that inbox, so the coordinator stands in' }
+        '^free RAM' { return 'the machine is low on memory; the coordinator checks what to stop' }
+        '^status flags changed' { return 'the status page raised new flags; the coordinator reviews them' }
+        '^periodic review' { return 'scheduled review of the whole board' }
+        '^first review' { return 'first review since this runner started' }
+        default { return 'work found; starting a session' }
+    }
+}
 function Get-IdleReport {
     $doc = Read-Tasks $P
     $fg = Get-FocusGroups $doc $P
@@ -307,12 +330,12 @@ function Show-IdleStatus {
     if ($state.status -notlike 'idle since*') { $state.status = "idle since $(Get-Now)" }
     Write-RunnerState $state
     if ($key -ne $script:idleLastWhy -or -not $script:idleLastPrint) {
-        "$(Get-Now) IDLE nothing to take for $Role$(if ($script:idleLastPrint) { " (reason changed; idle since $(Format-Local $script:idleSince.ToUniversalTime()))" })"
+        "$(Get-TabNow) IDLE nothing to take for $Role$(if ($script:idleLastPrint) { " (reason changed; idle since $(Format-Local $script:idleSince.ToUniversalTime()))" })"
         Format-IdleReport $rep $fallback
         $script:idleLastWhy = $key; $script:idleLastPrint = $now
         if ($Tab) { Set-RunnerTabTitle "$Tab - idle" }
     } elseif (($now - $script:idleLastPrint).TotalSeconds -ge $IntervalSeconds) {
-        "$(Get-Now) still idle since $(Format-Local $script:idleSince.ToUniversalTime()) ($([int]($now - $script:idleSince).TotalMinutes) min): $($rep.Short); next look by $(Format-Local $fallback.ToUniversalTime())"
+        "$(Get-TabNow) still idle since $(Format-Local $script:idleSince.ToUniversalTime()) ($([int]($now - $script:idleSince).TotalMinutes) min): $($rep.Short); next look by $(Format-Local $fallback.ToUniversalTime())"
         $script:idleLastPrint = $now
     }
 }
@@ -502,14 +525,14 @@ function Invoke-StatusTick([string] $Session) {
     foreach ($s in $steps) {
         if ($s.Ok) { continue }
         $detail = [string](@(@($s.Text) + @($s.Warnings) | Where-Object { "$_".Trim() }) | Select-Object -Last 1)
-        "$(Get-Now) TICK-FAILED $($s.Script) exit $($s.Code): $detail"
+        "$(Get-TabNow) TICK-FAILED $($s.Script) exit $($s.Code): $detail"
         if (-not $script:tickFailures.ContainsKey($s.Script)) {
             $script:tickFailures[$s.Script] = Get-Now
             try { [void](Invoke-KitScript 'Send-InboxItem.ps1' @{ Repo = $Repo; To = 'stream-kit'; From = $Session; Kind = 'bug'; Ask = "$($s.Script) failed in the status runner's script tick (exit $($s.Code)): $(($detail -replace '\s+', ' ').Trim())"; Evidence = $logDir }) } catch { }
         }
     }
     $script:ticks++
-    "$(Get-Now) STATUS-TICK $Session $([int]$sw.Elapsed.TotalSeconds)s | $wdLine | $inboxLine | page: $(Get-TickNote $pg) | cost: $(Get-TickNote $cp) | priority: $(Get-TickNote $pr) | archive: $archiveNote | activation: $(if ($actNotes.Count) { $actNotes -join '; ' } else { 'none needed' })"
+    "$(Get-TabNow) STATUS-TICK $Session $([int]$sw.Elapsed.TotalSeconds)s | $wdLine | $inboxLine | page: $(Get-TickNote $pg) | cost: $(Get-TickNote $cp) | priority: $(Get-TickNote $pr) | archive: $archiveNote | activation: $(if ($actNotes.Count) { $actNotes -join '; ' } else { 'none needed' }) | next tick at $(Get-TabAt $IntervalSeconds)"
     $state.lastTick = Get-Now; $state.ticks = $script:ticks
     $state.status = "ticked $(Get-Now); next tick in $IntervalSeconds s$(if ($openItems.Count) { "; $($openItems.Count) open inbox item(s): launching a unit" })"
     Write-RunnerState $state
@@ -1359,33 +1382,36 @@ while ($true) {
     if ($gated) {
         $why = Get-WorkGate
         if (-not $why) {
-            try { Show-IdleStatus } catch { "$(Get-Now) IDLE nothing to take for $Role (report failed: $(("$_" -split "`n")[0]))" }
+            try { Show-IdleStatus } catch { "$(Get-TabNow) IDLE nothing to take for $Role (report failed: $(("$_" -split "`n")[0]))" }
             [void](Wait-ForBoardChange); continue
         }
         Clear-IdleStatus
-        "$(Get-Now) GATE $why"
+        "$(Get-TabNow) GATE $why"
+        "  doing      : $(Get-GatePlain $why)"
     } elseif ($statusTick) {
         $script:tickOpenCount = 0
-        try { Invoke-StatusTick $stableSession } catch { "$(Get-Now) TICK-FAILED the status tick threw: $(("$_" -split "`n")[0])" }
+        try { Invoke-StatusTick $stableSession } catch { "$(Get-TabNow) TICK-FAILED the status tick threw: $(("$_" -split "`n")[0])" }
         $openCount = [int]$script:tickOpenCount
         if (-not $openCount) { [void](Wait-ForTick $IntervalSeconds); continue }
-        "$(Get-Now) GATE inbox $openCount open $skill item(s): a unit works them"
+        "$(Get-TabNow) GATE inbox $openCount open $skill item(s): a unit works them"
     } elseif ($timedGated) {
         $why = Get-TimedGate (Read-Tasks $P)
         if (-not $why) {
-            try { Show-IdleStatus } catch { "$(Get-Now) IDLE nothing to take for $Role (report failed: $(("$_" -split "`n")[0]))" }
+            try { Show-IdleStatus } catch { "$(Get-TabNow) IDLE nothing to take for $Role (report failed: $(("$_" -split "`n")[0]))" }
             [void](Wait-ForBoardChange); continue
         }
         Clear-IdleStatus
         Set-TimedLaunch
-        "$(Get-Now) GATE $why"
+        "$(Get-TabNow) GATE $why"
+        "  doing      : $(Get-GatePlain $why)"
     }
     $session = if ($gated) { New-SessionId $idPrefix } else { $stableSession }
     if ($Role -eq 'plan') {
         $lp = Get-LivePlanner $session
         if ($lp) {
             $state.status = "waiting: live planner $lp"; Write-RunnerState $state
-            "$(Get-Now) LIVE-PLANNER $lp; next check in $IntervalSeconds s"
+            "$(Get-TabNow) LIVE-PLANNER $lp; next check at $(Get-TabAt $IntervalSeconds) ($IntervalSeconds s)"
+            "  waiting    : another planner session is live; one planner at a time"
             Start-Sleep -Seconds $IntervalSeconds; continue
         }
     }
@@ -1395,16 +1421,17 @@ while ($true) {
     if ($hold) {
         $holdWait = [Math]::Max(1, [int]($hold.until - (Get-Date).ToUniversalTime()).TotalSeconds)
         $state.status = "quota hold until $($hold.until.ToString('yyyy-MM-ddTHH:mm:ssZ')) ($($hold.type), set by $($hold.by))"; Write-RunnerState $state
-        "$(Get-Now) QUOTA-HOLD until $($hold.until.ToString('yyyy-MM-ddTHH:mm:ssZ')) ($holdWait s): $($hold.type) limit seen by $($hold.by)"
+        "$(Get-TabNow) QUOTA-HOLD until $(Format-Local $hold.until) ($holdWait s): $($hold.type) limit seen by $($hold.by)"
+        "  waiting    : the Claude usage limit was reached; no runner launches before $(Format-Local $hold.until)"
         while ($holdWait -gt 0 -and -not (Test-StopRequested)) { Start-Sleep -Seconds ([Math]::Min(15, $holdWait)); $holdWait -= 15 }
         continue
     }
     $check = Sync-LaunchEnvironment
     Restore-RunnerTabTitle
-    if ($check -notin @('CURRENT', 'CHECKED')) { "$(Get-Now) LAUNCH-CHECK $check" }
+    if ($check -notin @('CURRENT', 'CHECKED')) { "$(Get-TabNow) LAUNCH-CHECK $check" }
     if ($firstTick -and $startJitter -gt 0) {
         $j = Get-Random -Minimum 0 -Maximum ($startJitter + 1)
-        "$(Get-Now) START-JITTER $j s"
+        "$(Get-TabNow) START-JITTER $j s: a random start delay so tabs opened together do not all claim at once; starts at $(Get-TabAt $j)"
         if ($j -gt 0) { Start-Sleep -Seconds $j }
     }
     $firstTick = $false
@@ -1413,11 +1440,11 @@ while ($true) {
     $failed = $false; $res = $null; $code = $null; $text = ''
     $packet = $null; $pre = $null
     $cfg = Get-RoleConfig
-    if ($cfg.note) { "$(Get-Now) $($cfg.note)" }
+    if ($cfg.note) { "$(Get-TabNow) $($cfg.note)" }
     $checkFailed = $check -like 'REFUSED*' -or $check -like 'FAILED*'
     if ($preStage -and -not $checkFailed) {
         $pre = Invoke-PreStageGuarded $session
-        foreach ($l in $pre.Lines) { "$(Get-Now) $l" }
+        foreach ($l in $pre.Lines) { "$(Get-TabNow) $l" }
         # A NONE claim in the pre-stage left an idle beat for this new session id, which never becomes a unit, so it
         # counted as one more live session for the role's whole limit; the runner state file is this runner's liveness.
         if (-not $pre.Packet) { Clear-IdleBeat $P $session }
@@ -1427,7 +1454,7 @@ while ($true) {
             # Lock contention: no run, no backoff. The claim and any hold were released by the guard; try again soon.
             $j = if ($busyRetryMax -gt 0) { Get-Random -Minimum ([Math]::Max(1, [int]($busyRetryMax / 6))) -Maximum ($busyRetryMax + 1) } else { 0 }
             $state.status = "retry in $j s: pre-stage lost a lock race"; Write-RunnerState $state
-            "$(Get-Now) BUSY-RETRY $j s (lock contention is not a failed run)"
+            "$(Get-TabNow) BUSY-RETRY $j s (lock contention is not a failed run)"
             if ($j -gt 0) { Start-Sleep -Seconds $j }
             continue
         }
@@ -1447,7 +1474,7 @@ while ($true) {
         $cliArgs = Get-CliArgs $session $rulesFile $unitCommand $cfg $claudeSession
         $unitStartUtc = (Get-Date).ToUniversalTime().AddSeconds(-2)
         $state.lastStart = Get-Now; $state.status = "running $session"; $state.session = $session; $state.unitPid = $null; Write-RunnerState $state
-        "$(Get-Now) RUN $session ($mode) $(Format-Config $cfg)$(if ($packet) { " packet $($packet.packet)" })"
+        "$(Get-TabNow) RUN $session ($mode) $(Format-Config $cfg)$(if ($packet) { " packet $($packet.packet)" })"
         Set-LaunchConfig $cfg
         # Whatever way the unit ends (a clean exit, TIMEOUT, NO-RESULT, a failed launch, or Ctrl+C on this runner), any
         # claim its session still holds is released here, so the row is claimable at once instead of after the role's
@@ -1472,7 +1499,7 @@ while ($true) {
                 if (-not $res) { Set-Content -LiteralPath $out -Value $text -Encoding utf8; $failed = $true }
             } elseif ($code -eq 'RESULT-GRACE') {
                 # The unit's work is done and its result is on disk; only its exit hung. Not a failed run.
-                "$(Get-Now) RESULT-GRACE $session wrote its result and was still running $exitGrace s later; ended it"
+                "$(Get-TabNow) RESULT-GRACE $session wrote its result and was still running $exitGrace s later; ended it"
                 if (-not $res) { $text = 'RESULT-GRACE the result file could not be read back'; $failed = $true }
             } elseif (-not $res) {
                 $text = "NO-RESULT the session exited ($code) without calling unit_done"
@@ -1510,19 +1537,19 @@ while ($true) {
             Clear-LaunchConfig
             # A build unit that died holding its claim: export its worktree to a patch BEFORE the claim goes (3.3).
             if ($packet -and $packet.worktree) {
-                try { Save-UnitWork $session $packet.task $packet.worktree $(if ($null -eq $code) { 'interrupted' } else { [string]$code }) | ForEach-Object { "$(Get-Now) $_" } }
-                catch { "$(Get-Now) HARVEST-FAILED $($packet.task) : $_ (the watchdog harvests the tree under its quiet period)" }
+                try { Save-UnitWork $session $packet.task $packet.worktree $(if ($null -eq $code) { 'interrupted' } else { [string]$code }) | ForEach-Object { "$(Get-TabNow) $_" } }
+                catch { "$(Get-TabNow) HARVEST-FAILED $($packet.task) : $_ (the watchdog harvests the tree under its quiet period)" }
             }
             try {
                 $freed = @(Clear-SessionClaims $P $session $runnerId "released by the runner: unit $session exited ($(if ($null -eq $code) { 'interrupted' } else { $code }))")
-                if ($freed.Count) { "$(Get-Now) RELEASED $($freed -join ', '): claim(s) unit $session left" }
-            } catch { "$(Get-Now) RELEASE-FAILED $session : $_ (the watchdog frees it once the claim is stale)" }
+                if ($freed.Count) { "$(Get-TabNow) RELEASED $($freed -join ', '): claim(s) unit $session left" }
+            } catch { "$(Get-TabNow) RELEASE-FAILED $session : $_ (the watchdog frees it once the claim is stale)" }
             # A work unit's session never comes back, so an inbox item it still holds is re-opened now with a progress
             # file, not left taken until the role's limit and then restarted from scratch (kit item IN-20261005193358-71ec).
             # Timed roles keep one session across units, so their next unit still holds the item and goes on with it.
             if ($gated) {
-                try { Open-UnitInboxHolds $P $session $unitStartUtc $(if ($null -eq $code) { 'interrupted' } else { [string]$code }) | ForEach-Object { "$(Get-Now) $_" } }
-                catch { "$(Get-Now) REOPEN-FAILED $session : $_ (the watchdog re-opens the item once its hold is stale)" }
+                try { Open-UnitInboxHolds $P $session $unitStartUtc $(if ($null -eq $code) { 'interrupted' } else { [string]$code }) | ForEach-Object { "$(Get-TabNow) $_" } }
+                catch { "$(Get-TabNow) REOPEN-FAILED $session : $_ (the watchdog re-opens the item once its hold is stale)" }
             }
         }
         $state.runs++
@@ -1538,22 +1565,23 @@ while ($true) {
         $q = $script:unitQuota
         $until = Get-QuotaResumeTime $q.resetsAt
         Set-QuotaHold $P $until $session $q.type
-        "$(Get-Now) EXIT USAGE-LIMIT $($q.type) -> $out"
+        "$(Get-TabNow) EXIT USAGE-LIMIT $($q.type) -> $out"
         $backoff = 0
         continue
     }
     $unitOutcome = Get-UnitOutcome $res
     if (($code -is [int] -and $code -ne 0) -or ((& $field 'is_error') -and -not $unitOutcome) -or ($text -match '(?i)usage limit|rate limit|overloaded|limit reached')) { $failed = $true }
     $outcome = if ($unitOutcome) { " outcome $unitOutcome" } else { '' }
-    "$(Get-Now) EXIT $code$outcome $(if ($res) { "turns $(& $field 'num_turns') cost $(& $field 'total_cost_usd')" }) $(if ($failed) { 'FAILED' } else { 'ok' }) -> $out"
+    "$(Get-TabNow) EXIT $code$outcome $(if ($res) { "turns $(& $field 'num_turns') cost $(& $field 'total_cost_usd')" }) $(if ($failed) { 'FAILED' } else { 'ok' }) -> $out"
     # The scoped-autoapprove hook (claude\scripts, PermissionRequest) answers a prompt about work inside the repo /
     # scratch roots itself and logs each yes beside the unit result; the owner sees the count here, the lines there.
-    if (Test-Path -LiteralPath "$out.approvals.log") { try { "$(Get-Now) APPROVED $(@(Get-Content -LiteralPath "$out.approvals.log").Count) in-scope permission prompt(s) answered by the scoped-autoapprove hook -> $out.approvals.log" } catch { } }
+    if (Test-Path -LiteralPath "$out.approvals.log") { try { "$(Get-TabNow) APPROVED $(@(Get-Content -LiteralPath "$out.approvals.log").Count) in-scope permission prompt(s) answered by the scoped-autoapprove hook -> $out.approvals.log" } catch { } }
     try { Record-Unit $session $packet $unitOutcome $res $code $unitStartUtc } catch { }
     if ($failed) {
         $backoff = if ($backoff -eq 0) { 900 } else { [math]::Min(3600, $backoff * 2) }
-        $state.status = "backoff $backoff s after a failed run"; Write-RunnerState $state
-        "$(Get-Now) BACKOFF $backoff s"
+        $state.status = "backoff $backoff s after a failed run; next try at $(Get-TabAt $backoff)"; Write-RunnerState $state
+        "  failed     : $(if ("$code" -eq 'PRESTAGE') { 'the set-up before Claude (claim, worktree, base, RED check) failed, so no Claude session ran; the reason is on the PRESTAGE-FAILED line above' } else { 'the session ended without a usable result; the log named on the EXIT line has the detail' })"
+        "$(Get-TabNow) BACKOFF $backoff s: waiting after a failed run (doubles on each failure in a row, up to 1 h); next try at $(Get-TabAt $backoff)"
         Start-Sleep -Seconds $backoff; continue
     }
     $backoff = 0
@@ -1569,14 +1597,15 @@ while ($true) {
         # A gated timed role goes back to its gate after a short floor: the gate, not the clock, decides the next launch.
         # After an idle unit (the gate said work, the unit found none) it waits the interval, backed off as before.
         $every = if ($idleStreak -or $statusTick) { Get-RunnerWait $Role $IntervalSeconds $idleStreak } else { [Math]::Min($IntervalSeconds, 30) }
-        if ($idleStreak -and $every -ne $IntervalSeconds) { "$(Get-Now) BACKOFF-IDLE next unit in $every s (idle streak $idleStreak); an inbox write wakes it" }
+        if ($idleStreak -and $every -ne $IntervalSeconds) { "$(Get-TabNow) BACKOFF-IDLE next unit in $every s (idle streak $idleStreak); an inbox write wakes it" }
         $wait = $every - [int]((Get-Date) - $tickStart).TotalSeconds
+        if ($wait -gt 0) { "  next look  : $(Get-TabAt $wait), or sooner when the $inboxSkill inbox is written" }
         $inboxFile = Get-InboxPath $P $inboxSkill
         $stamp = if (Test-Path -LiteralPath $inboxFile) { (Get-Item -LiteralPath $inboxFile).LastWriteTimeUtc } else { [datetime]::MinValue }
         while ($wait -gt 0) {
             Start-Sleep -Seconds ([Math]::Min(15, $wait)); $wait -= 15
             if ($idleStreak -and (Test-Path -LiteralPath $inboxFile) -and (Get-Item -LiteralPath $inboxFile).LastWriteTimeUtc -ne $stamp) {
-                "$(Get-Now) WAKE inbox written"; $idleStreak = 0; break
+                "$(Get-TabNow) WAKE inbox written"; $idleStreak = 0; break
             }
         }
     }

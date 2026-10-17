@@ -1,9 +1,52 @@
 # Self-test of the kit's recovery paths against throwaway git repos (removed at the end with their worktrees):
 # grader identity and since time, grader-suspect vs code-defect on a red main, prior-patch reuse, role inboxes,
 # fix tasks after landing, and grader portability. Real scripts, real git; nothing is mocked.
-param([string] $Scratch = (Join-Path ([IO.Path]::GetTempPath()) "streamkit-recovery-$PID"))
+#   pwsh -NoProfile -File Test-StreamKitRecovery.ps1                         every section (about 40 minutes)
+#   pwsh -NoProfile -File Test-StreamKitRecovery.ps1 -List                   the section headers, one per line
+#   pwsh -NoProfile -File Test-StreamKitRecovery.ps1 -Only '^74\.,^112\.'   only the sections whose header matches
+#                                                                            (comma-separated regexes, one argument)
+param(
+    [string] $Scratch = (Join-Path ([IO.Path]::GetTempPath()) "streamkit-recovery-$PID"),
+    [string[]] $Only,
+    [switch] $List
+)
 $ErrorActionPreference = 'Stop'
 $S = $PSScriptRoot
+
+# SECTION FILTER (owner 2026-10-17: "why not add a filter to the tests for now and future"). The minutes go into each
+# section's setup (throwaway repos, live runners), not into its Case lines, so the filter keeps whole SECTIONS: every
+# '    # ---- <id>. <title>' line inside the try block below starts one, which runs to the next. Section ids repeat
+# (two 14s, two 22s), so -Only takes regexes matched against the header text after '# ---- ' ('^74\.', 'usage limit').
+# The script rebuilds itself from the setup code above the try block, the chosen sections and the cleanup after it,
+# and runs that copy BESIDE itself so $PSScriptRoot still finds the kit; the copy is deleted afterwards. A section that
+# reuses an earlier section's repo or variables needs that section named too (its cases fail loudly otherwise).
+# pwsh -File hands a list over as one string, so commas split it here (a regex therefore cannot contain a comma).
+$Only = @($Only | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim().Trim("'", '"') } | Where-Object { $_ })
+if ($Only.Count -or $List) {
+    $self = @(Get-Content -LiteralPath $PSCommandPath)
+    $tryAt = [Array]::IndexOf($self, 'try {')
+    $endAt = [Array]::LastIndexOf($self, '} catch {')
+    if ($tryAt -lt 0 -or $endAt -lt $tryAt) { 'FAIL harness: the section filter could not find the try block'; exit 2 }
+    $heads = @(for ($i = $tryAt + 1; $i -lt $endAt; $i++) { if ($self[$i] -like '    # ---- *') { $i } })
+    $titleOf = { param($at) $self[$at].Trim().Substring('# ---- '.Length) }
+    if ($List) { foreach ($h in $heads) { & $titleOf $h }; exit 0 }
+    $keep = [Collections.Generic.List[string]]::new()
+    $keep.AddRange([string[]]$self[0..$tryAt])
+    $picked = 0
+    for ($n = 0; $n -lt $heads.Count; $n++) {
+        $title = & $titleOf $heads[$n]
+        if (-not @($Only | Where-Object { $title -match $_ }).Count) { continue }
+        $to = if ($n + 1 -lt $heads.Count) { $heads[$n + 1] - 1 } else { $endAt - 1 }
+        $keep.AddRange([string[]]$self[$heads[$n]..$to]); $picked++
+        "SECTION $title"
+    }
+    if (-not $picked) { "FAIL harness: -Only $($Only -join ', ') matched no section header (see -List)"; exit 2 }
+    $keep.AddRange([string[]]$self[$endAt..($self.Count - 1)])
+    $copy = Join-Path $PSScriptRoot ".recovery-only-$PID.ps1"
+    Set-Content -LiteralPath $copy -Value $keep -Encoding utf8
+    try { & pwsh -NoProfile -File $copy -Scratch $Scratch; $code = $LASTEXITCODE } finally { Remove-Item -LiteralPath $copy -ErrorAction SilentlyContinue }
+    exit $code
+}
 # The watchdog sweeps the HOST temp folder, so every watchdog run in a self-test is pointed at scratch instead:
 # a self-test must never delete a file outside its own scratch (kit item IN-20260929144007-b69a).
 $env:STREAM_TEMP_ROOT = Join-Path $Scratch 'hosttemp'
@@ -2586,6 +2629,10 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $f74b = @(Get-ChildItem (Join-Path $r74b '.streams\logs\runner') -Recurse -Filter '*-kit-*.json' -ErrorAction SilentlyContinue | Where-Object Name -notlike '*.rules.txt')
     $ft74b = if ($f74b.Count) { Get-Content -Raw $f74b[0].FullName } else { '' }
     Case 'runner -Live: a session that exits without unit_done is a failed run (NO-RESULT, backoff)' ((($o74b -join "`n") -match ' EXIT 0 +FAILED -> ') -and (($o74b -join "`n") -match 'BACKOFF 900 s') -and $ft74b -match '^NO-RESULT ') "out=$($o74b -join ' | ') file='$ft74b'"
+    # Owner 2026-10-17 ("This is cryptic ... it should also show the next time it will poll"): tab lines carry LOCAL
+    # time, a failed run says what failed in words, and BACKOFF names the clock time of the next try.
+    $t74c = $o74b -join "`n"
+    Case 'runner tab: local-time prefix, a plain failed line, and BACKOFF with the next try time' (($t74c -match '(?m)^\d\d:\d\d:\d\d EXIT 0 +FAILED -> ') -and ($t74c -match '(?m)^  failed     : the session ended without a usable result') -and ($t74c -match '(?m)^\d\d:\d\d:\d\d BACKOFF 900 s: waiting after a failed run .*; next try at \d\d:\d\d:\d\d$') -and ($t74c -notmatch '(?m)^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ ')) "out=$($o74b -join ' | ')"
 
     # ---- 75. Start-StreamRunner -Live: a session past -UnitTimeoutSeconds is ended, with everything it started, and
     # logged TIMEOUT. An interactive session can hang (a prompt nobody answers); the -p modes cannot.
@@ -2673,7 +2720,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $c75h = if (Test-Path $pid75q) { [int](Get-Content -Raw $pid75q) } else { 0 }
     if ($launched75h -and $c75h) { Stop-Process -Id $c75h -Force -ErrorAction SilentlyContinue }
     Remove-Item Env:\STREAM_RUNNER_AI, Env:\STREAM_RUNNER_CLAUDE, Env:\STREAM_CLAUDE_PROJECTS, Env:\STREAM_RUNNER_QUOTA_CHECK_SECONDS -ErrorAction SilentlyContinue
-    Case 'usage limit: another runner of the repo waits on the hold and launches nothing' ((($o75h -join "`n") -match 'QUOTA-HOLD until \S+Z \(\d+ s\): five_hour limit seen by ') -and -not $launched75h) "launched=$launched75h out=$($o75h -join ' | ')"
+    Case 'usage limit: another runner of the repo waits on the hold and launches nothing' ((($o75h -join "`n") -match 'QUOTA-HOLD until \d\d:\d\d:\d\d \(\d+ s\): five_hour limit seen by ') -and -not $launched75h) "launched=$launched75h out=$($o75h -join ' | ')"
 
     # ---- 76. Add-Lesson (EnhanceStream E): one line per lesson in .streams\lessons\<role>.md, at most 40 kept (the
     # oldest dropped and logged in decisions.md), and a multi-line, empty or secret-looking lesson refused with nothing
@@ -4424,6 +4471,7 @@ if ($st -eq 'expected') { exit 0 } else { "STREAM_T107='$env:STREAM_T107'"; exit
     Remove-Item Env:\STREAM_RUNNER_BUSY_RETRY_SECONDS -ErrorAction SilentlyContinue
     $t112 = $o112 -join "`n"
     Case '112 a pre-stage that loses the lock race retries (BUSY-RETRY), never backs off, and launches once the lock is free' ([bool]$done112 -and (Test-Path $ready112) -and $t112 -match 'PRESTAGE-BUSY .*lock busy for 2s' -and $t112 -match 'BUSY-RETRY \d+ s' -and $t112 -notmatch 'BACKOFF' -and $t112 -notmatch 'PRESTAGE-FAILED' -and $t112 -match 'PRESTAGE \S+ claimed G1\.L' -and $t112 -match ' EXIT 0 outcome built .* ok -> ') "finished=$([bool]$done112) out=$($o112 -join ' | ')"
+    Case '112b runner tab: a build GATE line is followed by a plain line naming the row it claims' (($t112 -match '(?m)^\d\d:\d\d:\d\d GATE claimable 1 \(G1\.L\)') -and ($t112 -match '(?m)^  doing      : 1 ticketed row\(s\) are ready to build; this runner claims the first \(G1\.L\) and starts a build session$')) "out=$($o112 -join ' | ')"
 
     # ---- 113. Add-Tasks.ps1 on a board-sized release finishes well inside the 120 s lock break limit (kit item
     # IN-20261010174706-ed53: an 81-row release ran 15 min under the lock, because the dependency chain was walked

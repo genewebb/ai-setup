@@ -175,6 +175,10 @@ else. Session id (2026-10-05, priority-focus-design 3.5): the `session: <id>` in
 ## `/stream-kit test`
 
 Run `pwsh -NoProfile -File <this skill>\scripts\Test-StreamKit.ps1` and `...\Test-StreamKitRecovery.ps1`, and report both `RESULT` lines.
+The recovery suite takes about 40 minutes. While iterating on one area, run only its sections: `-List` prints the
+section headers, and `-Only '^74\.,^112\.'` (comma-separated regexes matched against the header text, one argument)
+runs the setup, those sections and the cleanup. A section that reuses an earlier section's repo needs that section
+named too.
 
 ## Editing `scripts\` outside a kit inbox item
 
