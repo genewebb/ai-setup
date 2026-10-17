@@ -386,6 +386,22 @@ foreach ($root in $roots) {
             # A recorded path that no longer exists supersedes nothing (see the stale-record note below), so it is skipped.
             if ($recorded[$id] -eq $d.FullName -or -not $claimAt[$id] -or $d.LastWriteTime.ToUniversalTime() -ge $claimAt[$id]) { continue }
             if (-not (Test-Path -LiteralPath $recorded[$id])) { continue }
+            # The directory's own mtime moves only when an entry directly under it is added or removed, so an edit deep
+            # in the tree leaves it old. On 2026-10-16 build-202610160434-9e90 recorded G7.T019-2 but kept editing the
+            # old G7.T019 tree; the watchdog reaped that tree as a superseded copy 21 s after the unit wrote
+            # FamilyFactory.cs in it, the unit's next `cd` into it failed, and its Set-Content ran in the main tree
+            # (kit item IN-20261016125015-6592). So the newest FILE decides: any file written after the claim, or
+            # inside the quiet period, means a process is working there, even if it is the wrong tree.
+            $newest = @(Get-ChildItem $d.FullName -Recurse -File -Force -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1)
+            if ($newest.Count) {
+                $wrote = $newest[0].LastWriteTimeUtc
+                $quiet = ((Get-Date).ToUniversalTime() - $wrote).TotalMinutes
+                if ($wrote -ge $claimAt[$id] -or $quiet -lt $script:ReapQuietMinutes) {
+                    $acts.Add("KEPT $id $($d.FullName): superseded copy, but $($newest[0].Name) was written $([int]$quiet) min ago (after the claim or inside the $($script:ReapQuietMinutes) min quiet period); the holder may be working in the wrong tree - not reaped")
+                    continue
+                }
+            }
             $out = & $remove -Repo $Repo -Session $Session -Path $d.FullName -Label $id -Reason "watchdog: superseded copy; $id is live in $($recorded[$id])"
             if ($out -notlike 'NOTHING*') { $acts.Add("$out") }
             continue

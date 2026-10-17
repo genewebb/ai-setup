@@ -544,6 +544,8 @@ try {
     # Both copies exist; make the first one plainly older than the live claim, and write that live claim back (Build
     # releases it at -To built), so the reaper sees exactly the live board's shape.
     (Get-Item $dead26).LastWriteTime = (Get-Date).AddHours(-2)
+    # Its files too: since kit item IN-20261016125015-6592 the newest FILE decides whether a copy is in use.
+    Get-ChildItem $dead26 -Recurse -File -Force | ForEach-Object { $_.LastWriteTime = (Get-Date).AddHours(-2) }
     $doc26 = J $r26
     ($doc26.tasks | Where-Object { $_.id -eq 'G1.A' }).state = 'building'
     ($doc26.tasks | Where-Object { $_.id -eq 'G1.A' }).claim = @{ role = 'build'; session = 'build-26b'
@@ -554,6 +556,35 @@ try {
     Case 'reaper keeps the tree the live holder records' (Test-Path $live26) "$live26 went: $($o26 -join ' | ')"
     $led26 = @(Get-Content (Join-Path $r26 '.streams\owner\worktrees.md') | Where-Object { $_ -match 'removed \(' })[-1]
     Case 'the removal is attributed to the owning task' (($led26 -match '^- G1\.A \|') -and ($led26 -notmatch '\(orphan\)')) "$led26"
+
+    # ---- 26b/26c. a superseded copy somebody is still WRITING to is kept (kit item IN-20261016125015-6592). On
+    # 2026-10-16 a build unit recorded G7.T019-2 but kept editing the old G7.T019 tree; the watchdog reaped that tree
+    # because only the directory's own mtime was compared with claim.at, and an edit deep in the tree does not move it.
+    # The unit's next `cd` failed and its Set-Content wrote an empty file into the main tree. 26b: a file written after
+    # the claim keeps the copy. 26c: a file written before the claim but inside the quiet period keeps it too.
+    foreach ($k in @('b', 'c')) {
+        $rK = New-Repo "r26$k" ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok') }); $repos += $rK
+        $deadK = Build $rK 'G1.A' 'ok' "build-26${k}a"
+        [void](& "$S\Update-Task.ps1" -Repo $rK -Task G1.A -Role integrate -Session "integ-26$k" -To ticketed -Note 'test: bounced')
+        $liveK = Build $rK 'G1.A' 'ok' "build-26${k}b"
+        (Get-Item $deadK).LastWriteTime = (Get-Date).AddHours(-2)
+        Get-ChildItem $deadK -Recurse -File -Force | ForEach-Object { $_.LastWriteTime = (Get-Date).AddHours(-2) }
+        $deepK = Join-Path $deadK 'src\Deep'; New-Item -ItemType Directory -Path $deepK -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $deepK 'Edit.cs') -Value 'holder still editing here'
+        (Get-Item $deepK).LastWriteTime = (Get-Date).AddHours(-2); (Get-Item (Join-Path $deadK 'src')).LastWriteTime = (Get-Date).AddHours(-2)
+        (Get-Item $deadK).LastWriteTime = (Get-Date).AddHours(-2)
+        $claimK = if ($k -eq 'b') { (Get-Date).AddMinutes(-5) } else { Get-Date }
+        if ($k -eq 'c') { (Get-Item (Join-Path $deepK 'Edit.cs')).LastWriteTime = (Get-Date).AddMinutes(-1) }
+        if ($k -eq 'c') { $env:STREAM_REAP_QUIET_MINUTES = '10' }
+        $docK = J $rK
+        ($docK.tasks | Where-Object { $_.id -eq 'G1.A' }).state = 'building'
+        ($docK.tasks | Where-Object { $_.id -eq 'G1.A' }).claim = @{ role = 'build'; session = "build-26${k}b"
+            at = $claimK.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); beat = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+        Set-Content -Path (Join-Path $rK '.streams\tasks.json') -Encoding utf8 -Value ($docK | ConvertTo-Json -Depth 50)
+        try { $oK = @(& "$S\Invoke-Watchdog.ps1" -Repo $rK -Session "status-26$k") } finally { $env:STREAM_REAP_QUIET_MINUTES = '0' }
+        $what = if ($k -eq 'b') { 'written after the claim' } else { 'written inside the quiet period' }
+        Case "reaper keeps a superseded copy with a file $what" ((Test-Path (Join-Path $deepK 'Edit.cs')) -and (($oK -join ' ') -match "KEPT G1\.A .*wrong tree")) "$deadK out=$($oK -join ' | ')"
+    }
 
     # ---- 27. an AUTHOR claim must not hold a worktree. A worktree belongs to a build claim: New-TaskWorktree is only
     # ever called by a builder. On the live board G2.T04 sat `planned` with a live author claim writing its next ticket,
