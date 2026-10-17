@@ -18,6 +18,7 @@
     { "kind": "file", "from": "setup/Show-AIMachine.ps1", "to": "bin/Show-AIMachine.ps1" },
     { "kind": "file", "from": "setup/Write-AIFile.ps1", "to": "bin/Write-AIFile.ps1" },
     { "kind": "file", "from": "setup/Publish-KitFile.ps1", "to": "bin/Publish-KitFile.ps1" },
+    { "kind": "file", "from": "setup/Clear-AIScratch.ps1", "to": "bin/Clear-AIScratch.ps1" },
     { "kind": "tree", "from": "claude", "to": "machine-config/claude", "filter": "*.json;*.yaml" }
   ],
   "unmanaged": [ "skills/synced", "skills/.trash" ],

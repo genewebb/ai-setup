@@ -577,6 +577,23 @@ if (Test-Path $tempRoot) {
     if ($dirGone) { $acts.Add("SWEPT $dirGone stale speedy-* temp folders from $tempRoot") }
 }
 
+# Tool and test leftovers at the top level of the temp folder and of {ScratchRoot} (random-name .NET folders, dotnet
+# workload logs, MSBuildTemp, test folders), a day old, at most STREAM_TEMP_SWEEP_MAX (2000) per pass. Claude's shells
+# set TEMP to the scratch root, so these piled up there unseen by the sweep above: 89,249 top-level entries on SMVMTR1
+# by 2026-10-17. The hourly scheduled task "AI scratch cleanup" (bin\Clear-AIScratch.ps1, registered by install.ps1)
+# runs the same sweep (lib\MachineConfig.psm1 Clear-AIScratchLeftovers) and removes every file unused for a week under
+# {ScratchRoot}, so a machine with no stream running is kept clean too; this tick-time sweep keeps a busy stream
+# host's TEMP short between the hours. STREAM_SCRATCH_TOP_ROOT overrides the root for the self-tests.
+try {
+    Import-Module (Join-Path $PSScriptRoot '..\..\..\lib\MachineConfig.psm1') -Force -DisableNameChecking
+    $topRoot = if ($env:STREAM_SCRATCH_TOP_ROOT) { $env:STREAM_SCRATCH_TOP_ROOT } else { Get-AIPath ScratchRoot }
+    $sweepMax = if ($env:STREAM_TEMP_SWEEP_MAX) { [int]$env:STREAM_TEMP_SWEEP_MAX } else { 2000 }
+    foreach ($res in @(Clear-AIScratchLeftovers -Root @($tempRoot, $topRoot) -OlderThanHours $script:StreamScratchKeepHours -Max $sweepMax)) {
+        if ($res.Swept) { $acts.Add("SWEPT $($res.Swept) stale tool/test temp entries from $($res.Root)") }
+        if ($res.Left) { $notes.Add("NOTE LEFT $($res.Left) more stale tool/test temp entries in $($res.Root) for the next pass (at most $sweepMax per pass)") }
+    }
+} catch { $notes.Add("NOTE scratch leftover sweep skipped: $($_.Exception.Message)") }
+
 # Stream scratch sweep ({ScratchRoot}\streams\<repo>: skeptic rounds, probes, staging copies). A folder goes once nothing
 # inside it has been written for StreamScratchKeepHours, so a long skeptic round that still writes is never touched.
 # The folder is per repo, so this sweep never reaches another repo's work. An unreadable profile skips the sweep.

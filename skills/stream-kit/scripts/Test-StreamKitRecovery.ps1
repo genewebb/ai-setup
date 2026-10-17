@@ -7,6 +7,7 @@ $S = $PSScriptRoot
 # The watchdog sweeps the HOST temp folder, so every watchdog run in a self-test is pointed at scratch instead:
 # a self-test must never delete a file outside its own scratch (kit item IN-20260929144007-b69a).
 $env:STREAM_TEMP_ROOT = Join-Path $Scratch 'hosttemp'
+$env:STREAM_SCRATCH_TOP_ROOT = Join-Path $Scratch 'scratchtop-harness'   # the {ScratchRoot} top-level sweep, kept in scratch too
 $env:STREAM_WORKTREE_ROOT = Join-Path $Scratch 'wtroot'   # the profile WorktreesRoot stand-in: no host folder is touched
 $env:STREAM_SCRATCH_ROOT = Join-Path $Scratch 'streamscratch'   # the {ScratchRoot}\streams stand-in
 # Fixtures lay a worktree down and reap it in the same second, so the watchdog's 10-minute quiet period would
@@ -751,6 +752,32 @@ try {
     Case 'a fresh tmp file survives the sweep' (Test-Path $freshTmp) $freshTmp
     Case 'a stale speedy temp folder is swept' (($w33 -join ' ') -match 'SWEPT 1 stale speedy' -and -not (Test-Path $oldDir)) ($w33 -join ' | ')
     Case 'a fresh speedy temp folder survives' (Test-Path $newDir) $newDir
+
+    # ---- 32b. the watchdog sweeps tool and test leftovers at the scratch root's top level too. Claude's shells set TEMP
+    # to {ScratchRoot}, so .NET GetRandomFileName folders, dotnet workload logs and MSBuildTemp folders land there; the
+    # tmp*/speedy-* sweep never matched them and SMVMTR1's D:\tmp held 89,249 top-level entries by 2026-10-17. Only   # history
+    # those shapes go, only once a day old, at most STREAM_TEMP_SWEEP_MAX per pass; every other name is left alone.
+    $topRoot = Join-Path $Scratch 'scratchtop'
+    New-Item -ItemType Directory -Path $topRoot -Force | Out-Null
+    $dayOld = (Get-Date).AddDays(-2)
+    $oldRand = Join-Path $topRoot 'ab12cd34.x9z'; New-Item -ItemType Directory -Path $oldRand -Force | Out-Null; Set-Content (Join-Path $oldRand 'f.txt') 'x'
+    $freshRand = Join-Path $topRoot 'zz99yy88.q1w'; New-Item -ItemType Directory -Path $freshRand -Force | Out-Null
+    $oldLog = Join-Path $topRoot 'Microsoft.NET.Workload_4720_20261012_203358_207.log'; Set-Content $oldLog 'x'
+    $oldMsb = Join-Path $topRoot 'MSBuildTempab1cd2ef.gh3'; New-Item -ItemType Directory -Path $oldMsb -Force | Out-Null
+    $oldSpeedy = Join-Path $topRoot 'speedy-run-screens-0f3a'; New-Item -ItemType Directory -Path $oldSpeedy -Force | Out-Null
+    $keep = @('claude', 'streams', 'temp', 'g6t307-skeptic') | ForEach-Object { $k = Join-Path $topRoot $_; New-Item -ItemType Directory -Path $k -Force | Out-Null; $k }
+    $keepFile = Join-Path $topRoot 'share-vs-corpus.txt'; Set-Content $keepFile 'x'
+    foreach ($o in @($oldRand, $oldLog, $oldMsb, $oldSpeedy, $keepFile) + $keep) { $i = Get-Item -LiteralPath $o -Force; $i.LastWriteTime = $dayOld; $i.CreationTime = $dayOld }
+    $env:STREAM_TEMP_ROOT = Join-Path $Scratch 'tempsweep-empty'; New-Item -ItemType Directory -Path $env:STREAM_TEMP_ROOT -Force | Out-Null
+    $env:STREAM_SCRATCH_TOP_ROOT = $topRoot; $env:STREAM_TEMP_SWEEP_MAX = '2'
+    $w33b = & "$S\Invoke-Watchdog.ps1" -Repo $r33 -Session status-33b
+    $env:STREAM_TEMP_SWEEP_MAX = ''
+    $w33c = & "$S\Invoke-Watchdog.ps1" -Repo $r33 -Session status-33c
+    $env:STREAM_SCRATCH_TOP_ROOT = Join-Path $Scratch 'scratchtop-harness'; $env:STREAM_TEMP_ROOT = Join-Path $Scratch 'hosttemp'
+    Case 'scratch top: a pass sweeps at most STREAM_TEMP_SWEEP_MAX leftovers and says more are left' (($w33b -join ' ') -match 'SWEPT 2 stale tool/test temp entries' -and ($w33b -join ' ') -match 'LEFT 2') ($w33b -join ' | ')
+    Case 'scratch top: the next pass sweeps the rest' (($w33c -join ' ') -match 'SWEPT 2 stale tool/test temp entries' -and -not (Test-Path $oldRand) -and -not (Test-Path $oldLog) -and -not (Test-Path $oldMsb) -and -not (Test-Path $oldSpeedy)) ($w33c -join ' | ')
+    Case 'scratch top: a fresh random-name folder survives' (Test-Path $freshRand) $freshRand
+    Case 'scratch top: claude, streams, temp, named folders and other files are never swept' (@($keep | Where-Object { -not (Test-Path $_) }).Count -eq 0 -and (Test-Path $keepFile)) (($keep + $keepFile) -join ', ')
 
     # ---- 33. junk left in the main tree root is REPORTED, never deleted, and never committed. errs.txt appeared in
     # the repo root on 2026-09-29 holding one line of git stderr from an ad-hoc redirect in some session shell, owned
@@ -4597,6 +4624,7 @@ if ($args[0] -eq 'test' -and $env:STUB116_NOMATCH -eq '1') { 'No test matches th
         if (Test-Path $repo) { foreach ($w in @(git -C $repo worktree list --porcelain | Where-Object { $_ -like 'worktree *' } | Select-Object -Skip 1)) { git -C $repo worktree remove --force ($w.Substring(9)) 2>&1 | Out-Null } }
     }
     Remove-Item Env:\STREAM_TEMP_ROOT -ErrorAction SilentlyContinue
+    Remove-Item Env:\STREAM_SCRATCH_TOP_ROOT, Env:\STREAM_TEMP_SWEEP_MAX -ErrorAction SilentlyContinue
 Remove-Item Env:\STREAM_WORKTREE_ROOT -ErrorAction SilentlyContinue
 Remove-Item Env:\STREAM_SCRATCH_ROOT -ErrorAction SilentlyContinue
     Remove-Item Env:\STREAM_REAP_QUIET_MINUTES -ErrorAction SilentlyContinue

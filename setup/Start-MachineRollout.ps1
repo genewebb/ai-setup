@@ -99,7 +99,10 @@ try {
         @{ N = 'MachineConfig'; F = "$corpus\setup\tests\MachineConfig.Tests.ps1"; P = ' 0 failed' },
         @{ N = 'GitGuard'; F = "$corpus\setup\tests\GitGuard.Tests.ps1"; P = ' 0 failed' },
         @{ N = 'NestedLinks'; F = "$corpus\setup\tests\NestedLinks.Tests.ps1"; P = ' 0 failed' },
-        @{ N = 'LinkRoot'; F = "$corpus\setup\tests\LinkRoot.Tests.ps1"; P = ' 0 failed' }
+        @{ N = 'LinkRoot'; F = "$corpus\setup\tests\LinkRoot.Tests.ps1"; P = ' 0 failed' },
+        @{ N = 'Install'; F = "$corpus\setup\tests\Install.Tests.ps1"; P = ' 0 failed' },
+        @{ N = 'Publish'; F = "$corpus\setup\tests\Publish.Tests.ps1"; P = ' 0 failed' },
+        @{ N = 'ScratchClean'; F = "$corpus\setup\tests\ScratchClean.Tests.ps1"; P = ' 0 failed' }
     )
     foreach ($t in $tests) {
         if (-not (Test-Path $t.F)) { "$($t.N): SKIPPED (not installed here)"; continue }

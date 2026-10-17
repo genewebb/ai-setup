@@ -10,6 +10,8 @@ ai - start Claude Code on this machine's current configuration (spec 4.3c, R1, R
 3. Starts claude with CLAUDE_CODE_TMPDIR = {ScratchRoot} and AI_LAUNCH_REVISION = the installed revision,
    passing every argument through.
 Installed by Install-AIMachine.ps1 as {ClaudeHome}\bin\ai.ps1, with an ai.cmd shim next to claude.exe.
+The scratch area is kept clean by the hourly scheduled task "AI scratch cleanup" (bin\Clear-AIScratch.ps1,
+registered by install.ps1), not by the launcher.
 #>
 $ErrorActionPreference = 'Stop'
 $installer = Join-Path $PSScriptRoot 'Install-AIMachine.ps1'
@@ -56,5 +58,6 @@ foreach ($k in $sEnv.Keys) { if ($k -like 'AI_*') { Set-Item -LiteralPath "Env:\
 
 $env:CLAUDE_CODE_TMPDIR = $prof.Keys['ScratchRoot']
 $env:AI_LAUNCH_REVISION = $rev
+
 & claude @args
 exit $LASTEXITCODE

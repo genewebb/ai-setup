@@ -14,11 +14,20 @@ permissions, memory, stream kit. Product code is NOT here; it stays in the corpo
 
 ```powershell
 # from the clone folder
-pwsh -NoProfile -File .\install.ps1
-pwsh -NoProfile -File .\publish.ps1 -Message "stream-author: tighten ticket clauses"
+pwsh -NoProfile -File .\install.ps1            # lists every location first and asks once; -Yes skips the question
+pwsh -NoProfile -File .\install.ps1 -WhatIf    # the same list, nothing written, nothing asked
+pwsh -NoProfile -File .\publish.ps1 -Message "stream-author: tighten ticket clauses"   # shows the files, asks once; -Yes skips
 ```
 
-A conflict is an ordinary git conflict: resolve, `git rebase --continue`, re-run `publish.ps1`.
+`install.ps1` refuses when this clone is not the profile's `AIWorkRoot` or when the profile's `ClaudeHome` is not
+the folder Claude reads for the account running it, so an install never lands where nothing reads it. It installs
+the runtime, links memory, copies the PowerShell profiles, the stream-host scripts, and registers the hourly
+scheduled task **AI scratch cleanup** (`bin\Clear-AIScratch.ps1`): it works only under `{ScratchRoot}`, removes
+files nothing holds open and nothing wrote for 7 days plus day-old tool leftovers, then empty folders, and logs one
+line per run to `{ScratchRoot}\ai-config-work\Clear-AIScratch.log`. No Claude session is involved.
+
+`publish.ps1` publishes `main` only, refuses while a rebase or merge is unfinished, and tells a conflict (files to
+resolve, then `git rebase --continue`, re-run) apart from an unreachable remote (your commit is kept; re-run later).
 
 ## Machine values
 

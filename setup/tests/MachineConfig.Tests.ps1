@@ -133,6 +133,31 @@ try {
         $pn = Get-AIGitPolicy -Path $root -Profile $p
         Assert-True ($null -eq $pn.RepoRoot -and -not $pn.Commit)
     }
+
+    # Clear-AIScratchLeftovers: the ai launcher and the stream watchdog keep {ScratchRoot} clean with it.
+    $sw = Join-Path $root 'sweep'; New-Item -ItemType Directory $sw | Out-Null
+    $old = (Get-Date).AddDays(-2)
+    $made = @{}
+    foreach ($n in 'ab12cd34.x9z', 'zz99yy88.q1w', 'settings.yml', 'Microsoft.NET.Workload_1_20261012_2_3.log', 'MSBuildTempab.cd', 'speedy-run-screens-1', 'cc_runas_test_0b46', 'claude', 'streams', 'temp', 'keep.txt', 'QQ12RR34.ZZZ') {
+        $x = Join-Path $sw $n
+        if ($n -match '\.(yml|log|txt)$') { Set-Content -LiteralPath $x 'x' } else { New-Item -ItemType Directory $x | Out-Null; Set-Content (Join-Path $x 'f.txt') 'x' }
+        if ($n -ne 'zz99yy88.q1w') { $i = Get-Item -LiteralPath $x -Force; $i.LastWriteTime = $old; $i.CreationTime = $old }
+        $made[$n] = $x
+    }
+    Test-Case 'scratch sweep: removes day-old leftover shapes, at most -Max per call, and says how many are left' {
+        $r1 = @(Clear-AIScratchLeftovers -Root $sw -Max 3)
+        Assert-Equal 3 $r1[0].Swept; Assert-Equal 2 $r1[0].Left
+        $r2 = @(Clear-AIScratchLeftovers -Root $sw)
+        Assert-Equal 2 $r2[0].Swept; Assert-Equal 0 $r2[0].Left
+        foreach ($n in 'ab12cd34.x9z', 'Microsoft.NET.Workload_1_20261012_2_3.log', 'MSBuildTempab.cd', 'speedy-run-screens-1', 'cc_runas_test_0b46') { Assert-True (-not (Test-Path -LiteralPath $made[$n])) "$n should be swept" }
+    }
+    Test-Case 'scratch sweep: a fresh leftover, other names, a real-extension file and an upper-case name stay' {
+        foreach ($n in 'zz99yy88.q1w', 'settings.yml', 'claude', 'streams', 'temp', 'keep.txt', 'QQ12RR34.ZZZ') { Assert-True (Test-Path -LiteralPath $made[$n]) "$n should stay" }
+    }
+    Test-Case 'scratch sweep: a missing root and the same root twice are harmless' {
+        $r = @(Clear-AIScratchLeftovers -Root @((Join-Path $root 'nope'), $sw, $sw))
+        Assert-Equal 1 $r.Count
+    }
 }
 finally {
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

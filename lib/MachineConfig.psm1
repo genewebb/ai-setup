@@ -422,6 +422,70 @@ function Get-AIGitPolicy {
     }
 }
 
+# Tool and test leftovers that land at the TOP LEVEL of {ScratchRoot} and its temp folder. Claude's shells point TEMP
+# at the scratch root, so every Path.GetTempPath() user drops its folders there, and nothing removed them: SMVMTR1's
+# D:\tmp held 89,249 top-level entries (28,840 dotnet workload logs, .NET random-name folders, speedy-* test folders)   # history
+# by 2026-10-17. Only these shapes are ever removed; every other name (claude, streams, temp, a backup someone put
+# there) is left alone. One list, used by the hourly scratch cleanup task (setup\Clear-AIScratch.ps1, which also
+# removes every file unused for -KeepDays under the root) and by the stream watchdog every tick.
+$script:ScratchLeftoverShapes = @(
+    '^[a-z0-9]{8}\.[a-z0-9]{3}$'          # .NET Path.GetRandomFileName (test temp folders and files)
+    '^tmp[0-9A-Fa-f]+\.tmp$'              # Win32 GetTempFileName
+    '^Microsoft\.NET\.Workload_.*\.log$'  # dotnet CLI workload logs
+    '^MSBuildTemp'                        # MSBuild temp folders
+    '^speedy-'                            # speedmerchants test folders
+    '^cc_runas_test_', '^ConnExTest_', '^crewchief-', '^CrewChief[A-Za-z]*Tests$', '^cc-model-import-'   # CrewChief tests
+)
+# Names are compared case-sensitively (-cmatch). A random name is eight lowercase letters or digits, a dot and three
+# more, which a real file can also be (settings.yml), so a name whose extension is a common real one never counts.
+$script:ScratchKeepExtensions = @('.txt', '.md', '.ps1', '.psm1', '.yml', '.json', '.xml', '.csv', '.zip', '.log', '.cs', '.py', '.sql', '.htm', '.png', '.jpg', '.pdf', '.bak', '.cmd', '.bat', '.exe', '.dll')
+
+function Clear-AIScratchLeftovers {
+    <#
+    .SYNOPSIS
+        Removes stale tool/test leftovers from the top level of each root. Never recurses into other names.
+    .DESCRIPTION
+        An entry goes only when its name matches $ScratchLeftoverShapes (case-sensitive) and both its write and creation times are older
+        than -OlderThanHours, so a folder a running test or build just made is never touched. At most -Max entries go
+        per call, so a launch or a watchdog tick on a host that piled up for weeks stays short; the rest go next time.
+        An entry that cannot be removed (held open) stays and is not counted. Returns one object per root:
+        Root, Swept, Left (matching stale entries not reached this call).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string[]]$Root,
+        [double]$OlderThanHours = 24,
+        [int]$Max = 2000
+    )
+    $cut = (Get-Date).ToUniversalTime().AddHours(-$OlderThanHours)
+    $budget = $Max
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($r in $Root) {
+        if (-not $r -or -not (Test-Path -LiteralPath $r -PathType Container)) { continue }
+        $full = [IO.Path]::GetFullPath($r).TrimEnd('\')
+        if (-not $seen.Add($full)) { continue }
+        $swept = 0; $left = 0
+        foreach ($e in [IO.Directory]::EnumerateFileSystemEntries($full)) {
+            $name = [IO.Path]::GetFileName($e)
+            $match = $false
+            foreach ($s in $script:ScratchLeftoverShapes) { if ($name -cmatch $s) { $match = $true; break } }
+            if ($match -and $name -cmatch $script:ScratchLeftoverShapes[0] -and [IO.Path]::GetExtension($name) -in $script:ScratchKeepExtensions) { $match = $false }
+            if (-not $match) { continue }
+            try {
+                $isDir = [IO.Directory]::Exists($e)
+                $w = if ($isDir) { [IO.Directory]::GetLastWriteTimeUtc($e) } else { [IO.File]::GetLastWriteTimeUtc($e) }
+                $c = if ($isDir) { [IO.Directory]::GetCreationTimeUtc($e) } else { [IO.File]::GetCreationTimeUtc($e) }
+                if ($w -ge $cut -or $c -ge $cut) { continue }
+                if ($budget -le 0) { $left++; continue }
+                if ($isDir) { [IO.Directory]::Delete($e, $true) } else { [IO.File]::Delete($e) }
+                $swept++; $budget--
+            } catch { }   # held open or vanished: it stays, the next call tries again
+        }
+        [pscustomobject]@{ Root = $full; Swept = $swept; Left = $left }
+    }
+}
+
 Export-ModuleMember -Function Get-AIMachineConfigPath, Get-AIMachineProfile, Get-AIPath, Get-AIConfig,
-    Get-AILocationKind, Test-AIPathUnder, Test-AIMachineProfile, Get-AIRepoRoot, Get-AIGitPolicy, Expand-AIValue
+    Get-AILocationKind, Test-AIPathUnder, Test-AIMachineProfile, Get-AIRepoRoot, Get-AIGitPolicy, Expand-AIValue,
+    Clear-AIScratchLeftovers
 Export-ModuleMember -Variable AIKeys, RequiredKeys

@@ -7,6 +7,7 @@ $S = $PSScriptRoot
 # The watchdog sweeps the HOST temp folder, so every watchdog run in a self-test is pointed at scratch instead:
 # a self-test must never delete a file outside its own scratch (kit item IN-20260929144007-b69a).
 $env:STREAM_TEMP_ROOT = Join-Path $Scratch 'hosttemp'
+$env:STREAM_SCRATCH_TOP_ROOT = Join-Path $Scratch 'scratchtop-harness'   # the {ScratchRoot} top-level sweep, kept in scratch too
 $env:STREAM_WORKTREE_ROOT = Join-Path $Scratch 'wtroot'   # the profile WorktreesRoot stand-in: no host folder is touched
 $env:STREAM_SCRATCH_ROOT = Join-Path $Scratch 'streamscratch'   # the {ScratchRoot}\streams stand-in
 # This suite lays a worktree down and reaps it in the same second, so the watchdog's 10-minute quiet period would
@@ -1084,6 +1085,7 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
 } finally {
     if (Test-Path $repo) { foreach ($w in @(git -C $repo worktree list --porcelain | Where-Object { $_ -like 'worktree *' } | Select-Object -Skip 1)) { git -C $repo worktree remove --force ($w.Substring(9)) 2>&1 | Out-Null } }
     Remove-Item Env:\STREAM_TEMP_ROOT -ErrorAction SilentlyContinue
+    Remove-Item Env:\STREAM_SCRATCH_TOP_ROOT -ErrorAction SilentlyContinue
 Remove-Item Env:\STREAM_WORKTREE_ROOT -ErrorAction SilentlyContinue
 Remove-Item Env:\STREAM_SCRATCH_ROOT -ErrorAction SilentlyContinue
     Remove-Item Env:\STREAM_REAP_QUIET_MINUTES -ErrorAction SilentlyContinue
