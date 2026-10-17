@@ -751,12 +751,13 @@ function sp {
 
     if (Test-HelpRequested -ShowHelp:$ShowHelp) {
         Write-Usage "sp [-h|--help]" @(
-            "Shows the current PowerShell profile path."
+            "Same as: prof show (installed vs repo profile, and whether they match)."
         )
         return
     }
 
-    $PROFILE
+    Write-Host '(sp = prof show)' -ForegroundColor DarkGray
+    Invoke-GeneProf show
 }
 
 function ep {
@@ -768,13 +769,13 @@ function ep {
 
     if (Test-HelpRequested -ShowHelp:$ShowHelp) {
         Write-Usage "ep [-h|--help]" @(
-            "Opens the PowerShell profile in VS Code (fallback: Notepad)."
+            "Same as: prof edit. Opens the REPO copy of the profile (the installed copy is overwritten by every install)."
         )
         return
     }
 
-    if (Get-Command code -ErrorAction SilentlyContinue) { code $PROFILE }
-    else { notepad $PROFILE }
+    Write-Host '(ep = prof edit)' -ForegroundColor DarkGray
+    Invoke-GeneProf edit
 }
 
 Remove-Alias -Name rp -Force -ErrorAction SilentlyContinue
@@ -3560,14 +3561,17 @@ Set-Alias -Name claude-which -Value Get-ClaudeAccount -Scope Global
 
 
 #region Stream sessions (addStreams, addStreamTab, stopStreams, removeStreamTab, rerunStreamTab)
-# Two kinds of stream tab (owner ruling 2026-10-04):
-#   - Planner, Integrator, Kit, Coordinator, Status: ONE long interactive session per tab, started with the role's
-#     /loop, so the owner can work with it. The stream-compact mod (stream-kit\mods\stream-compact) compacts it after a
-#     turn once context fill reaches STREAM_COMPACT_PCT. Each tab keeps a marker, .streams\tabs\<tab>.json (its shell's
-#     PID), while its session runs: the planner wait, the duplicate check and stopStreams read it.
-#   - Author N, Builder N: a stream-kit runner in -Live mode that starts a FRESH 'claude --permission-mode
-#     bypassPermissions' session for every ticket or build. Each runner is started with -Tab <tab title>, so its state
-#     file (.streams\runners\runner-*.json) says which tab it runs in: tab numbers and removeStreamTab read it.
+# Two kinds of stream tab (owner rulings 2026-10-04 and 2026-10-17):
+#   - Planner (and Adhoc): ONE long interactive session per tab, started with the role's /loop, so the owner can work
+#     with it. The stream-compact mod (stream-kit\mods\stream-compact) compacts it after a turn once context fill
+#     reaches STREAM_COMPACT_PCT. Each tab keeps a marker, .streams\tabs\<tab>.json (its shell's PID), while its
+#     session runs: the planner wait, the duplicate check and stopStreams read it.
+#   - Integrator, Kit, Coordinator, Status, Author N, Builder N: a stream-kit runner in -Live mode that starts a FRESH
+#     'claude --permission-mode bypassPermissions' session only for a unit of work. Integrator, Kit and Coordinator
+#     launch only when the runner's script gate finds work, and Status is a PowerShell tick with a Claude unit only for
+#     its own inbox (owner 2026-10-17, "Both 1 + 2"): as long /loop sessions they would spend a Claude turn every
+#     interval. Each runner is started with -Tab <tab title>, so its state file (.streams\runners\runner-*.json) says
+#     which tab it runs in: tab numbers, the duplicate check and removeStreamTab read it.
 
 $global:GeneStreamDisabledHooks = 'gateguard'
 # Context fill (percent) at which a long session compacts after a turn.
@@ -3591,6 +3595,9 @@ $global:GeneStreamLoops = @{
     'Adhoc'       = '/stream-adhoc repo: {repo}'
 }
 $global:GeneStreamTabRoles = [ordered]@{ 'Author' = 'author'; 'Builder' = 'build' }
+# Tabs of GeneStreamRoles that addStreams / addStreamTab start as a gated runner, not a long /loop session
+# (owner 2026-10-17). Planner stays a long session: the owner talks to it.
+$global:GeneStreamRunnerSessionTabs = @('Integrator', 'Kit', 'Coordinator', 'Status')
 # Long interactive sessions that addStreams does NOT open; only addStreamTab -Role opens them (owner 2026-10-11:
 # Adhoc carries one owner request from requirement to commit, and runs only when the owner wants it).
 $global:GeneStreamOnDemandRoles = [ordered]@{ 'Adhoc' = 'adhoc' }
@@ -3647,6 +3654,32 @@ function Get-GeneStreamRunnerScript {
         "Set-Location -LiteralPath '$Repo'; " +
         "try { pwsh -NoProfile -File '$(Get-GeneStreamRunnerPath)' -Repo '$Repo' -Role $Role -Live -Tab '$Tab' } " +
         "finally { Complete-GeneStreamTab -Repo '$Repo' -Tab '$Tab' }"
+}
+
+# The script a GeneStreamRoles tab runs: a gated runner for the GeneStreamRunnerSessionTabs, a long session otherwise.
+function Get-GeneStreamTabScript {
+    param([Parameter(Mandatory)][string]$Repo, [Parameter(Mandatory)][string]$Tab)
+    if ($Tab -in $global:GeneStreamRunnerSessionTabs) {
+        return Get-GeneStreamRunnerScript -Repo $Repo -Role $global:GeneStreamRoles[$Tab] -Tab $Tab
+    }
+    return Get-GeneStreamSessionScript -Repo $Repo -Tab $Tab
+}
+
+# The runner role behind a tab title ('Author 2' -> author, 'Status' -> status), or $null for a long-session tab.
+function Get-GeneStreamRunnerRole {
+    param([Parameter(Mandatory)][string]$Tab)
+    $role = $global:GeneStreamTabRoles[($Tab -split ' ')[0]]
+    if ($role) { return $role }
+    if ($Tab -in $global:GeneStreamRunnerSessionTabs) { return $global:GeneStreamRoles[$Tab] }
+    return $null
+}
+
+# One line saying what a GeneStreamRoles tab starts, for the progress output.
+function Format-GeneStreamTabStart {
+    param([Parameter(Mandatory)][string]$Tab)
+    $role = Get-GeneStreamRunnerRole -Tab $Tab
+    if ($role) { return "runner -Role $role -Live" }
+    return $global:GeneStreamLoops[$Tab].Replace(' repo: {repo}', '')
 }
 
 # Stream tabs are Windows Terminal tabs, opened in the window the command runs in (owner 2026-10-05: the owner groups
@@ -3849,9 +3882,8 @@ function rerunStreamTab {
     }
     $r = $global:GeneStreamTabRerun
     if (-not $r) { Write-Error 'rerunStreamTab: this tab has no stopped runner to start again (run it in a "<tab> (stopped)" tab). Nothing was done.'; return }
-    $type = ($r.Tab -split ' ')[0]
-    $role = $global:GeneStreamTabRoles[$type]
-    if (-not $role) { Write-Error "rerunStreamTab: '$($r.Tab)' is not an author or builder tab. Nothing was done."; return }
+    $role = Get-GeneStreamRunnerRole -Tab $r.Tab
+    if (-not $role) { Write-Error "rerunStreamTab: '$($r.Tab)' is not a runner tab. Nothing was done."; return }
     $live = @(Get-GeneStreamRunners -Repo $r.Repo -Role $role | Where-Object { $_.Tab -eq $r.Tab })
     if ($live.Count) { Write-Error "rerunStreamTab: '$($r.Tab)' already has a live runner ($($live[0].Runner), pid $($live[0].Pid)). Nothing was done."; return }
     $global:GeneStreamTabRerun = $null
@@ -3931,7 +3963,7 @@ function Test-GeneStreamPrereqs {
     }
     if (-not $Roles.Count) { return $true }
     $dir = Join-Path $Repo '.streams\runners'
-    $runnerRoles = @($global:GeneStreamTabRoles.Values)
+    $runnerRoles = @(@($global:GeneStreamTabRoles.Values) + @($global:GeneStreamRunnerSessionTabs | ForEach-Object { $global:GeneStreamRoles[$_] }))
     foreach ($name in @(@('STOP') + @($Roles | ForEach-Object { "STOP-$_" }) | Sort-Object -Unique)) {
         $file = Join-Path $dir $name
         if (-not (Test-Path -LiteralPath $file)) { continue }
@@ -3980,27 +4012,41 @@ function Resolve-GeneStreamTab {
     return $null
 }
 
-# Opens ONE long-session tab (Planner, Integrator, Kit, Coordinator, Status, Adhoc) for addStreamTab -Role. Each runs
-# once per repo, so a live session for that tab refuses the open unless -Force.
+# Live sessions or runners already behind a once-per-repo tab, as 'session pid N' / 'runner <id> pid N' strings.
+function Get-GeneStreamTabHolders {
+    param([Parameter(Mandatory)][string]$Repo, [Parameter(Mandatory)][string]$Tab)
+    $hits = @(Get-GeneStreamSessions -Repo $Repo | Where-Object { $_.Tab -eq $Tab } | ForEach-Object { "session pid $($_.Pid)" })
+    $role = Get-GeneStreamRunnerRole -Tab $Tab
+    if ($role) { $hits += @(Get-GeneStreamRunners -Repo $Repo -Role $role | ForEach-Object { "runner $($_.Runner) pid $($_.Pid)" }) }
+    return $hits
+}
+
+# Opens ONE once-per-repo tab (Planner, Integrator, Kit, Coordinator, Status, Adhoc) for addStreamTab -Role: a long
+# session, or a gated runner for the GeneStreamRunnerSessionTabs. A live session or runner for that tab refuses the
+# open unless -Force.
 function Open-GeneStreamSessionTab {
-    param([string]$Repo, [Parameter(Mandatory)][string]$Tab, [int]$Count = 1, [switch]$Force, [switch]$DryRun)
+    param([string]$Repo, [Parameter(Mandatory)][string]$Tab, [int]$Count = 1, [switch]$ClearStop, [switch]$Force, [switch]$DryRun)
     if ($Count -ne 1) { Write-Error "addStreamTab: $Tab runs once per repo; -Count does not apply to it. Nothing was opened."; return }
     $full = Enter-GeneStreamRepo -Repo $Repo -Caller 'addStreamTab'
     if (-not $full) { return }
-    if (-not (Test-GeneStreamPrereqs -Repo $full -Need @('compact') -Caller 'addStreamTab' -DryRun:$DryRun)) { return }
-    $live = @(Get-GeneStreamSessions -Repo $full | Where-Object { $_.Tab -eq $Tab })
+    $role = Get-GeneStreamRunnerRole -Tab $Tab
+    $ok = if ($role) { Test-GeneStreamPrereqs -Repo $full -Roles @($role) -Need @('runner') -Caller 'addStreamTab' -ClearStop:$ClearStop -DryRun:$DryRun }
+    else { Test-GeneStreamPrereqs -Repo $full -Need @('compact') -Caller 'addStreamTab' -DryRun:$DryRun }
+    if (-not $ok) { return }
+    $live = @(Get-GeneStreamTabHolders -Repo $full -Tab $Tab)
     if ($live.Count -and -not $Force) {
-        Write-Error "addStreamTab: a $Tab session already runs (shell pid $($live[0].Pid)). Close it first, or add -Force. Nothing was opened."
+        Write-Error "addStreamTab: $Tab already runs ($($live -join ', ')). Close it first, or add -Force. Nothing was opened."
         return
     }
-    $script = Get-GeneStreamSessionScript -Repo $full -Tab $Tab
+    if ($role -and -not $DryRun) { Remove-Item -LiteralPath (Join-Path $full ".streams\runners\STOP-tab-$(Get-GeneStreamTabToken $Tab)") -ErrorAction SilentlyContinue }
+    $script = Get-GeneStreamTabScript -Repo $full -Tab $Tab
     if ($DryRun) {
         Write-Host "DryRun: would open this tab in this Windows Terminal window, in ${full}:" -ForegroundColor Cyan
         Format-GeneStreamScriptHelp -Tab $Tab -Script $script | ForEach-Object { Write-Host $_ }
         return
     }
     New-GeneWtTab -Directory $full -Title $Tab -Script $script
-    Write-Host "  $Tab -> $($global:GeneStreamLoops[$Tab].Replace(' repo: {repo}', ''))" -ForegroundColor DarkCyan
+    Write-Host "  $Tab -> $(Format-GeneStreamTabStart -Tab $Tab)" -ForegroundColor DarkCyan
     Write-Host "Opened the $Tab tab in $full." -ForegroundColor Green
 }
 
@@ -4025,18 +4071,21 @@ function addStreams {
             "Planner first: it waits until the Planner's claude is running (at most $($global:GeneStreamPlannerWaitSeconds) s) before opening the rest.",
             'Authors, builders and Adhoc are not opened here; use addStreamTab -Role Author|Builder|Adhoc.',
             '',
-            'Each agent tab is ONE long interactive session you can work with. It starts the role''s /loop, and the',
-            "stream-compact mod compacts it after a turn once context fill reaches $($global:GeneStreamCompactPct)% (STREAM_COMPACT_PCT).",
+            "Planner is ONE long interactive session you can work with. It starts the role's /loop, and the stream-compact",
+            "mod compacts it after a turn once context fill reaches $($global:GeneStreamCompactPct)% (STREAM_COMPACT_PCT).",
+            "$($global:GeneStreamRunnerSessionTabs -join ', ') are stream runners (-Live): a fresh Claude session only when",
+            'the runner finds work (Status: a PowerShell tick, a Claude unit only for its own inbox). Idle costs no tokens.',
             "Before opening anything it checks -Repo (folder with .streams\tasks.json) and changes to it.",
             'Each tab runs:'
         )
         foreach ($title in $global:GeneStreamRoles.Keys) {
-            $lines += Format-GeneStreamScriptHelp -Tab $title -Script (Get-GeneStreamSessionScript -Repo $shownRepo -Tab $title)
+            $lines += Format-GeneStreamScriptHelp -Tab $title -Script (Get-GeneStreamTabScript -Repo $shownRepo -Tab $title)
         }
         $lines += @(
             '',
             'Enter-/Exit-GeneStreamSession keep .streams\tabs\<tab>.json while the session runs (planner wait, stopStreams).',
-            'When claude exits the tab stays open as a shell.',
+            'When claude exits the tab stays open as a shell. A runner tab closes after a STOP; any other exit leaves it',
+            'open as "<tab> (stopped)", where rerunStreamTab starts it again.',
             "  [Git], [Compile]  plain PowerShell, started in $shownRepo; nothing else runs.",
             'Each tab is pwsh -NoExit -EncodedCommand <script>; the script also sets CLAUDE_CODE_DISABLE_TERMINAL_TITLE so the tab keeps its name.',
             '',
@@ -4054,19 +4103,15 @@ function addStreams {
 
     $full = Enter-GeneStreamRepo -Repo $Repo -Caller 'addStreams'
     if (-not $full) { return }
-    if (-not (Test-GeneStreamPrereqs -Repo $full -Need @('compact') -Caller 'addStreams' -DryRun:$DryRun)) { return }
+    $runnerRoles = @($global:GeneStreamRunnerSessionTabs | ForEach-Object { $global:GeneStreamRoles[$_] })
+    if (-not (Test-GeneStreamPrereqs -Repo $full -Roles $runnerRoles -Need @('compact', 'runner') -Caller 'addStreams' -DryRun:$DryRun)) { return }
 
     # Each of these roles runs once per repo (the integrator lock and the planner guard enforce it), so a live session
-    # or an open tab for one is almost always an old session to close first.
+    # or runner for one is almost always an old one to close first.
     if (-not $Force) {
-        # Match on the role's stem so older tab names count too ('Planning', 'integrate 1', 'status').
-        $open = @()
-        $live = @(Get-GeneStreamSessions -Repo $full)
-        $stems = @{ 'Planner' = '^plan'; 'Integrator' = '^integrat'; 'Kit' = '^kit'; 'Coordinator' = '^coordinat'; 'Status' = '^status' }
         $dupes = @($global:GeneStreamRoles.Keys | ForEach-Object {
                 $title = $_
-                $hits = @($open | Where-Object { $_ -match $stems[$title] })
-                $hits += @($live | Where-Object { $_.Tab -eq $title } | ForEach-Object { "session pid $($_.Pid)" })
+                $hits = @(Get-GeneStreamTabHolders -Repo $full -Tab $title)
                 if ($hits.Count) { "$title ($($hits -join ', '))" } })
         if ($dupes.Count) {
             Write-Error "addStreams: already running or open: $($dupes -join '; '). Close them first, or add -Force. Nothing was opened."
@@ -4077,7 +4122,7 @@ function addStreams {
     if ($DryRun) {
         Write-Host "DryRun: would open these tabs in this Windows Terminal window, in ${full}:" -ForegroundColor Cyan
         foreach ($title in $global:GeneStreamRoles.Keys) {
-            Format-GeneStreamScriptHelp -Tab $title -Script (Get-GeneStreamSessionScript -Repo $full -Tab $title) | ForEach-Object { Write-Host $_ }
+            Format-GeneStreamScriptHelp -Tab $title -Script (Get-GeneStreamTabScript -Repo $full -Tab $title) | ForEach-Object { Write-Host $_ }
             if ($title -eq 'Planner') { Write-Host "    (then wait up to $($global:GeneStreamPlannerWaitSeconds) s for the Planner's claude)" -ForegroundColor DarkGray }
         }
         foreach ($title in $global:GeneStreamPlainTabs) { Write-Host "  [$title] plain PowerShell" }
@@ -4088,9 +4133,11 @@ function addStreams {
     try {
         foreach ($title in $global:GeneStreamRoles.Keys) {
             $since = Get-Date
-            New-GeneWtTab -Directory $full -Title $title -Script (Get-GeneStreamSessionScript -Repo $full -Tab $title)
+            # A leftover per-tab stop file would stop a runner tab at once.
+            if (Get-GeneStreamRunnerRole -Tab $title) { Remove-Item -LiteralPath (Join-Path $full ".streams\runners\STOP-tab-$(Get-GeneStreamTabToken $title)") -ErrorAction SilentlyContinue }
+            New-GeneWtTab -Directory $full -Title $title -Script (Get-GeneStreamTabScript -Repo $full -Tab $title)
             $created.Add($title)
-            Write-Host "  $title -> $($global:GeneStreamLoops[$title].Replace(' repo: {repo}', ''))" -ForegroundColor DarkCyan
+            Write-Host "  $title -> $(Format-GeneStreamTabStart -Tab $title)" -ForegroundColor DarkCyan
             if ($title -eq 'Planner') {
                 $up = Wait-GeneStreamPlanner -Repo $full -Since $since
                 if ($up) { Write-Host "  Planner claude is running (pid $($up.ClaudePid)); opening the rest." -ForegroundColor DarkCyan }
@@ -4134,13 +4181,14 @@ function addStreamTab {
             'addStreamTab (-Author | -Builder) -Repo <repo> [-Count <n>] [-ClearStop] [-Force] [-DryRun] [-Help]',
             '',
             'Opens one tab for ANY stream role in the Windows Terminal window you run it in:',
-            '  -Role Planner | Integrator | Kit | Coordinator | Status | Adhoc   one long interactive session, once per repo',
-            '                                                                    (refused while that tab''s session runs; -Force opens anyway)',
+            '  -Role Planner | Adhoc                                              one long interactive session, once per repo',
+            '  -Role Integrator | Kit | Coordinator | Status                      one gated runner tab, once per repo',
+            '                                                                    (refused while that tab''s session or runner runs; -Force opens anyway)',
             '  -Role Author | Builder (same as -Author | -Builder)                runner tabs, -Count of them',
             'Adhoc is never opened by addStreams: it carries one request you type in its tab from requirement to commit.'
         )
         foreach ($title in @($global:GeneStreamRoles.Keys) + @($global:GeneStreamOnDemandRoles.Keys)) {
-            $lines += Format-GeneStreamScriptHelp -Tab $title -Script (Get-GeneStreamSessionScript -Repo $shownRepo -Tab $title)
+            $lines += Format-GeneStreamScriptHelp -Tab $title -Script (Get-GeneStreamTabScript -Repo $shownRepo -Tab $title)
         }
         $lines += @(
             '',
@@ -4197,7 +4245,7 @@ function addStreamTab {
         $resolved = Resolve-GeneStreamTab -Name $Role
         if ($resolved -eq 'Author') { $Author = [switch]::Present }
         elseif ($resolved -eq 'Builder') { $Builder = [switch]::Present }
-        else { Open-GeneStreamSessionTab -Repo $Repo -Tab $resolved -Count $Count -Force:$Force -DryRun:$DryRun; return }
+        else { Open-GeneStreamSessionTab -Repo $Repo -Tab $resolved -Count $Count -ClearStop:$ClearStop -Force:$Force -DryRun:$DryRun; return }
     }
     if (-not ($Author -or $Builder)) {
         Write-Error 'addStreamTab: a role is required: -Role <role>, -Author or -Builder (see addStreamTab -Help). Nothing was opened.'
@@ -4265,11 +4313,11 @@ function stopStreams {
         @(
             'stopStreams -Repo <repo> [-Role <name>[,<name>...]] [-CloseSessions] [-DryRun] [-Help]',
             '',
-            'Authors and builders (runners): stop cleanly. Each finishes the unit it is running (never killed mid-unit), then',
-            'exits, and its tab closes. Writes .streams\runners\STOP (no -Role) or STOP-author / STOP-build. Returns at once;',
-            'the next addStreamTab removes the stop file once those runners have exited.',
+            'Runners (Integrator, Kit, Coordinator, Status, authors, builders): stop cleanly. Each finishes the unit it is',
+            'running (never killed mid-unit), then exits, and its tab closes. Writes .streams\runners\STOP (no -Role) or',
+            'STOP-<role>. Returns at once; the next addStreams / addStreamTab removes the stop file once those runners have exited.',
             '',
-            'Planner, Integrator, Kit, Coordinator, Status, Adhoc (long sessions): a STOP file cannot reach them. Without',
+            'Planner, Adhoc (long sessions): a STOP file cannot reach them. Without',
             '-CloseSessions it lists the live ones so you can end each at a quiet moment (Esc, then /exit). With -CloseSessions',
             'it closes their tabs now, ending any turn in progress.',
             '',
@@ -4294,12 +4342,13 @@ function stopStreams {
         $tabs += $resolved
     }
     $all = -not $tabs.Count
-    $runnerTypes = @($global:GeneStreamTabRoles.Keys | Where-Object { $all -or $_ -in $tabs })
-    $sessionTabs = @(@($global:GeneStreamRoles.Keys) + @($global:GeneStreamOnDemandRoles.Keys) | Where-Object { $all -or $_ -in $tabs })
+    $runnerTypes = @(@($global:GeneStreamTabRoles.Keys) + @($global:GeneStreamRunnerSessionTabs) | Where-Object { $all -or $_ -in $tabs })
+    $sessionTabs = @(@($global:GeneStreamRoles.Keys) + @($global:GeneStreamOnDemandRoles.Keys) |
+            Where-Object { $_ -notin $global:GeneStreamRunnerSessionTabs -and ($all -or $_ -in $tabs) })
 
     # Runners: STOP files.
     if ($runnerTypes.Count) {
-        $roles = @($runnerTypes | ForEach-Object { $global:GeneStreamTabRoles[$_] })
+        $roles = @($runnerTypes | ForEach-Object { Get-GeneStreamRunnerRole -Tab $_ })
         $files = if ($all) { @('STOP') } else { @($roles | ForEach-Object { "STOP-$_" }) }
         $live = @(Get-GeneStreamRunners -Repo $full -Role $roles)
         $verb = if ($DryRun) { 'would stop' } else { 'stopping' }
