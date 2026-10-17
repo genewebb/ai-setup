@@ -26,6 +26,7 @@
 - UI: [mockups first](feedback_ui_mockups_before_implementing.md) · [RadzenSwitch](feedback_radzenswitch_not_selectbar.md) · [no blur-to-commit](feedback_no_blur_to_commit_ui.md) · [parity before new](feedback_ui_parity_before_new.md)
 - [ANY UI design/update: ui-ux-pro-max + mockups at a gate BEFORE code](feedback_ui_port_characterise_and_uxreview.md)
 - [ADO MCP = Microsoft @azure-devops/mcp, PAT as base64 any:pat; wit_work_item; Cursor removed 10/12](reference_ado_mcp_microsoft_pat.md)
+- [DO droplet 138.68.42.81 (SFO2, 2 GB, recreated 10/16): `addLinux` + `-Desktop`, key ~\.ssh\do_droplet_ed25519, rebuild script D:\repos\Linux\setup-droplet.sh, Royal TS doc; skill royalts](reference_do_droplet_addlinux.md)
 - [Key Repos](project_repos.md) · [workspace start](project_workspace_start_convention.md)
 - Sub-indexes: [CrewChief](index_crewchief.md) · [TestAuto](index_testauto.md) · [Profisee/Connect/Matching](index_profisee_platform.md) · [Claude harness](index_claude_harness.md) · [Infra/shell/misc](index_infra_misc.md) · [vNext/Speedy plan, build, testing, stream kit](index_vnext_plan_design.md) · [Speedy requirements](index_speedy_requirements.md) (stream kit + MyLoop lines moved there 10/16)
 - [\\SMVMTR1\d$ Access denied from Claude = cached-logon session lost its TGT; fix `cmdkey /add:SMVMTR1 /user:corp\agenewe /pass`](reference_smvmtr1_smb_access_denied_cached_logon.md)
@@ -45,6 +46,7 @@
 - [Matching processActions on 300M blocks ~6 min before queuing; gateway 500 at 100 s, CurlStep 60 s; matching still runs](reference_matching_processactions_timeout_300m.md)
 - **[Profisee gateway 401 (2070 invalid_client) body ECHOES the full API key: never print 401 bodies](reference_profisee_gateway_401_echoes_api_key.md)**
 - **[Connect SC import response ECHOES the Snowflake private key; CrewChief run output shows it: ask for failing line only](reference_connect_sc_import_echoes_snowflake_private_key.md)**
+- **[UnifiedMatching code vs docs 10/16: S2=BatchLoad strategy, BatchLoad not bulk, no runtime mutation, 3B 85/15 dead, users=MaxHangfireScenarioServersCount; non-dev archify diagrams in matching\ScenarioDocumentation](reference_unified_matching_code_vs_docs_2026-10-16.md)**
 - [Matching lookup 400 status 2219 = no existing record (no-match), NOT error; LookupThenCreate still creates](reference_matching_lookup_2219_is_no_match.md)
 - [TestAuto Monitor step COMPLETE but no row = silent NSB send fail; check nsb_log + MonitorDB catalog](reference_testauto_monitor_send_silent_fail.md)
 - [sqlcmd needs -I for Profisee table writes; backfill Monitor start marker by direct INSERT](reference_sqlcmd_quoted_identifier_profisee.md)
