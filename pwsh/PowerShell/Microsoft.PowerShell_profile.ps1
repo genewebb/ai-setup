@@ -2807,6 +2807,8 @@ function addLinux {
         [string]$KeyFile = (Join-Path $HOME '.ssh\do_droplet_ed25519'),
         [switch]$Desktop,
         [int]$DesktopLocalPort = 13389,
+        [switch]$Cockpit,
+        [int]$CockpitLocalPort = 19090,
         [Alias('h','help')]
         [switch]$ShowHelp,
         [Parameter(ValueFromRemainingArguments=$true)]
@@ -2814,7 +2816,7 @@ function addLinux {
     )
 
     if (Test-HelpRequested -ShowHelp:$ShowHelp -RemainingArgs $RemoteCommand) {
-        Write-Usage "addLinux [-User <name>] [-HostAddress <ip>] [-KeyFile <path>] [-Desktop [-DesktopLocalPort <port>]] [<remote command>] [-h|--help]" @(
+        Write-Usage "addLinux [-User <name>] [-HostAddress <ip>] [-KeyFile <path>] [-Desktop [-DesktopLocalPort <port>]] [-Cockpit [-CockpitLocalPort <port>]] [<remote command>] [-h|--help]" @(
             "SSH into the DigitalOcean Ubuntu droplet (default gene@138.68.42.81, SFO2, 2 GB)."
             "Root SSH login is disabled; gene has passwordless sudo, e.g. addLinux 'sudo apt update'."
             "Uses passphrase-less key $HOME\.ssh\do_droplet_ed25519."
@@ -2822,7 +2824,9 @@ function addLinux {
             ""
             "-Desktop  Opens a hidden SSH tunnel localhost:$DesktopLocalPort -> droplet xrdp (3389), then"
             "          launches Remote Desktop to it. Log in as gene. RDP is never exposed to the internet."
-            "          Stop the tunnel with the Stop-Process command it prints."
+            "-Cockpit  Opens a hidden SSH tunnel localhost:$CockpitLocalPort -> droplet Cockpit (9090), then"
+            "          opens https://localhost:$CockpitLocalPort (self-signed cert warning is expected). Log in as gene."
+            "Stop a tunnel with the Stop-Process command it prints."
         )
         return
     }
@@ -2830,26 +2834,37 @@ function addLinux {
     Assert-PathExists $KeyFile
     $baseArgs = @('-i', $KeyFile, '-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=accept-new')
 
-    if ($Desktop) {
-        $tunnelArgs = $baseArgs + @('-N', '-o', 'ExitOnForwardFailure=yes', '-L', "${DesktopLocalPort}:localhost:3389", "$User@$HostAddress")
+    # Hidden 'ssh -N -L local:localhost:remote'; returns the ssh process once the local port accepts connections.
+    $openTunnel = {
+        param([int]$LocalPort, [int]$RemotePort, [string]$Label)
+        $tunnelArgs = $baseArgs + @('-N', '-o', 'ExitOnForwardFailure=yes', '-L', "${LocalPort}:localhost:${RemotePort}", "$User@$HostAddress")
         $tunnel = Start-Process ssh -ArgumentList $tunnelArgs -WindowStyle Hidden -PassThru
 
         $ready = $false
         for ($i = 0; $i -lt 30 -and -not $ready -and -not $tunnel.HasExited; $i++) {
             $client = [System.Net.Sockets.TcpClient]::new()
-            try { $ready = $client.ConnectAsync('127.0.0.1', $DesktopLocalPort).Wait(500) -and $client.Connected } catch { $ready = $false }
+            try { $ready = $client.ConnectAsync('127.0.0.1', $LocalPort).Wait(500) -and $client.Connected } catch { $ready = $false }
             finally { $client.Dispose() }
             if (-not $ready) { Start-Sleep -Milliseconds 500 }
         }
         if (-not $ready) {
             if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force }
-            throw "Desktop tunnel did not come up on localhost:$DesktopLocalPort (port in use, or SSH failed - try plain addLinux first)."
+            throw "$Label tunnel did not come up on localhost:$LocalPort (port in use, or SSH failed - try plain addLinux first)."
         }
-
-        Start-Process mstsc -ArgumentList "/v:localhost:$DesktopLocalPort"
-        Write-Host "Tunnel up (ssh PID $($tunnel.Id)). Log in as gene. Stop it with: Stop-Process -Id $($tunnel.Id)" -ForegroundColor Green
-        return
+        $tunnel
     }
+
+    if ($Desktop) {
+        $tunnel = & $openTunnel $DesktopLocalPort 3389 'Desktop'
+        Start-Process mstsc -ArgumentList "/v:localhost:$DesktopLocalPort"
+        Write-Host "Desktop tunnel up (ssh PID $($tunnel.Id)). Log in as gene. Stop it with: Stop-Process -Id $($tunnel.Id)" -ForegroundColor Green
+    }
+    if ($Cockpit) {
+        $tunnel = & $openTunnel $CockpitLocalPort 9090 'Cockpit'
+        Start-Process "https://localhost:$CockpitLocalPort"
+        Write-Host "Cockpit tunnel up (ssh PID $($tunnel.Id)). Log in as gene. Stop it with: Stop-Process -Id $($tunnel.Id)" -ForegroundColor Green
+    }
+    if ($Desktop -or $Cockpit) { return }
 
     $sshArgs = $baseArgs + @("$User@$HostAddress")
     if ($RemoteCommand) { $sshArgs += $RemoteCommand }
