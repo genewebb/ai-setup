@@ -1,6 +1,6 @@
 ---
 name: corp-dual-accounts
-description: Corp domain account convention — every employee has regular + admin account; admin accounts (corp\a*) never expire; user is corp\genewe / corp\agenewe
+description: Corp domain account convention — every employee has regular + admin account; admin accounts (corp\a*) never expire; user is corp\genewe / corp\agenewe; Gene's laptop terminal + Claude shell run as corp\agenewe (not genewe) until he switches
 metadata: 
   node_type: memory
   type: reference
@@ -23,3 +23,7 @@ User's own accounts: regular `corp\genewe`, admin `corp\agenewe`.
 - **WSL distro registration is per-user too** (`HKCU\...\Lxss`). agenewe sees only `Ubuntu` + leftover `docker-desktop`; the `rancher-desktop` distro and all Rancher state live under genewe. Absence there is expected, not a missing install.
 - **Named pipes are machine-global.** Rancher Desktop launched by genewe publishes `\\.\pipe\docker_engine`, and agenewe's `docker` CLI drives it with no bridging — verified client `29.6.2-rd` / server `29.5.3`. This is the CORRECT arrangement: launching Rancher as agenewe would register a second empty WSL distro and orphan the existing images. Never run it under both accounts at once.
 - Claude cannot launch a GUI app into genewe's session — ask Gene to start Rancher Desktop himself after a reboot. See [[reference_rancher_desktop_switch]].
+
+**Gene's terminal shell on CORPLTR94 runs as `corp\agenewe`, NOT `corp\genewe` (Gene, 2026-10-17).** It is the shell where he runs `install.ps1`, `prof` and the profile commands; Claude's shell is agenewe too. He plans to move it to genewe eventually; until he says so, treat agenewe as the laptop caller.
+**Why:** prof and install treat the caller as "you". From the laptop, the caller is agenewe, so a target that runs as genewe (SMVMTR1 stream host, [[project_smvmtr1_stream_host_genewe_2026-10-17]]) needs `-User CORP\genewe` and a password prompt.
+**How to apply:** never assume the laptop terminal is genewe; when the switch happens, update this line and the prof caller notes in [[project_manageprofile_hub_2026-10-17]].

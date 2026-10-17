@@ -1,0 +1,5 @@
+# Machines prof knows (names and accounts only; every path comes from that machine's own machine profile).
+# systemDrive: only when the machine profile is not on C:.
+machines:
+  SMVMTR1:
+    users: [CORP\agenewe]

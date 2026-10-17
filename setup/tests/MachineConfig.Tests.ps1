@@ -82,6 +82,23 @@ try {
         Assert-True (@($v | Where-Object { $_.Message -like '*R18*' }).Count -eq 1)
     }
 
+    Test-Case 'Owner push column: optional, overrides Push for the owner only, validated' {
+        $c6 = Join-Path $root 'p6.md'
+        $a = Join-Path $repos 'op-a'; $b = Join-Path $repos 'op-b'
+        foreach ($r in $a, $b) { if (-not (Test-Path $r)) { git init -q $r } }
+        New-TestProfile -Path $c6 -Keys $base -Sections @{ 'Git policy' = "| Repo | Commit | Push | Worktrees | Owner push | Note |`n|---|---|---|---|---|---|`n| {ReposRoot}\op-a | yes | no | yes | yes | |`n| {ReposRoot}\op-b | yes | yes | no | | |" }
+        $p = Get-AIMachineProfile -Path $c6
+        $pa = Get-AIGitPolicy -Path $a -Profile $p
+        Assert-True (-not $pa.Push -and $pa.OwnerPush) 'Owner push = yes gives the owner push, Claude keeps Push = no'
+        $pb = Get-AIGitPolicy -Path $b -Profile $p
+        Assert-True ($pb.Push -and $pb.OwnerPush) 'blank Owner push follows Push'
+        Assert-True (@(Test-AIMachineProfile -Profile $p | Where-Object Level -eq 'error').Count -eq 0)
+        New-TestProfile -Path $c6 -Keys $base -Sections @{ 'Git policy' = "| Repo | Commit | Push | Worktrees | Owner push | Note |`n|---|---|---|---|---|---|`n| {ReposRoot}\op-a | yes | no | yes | maybe | |" }
+        $v = Test-AIMachineProfile -Profile (Get-AIMachineProfile -Path $c6)
+        Assert-True (@($v | Where-Object { $_.Level -eq 'error' -and $_.Message -like '*Owner push must be*' }).Count -eq 1)
+        Assert-True (-not (Get-AIGitPolicy -Path $a -Profile (Get-AIMachineProfile -Path $cfg)).OwnerPush) 'no row = no owner push'
+    }
+
     Test-Case 'access rows: {Key} expansion, blank key skipped and reported' {
         $p = Get-AIMachineProfile -Path $cfg
         Assert-Equal $repos ($p.Access | Where-Object PathSpec -eq '{ReposRoot}').Path

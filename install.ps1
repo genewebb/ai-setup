@@ -36,6 +36,10 @@
          profile.
     It ends with a summary of what each step did and where.
 
+    -PassphraseFromStdin (with -SecretsFile) reads the secrets passphrase as the FIRST line of standard input, before
+    anything else runs, and keeps it in memory only: never on the command line, in the environment or on disk. It is
+    how prof secrets runs this script on another machine.
+
     -WhatIf or -Check list the locations, run step 2 in its own report-only mode and make steps 3-6 report without
     writing; nothing is asked. Exit code: 0 ok; 1 you said no; 2 the machine configuration is invalid; 3 the runtime
     apply stopped on drift (see Install-AIMachine.ps1 -AcceptDrift); anything else is the failing step's error.
@@ -54,13 +58,24 @@ param(
     [switch]$Check,
     [switch]$AcceptDrift,
     [string]$SecretsFile,
+    [switch]$PassphraseFromStdin,
     [switch]$Yes
 )
 $ErrorActionPreference = 'Stop'
+# First, before any child process can inherit and read standard input: the secrets passphrase, kept in memory.
+$stdinPassphrase = $null
+if ($PassphraseFromStdin) {
+    if (-not $SecretsFile) { Write-Host 'STOP: -PassphraseFromStdin needs -SecretsFile. Nothing was changed.' -ForegroundColor Red; exit 2 }
+    $line = [Console]::In.ReadLine()
+    if ([string]::IsNullOrEmpty($line)) { Write-Host 'STOP: -PassphraseFromStdin read an empty first line. Nothing was changed.' -ForegroundColor Red; exit 2 }
+    $stdinPassphrase = ConvertTo-SecureString -String $line -AsPlainText -Force
+    $line = $null
+}
 $repo = [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\')
 $dry = $WhatIf -or $Check
 $InstallerArgs = @{}
 foreach ($n in "WhatIf", "Check", "AcceptDrift", "SecretsFile") { if ($PSBoundParameters.ContainsKey($n)) { $InstallerArgs[$n] = $PSBoundParameters[$n] } }
+if ($stdinPassphrase) { $InstallerArgs['Passphrase'] = $stdinPassphrase }
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $summary = [System.Collections.Generic.List[string]]::new()
 function Step([string]$m) { Write-Host "== $m" -ForegroundColor Cyan }

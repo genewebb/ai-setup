@@ -1,2 +1,5 @@
 # Store every file byte-for-byte: some kit scripts must stay LF, others are CRLF. No conversion on any machine.
 * -text
+# Memory indexes: both sides only ever add lines, so a merge keeps both (prof push/pull merge clones from other machines).
+memory/MEMORY.md merge=union
+memory/index_*.md merge=union

@@ -26,6 +26,8 @@
     preserved under machine-config\drift-<stamp> and changed permission rules go to the harvest queue first.
 .PARAMETER SecretsFile
     A file written by Export-AISecrets.ps1; its values fill MCP secret placeholders and secret user env vars.
+.PARAMETER Passphrase
+    The SecretsFile passphrase, in memory (install.ps1 -PassphraseFromStdin). Without it, Install-AIMcp.ps1 asks.
 #>
 [CmdletBinding()]
 param(
@@ -36,6 +38,7 @@ param(
     [switch]$Launch,
     [switch]$AcceptDrift,
     [string]$SecretsFile,
+    [securestring]$Passphrase,
     [string]$ClaudeExeDir,
     [switch]$SkipMcp
 )
@@ -583,6 +586,7 @@ try {
             $ma = @{ TemplatePath = (Join-Path $templateDir 'mcp-servers.json') }
             if ($ConfigPath) { $ma.ConfigPath = $ConfigPath }
             if ($SecretsFile) { $ma.SecretsFile = $SecretsFile }
+            if ($SecretsFile -and $Passphrase) { $ma.Passphrase = $Passphrase }
             if ($manifest) { $ma.SecretEnv = @($manifest.secretEnv) }
             & $mcpScript @ma
         }

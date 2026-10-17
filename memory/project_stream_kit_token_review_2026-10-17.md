@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 3754e77a-a9e8-42e9-b3f4-cd17c62e480c
-  modified: 2026-10-17T19:15:33.729Z
+  modified: 2026-10-17T20:32:29.776Z
 ---
 
 Gene approved "Both 1 + 2" on 2026-10-17: (1) status = PowerShell tick, (2) timed roles gated. "Runner line is
@@ -29,7 +29,10 @@ SKILL.md, Update-Task.ps1):**
 - Permission prompts: [[reference_permissionrequest_hook_scoped_autoapprove_2026-10-17]].
 
 **Stage** was `C:\scratch\streams\speedmerchants\kit-idle-display-root\` (scripts) and `...kit-idle-display-stage\`
-(SKILL files); published with `Publish-KitFile.ps1 -BaseHash`, applied with `install.ps1 -NoPull -Yes`.
+(SKILL files); published with `Publish-KitFile.ps1 -BaseHash`, applied with `install.ps1 -NoPull -Yes`, committed in
+ai-setup as 9c5b319 (2026-10-17 16:35, Gene pushes). Runners and sessions started before 16:30 still run the OLD
+script and settings: restart the stream tabs. Test trap: a live test of a timed role needs `Open-Gate` (an inbox
+item) or the runner idles for ever and the suite hangs.
 
 **Still open after this:** close kit inbox items IN-20261017025015-83de / IN-20261017100037-aa62 citing a644425;
 repoint `status-url.txt` at SMVMTR1; Gene runs `Clear-Smvmtr1Tmp.ps1` on SMVMTR1. Hard-path gate baseline on the

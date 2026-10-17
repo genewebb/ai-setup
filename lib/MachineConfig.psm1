@@ -170,6 +170,9 @@ function Get-AIMachineProfile {
             Commit    = ([string]$r['Commit']).Trim().ToLowerInvariant()
             Push      = ([string]$r['Push']).Trim().ToLowerInvariant()
             Worktrees = ([string]$r['Worktrees']).Trim().ToLowerInvariant()
+            # Optional column: the owner's own push (the pwsh profile's pushStreams). git-guard never reads it, so a
+            # row can give the owner push while Claude sessions keep Push = no. Blank or absent = same as Push.
+            OwnerPush = ([string]$r['Owner push']).Trim().ToLowerInvariant()
             Note      = [string]$r['Note']
         }
     }
@@ -333,6 +336,7 @@ function Test-AIMachineProfile {
         foreach ($col in 'Commit', 'Push', 'Worktrees') {
             if ($g.$col -notin 'yes', 'no') { & $err "Git policy: row '$($g.RepoSpec)' column $col must be yes or no (found '$($g.$col)')." }
         }
+        if ($g.OwnerPush -notin '', 'yes', 'no') { & $err "Git policy: row '$($g.RepoSpec)' column Owner push must be yes, no or blank (found '$($g.OwnerPush)')." }
         if ($g.Worktrees -eq 'yes' -and $g.Commit -ne 'yes') { & $err "Git policy: row '$($g.RepoSpec)' has Worktrees = yes with Commit = no (R18)." }
         if ($g.Push -eq 'yes' -and $g.Commit -ne 'yes') { & $warn "Git policy: row '$($g.RepoSpec)' allows Push but not Commit." }
         if (-not $g.Repo) { & $err "Git policy: row '$($g.RepoSpec)' does not resolve on this machine." }
@@ -419,6 +423,10 @@ function Get-AIGitPolicy {
         Commit    = [bool]($row -and $row.Commit -eq 'yes')
         Push      = [bool]($row -and $row.Push -eq 'yes')
         Worktrees = [bool]($row -and $row.Worktrees -eq 'yes' -and $row.Commit -eq 'yes')
+        # The owner's push (pushStreams): the Owner push column when it is set, else Push.
+        OwnerPush = [bool]($row -and $(
+                $own = if ($row.PSObject.Properties['OwnerPush']) { $row.OwnerPush } else { '' }
+                if ($own) { $own -eq 'yes' } else { $row.Push -eq 'yes' }))
     }
 }
 
@@ -487,5 +495,5 @@ function Clear-AIScratchLeftovers {
 
 Export-ModuleMember -Function Get-AIMachineConfigPath, Get-AIMachineProfile, Get-AIPath, Get-AIConfig,
     Get-AILocationKind, Test-AIPathUnder, Test-AIMachineProfile, Get-AIRepoRoot, Get-AIGitPolicy, Expand-AIValue,
-    Clear-AIScratchLeftovers
+    Clear-AIScratchLeftovers, Read-AIMarkdownTables
 Export-ModuleMember -Variable AIKeys, RequiredKeys

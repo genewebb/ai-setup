@@ -6,6 +6,7 @@ PowerShell Microsoft.PowerShell.SecretManagement
 PowerShell Microsoft.PowerShell.SecretStore
 PowerShell posh-git
 PowerShell powershell-yaml
+PowerShell PwshSpectreConsole
 WindowsPowerShell Microsoft.PowerShell.SecretManagement
 WindowsPowerShell Microsoft.PowerShell.SecretStore
 WindowsPowerShell PSReadLine

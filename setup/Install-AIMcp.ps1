@@ -16,7 +16,7 @@ param(
     [string]$SecretsFile,
     [string[]]$SecretEnv = @(),
     [string]$ClaudeJson = (Join-Path $HOME '.claude.json'),
-    [securestring]$Passphrase,   # tests only; normally typed
+    [securestring]$Passphrase,   # in memory from install.ps1 -PassphraseFromStdin (and tests); otherwise typed
     [switch]$RemoveSecretsFile
 )
 $ErrorActionPreference = 'Stop'
