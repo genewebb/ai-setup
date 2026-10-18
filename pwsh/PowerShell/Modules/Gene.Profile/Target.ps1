@@ -116,6 +116,19 @@ function Add-GeneMachine {
     return $true
 }
 
+function Resolve-GeneTargetUser {
+    <# The account a remote verb acts as: -User when given; else the one account machines.yaml lists for the machine;
+       else, for a machine it does not know, the caller. Several listed and no -User: refuse, naming them. #>
+    param([Parameter(Mandatory)][string]$Machine, [string]$User, [string]$Path = (Get-GeneMachinesPath))
+    if ($User) { return Resolve-GeneUser $User }
+    $all = Get-GeneMachines -Path $Path
+    $key = @($all.Keys | Where-Object { $_ -ieq $Machine }) | Select-Object -First 1
+    $users = @(if ($key) { @($all[$key].users) | Where-Object { $_ } })
+    if ($users.Count -eq 1) { return [string]$users[0] }
+    if ($users.Count -gt 1) { throw "$key has several accounts in machines.yaml ($($users -join ', ')). Say which one: -User <DOMAIN\name>." }
+    return Resolve-GeneUser ''
+}
+
 function Remove-GeneMachineUser {
     param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string]$User, [string]$Path = (Get-GeneMachinesPath))
     $all = Get-GeneMachines -Path $Path
@@ -217,7 +230,7 @@ function Resolve-GeneTarget {
     #>
     param([Parameter(Mandatory)][string]$Machine, [string]$User, [switch]$NeedSession, [switch]$AllowMissingProfile)
     if (Test-GeneIsLocalMachine $Machine) { throw "-Machine $Machine is this machine (the hub). push, pull, check, bootstrap, terminal and secrets work on another machine." }
-    $u = Resolve-GeneUser $User
+    $u = Resolve-GeneTargetUser -Machine $Machine -User $User
     $known = Get-GeneMachines
     $key = @($known.Keys | Where-Object { $_ -ieq $Machine }) | Select-Object -First 1
     $sysDrive = if ($key) { $known[$key].systemDrive } else { 'C' }

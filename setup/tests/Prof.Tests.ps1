@@ -65,6 +65,16 @@ try {
         Assert-True (Remove-GeneMachineUser -Name box1 -User 'CORP\a' -Path $yaml)
         Assert-Equal @('CORP\b') (Get-GeneMachines -Path $yaml)['BOX1'].users
     }
+    Test-Case 'target user: -User wins, else the one machines.yaml account, else the caller; several = refuse' {
+        $yaml = Join-Path $root 'users.yaml'
+        Assert-True (Add-GeneMachine -Name one -User 'CORP\solo' -Path $yaml)
+        Assert-True (Add-GeneMachine -Name two -User 'CORP\a' -Path $yaml)
+        Assert-True (Add-GeneMachine -Name two -User 'CORP\b' -Path $yaml)
+        Assert-Equal 'CORP\solo' (Resolve-GeneTargetUser -Machine ONE -Path $yaml)
+        Assert-Equal 'CORP\x' (Resolve-GeneTargetUser -Machine one -User 'CORP\x' -Path $yaml)
+        Assert-Equal (Get-GeneCaller) (Resolve-GeneTargetUser -Machine unknown -Path $yaml)
+        Assert-Throws { Resolve-GeneTargetUser -Machine two -Path $yaml } '*several accounts*CORP\a, CORP\b*'
+    }
     Test-Case 'machines.yaml: missing file is an empty registry' { Assert-Equal 0 (Get-GeneMachines -Path (Join-Path $root 'none.yaml')).Count }
 
     Test-Case 'target profile: first table raw and unexpanded; missing file = null' {
