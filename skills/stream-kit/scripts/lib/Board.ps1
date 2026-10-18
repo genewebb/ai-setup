@@ -2,7 +2,8 @@
 # The board is ordered when:
 #   - every dependsOn id exists and the dependsOn graph has no cycle;
 #   - no two OPEN tasks (not integrated/done, not gate/integration) share a write-set path (same path, or a wildcard
-#     entry matching it, as Test-WriteSetOverlap reads them) unless one depends on the other, directly or transitively.
+#     entry matching it, as Test-WriteSetOverlap reads them) unless one depends on the other, directly or transitively,
+#     or the path is an exact composition / registration file (ORDERED-BY-MERGE, lib\Streams.ps1 Test-MergeOrderedOverlap).
 # Two unordered open tasks on one file are built on different bases and collide at integration.
 
 function Get-BoardProblems($Tasks) {
@@ -57,7 +58,9 @@ function Get-BoardProblems($Tasks) {
         if ($anc[$a].Contains($b) -or $anc[$b].Contains($a)) { return }
         $problems.Add("UNORDERED $a / $b : $file")
     }
-    foreach ($p in $exact.Keys) { $ids = @($exact[$p] | Select-Object -Unique); for ($i = 0; $i -lt $ids.Count; $i++) { for ($j = $i + 1; $j -lt $ids.Count; $j++) { Pair $ids[$i] $ids[$j] $p } } }
+    # ORDERED-BY-MERGE: an exact composition / registration path (Test-MergeOrderedOverlap's rule) needs no order;
+    # a wildcard entry over one still does.
+    foreach ($p in $exact.Keys) { if ($p -match $script:CompositionFileRx) { continue }; $ids = @($exact[$p] | Select-Object -Unique); for ($i = 0; $i -lt $ids.Count; $i++) { for ($j = $i + 1; $j -lt $ids.Count; $j++) { Pair $ids[$i] $ids[$j] $p } } }
     foreach ($w in $wild) { foreach ($o in $all) { if ($o[1] -like $w[1] -or $w[1] -like $o[1]) { Pair $w[0] $o[0] $w[1] } } }
     , $problems
 }

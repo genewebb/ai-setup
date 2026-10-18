@@ -45,6 +45,7 @@ $report = [Collections.Generic.List[string]]::new()
             if ($t.kind -in @('gate', 'integration')) { break }
             if ($null -ne $cand -and -not $cand.Contains($o)) { continue }
             if (Test-WriteSetOverlap $t.writeSet $o.writeSet) {
+                if (Test-MergeOrderedOverlap $t.writeSet $o.writeSet) { continue }   # ORDERED-BY-MERGE: composition files only
                 if ((Test-DependsOnChain $known $t $o.id $byId) -or (Test-DependsOnChain $known $o $t.id $byId)) { continue }
                 if ($Role -eq 'integrate' -and $o.state -eq 'integrated') {
                     # landed already: a history note there would never be acted on; build on top of it instead

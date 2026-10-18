@@ -247,10 +247,10 @@ _188 skills · 12 agents · updated 2026-10-18_
 | [Stream Adhoc](../skills/stream-adhoc/SKILL.md) | v0.1. Stream kit ad-hoc role. One long interactive session per repo (addStreamTab -Role Adhoc) that takes the owner's ad-hoc change requests typed... |
 | [Stream Author](../skills/stream-author/SKILL.md) | v0.11. Stream kit skill 2 of 5. It runs unattended and never prompts. Each cycle it first takes the oldest open item in its inbox (.streams\inbox\s... |
 | [Stream Build](../skills/stream-build/SKILL.md) | v0.11. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattend... |
-| [Stream Coordinator](../skills/stream-coordinator/SKILL.md) | v0.4. Stream kit supervisor. It runs unattended under /loop and never prompts. Each tick it reads the whole board and every inbox, then keeps work... |
-| [Stream Integrate](../skills/stream-integrate/SKILL.md) | v0.18. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes,... |
+| [Stream Coordinator](../skills/stream-coordinator/SKILL.md) | v0.7. Stream kit supervisor. It runs unattended under /loop and never prompts. Each tick it reads the whole board and every inbox, then keeps work... |
+| [Stream Integrate](../skills/stream-integrate/SKILL.md) | v0.19. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes,... |
 | [Stream Kit](../skills/stream-kit/SKILL.md) | Overview and shared scripts of the stream kit, the MyLoop replacement. It has five one-role skills (stream-plan, stream-author, stream-build, strea... |
-| [Stream Plan](../skills/stream-plan/SKILL.md) | v0.12. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which grou... |
+| [Stream Plan](../skills/stream-plan/SKILL.md) | v0.15. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which grou... |
 | [Stream Status](../skills/stream-status/SKILL.md) | v0.8. Stream kit skill 5 of 5. It runs unattended every 15 minutes and never prompts, and works its own inbox at least every 10 minutes. It reads .... |
 | [Task Generator](../skills/task-generator/SKILL.md) | Azure DevOps task work item generator from User Stories |
 | [UI Styling](../skills/ui-styling/SKILL.md) | Create beautiful, accessible user interfaces with shadcn/ui components (built on Radix UI + Tailwind), Tailwind CSS utility-first styling, and canv... |

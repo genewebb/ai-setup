@@ -1445,6 +1445,144 @@ function Test-WriteSetOverlap($A, $B) {
     $false
 }
 
+# ORDERED-BY-MERGE (owner ruling 2026-10-18, kit item IN-20261018133755-8c9f): two rows may share a composition /
+# registration file with no dependsOn chain, because each only appends registration lines there and the merge orders
+# them. True only when A and B overlap and EVERY overlapping pair is the same exact path (no wildcard, no directory
+# entry) matching $script:CompositionFileRx; any other shared path still needs an order. Same regex as
+# Find-ArtificialBlockers.ps1's 'composition' kind.
+$script:CompositionFileRx = '(^|/)src/Composition/|(^|/)Program\.cs$|Module\.cs$|ServiceCollectionExtensions\.cs$|(^|/)Routes\.razor$'
+function Test-MergeOrderedOverlap($A, $B) {
+    $as = @(@($A) | Where-Object { $_ } | ForEach-Object { ([string]$_ -replace '\\', '/') -replace '^\./', '' })
+    $bs = @(@($B) | Where-Object { $_ } | ForEach-Object { ([string]$_ -replace '\\', '/') -replace '^\./', '' })
+    $found = $false
+    for ($i = 0; $i -lt $as.Count; $i++) {
+        for ($j = 0; $j -lt $bs.Count; $j++) {
+            if (-not (Test-WriteSetOverlap @($as[$i]) @($bs[$j]))) { continue }
+            $x = $as[$i]; $y = $bs[$j]
+            if ($x -ne $y -or $x -match '[\*\?\[]' -or $x.EndsWith('/') -or $x -notmatch $script:CompositionFileRx) { return $false }
+            $found = $true
+        }
+    }
+    $found
+}
+
+# The builder's side of ORDERED-BY-MERGE (kit item IN-20261018134209-b23c): a row that shares an exact composition
+# file with another open row and no dependsOn path between them (either way) may only APPEND lines there, because the
+# integrator merges such patches by their added lines. Returns one 'COMPOSITION-EDIT <path> ...' line per changed
+# composition file of $Changed whose diff in $Worktree removes or changes a line while such a peer exists; empty when
+# the patch is add-only there, or the file is the row's alone, or every sharer is ordered with it.
+function Get-CompositionEditRefusals($Tasks, [string] $Task, [string] $Worktree, [string[]] $Changed) {
+    $rows = @($Tasks | Where-Object { $_ })
+    $byId = @{}; foreach ($r in $rows) { $byId[[string]$r['id']] = $r }
+    $me = $byId[$Task]; if (-not $me) { return }
+    $ancOf = {
+        param($id)
+        $seen = [Collections.Generic.HashSet[string]]::new(); $stack = [Collections.Generic.Stack[string]]::new(); $stack.Push($id)
+        while ($stack.Count) { $c = $stack.Pop(); $r = $byId[$c]; if (-not $r) { continue }
+            foreach ($d in @($r['dependsOn'])) { if ($d -and $seen.Add([string]$d)) { $stack.Push([string]$d) } } }
+        , $seen
+    }
+    $myAnc = & $ancOf $Task
+    foreach ($p in @($Changed)) {
+        $n = ([string]$p -replace '\\', '/') -replace '^\./', ''
+        if ($n -notmatch $script:CompositionFileRx) { continue }
+        $peers = @(foreach ($r in $rows) {
+            $id = [string]$r['id']
+            if ($id -eq $Task -or [string]$r['state'] -eq 'done') { continue }
+            $hit = @(@($r['writeSet']) | Where-Object { (([string]$_ -replace '\\', '/') -replace '^\./', '') -ieq $n })
+            if (-not $hit.Count -or $myAnc.Contains($id) -or (& $ancOf $id).Contains($Task)) { continue }
+            $id })
+        if (-not $peers.Count) { continue }
+        $ns = @(& git -C $Worktree -c core.safecrlf=false diff --numstat -- $p | Where-Object { $_ })
+        $del = 0; foreach ($l in $ns) { $c = ($l -split "`t")[1]; if ($c -match '^\d+$') { $del += [int]$c } elseif ($c -eq '-') { $del++ } }
+        if ($del -gt 0) { "COMPOSITION-EDIT $n removes or changes $del line(s); shared with $($peers -join ', ') (no dependsOn order): append registration lines only, or ask the plan for an order" }
+    }
+}
+# The integrator's side of ORDERED-BY-MERGE (kit item IN-20261018134210-ede5): a patch whose `git apply --check` fails
+# on the main tree may still land when every failing section is a composition file (lib $script:CompositionFileRx)
+# whose hunks only ADD lines. Each added run is re-inserted after the unchanged lines that preceded it in the patch
+# (up to 3), or before the ones that followed it when it opened its hunk, at the one place those lines appear in main
+# now; a run already there is skipped. The result is one new patch, $OutPath: the untouched sections plus a fresh diff
+# of each merged file against main, so the apply, the reverse and the commit all work on that one patch. Returns
+# @{ Ok; Path; Files; Reason }. Not Ok (main untouched) when another file conflicts, a failing composition section
+# removes or changes a line, creates, deletes or renames a file, or an anchor is missing or not unique.
+function New-CompositionMergedPatch([string] $Repo, [string] $PatchPath, [string] $OutPath) {
+    $no = { param($why) [pscustomobject]@{ Ok = $false; Path = $null; Files = @(); Reason = $why } }
+    $raw = [IO.File]::ReadAllText($PatchPath)
+    $sections = @([regex]::Split($raw, '(?m)^(?=diff --git )') | Where-Object { $_ -match '^diff --git ' })
+    if (-not $sections.Count) { return (& $no 'no file sections in the patch') }
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) ('speedy-merge-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+    New-Item -ItemType Directory -Force $tmp | Out-Null
+    try {
+        $check = {
+            param([string] $text)
+            $f = Join-Path $tmp ('check-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.patch')
+            [IO.File]::WriteAllText($f, $text)
+            & git -C $Repo apply --check --binary --whitespace=nowarn $f 2>&1 | Out-Null
+            $LASTEXITCODE -eq 0
+        }
+        $keep = [Collections.Generic.List[string]]::new(); $toMerge = [Collections.Generic.List[object]]::new()
+        foreach ($sec in $sections) {
+            $path = if ($sec -match '^diff --git a/(.+?) b/(.+?)\r?\n') { $Matches[2] } else { '' }
+            $plain = $sec -notmatch '(?m)^(new file mode|deleted file mode|rename from|copy from|Binary files|GIT binary patch)'
+            if ($path -match $script:CompositionFileRx -and $plain -and -not (& $check $sec)) { $toMerge.Add([pscustomobject]@{ Path = $path; Text = $sec }) }
+            else { $keep.Add($sec) }
+        }
+        if (-not $toMerge.Count) { return (& $no 'the conflict is not in a composition file') }
+        if ($keep.Count -and -not (& $check ($keep -join ''))) { return (& $no 'a file outside the composition files does not apply') }
+        foreach ($m in $toMerge) {
+            $full = Join-Path $Repo $m.Path
+            if (-not (Test-Path -LiteralPath $full)) { return (& $no "$($m.Path) is missing on main") }
+            $bytes = [IO.File]::ReadAllBytes($full)
+            $bom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
+            $text = [Text.UTF8Encoding]::new($false).GetString($bytes, $(if ($bom) { 3 } else { 0 }), $bytes.Length - $(if ($bom) { 3 } else { 0 }))
+            $nl = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
+            $lines = [Collections.Generic.List[string]]::new()
+            foreach ($l in [regex]::Split($text, '(?<=\n)')) { if ($l -ne '') { $lines.Add($l) } }
+            $key = { param($s) $s.TrimEnd("`r", "`n") }
+            $hunks = [Collections.Generic.List[object]]::new(); $cur = $null
+            foreach ($pl in ($m.Text -split "`n")) {
+                $pl = $pl.TrimEnd("`r")
+                if ($pl -match '^@@ ') { $cur = [Collections.Generic.List[object]]::new(); $hunks.Add($cur); continue }
+                if ($null -eq $cur -or $pl.Length -eq 0 -or $pl[0] -eq '\') { continue }
+                if ($pl[0] -eq '-') { return (& $no "$($m.Path) removes or changes a line (not add-only)") }
+                if ($pl[0] -in ' ', '+') { $cur.Add([pscustomobject]@{ T = $pl[0]; S = $pl.Substring(1) }) }
+            }
+            foreach ($h in $hunks) {
+                for ($i = 0; $i -lt $h.Count; $i++) {
+                    if ($h[$i].T -ne '+' -or ($i -gt 0 -and $h[$i - 1].T -eq '+')) { continue }
+                    $run = @(); $j = $i; while ($j -lt $h.Count -and $h[$j].T -eq '+') { $run += $h[$j].S; $j++ }
+                    $before = @(); $k = $i - 1; while ($k -ge 0 -and $h[$k].T -eq ' ' -and $before.Count -lt 3) { $before = @($h[$k].S) + $before; $k-- }
+                    $after = @(); $k = $j; while ($k -lt $h.Count -and $h[$k].T -eq ' ' -and $after.Count -lt 3) { $after += $h[$k].S; $k++ }
+                    $anchor = if ($before.Count) { $before } else { $after }
+                    if (-not $anchor.Count) { return (& $no "$($m.Path) has an added run with no unchanged line around it") }
+                    $at = @(for ($p = 0; $p -le $lines.Count - $anchor.Count; $p++) {
+                        $ok = $true; for ($q = 0; $q -lt $anchor.Count; $q++) { if ((& $key $lines[$p + $q]) -cne $anchor[$q]) { $ok = $false; break } }
+                        if ($ok) { $p } })
+                    if ($at.Count -ne 1) { return (& $no "$($m.Path): the lines around an added run appear $($at.Count) times on main (need exactly 1)") }
+                    $ins = if ($before.Count) { $at[0] + $anchor.Count } else { $at[0] }
+                    $there = $ins + $run.Count -le $lines.Count
+                    for ($q = 0; $there -and $q -lt $run.Count; $q++) { if ((& $key $lines[$ins + $q]) -cne $run[$q]) { $there = $false } }
+                    if ($there) { continue }
+                    if ($ins -gt 0 -and -not $lines[$ins - 1].EndsWith("`n")) { $lines[$ins - 1] += $nl }
+                    $lines.InsertRange($ins, [string[]]@($run | ForEach-Object { $_ + $nl }))
+                }
+            }
+            foreach ($side in 'a', 'b') { New-Item -ItemType Directory -Force (Split-Path (Join-Path $tmp "$side/$($m.Path)")) | Out-Null }
+            [IO.File]::WriteAllBytes((Join-Path $tmp "a/$($m.Path)"), $bytes)
+            $pre = if ($bom) { [byte[]](0xEF, 0xBB, 0xBF) } else { [byte[]]@() }
+            [IO.File]::WriteAllBytes((Join-Path $tmp "b/$($m.Path)"), [byte[]]($pre + [Text.UTF8Encoding]::new($false).GetBytes(($lines -join ''))))
+            $out = Join-Path $tmp ('diff-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.patch')
+            & git -C $tmp -c core.autocrlf=false diff --no-index --binary --src-prefix= --dst-prefix= "--output=$out" -- "a/$($m.Path)" "b/$($m.Path)" 2>&1 | Out-Null
+            if (-not (Test-Path -LiteralPath $out) -or (Get-Item -LiteralPath $out).Length -eq 0) { continue }
+            $keep.Add([IO.File]::ReadAllText($out))
+        }
+        $merged = $keep -join ''
+        if (-not (& $check $merged)) { return (& $no 'the merged patch does not apply') }
+        [IO.File]::WriteAllText($OutPath, $merged)
+        [pscustomobject]@{ Ok = $true; Path = $OutPath; Files = @($toMerge | ForEach-Object { $_.Path }); Reason = '' }
+    } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+}
 # A write-set index for comparing many rows at once (Add-Tasks.ps1: every new row against every open row). An entry
 # with no wildcard character and no trailing '/' overlaps another such entry only when the two are equal ignoring case,
 # which is all Test-WriteSetOverlap can find for that pair, so those go in a dictionary; a row with any pattern or

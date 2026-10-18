@@ -1,6 +1,6 @@
 ---
 name: stream-coordinator
-description: v0.4. Stream kit supervisor. It runs unattended under /loop and never prompts. Each tick it reads the whole board and every inbox, then keeps work flowing. It works the kit inbox (fix, test, publish), stands in for stream-plan when no planner session is live (write-set and dependsOn revisions through Revise-Task.ps1, blocked-task release, follow-up tasks), and diagnoses stuck flow: dead or silent sessions, stale work to salvage, starved fix tasks, false flags, and memory pressure. It logs one tick line per run and notifies the owner only for a decision only the owner can make. Use for /stream-coordinator (run under /loop 20m; every tick works the inboxes), /stream-coordinator once, and /stream-coordinator blockers.
+description: v0.7. Stream kit supervisor. It runs unattended under /loop and never prompts. Each tick it reads the whole board and every inbox, then keeps work flowing. It works the kit inbox (fix, test, publish), stands in for stream-plan when no planner session is live (write-set and dependsOn revisions through Revise-Task.ps1, blocked-task release, follow-up tasks), and diagnoses stuck flow: dead or silent sessions, stale work to salvage, starved fix tasks, false flags, and memory pressure. It logs one tick line per run and notifies the owner only for a decision only the owner can make. Use for /stream-coordinator (run under /loop 20m; every tick works the inboxes), /stream-coordinator once, and /stream-coordinator blockers.
 ---
 
 # stream-coordinator
@@ -176,6 +176,14 @@ Do these in order. Keep each step short; the whole tick should take minutes.
      Fix it through step 2's procedure, even without an inbox item.
      - Examples from 9/28: `-AddWriteSet` refused files of landed tasks; status liveness ignored beats; claim order put
        integration fix tasks last; `Export-TaskPatch` dropped deletions; SUSPECT fired on CS2012 build locks.
+   - **Artificial blockers.** Run `Find-ArtificialBlockers.ps1 -Repo <repo> -Session <coord id>` (read-only). When no
+     planner is live, apply the candidates with `Find-ArtificialBlockers.ps1 -Repo <repo> -Session <coord id> -Apply`
+     (one `Revise-Task.ps1` batch per candidate keeping every order through the moved row explicit; it prints `APPLY
+     ... claimable before <n> after <n>`), then `Test-BoardOrder.ps1` must print `CLEAN`; with a live planner, file one
+     `stream-plan` item naming the candidates.
+   - **Test blockers.** Run `Find-TestBlockers.ps1 -Repo <repo> -Session <coord id>` (read-only). When no planner is
+     live, act on the `plan`-routed flags as stream-plan inbox watch step 3 says; with a live planner, file one
+     `stream-plan` item naming them. `live-stack` flags go to the owner queue once per row.
    - **False flags.** Recognise these and do not act on them:
      - an integration task "building" for hours while its group's fix tasks run: the fix-retest cycle;
      - a conditional inbox note whose condition does not hold yet;

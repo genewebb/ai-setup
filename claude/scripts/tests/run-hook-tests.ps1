@@ -28,7 +28,9 @@ function Test-Hook {
     # The child pwsh inherits this process's environment, so a developer session that has silenced a hook for
     # itself (e.g. $env:CLAUDE_DISABLED_HOOKS='gateguard') would silence it under test too and the case would fail
     # for the wrong reason. Clear the switches first; a case that names one in -Env still wins.
-    $vars = @{ CLAUDE_DISABLED_HOOKS = '' }
+    # A stream unit's own STREAM_UNIT_SESSION / STREAM_UNIT_OUT would also leak in: the log line would read
+    # unit=<that session> and every test approval would land in the live unit's approvals log. Clear them too.
+    $vars = @{ CLAUDE_DISABLED_HOOKS = ''; STREAM_UNIT_SESSION = ''; STREAM_UNIT_OUT = '' }
     foreach ($k in $Env.Keys) { $vars[$k] = $Env[$k] }
     $saved = @{}
     foreach ($k in $vars.Keys) {
@@ -326,7 +328,11 @@ $dpgSilent = @(
     "Remove-Item -LiteralPath $wtW\x\bin -Recurse",
     'cmd /c mklink /J "$t\tree\sub\link" "$t\target" | Out-Null; Remove-Item -LiteralPath "$t\tree" -Recurse -Force',
     "cmd /c rd /s /q $scW\x",
-    "robocopy $scW\a $scW\b /MIR /R:1; Remove-Item $scW\a -Recurse"
+    "robocopy $scW\a $scW\b /MIR /R:1; Remove-Item $scW\a -Recurse",
+    # A quoted nested command is checked token by token: the 2026-10-18 builder hang read the whole
+    # "(Start-Process ... 'C:/...' ...).Id" string as one token, stopped its option prefix at the drive colon and
+    # took "/Users/..." for a POSIX absolute (kit item IN-20261018050026-e429).
+    "cd $rpM/speedmerchants && rm -f .streams/logs/x.txt; pwsh -NoProfile -Command `"(Start-Process pwsh -WindowStyle Hidden -ArgumentList '-NoProfile','-File','$($rpF)/x/Invoke-Grader.ps1','-Root','$($wtW -replace '\\', '/')/x' -RedirectStandardOutput '$rpF/speedmerchants/.streams/logs/x.out.txt' -PassThru).Id`""
 )
 # Rows with the delete right (whole working trees, ~\.claude) are trusted too; their cases are built from this
 # machine's rows. The 8.3 form of THIS profile expands to the same root as its long spelling; another account's
@@ -362,7 +368,8 @@ $dpgAsk = @(
     'rm -rf /c',
     'Remove-Item -LiteralPath C:\devopslocal\repos\x\bin -Recurse',   # retired root: no longer trusted
     'cmd /c echo x; rm -rf /c',
-    'cmd /c rd /s /q C:\Users\agenewe\Documents\x'
+    'cmd /c rd /s /q C:\Users\agenewe\Documents\x',
+    'rm -f x.txt; pwsh -NoProfile -Command "Start-Process pwsh -ArgumentList ''-File'',''C:/Users/agenewe/Documents/x.ps1''"'
 ) + $dpgAskExtra
 foreach ($c in $dpgAsk) {
     Test-Hook -Name "dpg: ask    | $c" -ScriptPath $dpg -Json (New-BashJson $c) `
