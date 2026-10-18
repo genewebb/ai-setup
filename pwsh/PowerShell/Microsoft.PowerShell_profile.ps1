@@ -23,6 +23,11 @@ $global:GeneMachineDefaults = [ordered]@{
     CursorRulesDir        = 'D:\repos\cursor-rules-templates'
     LocalSpeedSecretsFile = 'D:\secrets\corpltr94.localspeed.json'
     PackageShare          = '\\CORPNAS01\RnD\Utilities\SpeedMerchants'
+    # Second publish target (Publish-GeneSharedBits): blank SharedBitsHost = off.
+    SharedBitsHost        = ''
+    SharedBitsShare       = ''
+    SharedBitsKeyScript   = ''
+    SharedBitsStaging     = ''
     VaultDocsRoot         = 'Q:\Work\Work\99 Documentation'
     MarkitdownVenv        = '%USERPROFILE%\.venvs\markitdown'
     MarkitdownOcrScript   = 'C:\devopslocal\powershellscripts\ocr_pdf.py'
@@ -1062,6 +1067,115 @@ Set-Alias -Name ntab -Value addnew -ErrorAction SilentlyContinue
 # DevOps commands (lazy-loaded)
 # -----------------------------
 
+function Publish-GeneSharedBits {
+    <#
+        Second publish target for the dp* -Package tail (Publish-SpeedMerchantsPackage): copies the freshly built
+        setup exes to SharedBitsShare and prunes STRICTLY-OLDER versions of the SAME product there, the same rule
+        as the team share. Off while SharedBitsHost is blank in this machine's config.
+
+        SharedBitsShare is SMVMTR1's S: (an Azure Files share). Outbound port 445 to Azure is blocked on the
+        laptop's network, so the laptop cannot open it; SharedBitsHost can. The exes are staged on that host
+        through its admin share (SharedBitsStaging is a path on the host), and a remote session there copies
+        and prunes. The storage key is read ON the host from SharedBitsKeyScript (the `$AccountKey = "..."` line
+        of MapDrive.ps1), used for a connection that lives only in that session, and never sent back: the
+        session returns status lines only. Best-effort like the team share: every failure is a warning and
+        the packages stay in the bits folder.
+    #>
+    param([Parameter(Mandatory)][object[]]$Plan, [Parameter(Mandatory)][string]$BitsDir)
+
+    $relayHost = $global:GeneMachine.SharedBitsHost
+    if (-not $relayHost) { return }
+    $share     = $global:GeneMachine.SharedBitsShare
+    $keyScript = $global:GeneMachine.SharedBitsKeyScript
+    $staging   = $global:GeneMachine.SharedBitsStaging
+    if (-not ($share -and $keyScript -and $staging)) {
+        Write-Warning "Shared bits skipped: SharedBitsHost is set but SharedBitsShare, SharedBitsKeyScript or SharedBitsStaging is blank in $global:GeneMachineConfigPath."
+        return
+    }
+    if ($staging -notmatch '^(?<d>[A-Za-z]):\\(?<rest>.+)$') {
+        Write-Warning "Shared bits skipped: SharedBitsStaging must be a local path on $relayHost (e.g. C:\ProgramData\GeneSharedBits), not '$staging'."
+        return
+    }
+    $stagingUnc = "\\$relayHost\$($Matches.d)`$\$($Matches.rest)"
+
+    # 1. Stage the exes on the host (laptop -> host admin share; the host -> Azure leg is step 2).
+    $names = @($Plan | ForEach-Object { $_.Built.Name })
+    try { New-Item -ItemType Directory -Path $stagingUnc -Force -ErrorAction Stop | Out-Null }
+    catch {
+        Write-Warning "Shared bits skipped: cannot reach $stagingUnc ($($_.Exception.Message)) - package(s) left in $BitsDir."
+        return
+    }
+    Write-Host "Staging $($names.Count) package(s) on $relayHost for $share..." -ForegroundColor Yellow
+    $null = & robocopy $BitsDir $stagingUnc @names /J /R:1 /W:1 /NFL /NDL /NJH /NJS /NP
+    if ($LASTEXITCODE -ge 8) {
+        Write-Warning "Shared bits skipped: staging on $relayHost failed (robocopy exit $LASTEXITCODE) - package(s) left in $BitsDir."
+        return
+    }
+
+    # 2. Copy + prune on the host. Only Level/Text lines come back.
+    $items = @($Plan | ForEach-Object {
+        [pscustomobject]@{ Name = $_.Built.Name; Length = $_.Built.Length; Filter = $_.Filter; Version = [string]$_.Version }
+    })
+    try {
+        $lines = Invoke-Command -ComputerName $relayHost -ErrorAction Stop -ArgumentList $share, $keyScript, $staging, $items -ScriptBlock {
+            param($Share, $KeyScript, $Staging, $Items)
+            $out = [System.Collections.Generic.List[object]]::new()
+            function Say([string]$Level, [string]$Text) { $out.Add([pscustomobject]@{ Level = $Level; Text = $Text }) }
+            $root = $null
+            try {
+                if ($Share -notmatch '^\\\\(?<srv>[^\\]+)\\(?<sh>[^\\]+)') { Say 'Warn' "SharedBitsShare is not a UNC path: $Share"; return }
+                $root    = "\\$($Matches.srv)\$($Matches.sh)"
+                $account = $Matches.srv.Split('.')[0]
+                $hit = Select-String -LiteralPath $KeyScript -Pattern '^\s*\$AccountKey\s*=\s*"([^"]+)"' -ErrorAction SilentlyContinue | Select-Object -First 1
+                if (-not $hit) { Say 'Warn' "No `$AccountKey line in $KeyScript on $env:COMPUTERNAME."; $root = $null; return }
+                $null = & net.exe use $root "/user:Azure\$account" $hit.Matches[0].Groups[1].Value 2>&1
+                $hit = $null
+                if ($LASTEXITCODE -ne 0) { Say 'Warn' "Could not connect $root from $env:COMPUTERNAME (net use exit $LASTEXITCODE)."; $root = $null; return }
+
+                New-Item -ItemType Directory -Path $Share -Force -ErrorAction Stop | Out-Null
+                $existing = @(Get-ChildItem -LiteralPath $Share -Filter '*-Setup-*.exe' -File -ErrorAction Stop)
+                foreach ($i in $Items) {
+                    $on = $existing | Where-Object { $_.Name -eq $i.Name } | Select-Object -First 1
+                    if ($on -and $on.Length -eq $i.Length) {
+                        Say 'Gray' "Already on shared bits, upload skipped: $($i.Name)"
+                    }
+                    else {
+                        $null = & robocopy $Staging $Share $i.Name /J /R:1 /W:1 /NFL /NDL /NJH /NJS /NP
+                        if ($LASTEXITCODE -ge 8) { Say 'Warn' "robocopy to $Share failed for $($i.Name) (exit $LASTEXITCODE); nothing pruned for it."; continue }
+                        Say 'Ok' "Copied $($i.Name) -> $Share"
+                    }
+                    # Prune against the listing taken before any copy, so a sibling product's fresh upload is never seen.
+                    $version = [version]$i.Version
+                    foreach ($f in $existing) {
+                        if ($f.Name -notlike $i.Filter -or $f.Name -eq $i.Name) { continue }
+                        if ($f.Name -notmatch '-Setup-(?<v>\d+\.\d+\.\d+)\.exe$') { Say 'Warn' "Unrecognized package name left in shared bits: $($f.Name)"; continue }
+                        if ([version]$Matches.v -ge $version) { Say 'Warn' "Newer package kept in shared bits: $($f.Name) (built $version is older)."; continue }
+                        try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; Say 'Gray' "Removed older package from shared bits: $($f.Name)" }
+                        catch { Say 'Warn' "Could not remove old package from shared bits $($f.Name): $($_.Exception.Message)" }
+                    }
+                }
+            }
+            catch { Say 'Warn' "Shared bits on ${env:COMPUTERNAME}: $($_.Exception.Message)" }
+            finally {
+                foreach ($i in $Items) { Remove-Item -LiteralPath (Join-Path $Staging $i.Name) -Force -ErrorAction SilentlyContinue }
+                if ($root) { $null = & net.exe use $root /delete /y 2>&1 }
+                $out
+            }
+        }
+    }
+    catch {
+        Write-Warning "Shared bits: the remote session on $relayHost failed ($($_.Exception.Message)) - package(s) left in $BitsDir."
+        return
+    }
+    foreach ($l in @($lines)) {
+        switch ($l.Level) {
+            'Ok'    { Write-Host $l.Text -ForegroundColor Green }
+            'Gray'  { Write-Host $l.Text -ForegroundColor DarkGray }
+            default { Write-Warning $l.Text }
+        }
+    }
+}
+
 function Publish-SpeedMerchantsPackage {
     <#
         Shared tail step for dpspeed / dpcrewchief / dpdatagen / dpmutate -Package and for dpall:
@@ -1071,7 +1185,8 @@ function Publish-SpeedMerchantsPackage {
         warning, so a downgrade rebuild can never destroy it). Reached only when packaging succeeded
         (the repo scripts throw on any failure). Best-effort: an unreachable share warns and never
         fails the build - the package is still in C:\Bits. -BuiltAfter guards against re-publishing a
-        stale exe.
+        stale exe. Then the same packages go to the shared bits (Publish-GeneSharedBits, SMVMTR1's S:)
+        when SharedBitsHost is set, whether or not the team share was reachable.
 
         -Product takes a LIST so dpall hands over all four products in ONE call. That is what makes
         the share optimisations possible. Measured 2026-08-25 against CORPNAS01, which moves only
@@ -1170,6 +1285,7 @@ function Publish-SpeedMerchantsPackage {
 
     # 3. ONE share listing for the whole batch; it doubles as the reachability probe.
     $shareItems = $null
+    $shareOk = $true
     try {
         $shareItems = @(Get-ChildItem -Path $share -Filter '*-Setup-*.exe' -File -ErrorAction Stop)
     }
@@ -1182,49 +1298,54 @@ function Publish-SpeedMerchantsPackage {
         }
         catch {
             Write-Warning "Share not reachable: $share - package(s) left in $bits."
-            return
+            $shareOk = $false
         }
     }
 
-    # 4. Same name at the same byte length means the share already has this exact build: skip ~45s.
-    $toCopy = foreach ($item in $plan) {
-        $onShare = $shareItems | Where-Object { $_.Name -eq $item.Built.Name } | Select-Object -First 1
-        if ($onShare -and $onShare.Length -eq $item.Built.Length) {
-            Write-Host ("Already on share, upload skipped: {0} ({1:N1} MB)" -f $item.Built.Name, ($item.Built.Length / 1MB)) -ForegroundColor DarkGray
-            continue
+    if ($shareOk) {
+        # 4. Same name at the same byte length means the share already has this exact build: skip ~45s.
+        $toCopy = foreach ($item in $plan) {
+            $onShare = $shareItems | Where-Object { $_.Name -eq $item.Built.Name } | Select-Object -First 1
+            if ($onShare -and $onShare.Length -eq $item.Built.Length) {
+                Write-Host ("Already on share, upload skipped: {0} ({1:N1} MB)" -f $item.Built.Name, ($item.Built.Length / 1MB)) -ForegroundColor DarkGray
+                continue
+            }
+            $item
         }
-        $item
-    }
-    $toCopy = @($toCopy)
+        $toCopy = @($toCopy)
 
-    # 5. Upload in parallel. robocopy exit codes below 8 are its success range; 8 and up is a real
-    #    failure. robocopy also skips a byte- and timestamp-identical file on its own, which is a
-    #    harmless second line of defence behind the check in step 4.
-    $copyResults = @()
-    if ($toCopy.Count -gt 0) {
-        Write-Host "Uploading $($toCopy.Count) package(s) to $share..." -ForegroundColor Yellow
-        $copyResults = $toCopy | ForEach-Object -ThrottleLimit $toCopy.Count -Parallel {
-            $name = $_.Built.Name
-            $out  = & robocopy $using:bits $using:share $name /J /R:1 /W:1 /NFL /NDL /NJH /NJS /NP 2>&1
-            [pscustomobject]@{ FileName = $name; Code = $LASTEXITCODE; Output = ($out -join ' ').Trim() }
+        # 5. Upload in parallel. robocopy exit codes below 8 are its success range; 8 and up is a real
+        #    failure. robocopy also skips a byte- and timestamp-identical file on its own, which is a
+        #    harmless second line of defence behind the check in step 4.
+        $copyResults = @()
+        if ($toCopy.Count -gt 0) {
+            Write-Host "Uploading $($toCopy.Count) package(s) to $share..." -ForegroundColor Yellow
+            $copyResults = $toCopy | ForEach-Object -ThrottleLimit $toCopy.Count -Parallel {
+                $name = $_.Built.Name
+                $out  = & robocopy $using:bits $using:share $name /J /R:1 /W:1 /NFL /NDL /NJH /NJS /NP 2>&1
+                [pscustomobject]@{ FileName = $name; Code = $LASTEXITCODE; Output = ($out -join ' ').Trim() }
+            }
         }
-    }
-    foreach ($r in @($copyResults)) {
-        if ($r.Code -lt 8) {
-            Write-Host "Copied $($r.FileName) -> $share" -ForegroundColor Green
+        foreach ($r in @($copyResults)) {
+            if ($r.Code -lt 8) {
+                Write-Host "Copied $($r.FileName) -> $share" -ForegroundColor Green
+            }
+            else {
+                Write-Warning "robocopy failed for $($r.FileName) (exit $($r.Code)): $($r.Output) - the package is still in $bits."
+            }
         }
-        else {
-            Write-Warning "robocopy failed for $($r.FileName) (exit $($r.Code)): $($r.Output) - the package is still in $bits."
-        }
-    }
-    $failedNames = @(@($copyResults) | Where-Object { $_.Code -ge 8 } | ForEach-Object { $_.FileName })
+        $failedNames = @(@($copyResults) | Where-Object { $_.Code -ge 8 } | ForEach-Object { $_.FileName })
 
-    # 6. Prune the share against the pre-run snapshot (see the header note on why it is a snapshot).
-    foreach ($item in $plan) {
-        if ($failedNames -contains $item.Built.Name) { continue }
-        Remove-OlderPackages -Existing $shareItems -Filter $item.Filter -Version $item.Version `
-            -KeepName $item.Built.Name -FolderLabel 'share'
+        # 6. Prune the share against the pre-run snapshot (see the header note on why it is a snapshot).
+        foreach ($item in $plan) {
+            if ($failedNames -contains $item.Built.Name) { continue }
+            Remove-OlderPackages -Existing $shareItems -Filter $item.Filter -Version $item.Version `
+                -KeepName $item.Built.Name -FolderLabel 'share'
+        }
     }
+
+    # 7. The shared bits on SMVMTR1's S: (off while SharedBitsHost is blank).
+    Publish-GeneSharedBits -Plan $plan -BitsDir $bits
 }
 
 function dpspeed {
@@ -1338,6 +1459,7 @@ function dpspeed {
             elseif ($Bump) { Write-Host "[WhatIf] Would bump the PATCH version (2.5.0 -> 2.5.1) in TestAuto.Web.csproj first." -ForegroundColor Yellow }
             Write-Host "[WhatIf] Would produce: $global:GeneBitsDir\TestAuto-Setup-<version>.exe" -ForegroundColor Yellow
             Write-Host "[WhatIf] Would copy it to $($global:GeneMachine.PackageShare) and remove older TestAuto-Setup-*.exe there." -ForegroundColor Yellow
+            if ($global:GeneMachine.SharedBitsHost) { Write-Host "[WhatIf] Would also copy it to $($global:GeneMachine.SharedBitsShare) through $($global:GeneMachine.SharedBitsHost) and remove older versions there." -ForegroundColor Yellow }
             return
         }
         $packStarted = Get-Date
@@ -1659,6 +1781,7 @@ function dpcrewchief {
             elseif ($Bump) { Write-Host "[WhatIf] Would bump the PATCH version (x.y.z -> x.y.z+1) in Directory.Build.props first." -ForegroundColor Yellow }
             Write-Host "[WhatIf] Would produce: $global:GeneBitsDir\CrewChief-Setup-<version>.exe" -ForegroundColor Yellow
             Write-Host "[WhatIf] Would copy it to $($global:GeneMachine.PackageShare) and remove older CrewChief-Setup-*.exe there." -ForegroundColor Yellow
+            if ($global:GeneMachine.SharedBitsHost) { Write-Host "[WhatIf] Would also copy it to $($global:GeneMachine.SharedBitsShare) through $($global:GeneMachine.SharedBitsHost) and remove older versions there." -ForegroundColor Yellow }
             return
         }
         $packStarted = Get-Date
@@ -1853,6 +1976,7 @@ function dpdatagen {
             elseif ($Bump) { Write-Host "[WhatIf] Would bump the PATCH version (x.y.z -> x.y.z+1) in TestData.Generation\Directory.Build.props first." -ForegroundColor Yellow }
             Write-Host "[WhatIf] Would produce: $global:GeneBitsDir\TestDataGeneration-Setup-<version>.exe" -ForegroundColor Yellow
             Write-Host "[WhatIf] Would copy it to $($global:GeneMachine.PackageShare) and remove older TestDataGeneration-Setup-*.exe there." -ForegroundColor Yellow
+            if ($global:GeneMachine.SharedBitsHost) { Write-Host "[WhatIf] Would also copy it to $($global:GeneMachine.SharedBitsShare) through $($global:GeneMachine.SharedBitsHost) and remove older versions there." -ForegroundColor Yellow }
             return
         }
         $packStarted = Get-Date
@@ -2058,6 +2182,7 @@ function dpmutate {
             elseif ($Bump) { Write-Host "[WhatIf] Would bump the PATCH version (x.y.z -> x.y.z+1) in TestData.Mutation\Directory.Build.props first." -ForegroundColor Yellow }
             Write-Host "[WhatIf] Would produce: $global:GeneBitsDir\TestDataGenerationAndMutation-Setup-<version>.exe" -ForegroundColor Yellow
             Write-Host "[WhatIf] Would copy it to $($global:GeneMachine.PackageShare) and remove older TestDataGenerationAndMutation-Setup-*.exe there." -ForegroundColor Yellow
+            if ($global:GeneMachine.SharedBitsHost) { Write-Host "[WhatIf] Would also copy it to $($global:GeneMachine.SharedBitsShare) through $($global:GeneMachine.SharedBitsHost) and remove older versions there." -ForegroundColor Yellow }
             return
         }
         $packStarted = Get-Date
@@ -2540,6 +2665,7 @@ function dpall {
         }
         else {
             Write-Host "[WhatIf] Would then copy each package to $($global:GeneMachine.PackageShare) and prune strictly-older versions of the SAME product." -ForegroundColor Yellow
+            if ($global:GeneMachine.SharedBitsHost) { Write-Host "[WhatIf] Would also copy it to $($global:GeneMachine.SharedBitsShare) through $($global:GeneMachine.SharedBitsHost) and remove older versions there." -ForegroundColor Yellow }
         }
         return
     }
