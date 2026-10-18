@@ -212,6 +212,14 @@ do the held item's work (an item). Never run them again.
    - an impact list that misses an obvious caller or test of a changed file;
    - a RED that did not fail for the clause's stated reason.
    Its verdict goes to `.streams\verdicts\<task>.md`, auto-accepted decisions listed in it.
+   - **Run the verifier in the FOREGROUND: an Agent call without `run_in_background`, and no Monitor, sleep loop or
+     polling to wait for it.** The call returns with the verdict, and that one result is the only turn it costs. A
+     background verifier plus a "Wait for verifier" Monitor wakes the session on each event, and every wake-up turn
+     re-reads the whole context. The monitors also outlive the unit: on 2026-10-17 a G11.T003 build recorded `built`
+     with three still running, Claude Code answered the mod's `/exit` with its "Background work is running" dialog,
+     and the session sat until the runner's `RESULT-GRACE` ended it 120 s later. If any background task, Monitor or
+     shell is still running when the row's final state is recorded, stop it (TaskStop, or the PID's
+     `Stop-Process`) before `unit_done`.
    - **Give the verifier its paths in forward-slash form, and tell it to quote every path in the Bash tool.** The
      verifier's Bash tool is Git Bash, run in the repo root, where an unquoted backslash is an escape. On 2026-10-04 a
      G3.T057 verifier ran `pwsh ... > D:\tmp\claude\...\scratchpad\verify-run.txt` unquoted: bash stripped every <!-- history -->

@@ -1057,9 +1057,15 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     [void](& "$S\Build-StatusPage.ps1" -Repo $pr -Session status-p -Out $ppg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
     $pph = Get-Content -Raw $ppg
     Case 'the page shows the left to plan tile right after ready to author and left to author, the column and the no-group row' ($pph -match '<span>ready to author</span></div>\s*<div class="tile"[^>]*><b>\d+</b><span>left to author[^<]*</span></div>\s*<a class="tile" href="#left-to-plan"[^>]*><b>2</b><span>left to plan &middot; of 5 clauses' -and $pph -match '<th id="left-to-plan">Left to plan</th>' -and $pph -match '(?s)Not in any group.{0,600}?<td class="num" title="AC-B-002">1</td>' -and $pph -match '(?s)P1</span></td>.{0,1500}?<td class="num" title="AC-A-003">1</td>') (([regex]::Match($pph, 'planned</span>.{0,300}')).Value)
+    # Totals line (owner ask 2026-10-16, lost with the CORPVM17 kit copy and restored 2026-10-17): one line under the
+    # Priority categories title, before the table, labelled like the columns and summing the All categories row.
+    $ptl = [regex]::Match($pph, '(?s)<h2>Priority categories</h2>\s*<div class="cat-totals"[^>]*>(.*?)</div>\s*<style>.*?<table class="cats">')
+    $ptv = [ordered]@{}; foreach ($m in [regex]::Matches($ptl.Groups[1].Value, '<span class="muted">([^<]+)</span> <b>([^<]+)</b>')) { $ptv[$m.Groups[1].Value] = $m.Groups[2].Value }
+    $ptr = [regex]::Matches([regex]::Match($pph, '(?s)<tr class="total">.*?</tr>').Value, '<td class="num[^"]*"[^>]*>([^<]*)<') | ForEach-Object { $_.Groups[1].Value }
+    Case 'the categories totals line sits under the title, labelled like the columns, and equals the All categories row' ($ptl.Success -and (@($ptv.Keys) -join ',') -eq 'Done,To go,Waiting,Free,Authoring,Ticketed,Building,Built,Blocked,Left to plan' -and (@($ptv.Values)[0..8] -join ',') -eq (@($ptr)[0..8] -join ',') -and $ptv['Left to plan'] -eq '2') "line: $(@($ptv.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' ') row: $(@($ptr) -join ',')"
     $pDoc.groups[0].state = 'closed'
     $pDoc | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $pr '.streams\tasks.json') -Encoding utf8
-    $pj2 = (& "$S\Get-StreamStatus.ps1" -Repo $pr -Json | ConvertFrom-Json).leftToPlan
+    $pj2 =(& "$S\Get-StreamStatus.ps1" -Repo $pr -Json | ConvertFrom-Json).leftToPlan
     $pst2 = @(& "$S\Get-StreamStatus.ps1" -Repo $pr)
     [void](& "$S\Build-StatusPage.ps1" -Repo $pr -Session status-p -Out $ppg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
     $pph2 = Get-Content -Raw $ppg

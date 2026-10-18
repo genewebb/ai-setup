@@ -243,6 +243,11 @@ function PipeCell([object[]] $ts, [string] $cls) {
   '<td class="num ' + $cls + '" title="' + (E ((@($ts | ForEach-Object { [string]$_.id }) | Sort-Object) -join ', ')) + '">' + $n + '</td>'
 }
 W '<section><h2>Priority categories</h2>'
+# Totals line (owner ask 2026-10-16): the All categories sums in one line under the title, before the table, so the
+# board's whole position reads without scrolling to the table's last row. It counts EVERY category, the paused ones
+# below the line included, exactly as the All categories row does. The sums are known only once the rows are drawn, so
+# the line is inserted at this offset afterwards. Its labels are the table's column names.
+$catTotLineAt = $sb.Length
 W '<style>table.cats tr.prio-line td{border-top:5px solid var(--accent);border-bottom:1px solid var(--accent);padding:8px 10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.04em;font-size:12px}table.cats tr.below td{opacity:.72}table.cats tr.prio-done td{border-top:5px solid var(--ticketed);border-bottom:1px solid var(--ticketed);padding:8px 10px;font-weight:700;color:var(--ticketed);text-transform:uppercase;letter-spacing:.04em;font-size:12px}</style>'
 W ('<div class="scroll"><table class="cats"><thead><tr><th>Category</th><th>Done</th><th>To go</th><th>&mdash; waiting</th><th>&mdash; free</th>' + (($pipeBuckets | ForEach-Object { '<th>' + $pipeLabels[$_] + '</th>' }) -join '') + '<th>Total</th><th id="left-to-plan">Left to plan</th><th>Progress</th><th>Work left</th><th>Rate</th><th>Predicted finish</th></tr></thead><tbody>')
 $rowIx = 0
@@ -310,6 +315,13 @@ W ('<td class="num">' + $bf.ratePerHour + ' <small class="muted">min/h</small></
 W ('<td>' + (FinCell $bf) + '</td>')
 W '</tr>'
 W '</tbody></table></div>'
+$ltpTot = if ($ltpNone -and $ltpNone.known) { [string]$ltpNone.total } else { '?' }
+$catTotItems = @(
+  @('Done', $catDoneAll), @('To go', $catTogoAll), @('Waiting', $catWaitAll), @('Free', $catFreeAll),
+  @('Authoring', $pipeAll['ticketing']), @('Ticketed', $pipeAll['ticketed']), @('Building', $pipeAll['building']),
+  @('Built', $pipeAll['built']), @('Blocked', $pipeAll['blocked']), @('Left to plan', $ltpTot))
+[void]$sb.Insert($catTotLineAt, ('<div class="cat-totals" style="display:flex;flex-wrap:wrap;gap:6px 18px;margin:0 0 10px;font-size:13px">' +
+  (($catTotItems | ForEach-Object { '<span><span class="muted">' + $_[0] + '</span> <b>' + $_[1] + '</b></span>' }) -join '') + '</div>' + [Environment]::NewLine))
 W '<div class="note">Done counts tasks that are integrated or done. To go counts everything else, blocked included. Waiting is the part of To go held by a dependency that has not landed yet; free is the rest, which needs only a builder. Authoring, ticketed, building, built and blocked split To go by pipeline stage: authoring is a row a live author is writing the ticket for, built is a row waiting for the integrator. Hover a number for its task ids. Above the line: the priority list (<code>.streams\config.json</code> focus.groups), numbered in the order it is worked, then the completed groups. Below the line: open groups left out of the priority list, paused until the owner adds them.</div>'
 W ('<div class="note"><b>Left to plan</b> counts goals no row exists for yet: the acceptance clauses of READY requirement files under docs\requirements that no row names in its why, title, tests or ticket. A category counts the requirements its scope includes; Not in any group counts the ones no scope includes. ' +
    'It is shown only when the match can be trusted: a closed group was built in full, so if a closed group has clauses no row names, a clause no row names may still be built, and the count reads ? with the reason on hover. Hover a number for the clause ids.' +
