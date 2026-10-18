@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: f72b1fa1-4f0b-4455-a732-6236fcf25583
-  modified: 2026-10-18T14:40:04.091Z
+  modified: 2026-10-18T15:00:49.184Z
 ---
 
 Review of how the stream kit handles `dependsOn` (2026-10-18, Gene asked for an objective critical review, then "make your suggested improvements"). Source of truth is `C:\devops\repos\ai-setup\skills\stream-kit\scripts` (installed copies under `~\.claude\skills` are copies).
@@ -26,7 +26,9 @@ Review of how the stream kit handles `dependsOn` (2026-10-18, Gene asked for an 
 
 **State 10/18 10:40:** Test-StreamKit 222/222, Test-StreamKitRecovery fails=0; laptop installed; PUBLISHED b1cfe17 (Gene typed yes at the secret guard: the Add-Lesson refusal fixture in Test-StreamKitRecovery.ps1:2759 trips the conn-password rule, and so does quoting it in a memory file - never quote that fixture). prof HUB pwsh profile WIP went in the same commit (Gene's choice). Planner audit item FILED on SMVMTR1: `IN-20261018143920-ebda stream-plan` (semantic-edge audit of focus groups via DEP-REVIEW flags; G9.G90 + integration edges need owner sign-off).
 
-**Open:** SMVMTR1 needs `install.ps1` (pull) before DEP-REVIEW / FOCUS-PULL / BASE-STALE appear on its status page and the freshness tick runs there.
+**10/18 10:59 MERGE d05c226:** `prof setup push` refused: SMVMTR1's clone had its own kit commit 28f1de6 (ORDERED-BY-MERGE composition-file rule, Find-ArtificialBlockers, Find-TestBlockers, 15 files) conflicting in 3 SKILL.md + Test-StreamKit.ps1 (whole-file conflicts, real diffs small: fetch `\\SMVMTR1\D$\devops\repos\ai-setup main`, `checkout --ours`, re-apply their sentences by hand, keep both test blocks). Merged suites: unit 231/231, recovery 706 PASS fails=0. Versions after merge: integrate v0.19, plan v0.15.
+
+**Open:** SMVMTR1 needs the rollout (`prof setup reload` / `prof setup push -Machine SMVMTR1 -AllowSecrets` / `prof streams update -RestartSessions`) before DEP-REVIEW / FOCUS-PULL / BASE-STALE appear on its status page and the freshness tick runs there.
 
 **Why:** 85% of ticketed rows wait on dependencies, and nothing on the board could say whether an edge was real or whether a landed base matched what the verifier graded.
 **How to apply:** when a dependency question comes up, read `FOCUS-PULL` / `DEP-REVIEW` / `DEP-MOVED` / `BASE-STALE` on the status page first; adjust edges only through `Revise-Task.ps1`. See [[reference_stream_kit_mtime_grader_clause_breaks_on_integrate]], [[feedback_stream_mechanical_work_outside_claude]], [[project_smvmtr1_stream_host_genewe_2026-10-17]].
