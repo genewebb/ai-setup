@@ -3,9 +3,9 @@
 # With -Repo, prof moves this window into that repo and leaves it there.
 
 $script:ProfGitVerbs = [ordered]@{
-    status = 'What changed in the repo, and is the current branch ahead of or behind GitHub? (changes nothing)'
+    status = 'What changed in the repo, and is the current branch ahead of or behind the server? (changes nothing)'
     push   = 'Save every change in the repo as one commit and send the current branch (gpush; -AIOnly = pushrules)'
-    pull   = 'Bring the current branch up to date from GitHub (only when that needs no merge)'
+    pull   = 'Bring the current branch up to date from the server (only when that needs no merge)'
 }
 $script:ProfGitDetails = @{
     status = @(
@@ -99,23 +99,48 @@ function Enter-GeneGitRepo {
     return $top
 }
 
+function Get-GeneGitSync {
+    <# Fetches, then compares the branch with its server copy: Fetched, Upstream (has one), Ahead, Behind, Dirty (uncommitted changes). #>
+    param([Parameter(Mandatory)][string]$Top)
+    git -c safe.directory=* -C $Top fetch --quiet
+    $fetched = $LASTEXITCODE -eq 0
+    $dirty = [bool](git -c safe.directory=* -C $Top status --porcelain)
+    $counts = git -c safe.directory=* -C $Top rev-list --left-right --count 'HEAD...@{u}' 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $counts) { return [pscustomobject]@{ Fetched = $fetched; Upstream = $false; Ahead = 0; Behind = 0; Dirty = $dirty } }
+    $ahead, $behind = @(([string]$counts).Trim() -split '\s+')
+    [pscustomobject]@{ Fetched = $fetched; Upstream = $true; Ahead = [int]$ahead; Behind = [int]$behind; Dirty = $dirty }
+}
+
 function Invoke-GeneProfGitStatus {
     param([string]$Repo, [switch]$WhatIf)
     $top = Enter-GeneGitRepo -Repo $Repo
-    git -c safe.directory=* -C $top fetch --quiet
-    if ($LASTEXITCODE -ne 0) { Write-ProfWarn 'Could not fetch from GitHub; ahead/behind below is as of the last fetch.' }
+    $sync = Get-GeneGitSync $top
+    if (-not $sync.Fetched) { Write-ProfWarn 'Could not fetch from the server; ahead/behind below is as of the last fetch.' }
     git -c safe.directory=* -C $top status -sb
-    $counts = git -c safe.directory=* -C $top rev-list --left-right --count 'HEAD...@{u}' 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $counts) { Write-ProfNote 'This branch is not on GitHub yet. prof git push sends it.'; return }
-    $ahead, $behind = @(([string]$counts).Trim() -split '\s+')
-    if ([int]$ahead -eq 0 -and [int]$behind -eq 0) { Write-ProfNote 'Same as GitHub.' }
-    if ([int]$ahead -gt 0) { Write-ProfNote "$ahead commit(s) here are not on GitHub yet: prof git push sends them." }
-    if ([int]$behind -gt 0) { Write-ProfNote "$behind commit(s) on GitHub are not here yet: prof git pull brings them." }
+    if (-not $sync.Upstream) { Write-ProfNote 'This branch is not on the server yet. prof git push sends it.'; return }
+    if ($sync.Ahead -eq 0 -and $sync.Behind -eq 0) { Write-ProfNote 'Same as the server.' }
+    if ($sync.Ahead -gt 0) { Write-ProfNote "$($sync.Ahead) commit(s) here are not on the server yet: prof git push sends them." }
+    if ($sync.Behind -gt 0) { Write-ProfNote "$($sync.Behind) commit(s) on the server are not here yet: prof git pull brings them." }
 }
 
 function Invoke-GeneProfGitPush {
     param([string]$Repo, [string]$Message, [switch]$AIOnly, [switch]$WhatIf)
-    [void](Enter-GeneGitRepo -Repo $Repo)
+    $top = Enter-GeneGitRepo -Repo $Repo
+    # Check against the server first, so "behind" and "nothing to do" are said plainly instead of as git's push rejection.
+    $sync = Get-GeneGitSync $top
+    $pull = "prof git pull$(if ($Repo) { " $Repo" })"
+    if (-not $sync.Fetched) { Write-ProfWarn 'Could not fetch from the server; pushing anyway (git refuses if the server has newer commits).' }
+    elseif ($sync.Behind -gt 0) {
+        if (-not $sync.Dirty -and $sync.Ahead -eq 0) {
+            Write-ProfNote "Nothing to commit or push here. The server has $($sync.Behind) newer commit(s): $pull brings them."
+            return
+        }
+        throw "The server has $($sync.Behind) newer commit(s) this copy does not have. Nothing was committed or pushed. Pull first ($pull); with commits of your own here ($($sync.Ahead)), merge or rebase by hand."
+    }
+    elseif (-not $AIOnly -and $sync.Upstream -and -not $sync.Dirty -and $sync.Ahead -eq 0) {
+        Write-ProfNote 'Nothing to commit or push: same as the server.'
+        return
+    }
     if ($AIOnly) {
         if (-not (Get-Command pushrules -ErrorAction SilentlyContinue)) { throw 'pushrules is not loaded. It lives in the PowerShell profile: open a new tab, or . $PROFILE.' }
         if ($WhatIf) { Write-Host '[WhatIf] Would run: pushrules (commit + push only .cursor, .vscode, .github, .swarm, .claude)' -ForegroundColor Yellow; return }
@@ -137,7 +162,7 @@ function Invoke-GeneProfGitPull {
     $top = Enter-GeneGitRepo -Repo $Repo
     if ($WhatIf) { Write-Host '[WhatIf] Would run: git pull --ff-only' -ForegroundColor Yellow; return }
     git -c safe.directory=* -C $top pull --ff-only
-    if ($LASTEXITCODE -ne 0) { throw 'git pull --ff-only stopped (see above). If this branch and GitHub both have new commits, merge or rebase by hand.' }
+    if ($LASTEXITCODE -ne 0) { throw 'git pull --ff-only stopped (see above). If this branch and the server both have new commits, merge or rebase by hand.' }
 }
 
 function Read-GeneGitMenuParams {

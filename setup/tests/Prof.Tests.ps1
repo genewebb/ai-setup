@@ -381,7 +381,7 @@ try {
         Test-Case 'git: status on a named repo moves the window there and reports GitHub' {
             Set-Location $root
             $o = Invoke-GeneProf git status speedy 6>&1 | Out-String
-            Assert-Match $o 'Same as GitHub'
+            Assert-Match $o 'Same as the server'
             Assert-Equal $work (Get-Location).ProviderPath
         }
         Test-Case 'git: pull brings the new commit from GitHub' {
@@ -398,6 +398,23 @@ try {
             Set-Location $work
             $o = Invoke-GeneProfMenu -Group git -Reader (New-Queue @('2', '1', 'my msg', 'n', 'y', 'n')) 6>&1 | Out-String
             Assert-Match $o "> prof git push -Message 'my msg' -WhatIf"
+        }
+        Test-Case 'git: push with nothing to do says so and pushes nothing' {
+            $o = Invoke-GeneProf git push speedy 6>&1 | Out-String
+            Assert-Match $o 'Nothing to commit or push: same as the server'
+        }
+        Test-Case 'git: push while the server is ahead stops before committing' {
+            $tmp = Join-Path $root 'ahead'; git clone -q $bare $tmp 2>$null
+            Set-Content (Join-Path $tmp 'srv.txt') 'srv'; git -C $tmp add -A; git -C $tmp commit -q -m 'server side'; git -C $tmp push -q 2>$null
+            $o = Invoke-GeneProf git push speedy 6>&1 | Out-String
+            Assert-Match $o 'Nothing to commit or push here. The server has 1 newer commit'
+            Set-Content (Join-Path $work 'mine.txt') 'mine'
+            $head = (git -C $work rev-parse HEAD)
+            $err = try { Invoke-GeneProf git push speedy 6>&1 | Out-Null; '' } catch { "$_" }
+            Assert-Match $err 'Nothing was committed or pushed. Pull first \(prof git pull speedy\)'
+            Assert-Equal $head (git -C $work rev-parse HEAD) 'a commit was made'
+            Remove-Item (Join-Path $work 'mine.txt')
+            Invoke-GeneProf git pull speedy 6>&1 | Out-Null
         }
         Test-Case 'git: -AIOnly pushes through pushrules with the message' {
             function pushrules { param([string]$Message, [string]$Remote) $script:rulesGot = "msg=$Message" }
