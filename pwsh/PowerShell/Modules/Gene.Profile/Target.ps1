@@ -224,7 +224,7 @@ function Resolve-GeneTarget {
     if (-not (Test-Path -LiteralPath "\\$Machine\$($sysDrive)`$")) { throw "Cannot reach \\$Machine\$($sysDrive)`$ (admin share). Check the name, the network and that you are an administrator there." }
     $profilePath = Get-GeneTargetProfilePath -Machine $Machine -SystemDrive $sysDrive
     $prof = Read-GeneTargetProfile -Path $profilePath
-    if (-not $prof -and -not $AllowMissingProfile) { throw "No machine profile on $Machine ($profilePath). Run: prof streams bootstrap -Machine $Machine -User $u" }
+    if (-not $prof -and -not $AllowMissingProfile) { throw "No machine profile on $Machine ($profilePath). Run: prof setup bootstrap -Machine $Machine -User $u" }
     $t = [pscustomobject]@{
         Machine = $(if ($key) { $key } else { $Machine.ToUpperInvariant() }); User = $u; SystemDrive = $sysDrive; Known = [bool]$key
         Users = @(if ($key) { $known[$key].users }); ProfilePath = $profilePath; Profile = $prof; Session = $null; Paths = $null

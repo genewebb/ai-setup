@@ -17,7 +17,7 @@ Moved out of MEMORY.md to keep the index under its read limit; each line keeps i
 - Shell gotchas: [backslash escapes in heredocs](reference_backslash_escapes_become_control_bytes.md) · [Git Bash grep CR count lies](reference_gitbash_grep_cr_count_lies.md) · [python print CRLF breaks bash loops](reference_python_print_crlf_breaks_bash_loops.md) · [[switch] param shadows local var; $Home read-only](reference_powershell_switch_param_shadows_local_var.md) · [Copy-Item preserves mtime](reference_copy_item_preserves_mtime_breaks_counterfactual.md) · [PS7 -MaximumRedirection sticks to -WebSession](reference_pwsh_webrequestsession_stores_maxredirection.md)
 - [Rancher Desktop autoStart = LOGIN not boot](reference_rancher_desktop_autostart_is_login_scoped.md)
 - [Radzen grid: unsized column collapses to zero](reference_radzen_datagrid_unsized_column_collapses.md)
-- Other projects: [CDP SqlBulkCopy](project_cdp_sqlbulkcopy_regression.md) · [governance review](governance_project_review.md) · [swarm pipeline](project_swarm_pipeline.md) · [SM SQL refactor](speed-merchants-sql-refactor.md)
+- Other projects: [CDP SqlBulkCopy](project_cdp_sqlbulkcopy_regression.md) · [swarm pipeline](project_swarm_pipeline.md) · [SM SQL refactor](speed-merchants-sql-refactor.md)
 - [CORPSQL03 C: full 9/28: 329 GB ERRORLOG from 9002 spam; log backups failing 3013 since 9/26 05:45](project_corpsql03_c_drive_full_2026-09-28.md)
 - [On-prem perf rack 9/28: Option A 9x1U rack vs Option B CORPSQL03 duplicate, Lucid PerfRack2](project_onprem_perf_rack_options_2026-09-28.md)
 - Blazor: [Dispose must not resolve services](reference_blazor_dispose_must_not_resolve_services.md) · [Razor string param needs @; .card on popover](reference_razor_string_param_needs_at_and_card_popover.md)

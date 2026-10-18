@@ -40,7 +40,10 @@ function Select-GeneMenu {
     .PARAMETER Default
         1-based item. Numbered menu: taken on Enter (0 = Enter asks again). Arrow-key menu: listed first.
     .PARAMETER Multi
-        Accept several numbers separated by commas or spaces; returns an array (always the numbered menu).
+        Several picks: arrow-key menu = Space to tick, Enter when done; numbered = numbers separated by commas or spaces.
+        Returns an array.
+    .PARAMETER AllowEmpty
+        With -Multi: picking nothing returns an empty array instead of asking again ($null still means cancelled).
     .PARAMETER Reader
         Tests only: replaces Read-Host and forces the numbered menu. Receives the prompt, returns the answer.
     #>
@@ -50,11 +53,23 @@ function Select-GeneMenu {
         [Parameter(Mandatory)][object[]]$Items,
         [int]$Default = 0,
         [switch]$Multi,
+        [switch]$AllowEmpty,
         [scriptblock]$Reader
     )
     $names = @($Items | ForEach-Object { if ($_ -is [string]) { $_ } else { [string]$_.Name } })
     $width = ($names | Measure-Object -Property Length -Maximum).Maximum
 
+    if (-not $Reader -and $Multi -and (Test-GeneRichMenu)) {
+        $labels = @(for ($i = 0; $i -lt $Items.Count; $i++) {
+                $desc = if ($Items[$i] -isnot [string] -and $Items[$i].Description) { "  [grey]$(ConvertTo-GeneMarkupText $Items[$i].Description)[/]" } else { '' }
+                "$(ConvertTo-GeneMarkupText $names[$i].PadRight($width))$desc"
+            })
+        Write-Host ''
+        $picked = Read-SpectreMultiSelection -Message "[cyan]$(ConvertTo-GeneMarkupText $Title)[/]" -Choices $labels -AllowEmpty:$AllowEmpty `
+            -PageSize ([Math]::Max(3, [Math]::Min(20, $labels.Count))) -Color Cyan
+        if ($null -eq $picked -and -not $AllowEmpty) { return $null }
+        return , @(@($picked) | Where-Object { $_ } | ForEach-Object { $Items[[array]::IndexOf($labels, [string]$_)] })
+    }
     if (-not $Reader -and -not $Multi -and (Test-GeneRichMenu)) {
         $order = @(0..($Items.Count - 1))
         if ($Default -ge 1 -and $Default -le $Items.Count) { $order = @($Default - 1) + @($order | Where-Object { $_ -ne $Default - 1 }) }
@@ -78,11 +93,12 @@ function Select-GeneMenu {
         $mark = if ($Default -eq $i + 1) { '*' } else { ' ' }
         Write-Host ("  {0}{1,2}) {2}{3}" -f $mark, ($i + 1), $names[$i].PadRight($width), $desc)
     }
-    $hint = "Pick $(if ($Multi) { 'one or more, e.g. 1,3' } else { "1-$($Items.Count)" })$(if ($Default) { ", Enter = $Default" }), q = cancel"
+    $hint = "Pick $(if ($Multi) { 'one or more, e.g. 1,3' } else { "1-$($Items.Count)" })$(if ($Default) { ", Enter = $Default" } elseif ($Multi -and $AllowEmpty) { ', Enter = none' }), q = cancel"
     while ($true) {
         $answer = ([string](& $Reader $hint)).Trim()
         if ($answer -ieq 'q') { return $null }
         if (-not $answer) {
+            if ($Multi -and $AllowEmpty -and -not $Default) { return , @() }
             if ($Default -ge 1 -and $Default -le $Items.Count) { return $(if ($Multi) { , @($Items[$Default - 1]) } else { $Items[$Default - 1] }) }
             continue
         }

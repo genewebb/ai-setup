@@ -68,7 +68,8 @@ long alias: manageProfile
 ```
 
 **prof is the general-purpose hub (Gene, 10/17).** Commands live in groups; the main menu lists the groups. The
-first group is `streams`, holding the eleven commands below. Other profile commands join as further groups
+groups, in menu order: `streams` (the stream board, section 6.1), `setup` (the eleven commands below; it was named
+`streams` until Gene renamed it 10/17 so `streams` could mean the board), `git`, `build`, `ai`, `other`. Other profile commands join as further groups
 (section 6). A group is one entry in `$script:ProfGroups` (`Verbs.ps1`): its commands with one-line and long
 descriptions, usage lines, the function prefix, which commands need `-Machine`, and the menu's question flow.
 
@@ -76,7 +77,7 @@ Groups and commands are tab-completed. Every verb accepts `-h` (the existing `Wr
 writes nothing anywhere). Every verb that runs prints the **composed command line** it is about to run before it
 runs it, so a menu session teaches the syntax.
 
-The `streams` group (`prof streams <command>`):
+The `setup` group (`prof setup <command>`):
 
 | Command | What it does | Needs |
 |---|---|---|
@@ -104,8 +105,8 @@ The `streams` group (`prof streams <command>`):
 
 1. pick a group (or help); `prof <group>` starts at step 2;
 2. pick a command (one-line descriptions; the group's own help is the last entry);
-3. the group's questions (streams: machine from `machines.yaml` or typed, account, switches as yes/no);
-4. shows the composed command line (`prof streams push -Machine ...`), asks once, runs.
+3. the group's questions (setup: machine from `machines.yaml` or typed, account, switches as yes/no);
+4. shows the composed command line (`prof setup push -Machine ...`), asks once, runs.
 
 Prompts are `Select-GeneMenu`, `Read-GeneYesNo` and `Read-GeneText` (`Menu.ps1`), shared by every group. They
 have two looks with the same answers. **Arrow keys** (up/down + Enter, a `(cancel)` entry, the default listed
@@ -232,6 +233,44 @@ For `-Machine M -User U`; `-WorkDrive D:` (default `C:`) seeds the paths of a ne
   `Install-AIMachine.ps1` gain `-PassphraseFromStdin`. Never on disk, never in a process argument. Both files are
   deleted at the end, also on failure.
 
+### 4.7 The git and build groups (Gene, 10/17)
+
+`prof git status|push|pull [<repo>]` acts on the current branch of the repo you stand in, or of `<repo>`: a repo
+from this machine's profile by folder name (every `*Repo` key plus `AIWorkRoot`), or a folder path. Naming a repo
+moves the window into it and leaves it there. `push` is gpush (`Git-QuickPush` in Gene.GitTools: add, secret-name
+guard, commit with `-Message`, default "Update latest", push with upstream); `pull` is `git pull --ff-only` and
+stops rather than merging; `status` fetches, then shows `git status -sb` and ahead/behind in words. The menu offers
+`(this folder)` first, then the known repos.
+
+`prof build compile|run|publish|more <product>` drives the dp* commands in the profile, for products speed
+(dpspeed), crewchief, datagen, mutate, speedy (dpv2) and all (dpall; publish and compile only). prof
+moves the window into the product's repo and leaves it there.
+
+| Command | Does |
+|---|---|
+| `compile` | Build only: `dotnet build` of the product's solution (`-Configuration`, Debug by default); `all` = the four speed-merchants solutions. New; no dp* did this. |
+| `run` | The dp* command with no switches (build + publish + start; dpv2 = rebuild local containers). |
+| `publish` | dp* `-Package`; `-Bump None|Patch|Minor|Major` maps to `-Bump`/`-BumpMinor`/`-BumpMajor`. The menu shows current -> new version. |
+| `more` | The dp* command with any of its own switches; the menu lists them (from the function's parameters and help lines). |
+
+Words prof does not know after the product are passed to the dp* command (`prof build run speed -CleanBuild`,
+`prof build publish all -Products speed,crewchief -Parallel`); a switch the dp* command does not have is refused.
+The menu runs product first, then action (Build only / Build + run / Publish / More options...), then the action's
+questions. The dp* commands themselves are unchanged and still work.
+
+A group sets `TopicParam` (the third word: Repo for git, Product for build), `TopicNames` (its tab completion) and
+optionally `Menu` (its own question order instead of command list + Ask). `prof push`, `pull` and `status` now name
+two groups, so prof asks which; `prof publish` still works alone.
+
+### 4.8 The other group (Gene, 10/17)
+
+`prof other` is a catalog, not a launcher: every remaining profile command by category (navigate, tabs, build, git,
+board, profile, claude, tools) with what it does, how to call it, and the prof command that covers it where there is
+one. `prof other <category>` lists one category, `prof other <category> <command>` shows one command; the menu
+browses category, then command, and runs nothing. The catalog is `$script:ProfOtherCatalog` in `OtherGroup.ps1`; a
+census test fails when the profile gains a lower-case top-level function the catalog does not list, so a new command
+must be catalogued (or folded into a group) before the tests pass.
+
 ## 5. Where the code lives
 
 - New module `pwsh\PowerShell\Modules\Gene.Profile\` (`.psd1` + `.psm1`), exporting `prof` (`Invoke-GeneProf`),
@@ -259,17 +298,24 @@ stay as aliases.
 
 | Group (later) | Folds in | Note |
 |---|---|---|
-| `streams` | sp, ep, rp, machinecfg, profile/runtime/machine moves | built: the eleven commands of section 4 |
-| `deploy` | dpspeed, dpcrewchief, dpdatagen, dpmutate, dpall, dpv2, dpContainers, dpgov, dpAI | `deploy speed -Package` |
-| (stream board) | addStreams, addStreamTab, stopStreams, removeStreamTab, rerunStreamTab, the proposed getStreams / pushStreams / updateStreams | section 6.1. OPEN: the name `streams` is now taken by the profile group, and 6.1's `streams push` collides with its `push` |
+| `setup` | sp, ep, rp, machinecfg, profile/runtime/machine moves | built: the eleven commands of section 4 (named `streams` until 10/17) |
+| `build` | dpspeed, dpcrewchief, dpdatagen, dpmutate, dpall, dpv2, dpContainers | built 10/17, section 4.7; `containers` is Speedy only |
+| `git` | gpush, pps, psql, pushrules | built 10/17, section 4.7; the scripts folders are repos in its list, `-AIOnly` = pushrules |
+| `ai` | dpAI | built 10/17: `prof ai local|remote|git|promote [<repo>]`, the mode is the command |
+| `streams` | addStreams, addStreamTab, stopStreams, removeStreamTab, rerunStreamTab, getStreams, pushStreams, updateStreams | built 10/17 as a thin layer (section 6.1): `prof streams add|tab|stop|remove|rerun|get|push|update|status-rebuild` call the profile commands; `-WhatIf` becomes `-DryRun` |
 | `tab` | addtab, addnew, addLinux | |
-| `go` | cdevops, cgov, cspeed, ccrew, cpower, csql, ccursor | `go speed`, repo names from the machine profile |
+| `go` | cdevops, caiprof, cspeed, ccrew, cpower, csql, ccursor | `go speed`, repo names from the machine profile |
 | (none) | `prof help` lists every group and every old name with its new form | the one name to remember is `prof` |
 
 Old names stay as aliases for a deprecation period; `hubs` and `<hub> help` show the mapping. Each hub moves into
 its own `Gene.*` module as it is built, which also shortens the 4,400-line profile.
 
 ### 6.1 The `streams` hub: the 10/17 stream-commands proposal, re-based on the laptop hub
+
+**Built 10/17 (thin layer):** `StreamsGroup.ps1` maps each board command to its profile function (the table below is the
+target behaviour of those functions, not yet re-based). `status-rebuild` is new: it sets the LastWriteTime of
+`<SpeedyRepo>\.streams\inbox\stream-status.md` to now so the Status runner's next tick rebuilds the status page;
+`-Repo` overrides the repo. Below, `prof reload` / `prof pull` mean `prof setup reload` / `prof setup pull`.
 
 The getStreams / pushStreams / updateStreams proposal (decisions: owner-push column in the Git policy table that
 only the stream push reads; host guard = `.streams\host.json` board marker, no profile key; `-Force` to override)

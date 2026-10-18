@@ -66,7 +66,6 @@ function rp {
 # Quick nav (work)
 # -----------------------------
 function cdevops { Set-Location C:\devops\repos }
-function cgov    { Set-Location C:\devops\repos\governance }
 function cspeed  { Set-Location C:\devops\repos\speed-merchants }
 
 # -----------------------------
@@ -77,114 +76,6 @@ function csql    { Set-Location D:\SqlScripts }
 function ccursor { Set-Location D:\repos\cursor-rules-templates }
 
 function newguid { (New-Guid).Guid }
-
-# -----------------------------
-# IIS appcmd path (Gov restart uses IIS)
-# -----------------------------
-$AppCmd = "$env:windir\System32\inetsrv\appcmd.exe"
-
-# Wait until AppPool is Started/Stopped
-function Wait-AppPoolState {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Justification='Profile helper')]
-    param($Name, $Desired)
-    for ($i = 0; $i -lt 20; $i++) {
-        $s = & $AppCmd list apppool /name:$Name /text:state
-        if ($s.Trim() -eq $Desired) { return $true }
-        Start-Sleep -Milliseconds 500
-    }
-    return $false
-}
-
-# Stop with retries
-function Stop-AppPoolWithRetry {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Justification='Profile helper')]
-    param($Name)
-    for ($i = 1; $i -le 3; $i++) {
-        Write-Host "Stopping App Pool '$Name' ($i/3)..." -ForegroundColor Yellow
-        & $AppCmd stop apppool /apppool.name:$Name | Out-Null
-        if (Wait-AppPoolState $Name 'Stopped') {
-            Write-Host "Stopped." -ForegroundColor Green
-            return $true
-        }
-        Start-Sleep -Seconds (2 * $i)
-    }
-    Write-Host "Failed to stop '$Name'." -ForegroundColor Red
-    return $false
-}
-
-# Start safely
-function Start-AppPoolSafe {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Justification='Profile helper')]
-    param($Name)
-    Write-Host "Starting App Pool '$Name'..." -ForegroundColor Yellow
-    & $AppCmd start apppool /apppool.name:$Name | Out-Null
-    if (Wait-AppPoolState $Name 'Started') {
-        Write-Host "Started." -ForegroundColor Green
-    } else {
-        Write-Host "Start failed." -ForegroundColor Red
-    }
-}
-
-# Build & publish (supports Debug/Release like dpspeed; default Release)
-function Build-And-Publish {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Justification='Profile helper')]
-    [CmdletBinding()]
-    param(
-        [ValidateSet("Debug","Release")]
-        [string]$Configuration = "Release",
-
-        [switch]$WhatIf
-    )
-
-    $proj = "C:\devops\repos\governance\Governance.Service.Api\Governance.Service.Api.csproj"
-    $out  = "C:\devops\repos\platform\Server\Services\governance"
-
-    if ($WhatIf) {
-        Write-Host "[WhatIf] Would publish Governance [$Configuration] -> $out" -ForegroundColor Yellow
-        Write-Host "[WhatIf] dotnet publish `"$proj`" -c $Configuration -o `"$out`" --no-restore" -ForegroundColor Yellow
-        return
-    }
-
-    Write-Host "Publishing Governance [$Configuration] -> service location..." -ForegroundColor Yellow
-    dotnet publish $proj -c $Configuration -o $out --no-restore
-}
-
-# Main restart function (Governance/IIS-hosted) - supports -Configuration Debug|Release (default Release) + -WhatIf
-function Dev-ProfiseeGovRestart {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Justification='Profile helper')]
-    [CmdletBinding()]
-    param(
-        [switch]$WhatIf,
-
-        [ValidateSet("Debug","Release")]
-        [string]$Configuration = "Release"
-    )
-
-    if ($WhatIf) {
-        Write-Host "[WhatIf] Would run: dev profisee stop" -ForegroundColor Yellow
-        Write-Host "[WhatIf] Would stop app pool: Profisee-governance" -ForegroundColor Yellow
-        Write-Host "[WhatIf] Would publish Governance [$Configuration]" -ForegroundColor Yellow
-        Write-Host "[WhatIf] Would start app pool: Profisee-governance" -ForegroundColor Yellow
-        Write-Host "[WhatIf] Would run: dev profisee start" -ForegroundColor Yellow
-        return
-    }
-
-    Clear-Host
-    Write-Host "Stopping Profisee dev environment..." -ForegroundColor Yellow
-    dev profisee stop
-
-    Stop-AppPoolWithRetry 'Profisee-governance'
-
-    Build-And-Publish -Configuration $Configuration
-
-    Start-AppPoolSafe 'Profisee-governance'
-
-    Write-Host "Starting Profisee dev environment..." -ForegroundColor Yellow
-    dev profisee start
-
-    Write-Host "Done." -ForegroundColor Green
-}
-Set-Alias dpgov Dev-ProfiseeGovRestart
 
 # =====================================================================
 # Speed-Merchants (Kestrel-hosted) - publish + restart

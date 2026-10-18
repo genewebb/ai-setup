@@ -7,7 +7,7 @@ permissions, memory, stream kit. Product code is NOT here; it stays in the corpo
 
 | I want to | Run |
 |---|---|
-| Use my setup on a machine (first time) | `git clone https://github.com/genewebb/ai-setup.git` into the machine's repos root, then `install.ps1` |
+| Use my setup on a machine (first time) | `git clone https://genewebb@github.com/genewebb/ai-setup.git` (`genewebb@` stops the work/personal account picker) into the machine's repos root, then `install.ps1` |
 | Get changes made elsewhere | `install.ps1` (git pull --ff-only + install) |
 | Send changes from this machine | `publish.ps1 -Message "..."` (secret scan, commit, rebase, push) |
 | Share an item at work | add it to `share.yaml`, run `tools\Promote-ToWork.ps1 -TargetRepo <work marketplace clone>` |

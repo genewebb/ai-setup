@@ -4,7 +4,7 @@
 
 $script:ProfGitVerbs = [ordered]@{
     status = 'What changed in the repo, and is the current branch ahead of or behind GitHub? (changes nothing)'
-    push   = 'Save every change in the repo as one commit and send the current branch to GitHub (same as gpush)'
+    push   = 'Save every change in the repo as one commit and send the current branch (gpush; -AIOnly = pushrules)'
     pull   = 'Bring the current branch up to date from GitHub (only when that needs no merge)'
 }
 $script:ProfGitDetails = @{
@@ -17,7 +17,9 @@ $script:ProfGitDetails = @{
         'The gpush you know: stages everything under this folder (git add .), stops if a staged file looks like a',
         'secret (*.env, *secret*, *.key ...), commits with -Message (default "Update latest") when anything is',
         'staged, then pushes the current branch to origin (setting the upstream on the first push).',
-        'gpush itself still works.'
+        'gpush itself still works. -AIOnly commits and pushes only the AI files (.cursor, .vscode, .github, .swarm,',
+        '.claude), as pushrules does. The PowerShell and SQL scripts folders are repos here too: prof git push',
+        'PowershellScripts replaces pps, prof git push SqlScripts replaces psql.'
     )
     pull   = @(
         'git pull --ff-only on the current branch. When this branch and GitHub both have new commits, it stops',
@@ -26,7 +28,7 @@ $script:ProfGitDetails = @{
 }
 $script:ProfGitUsage = @{
     status = 'prof git status [<repo>] [-WhatIf]'
-    push   = 'prof git push [<repo>] [-Message <text>] [-WhatIf]'
+    push   = 'prof git push [<repo>] [-Message <text>] [-AIOnly] [-WhatIf]'
     pull   = 'prof git pull [<repo>] [-WhatIf]'
 }
 
@@ -57,11 +59,11 @@ function Get-GeneRepoTop([string]$Path) {
 }
 
 function Get-GeneKnownRepos {
-    <# Repos named in this machine's profile (every *Repo key plus AIWorkRoot) that exist here: Name (folder name), Path, Key. #>
+    <# Repos named in this machine's profile that exist here (every *Repo key, the script folders, AIWorkRoot): Name (folder name), Path, Key. #>
     if (-not $global:GeneMachine) { return @() }
     # The profile keeps repo paths in $global:GeneMachine and the AI keys (AIWorkRoot) in $global:GeneMachineAI.
     $all = [ordered]@{}
-    foreach ($k in @($global:GeneMachine.Keys | Where-Object { $_ -like '*Repo' })) { $all[$k] = [string]$global:GeneMachine.$k }
+    foreach ($k in @($global:GeneMachine.Keys | Where-Object { $_ -like '*Repo' -or $_ -in 'PowershellScriptsDir', 'SqlScriptsDir', 'CursorRulesDir' })) { $all[$k] = [string]$global:GeneMachine.$k }
     if ($global:GeneMachineAI -and $global:GeneMachineAI.AIWorkRoot) { $all['AIWorkRoot'] = [string]$global:GeneMachineAI.AIWorkRoot }
     $seen = @{}
     foreach ($k in $all.Keys) {
@@ -112,10 +114,22 @@ function Invoke-GeneProfGitStatus {
 }
 
 function Invoke-GeneProfGitPush {
-    param([string]$Repo, [string]$Message, [switch]$WhatIf)
+    param([string]$Repo, [string]$Message, [switch]$AIOnly, [switch]$WhatIf)
     [void](Enter-GeneGitRepo -Repo $Repo)
+    if ($AIOnly) {
+        if (-not (Get-Command pushrules -ErrorAction SilentlyContinue)) { throw 'pushrules is not loaded. It lives in the PowerShell profile: open a new tab, or . $PROFILE.' }
+        if ($WhatIf) { Write-Host '[WhatIf] Would run: pushrules (commit + push only .cursor, .vscode, .github, .swarm, .claude)' -ForegroundColor Yellow; return }
+        $a = @{}; if ($Message) { $a.Message = $Message }
+        pushrules @a
+        return
+    }
     if (-not (Get-Command Git-QuickPush -ErrorAction SilentlyContinue)) { Import-Module Gene.GitTools -ErrorAction Stop }
-    Git-QuickPush -Message $(if ($Message) { $Message } else { 'Update latest' }) -WhatIf:$WhatIf
+    # Some clones belong to the other account (ai-profisee is CORP\genewe's), which git refuses as "dubious ownership".
+    # Git-QuickPush runs plain git, so trust every folder through git's environment config for this one call.
+    $saved = @{}; foreach ($n in 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0') { $saved[$n] = [Environment]::GetEnvironmentVariable($n) }
+    $env:GIT_CONFIG_COUNT = '1'; $env:GIT_CONFIG_KEY_0 = 'safe.directory'; $env:GIT_CONFIG_VALUE_0 = '*'
+    try { Git-QuickPush -Message $(if ($Message) { $Message } else { 'Update latest' }) -WhatIf:$WhatIf }
+    finally { foreach ($n in $saved.Keys) { [Environment]::SetEnvironmentVariable($n, $saved[$n]) } }
 }
 
 function Invoke-GeneProfGitPull {
@@ -142,6 +156,7 @@ function Read-GeneGitMenuParams {
     if ($Verb -eq 'push') {
         $m = ([string](Read-GeneText -Reader $Reader -Prompt 'Commit message (Enter = Update latest)')).Trim()
         if ($m) { $p.Message = $m }
+        if (Read-GeneYesNo -Question 'Only the AI files (.cursor, .github, .claude ...) (-AIOnly, like pushrules)?' -Reader $Reader) { $p.AIOnly = $true }
     }
     if ($Verb -in 'push', 'pull' -and (Read-GeneYesNo -Question 'Dry run only (-WhatIf)?' -Reader $Reader)) { $p.WhatIf = $true }
     return $p

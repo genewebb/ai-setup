@@ -137,7 +137,7 @@ function Invoke-GenePushToTarget {
     Invoke-GeneGit $Hub @('push', '-q', '--no-verify', $Repo.Url, '+HEAD:refs/prof/incoming') | Out-Null
     $r = Invoke-GeneRepoGitResult $Repo @('merge', '--ff-only', '-q', 'refs/prof/incoming')
     if ($r.Code -ne 0) {
-        throw "Fast-forwarding $($Repo.Name) was refused; nothing there changed: $($r.Out -join ' '). Usually a Claude session there wrote after the harvest: run prof streams push again."
+        throw "Fast-forwarding $($Repo.Name) was refused; nothing there changed: $($r.Out -join ' '). Usually a Claude session there wrote after the harvest: run prof setup push again."
     }
     $after = (Invoke-GeneRepoGitResult $Repo @('rev-parse', 'HEAD')).Out | Select-Object -First 1
     [pscustomobject]@{ From = $before; To = $after }
@@ -164,10 +164,10 @@ function Get-GeneRelation {
     if (-not $TargetHead) { return 'no clone' }
     $hubHead = (Invoke-GeneGit $Hub @('rev-parse', 'HEAD')) | Select-Object -First 1
     if ($hubHead -eq $TargetHead) { return 'same as hub' }
-    if ((Invoke-GeneGitResult $Hub @('cat-file', '-e', "$TargetHead^{commit}")).Code -ne 0) { return 'has commits the hub lacks (prof streams pull)' }
+    if ((Invoke-GeneGitResult $Hub @('cat-file', '-e', "$TargetHead^{commit}")).Code -ne 0) { return 'has commits the hub lacks (prof setup pull)' }
     if ((Invoke-GeneGitResult $Hub @('merge-base', '--is-ancestor', $TargetHead, 'HEAD')).Code -eq 0) {
         $n = (Invoke-GeneGit $Hub @('rev-list', '--count', "$TargetHead..HEAD")) | Select-Object -First 1
-        return "behind hub by $n (prof streams push)"
+        return "behind hub by $n (prof setup push)"
     }
-    return 'diverged (prof streams push merges)'
+    return 'diverged (prof setup push merges)'
 }

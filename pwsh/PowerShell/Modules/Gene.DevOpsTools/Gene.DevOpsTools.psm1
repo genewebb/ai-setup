@@ -19,104 +19,6 @@ function Get-GeneBitsZipPath([string]$FileName) {
     return Join-Path $global:GeneBitsDir $FileName
 }
 
-function Wait-AppPoolState {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Justification='Profile helper')]
-    param([string]$Name, [string]$Desired)
-    for ($i = 0; $i -lt 20; $i++) {
-        $s = & $script:AppCmd list apppool /name:$Name /text:state
-        if ($s.Trim() -eq $Desired) { return $true }
-        Start-Sleep -Milliseconds 500
-    }
-    return $false
-}
-
-function Stop-AppPoolWithRetry {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Justification='Profile helper')]
-    param([string]$Name)
-    for ($i = 1; $i -le 3; $i++) {
-        Write-Host "Stopping App Pool '$Name' ($i/3)..." -ForegroundColor Yellow
-        & $script:AppCmd stop apppool /apppool.name:$Name | Out-Null
-        if (Wait-AppPoolState $Name 'Stopped') {
-            Write-Host "Stopped." -ForegroundColor Green
-            return $true
-        }
-        Start-Sleep -Seconds (2 * $i)
-    }
-    Write-Host "Failed to stop '$Name'." -ForegroundColor Red
-    return $false
-}
-
-function Start-AppPoolSafe {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Justification='Profile helper')]
-    param([string]$Name)
-    Write-Host "Starting App Pool '$Name'..." -ForegroundColor Yellow
-    & $script:AppCmd start apppool /apppool.name:$Name | Out-Null
-    if (Wait-AppPoolState $Name 'Started') {
-        Write-Host "Started." -ForegroundColor Green
-    } else {
-        Write-Host "Start failed." -ForegroundColor Red
-    }
-}
-
-function Build-And-Publish {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Justification='Profile helper')]
-    [CmdletBinding()]
-    param(
-        [ValidateSet("Debug","Release")]
-        [string]$Configuration = "Release",
-        [switch]$WhatIf
-    )
-
-    $proj = Join-Path (Get-GeneMachineRoot GovernanceRepo 'C:\devops\repos\governance') 'Governance.Service.Api\Governance.Service.Api.csproj'
-    $out  = Join-Path (Get-GeneMachineRoot PlatformRepo 'C:\devops\repos\platform') 'Server\Services\governance'
-
-    if ($WhatIf) {
-        Write-Host "[WhatIf] Would publish Governance [$Configuration] -> $out" -ForegroundColor Yellow
-        Write-Host "[WhatIf] dotnet publish `"$proj`" -c $Configuration -o `"$out`" --no-restore" -ForegroundColor Yellow
-        return
-    }
-
-    Write-Host "Publishing Governance [$Configuration] -> service location..." -ForegroundColor Yellow
-    dotnet publish $proj -c $Configuration -o $out --no-restore
-    if ($LASTEXITCODE -ne 0) {
-        throw "dotnet publish failed with exit code $LASTEXITCODE."
-    }
-}
-
-function Dev-ProfiseeGovRestart {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Justification='Profile helper')]
-    [CmdletBinding()]
-    param(
-        [switch]$WhatIf,
-        [ValidateSet("Debug","Release")]
-        [string]$Configuration = "Release"
-    )
-
-    if ($WhatIf) {
-        Write-Host "[WhatIf] Would run: dev profisee stop" -ForegroundColor Yellow
-        Write-Host "[WhatIf] Would stop app pool: Profisee-governance" -ForegroundColor Yellow
-        Write-Host "[WhatIf] Would publish Governance [$Configuration]" -ForegroundColor Yellow
-        Write-Host "[WhatIf] Would start app pool: Profisee-governance" -ForegroundColor Yellow
-        Write-Host "[WhatIf] Would run: dev profisee start" -ForegroundColor Yellow
-        return
-    }
-
-    Clear-Host
-    Write-Host "Stopping Profisee dev environment..." -ForegroundColor Yellow
-    dev profisee stop
-
-    if (-not (Stop-AppPoolWithRetry 'Profisee-governance')) {
-        throw "Cannot proceed: failed to stop app pool 'Profisee-governance'."
-    }
-    Build-And-Publish -Configuration $Configuration
-    Start-AppPoolSafe 'Profisee-governance'
-
-    Write-Host "Starting Profisee dev environment..." -ForegroundColor Yellow
-    dev profisee start
-
-    Write-Host "Done." -ForegroundColor Green
-}
-
 function Dev-SpeedMerchantsRestart {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Justification='Profile helper')]
     [CmdletBinding()]
@@ -812,4 +714,4 @@ function Dev-DataGenRestart {
 }
 
 Export-ModuleMember -Function `
-    Dev-ProfiseeGovRestart, Dev-SpeedMerchantsRestart, Dev-CrewChiefRestart, Dev-DataGenRestart
+    Dev-SpeedMerchantsRestart, Dev-CrewChiefRestart, Dev-DataGenRestart

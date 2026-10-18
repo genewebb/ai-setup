@@ -1,7 +1,7 @@
-# prof: the groups, the streams commands, the dispatcher and the menu.
+# prof: the groups, the setup commands, the dispatcher and the menu.
 # Design: docs\manageprofile-design.md in the ai-setup clone.
 
-# The streams group: one line each for the menu and 'prof help'.
+# The setup group (profile + AI setup between machines): one line each for the menu and 'prof help'.
 $script:ProfVerbs = [ordered]@{
     push      = 'Copy my profile and AI setup from this machine to another one, and install it there'
     pull      = 'Bring another machine''s changes (Claude memory, edits) back here, and install them here'
@@ -16,7 +16,7 @@ $script:ProfVerbs = [ordered]@{
     show      = 'Is the profile this machine runs the same as the one I edit?'
 }
 
-# The longer explanation 'prof help streams <command>' and '-h' print under the usage line.
+# The longer explanation 'prof help setup <command>' and '-h' print under the usage line.
 $script:ProfDetails = @{
     push      = @(
         'Use it after you changed your profile or AI setup here and want another machine to have it.'
@@ -56,7 +56,7 @@ $script:ProfDetails = @{
     )
     edit      = @(
         'Opens the profile kept in the ai-setup repo. Edit that one: the copy in Documents\PowerShell is'
-        'replaced by every install. When saved, run prof streams reload here or prof streams push for another machine.'
+        'replaced by every install. When saved, run prof setup reload here or prof setup push for another machine.'
     )
     reload    = @(
         'Runs the install from your local ai-setup repo on this machine (nothing is downloaded), so your edits'
@@ -64,36 +64,42 @@ $script:ProfDetails = @{
     )
     show      = @(
         'Compares the profile this machine loads with the one in the repo, plus your own modules.'
-        'If they differ, prof streams reload makes them the same.'
+        'If they differ, prof setup reload makes them the same.'
     )
 }
 $script:ProfUsage = @{
-    push      = 'prof streams push -Machine <name> [-User <DOMAIN\name>] [-NoPublish] [-AllowSecrets] [-Message <text>] [-WhatIf]'
-    pull      = 'prof streams pull -Machine <name> [-User <DOMAIN\name>] [-AllowSecrets] [-WhatIf]'
-    status    = 'prof streams status [-Machine <name>]'
-    check     = 'prof streams check -Machine <name> [-User <DOMAIN\name>]'
-    bootstrap = 'prof streams bootstrap -Machine <name> [-User <DOMAIN\name>] [-WorkDrive D:] [-FixProfile] [-Retire <DOMAIN\name>[,...]] [-WithTerminal] [-WithSecrets] [-WhatIf]'
-    terminal  = 'prof streams terminal -Machine <name> [-User <DOMAIN\name>] [-WhatIf]'
-    secrets   = 'prof streams secrets -Machine <name> [-User <DOMAIN\name>] [-WhatIf]'
-    config    = 'prof streams config [-Machine <name>]'
-    edit      = 'prof streams edit'
-    reload    = 'prof streams reload [-WhatIf]'
-    show      = 'prof streams show'
+    push      = 'prof setup push -Machine <name> [-User <DOMAIN\name>] [-NoPublish] [-AllowSecrets] [-Message <text>] [-WhatIf]'
+    pull      = 'prof setup pull -Machine <name> [-User <DOMAIN\name>] [-AllowSecrets] [-WhatIf]'
+    status    = 'prof setup status [-Machine <name>]'
+    check     = 'prof setup check -Machine <name> [-User <DOMAIN\name>]'
+    bootstrap = 'prof setup bootstrap -Machine <name> [-User <DOMAIN\name>] [-WorkDrive D:] [-FixProfile] [-Retire <DOMAIN\name>[,...]] [-WithTerminal] [-WithSecrets] [-WhatIf]'
+    terminal  = 'prof setup terminal -Machine <name> [-User <DOMAIN\name>] [-WhatIf]'
+    secrets   = 'prof setup secrets -Machine <name> [-User <DOMAIN\name>] [-WhatIf]'
+    config    = 'prof setup config [-Machine <name>]'
+    edit      = 'prof setup edit'
+    reload    = 'prof setup reload [-WhatIf]'
+    show      = 'prof setup show'
 }
-$script:ProfOldNames = [ordered]@{ sp = 'prof streams show'; ep = 'prof streams edit'; rp = 'prof streams reload (rp itself only reloads the profile in this window)'; machinecfg = 'prof streams config' }
+$script:ProfOldNames = [ordered]@{
+    sp = 'prof setup show'; ep = 'prof setup edit'; rp = 'prof setup reload (rp itself only reloads the profile in this window)'; machinecfg = 'prof setup config'
+    gpush = 'prof git push'
+    'dpspeed, dpcrewchief, dpdatagen, dpmutate, dpv2' = 'prof build run speed | crewchief | datagen | mutate | speedy'
+    'dp* -Package -Bump...' = 'prof build publish <product> -Bump Patch|Minor|Major'
+    'dpall -Package' = 'prof build publish all'
+}
 
 # The groups: prof <group> <command>. The main menu lists them; each is one area of work. A group's commands are
 # the functions <Prefix><Command> (TitleCase). Ask (optional) is the menu's question flow for a command: it returns
 # the parameters as an ordered dictionary, or $null when the user cancels. Add a group here to add it to prof.
 $script:ProfGroups = [ordered]@{
-    streams = [pscustomobject]@{
+    setup = [pscustomobject]@{
         Description = 'Move my profile and AI setup between machines (push, pull, status, first-time setup, secrets)'
         Verbs       = $script:ProfVerbs
         Details     = $script:ProfDetails
         Usage       = $script:ProfUsage
         Prefix      = 'Invoke-GeneProf'
         NeedMachine = @('push', 'pull', 'check', 'bootstrap', 'terminal', 'secrets')
-        Ask         = 'Read-GeneStreamsMenuParams'
+        Ask         = 'Read-GeneSetupMenuParams'
     }
 }
 
@@ -105,12 +111,14 @@ function Write-ProfNote([string]$m) { Write-Host "  $m" }
 function Format-GeneProfCommand {
     <# The command line a run is equivalent to, so a menu session teaches the syntax. #>
     param([string]$Group, [Parameter(Mandatory)][string]$Verb, [System.Collections.IDictionary]$Params = @{})
-    $order = 'Topic', 'Machine', 'User', 'WorkDrive', 'Retire', 'Message', 'FixProfile', 'WithTerminal', 'WithSecrets', 'NoPublish', 'AllowSecrets', 'WhatIf'
+    $topic = if ($Group -and $script:ProfGroups.Contains($Group)) { $script:ProfGroups[$Group].TopicParam }
+    $order = @('Topic') + @($topic | Where-Object { $_ }) + @('Machine', 'User', 'WorkDrive', 'Retire', 'Message', 'Bump', 'Configuration', 'FixProfile', 'WithTerminal', 'WithSecrets', 'NoPublish', 'AllowSecrets', 'AIOnly', 'Extra', 'WhatIf')
     $parts = @('prof') + @($Group | Where-Object { $_ }) + @($Verb)
     foreach ($k in $order + @($Params.Keys | Where-Object { $_ -notin $order })) {
         if (-not $Params.Contains($k)) { continue }
         $v = $Params[$k]
-        if ($k -eq 'Topic') { if ($v) { $parts += $v }; continue }
+        if ($k -eq 'Topic' -or ($topic -and $k -eq $topic)) { if ($v) { $parts += $v }; continue }
+        if ($k -eq 'Extra') { foreach ($e in @($v)) { $parts += $(if ($e -is [array]) { @($e) -join ',' } elseif ("$e" -match '\s') { "'$e'" } else { "$e" }) }; continue }
         if ($v -is [switch] -or $v -is [bool]) { if ([bool]$v) { $parts += "-$k" }; continue }
         if ($null -eq $v -or "$v" -eq '') { continue }
         $s = if ($v -is [array]) { (@($v) -join ',') } else { [string]$v }
@@ -140,9 +148,9 @@ function Get-GeneTargetClone {
     <# The target clone (local path, share path, repo object) for a resolved target with a session. #>
     param($Target, [switch]$MustExist)
     $local = $Target.Paths.Local['AIWorkRoot']; $unc = $Target.Paths.Unc['AIWorkRoot']
-    if (-not $local) { throw "AIWorkRoot is blank in $($Target.ProfilePath). Run: prof streams bootstrap -Machine $($Target.Machine) -User $($Target.User) -FixProfile" }
+    if (-not $local) { throw "AIWorkRoot is blank in $($Target.ProfilePath). Run: prof setup bootstrap -Machine $($Target.Machine) -User $($Target.User) -FixProfile" }
     if ($MustExist -and -not (Test-Path -LiteralPath (Join-Path $unc '.git'))) {
-        throw "No ai-setup clone for $($Target.User) on $($Target.Machine) at $local. Run: prof streams bootstrap -Machine $($Target.Machine) -User $($Target.User)"
+        throw "No ai-setup clone for $($Target.User) on $($Target.Machine) at $local. Run: prof setup bootstrap -Machine $($Target.Machine) -User $($Target.User)"
     }
     [pscustomobject]@{ Local = $local; Unc = $unc; Repo = (New-GeneRepo -Path $local -Session $Target.Session -Machine $Target.Machine) }
 }
@@ -150,7 +158,7 @@ function Get-GeneTargetClone {
 function Assert-GenePerUser {
     param($Target)
     if (@($Target.Users).Count -gt 1 -and -not (Test-GenePerUserValue $Target.Profile.Raw['AIWorkRoot'])) {
-        throw "$($Target.Machine) lists $(@($Target.Users).Count) accounts but its AIWorkRoot ($($Target.Profile.Raw['AIWorkRoot'])) is not per-user, so they would share one clone. Run: prof streams bootstrap -Machine $($Target.Machine) -User $($Target.User) -FixProfile"
+        throw "$($Target.Machine) lists $(@($Target.Users).Count) accounts but its AIWorkRoot ($($Target.Profile.Raw['AIWorkRoot'])) is not per-user, so they would share one clone. Run: prof setup bootstrap -Machine $($Target.Machine) -User $($Target.User) -FixProfile"
     }
 }
 
@@ -205,7 +213,7 @@ function Invoke-GeneProfStatus {
         $ab = (Invoke-GeneGitResult $hub @('rev-list', '--left-right', '--count', 'origin/main...HEAD')).Out | Select-Object -First 1
         $rel = if ($ab -match '^(\d+)\s+(\d+)$') { "origin: ahead $($Matches[2]), behind $($Matches[1]) (as of last fetch)" } else { 'origin: unknown' }
         $rows.Add([pscustomobject]@{ Machine = "$env:COMPUTERNAME (hub)"; User = (Get-GeneCaller); Clone = "yes ($hub)"; Head = $s.Head.Substring(0, 7); Dirty = $s.Dirty.Count; Relation = $rel
-                Runtime = (Get-GeneRuntimeRevision (Join-Path $HOME '.claude')); Profile = $(if ((Test-Path -LiteralPath $PROFILE) -and (Get-FileHash -LiteralPath $PROFILE).Hash -eq $hubProfileHash) { 'in sync' } else { 'DIFFERS (prof streams reload)' }) })
+                Runtime = (Get-GeneRuntimeRevision (Join-Path $HOME '.claude')); Profile = $(if ((Test-Path -LiteralPath $PROFILE) -and (Get-FileHash -LiteralPath $PROFILE).Hash -eq $hubProfileHash) { 'in sync' } else { 'DIFFERS (prof setup reload)' }) })
     }
     $known = Get-GeneMachines
     foreach ($name in $known.Keys) {
@@ -214,7 +222,7 @@ function Invoke-GeneProfStatus {
         $sd = $known[$name].systemDrive
         if (-not (Test-Path -LiteralPath "\\$name\$($sd)`$")) { $rows.Add([pscustomobject]@{ Machine = $name; User = '*'; Clone = 'unreachable'; Head = ''; Dirty = ''; Relation = "no \\$name\$($sd)`$"; Runtime = ''; Profile = '' }); continue }
         $tp = Read-GeneTargetProfile -Path (Get-GeneTargetProfilePath -Machine $name -SystemDrive $sd)
-        if (-not $tp) { $rows.Add([pscustomobject]@{ Machine = $name; User = '*'; Clone = 'no machine profile'; Head = ''; Dirty = ''; Relation = 'prof streams bootstrap'; Runtime = ''; Profile = '' }); continue }
+        if (-not $tp) { $rows.Add([pscustomobject]@{ Machine = $name; User = '*'; Clone = 'no machine profile'; Head = ''; Dirty = ''; Relation = 'prof setup bootstrap'; Runtime = ''; Profile = '' }); continue }
         $users = @($known[$name].users)
         $clonePaths = @($users | ForEach-Object { Expand-GeneOffline -Value $tp.Raw['AIWorkRoot'] -User $_ -SystemDrive $sd } | Where-Object { $_ } | Select-Object -Unique)
         $states = Get-GeneRemoteRepoStates -Machine $name -Paths $clonePaths
@@ -227,7 +235,7 @@ function Invoke-GeneProfStatus {
             $state = $states[$aiw]
             $row.Clone = if ($state.Exists) { "yes ($aiw)" } else { "none at $aiw" }
             if ($state.Exists) { $row.Head = $state.Head.Substring(0, 7); $row.Dirty = $state.Dirty; $row.Relation = Get-GeneRelation -Hub $hub -TargetHead $state.Head }
-            else { $row.Relation = 'prof streams bootstrap' }
+            else { $row.Relation = 'prof setup bootstrap' }
             if ($ch) { $row.Runtime = Get-GeneRuntimeRevision (ConvertTo-GeneUncPath -Machine $name -Path $ch) }
             if ($docs) {
                 $pf = ConvertTo-GeneUncPath -Machine $name -Path $docs
@@ -237,7 +245,7 @@ function Invoke-GeneProfStatus {
         }
     }
     if ($Machine -and -not (Test-GeneIsLocalMachine $Machine) -and -not @($known.Keys | Where-Object { $_ -ieq $Machine })) {
-        Write-ProfWarn "$Machine is not in machines.yaml. prof streams bootstrap adds it; prof streams status lists only known machines."
+        Write-ProfWarn "$Machine is not in machines.yaml. prof setup bootstrap adds it; prof setup status lists only known machines."
     }
     $rows | Format-Table -AutoSize -Wrap | Out-String -Width 220 | Write-Host
 }
@@ -268,7 +276,7 @@ function Invoke-GeneProfConfig {
 function Invoke-GeneProfEdit {
     $f = Join-Path (Get-GeneHubRoot) 'pwsh\PowerShell\Microsoft.PowerShell_profile.ps1'
     Write-ProfNote "Editing the repo copy: $f"
-    Write-ProfNote 'When saved: prof streams reload (this machine), prof streams push -Machine <name> (another one).'
+    Write-ProfNote 'When saved: prof setup reload (this machine), prof setup push -Machine <name> (another one).'
     if (Get-Command code -ErrorAction SilentlyContinue) { code $f } else { notepad $f }
 }
 
@@ -292,14 +300,14 @@ function Invoke-GeneProfShow {
     }
     [pscustomobject]@{ Copy = 'installed (what loads)'; Path = $PROFILE; Hash = $(if ($ih) { $ih.Substring(0, 12) } else { 'missing' }) },
     [pscustomobject]@{ Copy = 'repo (what you edit)'; Path = $repoFile; Hash = $rh.Substring(0, 12) } | Format-Table -AutoSize | Out-String -Width 220 | Write-Host
-    Write-ProfNote $(if ($ih -eq $rh) { 'Profile: in sync.' } else { 'Profile: DIFFERS. prof streams reload installs the repo copy.' })
-    Write-ProfNote $(if ($mods) { "Own modules: $mods file(s) differ from the repo. prof streams reload installs them." } else { 'Own modules: in sync.' })
+    Write-ProfNote $(if ($ih -eq $rh) { 'Profile: in sync.' } else { 'Profile: DIFFERS. prof setup reload installs the repo copy.' })
+    Write-ProfNote $(if ($mods) { "Own modules: $mods file(s) differ from the repo. prof setup reload installs them." } else { 'Own modules: in sync.' })
 }
 
 function Resolve-GeneProfCommand {
     <#
     The words typed after prof -> Group, Verb, Topic (or Help + Words). A command only one group has may be typed
-    without its group: 'prof push' means 'prof streams push'. Ambiguous lists the groups when several have it.
+    without its group: 'prof push' means 'prof setup push'. Ambiguous lists the groups when several have it.
     #>
     param([string]$First, [string]$Second, [string]$Third)
     $f = "$First".ToLowerInvariant(); $s = "$Second".ToLowerInvariant()
@@ -337,7 +345,7 @@ function Show-GeneProfHelp {
     if ($group) {
         $g = $script:ProfGroups[$group]
         Write-Host "prof $group <command> [options]     $($g.Description)" -ForegroundColor Cyan
-        foreach ($v in $g.Verbs.Keys) { Write-Host ("  {0,-10} {1}" -f $v, $g.Verbs[$v]) }
+        foreach ($v in $g.Verbs.Keys) { Write-Host ("  {0,-14} {1}" -f $v, $g.Verbs[$v]) }
         Write-Host ''
         Write-Host "prof $group alone opens this group's menu. prof help $group <command> explains one command."
         return
@@ -348,16 +356,16 @@ function Show-GeneProfHelp {
         $g = $script:ProfGroups[$gn]
         Write-Host ''
         Write-Host ("{0}  {1}" -f $gn, $g.Description) -ForegroundColor Cyan
-        foreach ($v in $g.Verbs.Keys) { Write-Host ("  {0,-10} {1}" -f $v, $g.Verbs[$v]) }
+        foreach ($v in $g.Verbs.Keys) { Write-Host ("  {0,-14} {1}" -f $v, $g.Verbs[$v]) }
     }
     Write-Host ''
     Write-Host 'help       This list. prof help <group> lists one group; prof help <group> <command> explains one command.'
-    Write-Host 'A command only one group has also works without the group: prof push = prof streams push.'
+    Write-Host 'A command only one group has also works without the group: prof publish = prof build publish.'
     Write-Host ''
     Write-Host 'Old commands still work:' -ForegroundColor Cyan
-    foreach ($k in $script:ProfOldNames.Keys) { Write-Host ("  {0,-10} -> {1}" -f $k, $script:ProfOldNames[$k]) }
+    foreach ($k in $script:ProfOldNames.Keys) { Write-Host ("  {0} -> {1}" -f $k.PadRight(10), $script:ProfOldNames[$k]) }
     Write-Host ''
-    Write-Host "Machines prof knows are listed in $(Get-GeneMachinesPath). Each machine's folders come from its own settings file (prof streams config)."
+    Write-Host "Machines prof knows are listed in $(Get-GeneMachinesPath). Each machine's folders come from its own settings file (prof setup config)."
 }
 
 # ------------------------------------------------------------------------------------------------ pull
@@ -367,13 +375,13 @@ function Invoke-GeneProfPull {
     $t = Resolve-GeneTarget -Machine $Machine -User $User
     Assert-GenePerUser $t
     $aiw = Expand-GeneOffline -Value $t.Profile.Raw['AIWorkRoot'] -User $t.User -SystemDrive $t.SystemDrive
-    if (-not $aiw) { throw "AIWorkRoot ($($t.Profile.Raw['AIWorkRoot'])) on $($t.Machine) cannot be expanded without a session as that account. Use prof streams push, which opens one." }
+    if (-not $aiw) { throw "AIWorkRoot ($($t.Profile.Raw['AIWorkRoot'])) on $($t.Machine) cannot be expanded without a session as that account. Use prof setup push, which opens one." }
     # Worktree git runs on that machine as you (Kerberos, no prompt); the clone may belong to another account.
     $session = New-PSSession -ComputerName $t.Machine -ErrorAction Stop
     try {
         $repo = New-GeneRepo -Path $aiw -Session $session -Machine $t.Machine
         $state = Get-GeneRepoState $repo
-        if (-not $state.Exists) { throw "No ai-setup clone for $($t.User) on $($t.Machine) at $aiw. Run: prof streams bootstrap -Machine $($t.Machine) -User $($t.User)" }
+        if (-not $state.Exists) { throw "No ai-setup clone for $($t.User) on $($t.Machine) at $aiw. Run: prof setup bootstrap -Machine $($t.Machine) -User $($t.User)" }
         if ($state.Branch -ne 'main') { throw "The clone on $($t.Machine) is on '$($state.Branch)', not main. Fix it there first." }
         $hubState = Get-GeneRepoState (Get-GeneHubRepo)
         Write-ProfStep "pull $($t.Machine)\$(Get-GeneUserName $t.User) -> $env:COMPUTERNAME"
@@ -392,7 +400,7 @@ function Invoke-GeneProfPull {
         Write-ProfStep 'summary'
         Write-ProfNote "target: $(if ($h1.Committed) { "$($h1.Files.Count) file(s) committed there" } else { 'nothing uncommitted' }); hub: $(if ($h0.Committed) { "$($h0.Files.Count) local file(s) committed" } else { 'clean' })"
         Write-ProfNote "merged $($m.Merged) commit(s) from $($t.Machine); install here exited $code"
-        Write-ProfNote 'GitHub not touched: publish.ps1 (or prof streams push) sends it.'
+        Write-ProfNote 'GitHub not touched: publish.ps1 (or prof setup push) sends it.'
     }
     finally { Remove-PSSession $session -ErrorAction SilentlyContinue }
 }
@@ -460,8 +468,8 @@ function Invoke-GeneProfPush {
         Write-ProfStep 'summary'
         Write-ProfNote "from $label`: $(if ($h1.Committed) { "$($h1.Files.Count) file(s) harvested, " } else { '' })$($m.Merged) commit(s) merged here"
         Write-ProfNote "to $label`: $(if ($p) { "$($p.From.Substring(0,7)) -> $($p.To.Substring(0,7))" } else { 'no change' })"
-        Write-ProfNote "install there exited $ic$(switch ($ic) { 0 { ' (ok)' } 2 { ' (machine profile invalid: prof streams check)' } 3 { ' (stopped on drift: see above)' } default { '' } })"
-        Write-ProfNote "Open a new pwsh on $($t.Machine) (or prof streams reload there) to load the new profile."
+        Write-ProfNote "install there exited $ic$(switch ($ic) { 0 { ' (ok)' } 2 { ' (machine profile invalid: prof setup check)' } 3 { ' (stopped on drift: see above)' } default { '' } })"
+        Write-ProfNote "Open a new pwsh on $($t.Machine) (or prof setup reload there) to load the new profile."
     }
     finally { Close-GeneTarget $t }
 }
@@ -473,11 +481,11 @@ function Invoke-GeneProfCheck {
     $t = Resolve-GeneTarget -Machine $Machine -User $User -NeedSession -AllowMissingProfile
     try {
         Write-ProfStep "check $($t.Machine) for $($t.User)"
-        if (-not $t.Profile) { Write-ProfWarn "No machine profile at $($t.ProfilePath). prof streams bootstrap creates one."; return }
+        if (-not $t.Profile) { Write-ProfWarn "No machine profile at $($t.ProfilePath). prof setup bootstrap creates one."; return }
         $fix = Get-GeneProfileFix -HubRaw (Get-GeneHubProfile).Raw -TargetRaw $t.Profile.Raw
         Write-ProfNote "machine profile $($t.ProfilePath)"
         if ($fix.Missing.Count) { Write-ProfWarn "rows this machine lacks (the hub has them): $($fix.Missing -join ', ')" } else { Write-ProfNote 'no rows missing compared with the hub' }
-        if ($fix.AIWorkRoot) { Write-ProfWarn "AIWorkRoot '$($fix.AIWorkRoot.Old)' is not per-user (one clone per account): prof streams bootstrap -FixProfile sets '$($fix.AIWorkRoot.New)'" }
+        if ($fix.AIWorkRoot) { Write-ProfWarn "AIWorkRoot '$($fix.AIWorkRoot.Old)' is not per-user (one clone per account): prof setup bootstrap -FixProfile sets '$($fix.AIWorkRoot.New)'" }
         $paths = Invoke-Command -Session $t.Session -ArgumentList $t.Profile.Raw -ScriptBlock {
             param($raw)
             foreach ($k in $raw.Keys) {
@@ -490,7 +498,7 @@ function Invoke-GeneProfCheck {
         if ($gone.Count) { foreach ($g in $gone) { Write-ProfWarn "$($g.Key) = $($g.Path) does not exist on $($t.Machine) for $($t.User)" } } else { Write-ProfNote 'every path row exists there' }
         $clone = Get-GeneTargetClone -Target $t
         $state = Get-GeneRepoState $clone.Repo
-        if (-not $state.Exists) { Write-ProfWarn "no clone at $($clone.Local): prof streams bootstrap"; return }
+        if (-not $state.Exists) { Write-ProfWarn "no clone at $($clone.Local): prof setup bootstrap"; return }
         Write-ProfNote "clone $($clone.Local) at $($state.Head.Substring(0,7)), $($state.Dirty.Count) uncommitted; $(Get-GeneRelation -Hub $hub -TargetHead $state.Head)"
         Write-ProfStep "install.ps1 -Check on $($t.Machine) as $($t.User)"
         $c = Invoke-GeneRemotePwsh -Target $t -File (Join-Path $clone.Local 'install.ps1') -Arguments @('-NoPull', '-Check')
@@ -519,7 +527,7 @@ function Edit-GeneProfileLines {
     Applies a fix to the lines of a machine profile: replaces the AIWorkRoot value and appends missing rows (blank
     value) at the end of the first table. Every other line is kept as it is.
     #>
-    param([Parameter(Mandatory)][AllowEmptyString()][string[]]$Lines, [Parameter(Mandatory)]$Fix, [string]$Note = 'added by prof streams bootstrap: fill in')
+    param([Parameter(Mandatory)][AllowEmptyString()][string[]]$Lines, [Parameter(Mandatory)]$Fix, [string]$Note = 'added by prof setup bootstrap: fill in')
     $out = [System.Collections.Generic.List[string]]::new()
     $inFirst = $false; $done = $false
     foreach ($line in $Lines) {
@@ -746,7 +754,7 @@ function Invoke-GeneProfBootstrap {
         Write-ProfNote "AIWorkRoot $($clone.Local); ClaudeHome $($t.Paths.Local['ClaudeHome']); ScratchRoot $($t.Paths.Local['ScratchRoot'])"
 
         Write-ProfStep '4. clone'
-        if (Test-Path -LiteralPath (Join-Path $clone.Unc '.git')) { Write-ProfNote 'already cloned (prof streams push from now on)' }
+        if (Test-Path -LiteralPath (Join-Path $clone.Unc '.git')) { Write-ProfNote 'already cloned (prof setup push from now on)' }
         elseif ((Test-Path -LiteralPath $clone.Unc) -and @(Get-ChildItem -LiteralPath $clone.Unc -Force).Count) { throw "$($clone.Local) exists, is not empty and is not a git clone. Move it aside first." }
         elseif ($WhatIf) { Write-ProfNote "(-WhatIf: would clone $hub's main into $($clone.Local) as $($t.User), from a bundle file)" }
         else { New-GeneTargetClone -Target $t -Clone $clone -Hub $hub }
@@ -759,13 +767,13 @@ function Invoke-GeneProfBootstrap {
         else {
             $ic = Invoke-GeneRemotePwsh -Target $t -File (Join-Path $clone.Local 'install.ps1') -Arguments @('-NoPull', '-Yes')
             Write-ProfNote "install exited $ic"
-            if ($ic -ne 0) { $left.Add("install.ps1 on $($t.Machine) exited ${ic}: read its output above, fix, then prof streams push -Machine $($t.Machine) -User $($t.User).") }
+            if ($ic -ne 0) { $left.Add("install.ps1 on $($t.Machine) exited ${ic}: read its output above, fix, then prof setup push -Machine $($t.Machine) -User $($t.User).") }
         }
 
         if (-not $WhatIf) {
             if (Add-GeneMachine -Name $t.Machine -User $t.User) { Write-ProfNote "added $($t.User) on $($t.Machine) to machines.yaml (uncommitted)" }
-            if ($WithTerminal) { Invoke-GeneTerminalOn -Target $t -Clone $clone -Left $left } else { $left.Add("Windows Terminal settings: prof streams terminal -Machine $($t.Machine) -User $($t.User)") }
-            if ($WithSecrets) { Invoke-GeneSecretsOn -Target $t -Clone $clone -Hub $hub } else { $left.Add("Claude secrets (MCP keys): prof streams secrets -Machine $($t.Machine) -User $($t.User)") }
+            if ($WithTerminal) { Invoke-GeneTerminalOn -Target $t -Clone $clone -Left $left } else { $left.Add("Windows Terminal settings: prof setup terminal -Machine $($t.Machine) -User $($t.User)") }
+            if ($WithSecrets) { Invoke-GeneSecretsOn -Target $t -Clone $clone -Hub $hub } else { $left.Add("Claude secrets (MCP keys): prof setup secrets -Machine $($t.Machine) -User $($t.User)") }
         }
         $left.Add("Sign in to Claude as $($t.User) on $($t.Machine): start it with 'ai'.")
         $left.Add('Chocolatey tools and anything install.ps1 reported as not installed are not done by prof.')
@@ -779,18 +787,18 @@ function Invoke-GeneProfBootstrap {
 function Invoke-GeneTerminalOn {
     param($Target, $Clone, [System.Collections.Generic.List[string]]$Left)
     $script = Join-Path $Clone.Local 'pwsh\AddOrUpdateMyTerminal.ps1'
-    if (-not (Test-Path -LiteralPath (Join-Path $Clone.Unc 'pwsh\AddOrUpdateMyTerminal.ps1'))) { throw "The clone on $($Target.Machine) has no pwsh\AddOrUpdateMyTerminal.ps1 yet: prof streams push first." }
+    if (-not (Test-Path -LiteralPath (Join-Path $Clone.Unc 'pwsh\AddOrUpdateMyTerminal.ps1'))) { throw "The clone on $($Target.Machine) has no pwsh\AddOrUpdateMyTerminal.ps1 yet: prof setup push first." }
     Write-ProfStep "Windows Terminal settings for $($Target.User) on $($Target.Machine)"
     $c = Invoke-GeneRemotePwsh -Target $Target -File $script -Arguments @('-ForUser')
-    if ($c -eq 3) { $Left.Add("Open Windows Terminal once as $($Target.User) on $($Target.Machine) (install it there if missing), then prof streams terminal -Machine $($Target.Machine) -User $($Target.User).") }
-    elseif ($c -ne 0) { $Left.Add("prof streams terminal on $($Target.Machine) exited $c (see above).") }
+    if ($c -eq 3) { $Left.Add("Open Windows Terminal once as $($Target.User) on $($Target.Machine) (install it there if missing), then prof setup terminal -Machine $($Target.Machine) -User $($Target.User).") }
+    elseif ($c -ne 0) { $Left.Add("prof setup terminal on $($Target.Machine) exited $c (see above).") }
     $Left.Add("Desktop shortcuts on $($Target.Machine): run pwsh\AddOrUpdateMyTerminal.ps1 there at the desktop (needs a console and admin).")
 }
 
 function Invoke-GeneSecretsOn {
     param($Target, $Clone, [string]$Hub)
     Write-ProfStep "Claude secrets -> $($Target.User) on $($Target.Machine)"
-    if (-not (Test-Path -LiteralPath (Join-Path $Clone.Unc 'install.ps1'))) { throw "No clone on $($Target.Machine) yet: prof streams bootstrap first." }
+    if (-not (Test-Path -LiteralPath (Join-Path $Clone.Unc 'install.ps1'))) { throw "No clone on $($Target.Machine) yet: prof setup bootstrap first." }
     $p1 = Read-Host 'Passphrase for this one transfer (12+ characters, used once, never stored)' -AsSecureString
     $p2 = Read-Host 'Type it again' -AsSecureString
     $plain = { param($s) $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); try { [Runtime.InteropServices.Marshal]::PtrToStringBSTR($b) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b) } }
@@ -841,10 +849,10 @@ function Invoke-GeneProfSecrets {
 }
 
 # ------------------------------------------------------------------------------------------------ menu
-function Read-GeneStreamsMenuParams {
-    <# The menu's questions for one streams command. Returns the parameters, or $null when the user cancels. #>
+function Read-GeneSetupMenuParams {
+    <# The menu's questions for one setup command. Returns the parameters, or $null when the user cancels. #>
     param([Parameter(Mandatory)][string]$Verb, [scriptblock]$Reader)
-    $g = $script:ProfGroups['streams']
+    $g = $script:ProfGroups['setup']
     $p = [ordered]@{}
     $known = Get-GeneMachines
     if ($Verb -in $g.NeedMachine -or $Verb -in 'config', 'status') {
@@ -899,6 +907,18 @@ function Invoke-GeneProfMenu {
         $Group = $pick.Name
     }
     $g = $script:ProfGroups[$Group]
+    if ($g.Menu) {
+        # The group asks its own questions in its own order (build: product first, then what to do).
+        $res = & $g.Menu -Reader $Reader
+        if ($null -eq $res) { return }
+        if ($res -eq 'help') { Show-GeneProfHelp -Words @($Group); return }
+        Write-Host ''
+        Write-Host "> $(Format-GeneProfCommand -Group $Group -Verb $res.Verb -Params $res.Params)" -ForegroundColor DarkCyan
+        if (-not (Read-GeneYesNo -Question 'Run it?' -Default $true -Reader $Reader)) { return }
+        $p = $res.Params
+        Invoke-GeneProf -Group $Group -Verb $res.Verb @p
+        return
+    }
     $items = @($g.Verbs.Keys | ForEach-Object { [pscustomobject]@{ Name = $_; Description = $g.Verbs[$_] } }) +
     [pscustomobject]@{ Name = 'help'; Description = "Explain one of these commands in full" }
     $pick = Select-GeneMenu -Title "prof $Group`: what do you want to do?" -Items $items -Reader $Reader
@@ -937,7 +957,13 @@ function Invoke-GeneProf {
                 $list | Where-Object { $_ -like "$w*" }
             })]
         [string]$Verb,
-        [Parameter(Position = 2)][string]$Topic,
+        [Parameter(Position = 2)]
+        [ArgumentCompleter({
+                param($c, $p, $w, $a, $fb)
+                $g = "$($fb['Group'])".ToLowerInvariant()
+                if ($script:ProfGroups.Contains($g) -and $script:ProfGroups[$g].TopicNames) { & $script:ProfGroups[$g].TopicNames | Where-Object { $_ -like "$w*" } }
+            })]
+        [string]$Topic,
         [ArgumentCompleter({ param($c, $p, $w) (Get-GeneMachines).Keys | Where-Object { $_ -like "$w*" } })]
         [string]$Machine,
         [string]$User,
@@ -949,8 +975,15 @@ function Invoke-GeneProf {
         [switch]$WithSecrets,
         [switch]$NoPublish,
         [switch]$AllowSecrets,
+        [string]$Repo,
+        [string]$Product,
+        [switch]$AIOnly,
+        [ValidateSet('None', 'Patch', 'Minor', 'Major')][string]$Bump,
+        [ValidateSet('Debug', 'Release')][string]$Configuration,
         [switch]$WhatIf,
-        [Alias('h')][switch]$ShowHelp
+        [Alias('h')][switch]$ShowHelp,
+        # Anything prof does not know (build: the dp* command's own switches, e.g. -Test, -Run Web).
+        [Parameter(ValueFromRemainingArguments)][object[]]$Extra
     )
     $ErrorActionPreference = 'Stop'
     $r = Resolve-GeneProfCommand $Group $Verb $Topic
@@ -966,13 +999,18 @@ function Invoke-GeneProf {
     if ($r.Verb -in $g.NeedMachine -and -not $Machine) { throw "prof $($r.Group) $($r.Verb) needs -Machine. $($g.Usage[$r.Verb])" }
 
     $bound = [ordered]@{}
+    if ($r.Topic -and $g.TopicParam -and -not $PSBoundParameters.ContainsKey($g.TopicParam)) { $bound[$g.TopicParam] = $r.Topic }
+    elseif ($r.Topic) { throw "prof $($r.Group) $($r.Verb): did not expect '$($r.Topic)'. $($g.Usage[$r.Verb])" }
     foreach ($k in $PSBoundParameters.Keys) { if ($k -notin 'Group', 'Verb', 'Topic', 'ShowHelp') { $bound[$k] = $PSBoundParameters[$k] } }
     Write-Host "> $(Format-GeneProfCommand -Group $r.Group -Verb $r.Verb -Params $bound)" -ForegroundColor DarkCyan
-    $fn = "$($g.Prefix)$((Get-Culture).TextInfo.ToTitleCase($r.Verb))"
+    # status-rebuild -> StatusRebuild: a command's function is <Prefix><Word><Word>.
+    $fn = $g.Prefix + (($r.Verb -split '-' | ForEach-Object { (Get-Culture).TextInfo.ToTitleCase($_) }) -join '')
     $accepts = (Get-Command $fn).Parameters.Keys
     $call = @{}
     foreach ($k in $bound.Keys) {
-        if ($k -in $accepts) { $call[$k] = $bound[$k] } else { Write-ProfWarn "-$k does not apply to prof $($r.Group) $($r.Verb); ignored." }
+        if ($k -in $accepts) { $call[$k] = $bound[$k] }
+        elseif ($k -eq 'Extra') { throw "prof $($r.Group) $($r.Verb) does not know: $(@($bound.Extra) -join ' '). $($g.Usage[$r.Verb])" }
+        else { Write-ProfWarn "-$k does not apply to prof $($r.Group) $($r.Verb); ignored." }
     }
     & $fn @call
 }

@@ -230,38 +230,229 @@ try {
         }
         finally { $script:GeneRichMenu = $null; Remove-Item Function:\Read-SpectreSelection }
     }
+    Test-Case 'arrow-key multi pick: ticked labels map back to items; nothing ticked with -AllowEmpty is an empty list' {
+        function Read-SpectreMultiSelection { param($Message, $Choices, $AllowEmpty, $PageSize, $Color) $Choices | Select-Object -Index $script:multiIdx }
+        $script:GeneRichMenu = $true
+        try {
+            $script:multiIdx = @(0, 2)
+            $r = Select-GeneMenu -Title t -Items @('a', 'b', 'c') -Multi
+            Assert-Equal @('a', 'c') $r
+            $script:multiIdx = @()
+            $r = Select-GeneMenu -Title t -Items @('a', 'b') -Multi -AllowEmpty
+            Assert-True ($null -ne $r -and @($r).Count -eq 0)
+        }
+        finally { $script:GeneRichMenu = $null; Remove-Item Function:\Read-SpectreMultiSelection }
+    }
     Test-Case 'text: the reader answers, Enter alone is empty' {
         Assert-Equal 'D:' (Read-GeneText -Prompt p -Reader (New-Queue @('D:')))
         Assert-Equal '' (Read-GeneText -Prompt p -Reader (New-Queue @('')))
     }
 
     # ---------------------------------------------------------------- groups and the dispatcher
-    . (Join-Path $mod 'Verbs.ps1')
-    Test-Case 'groups: streams holds the eleven commands, help is not one of them' {
-        Assert-True ($script:ProfGroups.Contains('streams'))
-        Assert-Equal @('push', 'pull', 'status', 'check', 'bootstrap', 'terminal', 'secrets', 'config', 'edit', 'reload', 'show') @($script:ProfGroups['streams'].Verbs.Keys)
+    foreach ($f in 'Verbs.ps1', 'StreamsGroup.ps1', 'GitGroup.ps1', 'BuildGroup.ps1', 'AiGroup.ps1', 'OtherGroup.ps1') { . (Join-Path $mod $f) }
+    Test-Case 'groups: main menu order is streams, setup, git, build, ai, other' { Assert-Equal @('streams', 'setup', 'git', 'build', 'ai', 'other') @($script:ProfGroups.Keys) }
+    Test-Case 'groups: setup holds the eleven commands, help is not one of them' {
+        Assert-True ($script:ProfGroups.Contains('setup'))
+        Assert-Equal @('push', 'pull', 'status', 'check', 'bootstrap', 'terminal', 'secrets', 'config', 'edit', 'reload', 'show') @($script:ProfGroups['setup'].Verbs.Keys)
     }
     Test-Case 'resolve: group + command, command alone, help words, unknown' {
-        $r = Resolve-GeneProfCommand 'streams' 'Status'
-        Assert-Equal 'streams' $r.Group; Assert-Equal 'status' $r.Verb
+        $r = Resolve-GeneProfCommand 'setup' 'Status'
+        Assert-Equal 'setup' $r.Group; Assert-Equal 'status' $r.Verb
+        $r = Resolve-GeneProfCommand 'publish' 'speed'
+        Assert-Equal 'build' $r.Group; Assert-Equal 'publish' $r.Verb; Assert-Equal 'speed' $r.Topic
         $r = Resolve-GeneProfCommand 'push'
-        Assert-Equal 'streams' $r.Group; Assert-Equal 'push' $r.Verb
+        Assert-Equal '' $r.Group; Assert-Equal @('streams', 'setup', 'git') $r.Ambiguous
         $r = Resolve-GeneProfCommand 'help' 'streams' 'push'
         Assert-True $r.Help; Assert-Equal @('streams', 'push') $r.Words
         $r = Resolve-GeneProfCommand 'nope'
         Assert-Equal '' $r.Group; Assert-Equal 'nope' $r.Verb
     }
     Test-Case 'command line: the group comes first' {
-        Assert-Equal 'prof streams push -Machine M1 -WhatIf' (Format-GeneProfCommand -Group streams -Verb push -Params ([ordered]@{ Machine = 'M1'; WhatIf = $true }))
+        Assert-Equal 'prof setup push -Machine M1 -WhatIf' (Format-GeneProfCommand -Group setup -Verb push -Params ([ordered]@{ Machine = 'M1'; WhatIf = $true }))
     }
     Test-Case 'menu flow: group, command, shows the full command, n runs nothing' {
-        $o = Invoke-GeneProfMenu -Reader (New-Queue @('1', '11', 'n')) 6>&1 | Out-String
-        Assert-Match $o '> prof streams show'
+        $o = Invoke-GeneProfMenu -Reader (New-Queue @('2', '11', 'n')) 6>&1 | Out-String
+        Assert-Match $o '> prof setup show'
         Assert-True ($o -notmatch 'Profile: ') 'show ran although the answer was n'
     }
     Test-Case 'menu flow: q at the main menu does nothing' {
         $o = Invoke-GeneProfMenu -Reader (New-Queue @('q')) 6>&1 | Out-String
         Assert-True ($o -notmatch '> prof')
+    }
+
+    # ---------------------------------------------------------------- other (catalog)
+    Test-Case 'other: every command the profile defines is in the catalog (census)' {
+        $profileFile = Join-Path $repoRoot 'pwsh\PowerShell\Microsoft.PowerShell_profile.ps1'
+        $ast = [Management.Automation.Language.Parser]::ParseFile($profileFile, [ref]$null, [ref]$null)
+        # Top-level functions whose name starts lower case are the typed commands; prompt is PowerShell's own.
+        $defined = @($ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.FunctionDefinitionAst] -and $_.Name -cmatch '^[a-z]' -and $_.Name -ne 'prompt' } | ForEach-Object Name)
+        $listed = @($script:ProfOtherCatalog.Values | ForEach-Object { $_.Commands.Name })
+        $missing = @($defined | Where-Object { $_ -notin $listed })
+        Assert-Equal 0 $missing.Count "not in prof other: $($missing -join ', ')"
+        Assert-True ('caiprof' -in $listed); Assert-True ('cgov' -notin $listed)
+    }
+    Test-Case 'other: a category lists its commands; a named command shows how to use it; runs nothing' {
+        $o = Invoke-GeneProf other navigate 6>&1 | Out-String
+        Assert-Match $o 'cspeed'; Assert-Match $o 'caiprof'
+        $o = Invoke-GeneProf other git pps 6>&1 | Out-String
+        Assert-Match $o 'How to use'; Assert-Match $o 'powershellscripts'
+        $o = Invoke-GeneProf other build dpall 6>&1 | Out-String
+        Assert-Match $o 'Also through prof: prof build publish all'
+    }
+    Test-Case 'other menu: category, then command, shows it, back to the list until q' {
+        $o = Invoke-GeneProfMenu -Group other -Reader (New-Queue @('2', '3', 'q')) 6>&1 | Out-String
+        Assert-Match $o 'addLinux'; Assert-Match $o 'How to use'
+        Assert-True ($o -notmatch 'Run it\?') 'the catalog asked to run something'
+    }
+
+    # ---------------------------------------------------------------- build and git groups
+    $savedMachine = $global:GeneMachine; $savedAI = $global:GeneMachineAI; $savedLoc = Get-Location
+    $sm = Join-Path $root 'sm'
+    New-Item -ItemType Directory -Force -Path (Join-Path $sm 'TestAuto.Web') | Out-Null
+    Set-Content -LiteralPath (Join-Path $sm 'TestAuto.Web\TestAuto.Web.csproj') -Value '<Project><PropertyGroup><Version>1.2.3</Version></PropertyGroup></Project>'
+    $global:GeneMachine = [ordered]@{ SpeedMerchantsRepo = $sm }
+    $global:GeneMachineAI = @{}
+    function dpfake {
+        [CmdletBinding(SupportsShouldProcess = $true)]
+        param([switch]$Test, [ValidateSet('A', 'B')][string]$Run, [string[]]$Products, [switch]$Package, [switch]$Bump, [switch]$BumpMinor, [switch]$BumpMajor, [Alias('h')][switch]$ShowHelp)
+        $script:dpGot = [ordered]@{} + $PSBoundParameters
+    }
+    $realSpeed = $script:ProfBuildProducts['speed'].Command
+    try {
+        Test-Case 'build: dp* switches after prof become a splat; unknown ones are refused' {
+            $h = ConvertTo-GeneCommandArgs -Command dpfake -Extra @('-Test', '-Run', 'B', '-Products', @('x', 'y'))
+            Assert-True $h.Test; Assert-Equal 'B' $h.Run; Assert-Equal @('x', 'y') $h.Products
+            Assert-True (-not (ConvertTo-GeneCommandArgs -Command dpfake -Extra @('-Test:$false')).Test)
+            Assert-Equal 0 (ConvertTo-GeneCommandArgs -Command dpfake -Extra $null).Count
+            $err = try { ConvertTo-GeneCommandArgs -Command dpfake -Extra @('-Bogus'); '' } catch { "$_" }
+            Assert-Match $err 'dpfake has no -Bogus'
+        }
+        Test-Case 'build: version bumps' {
+            Assert-Equal '1.2.4' (Get-GeneBumpedVersion '1.2.3' 'Patch'); Assert-Equal '1.3.0' (Get-GeneBumpedVersion '1.2.3' 'Minor')
+            Assert-Equal '2.0.0' (Get-GeneBumpedVersion '1.2.3' 'Major'); Assert-Equal '1.2.3' (Get-GeneBumpedVersion '1.2.3' 'None')
+            Assert-Equal '1.2.3' (Get-GeneProductVersion $script:ProfBuildProducts['speed'])
+        }
+        Test-Case 'build: command line shows product, bump and the dp* switches' {
+            Assert-Equal 'prof build publish speed -Bump Minor -Products a,b -WhatIf' (Format-GeneProfCommand -Group build -Verb publish -Params ([ordered]@{ Product = 'speed'; Bump = 'Minor'; Extra = @('-Products', @('a', 'b')); WhatIf = $true }))
+        }
+        $script:ProfBuildProducts['speed'].Command = 'dpfake'
+        Test-Case 'build: publish -Bump Major runs dp* -Package -BumpMajor in the repo folder, with the extra switches' {
+            $script:dpGot = $null
+            Invoke-GeneProf build publish speed -Bump Major -Products a, b 6>&1 | Out-Null
+            Assert-True $script:dpGot.Package; Assert-True $script:dpGot.BumpMajor; Assert-Equal @('a', 'b') $script:dpGot.Products
+            Assert-Equal $sm (Get-Location).ProviderPath
+        }
+        Test-Case 'build: prof publish (no group) works; the dp* bump switches through prof are refused' {
+            $script:dpGot = $null
+            Invoke-GeneProf publish speed 6>&1 | Out-Null
+            Assert-True $script:dpGot.Package; Assert-True (-not $script:dpGot.Contains('Bump'))
+            $err = try { Invoke-GeneProf build publish speed -BumpMinor 6>&1 | Out-Null; '' } catch { "$_" }
+            Assert-Match $err "Use prof's -Bump"
+        }
+        Test-Case 'build menu: product, Publish, bump shows versions, n at Run it? runs nothing' {
+            $script:dpGot = $null
+            $o = Invoke-GeneProfMenu -Group build -Reader (New-Queue @('1', '3', '3', 'n', 'n')) 6>&1 | Out-String
+            Assert-Match $o '1\.2\.3 -> 1\.3\.0'
+            Assert-Match $o '> prof build publish speed -Bump Minor'
+            Assert-True ($null -eq $script:dpGot) 'ran although the answer was n'
+        }
+        Test-Case 'build menu: More options ticks switches and asks a choice switch value' {
+            $o = Invoke-GeneProfMenu -Group build -Reader (New-Queue @('1', '4', '1,2', '2', 'n', 'n')) 6>&1 | Out-String
+            Assert-Match $o '> prof build more speed -Test -Run B'
+        }
+        Test-Case 'build menu: Build only asks the configuration' {
+            $o = Invoke-GeneProfMenu -Group build -Reader (New-Queue @('1', '1', '2', 'n', 'n')) 6>&1 | Out-String
+            Assert-Match $o '> prof build compile speed -Configuration Release'
+        }
+
+        # git: a local bare repo stands in for GitHub
+        $bare = Join-Path $root 'gh.git'; git init -q --bare -b main $bare
+        $work = Join-Path $root 'speedy'; New-Repo $work; Add-Commit $work 'a.txt' 'one'
+        git -C $work remote add origin $bare; git -C $work push -q -u origin main 2>$null
+        $other = Join-Path $root 'other'; git clone -q $bare $other 2>$null
+        git -C $other config user.name t; git -C $other config user.email t@t
+        $global:GeneMachine['SpeedyRepo'] = $work
+        Import-Module (Join-Path $repoRoot 'pwsh\PowerShell\Modules\Gene.GitTools') -Force -DisableNameChecking
+        Test-Case 'git: known repos come from the machine profile by folder name' {
+            Assert-Equal $work (Resolve-GeneGitRepo -Repo 'speedy')
+            $err = try { Resolve-GeneGitRepo -Repo 'nope'; '' } catch { "$_" }
+            Assert-Match $err 'Known here: speedy'
+        }
+        Test-Case 'git: status on a named repo moves the window there and reports GitHub' {
+            Set-Location $root
+            $o = Invoke-GeneProf git status speedy 6>&1 | Out-String
+            Assert-Match $o 'Same as GitHub'
+            Assert-Equal $work (Get-Location).ProviderPath
+        }
+        Test-Case 'git: pull brings the new commit from GitHub' {
+            Add-Commit $other 'b.txt' 'two'; git -C $other push -q 2>$null
+            Invoke-GeneProf git pull speedy 6>&1 | Out-Null
+            Assert-True (Test-Path (Join-Path $work 'b.txt'))
+        }
+        Test-Case 'git: push commits everything with the message and sends it (gpush)' {
+            Set-Content -LiteralPath (Join-Path $work 'c.txt') -Value 'three'
+            Invoke-GeneProf git push speedy -Message 'from prof' 6>&1 | Out-Null
+            Assert-Equal 'from prof' ([string](git -C $bare log -1 --format=%s main)).Trim()
+        }
+        Test-Case 'git menu: this folder is offered first; push asks the message' {
+            Set-Location $work
+            $o = Invoke-GeneProfMenu -Group git -Reader (New-Queue @('2', '1', 'my msg', 'n', 'y', 'n')) 6>&1 | Out-String
+            Assert-Match $o "> prof git push -Message 'my msg' -WhatIf"
+        }
+        Test-Case 'git: -AIOnly pushes through pushrules with the message' {
+            function pushrules { param([string]$Message, [string]$Remote) $script:rulesGot = "msg=$Message" }
+            try {
+                $script:rulesGot = $null
+                Invoke-GeneProf git push speedy -AIOnly -Message 'rules x' 6>&1 | Out-Null
+                Assert-Equal 'msg=rules x' $script:rulesGot
+            }
+            finally { Remove-Item Function:\pushrules }
+        }
+        Test-Case 'ai: local runs dpAI -Local in the named repo with -Force and -WhatIf' {
+            function dpAI { param([switch]$Local, [switch]$Remote, [switch]$Git, [switch]$Promote, [string]$RepoPath, [string]$Message, [switch]$Force, [switch]$WhatIf, [switch]$Try) $script:aiGot = [ordered]@{} + $PSBoundParameters }
+            try {
+                Invoke-GeneProf ai local speedy -Force -WhatIf 6>&1 | Out-Null
+                Assert-True $script:aiGot.Local; Assert-True $script:aiGot.Force; Assert-True $script:aiGot.WhatIf
+                Assert-Equal $work $script:aiGot.RepoPath
+                $err = try { Invoke-GeneProf ai local speedy -Remote 6>&1 | Out-Null; '' } catch { "$_" }
+                Assert-Match $err 'The mode is the command'
+            }
+            finally { Remove-Item Function:\dpAI }
+        }
+        Test-Case 'streams: status-rebuild touches the Status inbox file of SpeedyRepo' {
+            $inbox = Join-Path $work '.streams\inbox'
+            New-Item -ItemType Directory -Force -Path $inbox | Out-Null
+            $f = Join-Path $inbox 'stream-status.md'; Set-Content -LiteralPath $f -Value 'x'
+            (Get-Item -LiteralPath $f).LastWriteTime = (Get-Date).AddDays(-1)
+            Invoke-GeneProf streams status-rebuild 6>&1 | Out-Null
+            Assert-True ((Get-Item -LiteralPath $f).LastWriteTime -gt (Get-Date).AddMinutes(-1)) 'not touched'
+            $err = try { Invoke-GeneProf streams status-rebuild -Repo $root 6>&1 | Out-Null; '' } catch { "$_" }
+            Assert-Match $err 'No Status inbox file'
+        }
+        Test-Case 'streams: tab passes -Author -Count and turns -WhatIf into -DryRun' {
+            function addStreamTab { param([string]$Role, [switch]$Author, [switch]$Builder, [int]$Count, [string]$Repo, [switch]$ClearStop, [switch]$DryRun, [switch]$Help) $script:tabGot = [ordered]@{} + $PSBoundParameters }
+            try {
+                Invoke-GeneProf streams tab -Author -Count 2 -WhatIf 6>&1 | Out-Null
+                Assert-True $script:tabGot.Author; Assert-Equal 2 $script:tabGot.Count; Assert-True $script:tabGot.DryRun
+                $o = Invoke-GeneProfMenu -Reader (New-Queue @('1', '2', '1', '3', 'y', 'n')) 6>&1 | Out-String
+                Assert-Match $o '> prof streams tab -Author -Count 3 -WhatIf'
+            }
+            finally { Remove-Item Function:\addStreamTab }
+        }
+        Test-Case 'build: containers is Speedy only and runs dpContainers' {
+            function dpContainers { [CmdletBinding(SupportsShouldProcess = $true)] param([switch]$NoBuild, [switch]$ShowHelp) $script:ctrGot = [ordered]@{} + $PSBoundParameters }
+            try {
+                Invoke-GeneProf build containers speedy -NoBuild 6>&1 | Out-Null
+                Assert-True $script:ctrGot.NoBuild
+                $err = try { Invoke-GeneProf build containers speed 6>&1 | Out-Null; '' } catch { "$_" }
+                Assert-Match $err 'Speedy only'
+            }
+            finally { Remove-Item Function:\dpContainers }
+        }
+    }
+    finally {
+        $script:ProfBuildProducts['speed'].Command = $realSpeed
+        $global:GeneMachine = $savedMachine; $global:GeneMachineAI = $savedAI; Set-Location $savedLoc
     }
 }
 finally { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }

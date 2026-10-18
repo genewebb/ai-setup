@@ -42,6 +42,14 @@ $branch = (Invoke-Git @('rev-parse', '--abbrev-ref', 'HEAD')) | Select-Object -F
 if ($branch -ne 'main') { throw "publish.ps1 publishes main only; this clone is on '$branch'. A detached HEAD is usually a failed rebase: git status, then git rebase --abort or git checkout main." }
 $upstream = & git -C $repo rev-parse --abbrev-ref '@{u}' 2>$null
 if ($LASTEXITCODE -ne 0 -or $upstream -ne 'origin/main') { throw "main must track origin/main (now: $(if ($upstream) { $upstream } else { 'no upstream' })). Fix: git branch --set-upstream-to=origin/main main" }
+# The machine's Git Credential Manager holds two GitHub accounts (work and personal) and asks which one on every
+# fetch/push unless the remote URL names it; with no console to answer on (Claude, a remote run) that is a hang. This
+# repo lives under the personal account, so pin it in origin's URL (a fresh clone has it without).
+$origin = (Invoke-Git @('remote', 'get-url', 'origin')) | Select-Object -First 1
+if ($origin -match '^https://github\.com/genewebb/') {
+    Invoke-Git @('remote', 'set-url', 'origin', ($origin -replace '^https://github\.com/', 'https://genewebb@github.com/')) | Out-Null
+    Write-Host 'origin now names the GitHub account (genewebb@github.com), so Git Credential Manager no longer asks which account.' -ForegroundColor Cyan
+}
 
 # 1. What goes in: shown before anything is staged for good.
 Invoke-Git @('add', '-A') | Out-Null

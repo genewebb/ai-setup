@@ -14,7 +14,7 @@ $global:GeneMachineDefaults = [ordered]@{
     ReposRoot             = 'C:\devops\repos'
     SpeedMerchantsRepo    = 'C:\devops\repos\speed-merchants'
     SpeedyRepo            = 'C:\devops\repos\speedmerchants'
-    GovernanceRepo        = 'C:\devops\repos\governance'
+    AIProfiseeRepo        = 'C:\devops\repos\ai-profisee'
     PlatformRepo          = 'C:\devops\repos\platform'
     BitsDir               = 'C:\Bits'
     PowershellScriptsDir  = 'D:\PowershellScripts'
@@ -418,7 +418,7 @@ function dpAI {
             "  dpAI -Remote -Force",
             "  dpAI -Git",
             "  dpAI -Promote -Force",
-            "  dpAI -Promote -Message 'rules: promote governance updates'"
+            "  dpAI -Promote -Message 'rules: promote updates'"
         )
         return
     }
@@ -751,12 +751,12 @@ function sp {
 
     if (Test-HelpRequested -ShowHelp:$ShowHelp) {
         Write-Usage "sp [-h|--help]" @(
-            "Same as: prof streams show (installed vs repo profile, and whether they match)."
+            "Same as: prof setup show (installed vs repo profile, and whether they match)."
         )
         return
     }
 
-    Write-Host '(sp = prof streams show)' -ForegroundColor DarkGray
+    Write-Host '(sp = prof setup show)' -ForegroundColor DarkGray
     Invoke-GeneProf streams show
 }
 
@@ -769,12 +769,12 @@ function ep {
 
     if (Test-HelpRequested -ShowHelp:$ShowHelp) {
         Write-Usage "ep [-h|--help]" @(
-            "Same as: prof streams edit. Opens the REPO copy of the profile (the installed copy is overwritten by every install)."
+            "Same as: prof setup edit. Opens the REPO copy of the profile (the installed copy is overwritten by every install)."
         )
         return
     }
 
-    Write-Host '(ep = prof streams edit)' -ForegroundColor DarkGray
+    Write-Host '(ep = prof setup edit)' -ForegroundColor DarkGray
     Invoke-GeneProf streams edit
 }
 
@@ -821,16 +821,16 @@ function cdevops {
     Set-Location $path
 }
 
-function cgov {
+function caiprof {
     [CmdletBinding()]
     param([Alias('h','help')][switch]$ShowHelp)
 
     if (Test-HelpRequested -ShowHelp:$ShowHelp) {
-        Write-Usage "cgov [-h|--help]" @("Navigate to $($global:GeneMachine.GovernanceRepo)")
+        Write-Usage "caiprof [-h|--help]" @("Navigate to $($global:GeneMachine.AIProfiseeRepo) (the shared Profisee AI repo)")
         return
     }
 
-    $path = $global:GeneMachine.GovernanceRepo
+    $path = $global:GeneMachine.AIProfiseeRepo
     Assert-PathExists -PathToCheck $path
     Set-Location $path
 }
@@ -1061,56 +1061,6 @@ Set-Alias -Name ntab -Value addnew -ErrorAction SilentlyContinue
 # -----------------------------
 # DevOps commands (lazy-loaded)
 # -----------------------------
-
-function dpgov {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSShouldProcess', '', Justification='WhatIf is passed through to Dev-ProfiseeGovRestart via explicit splat parameter')]
-    [CmdletBinding(SupportsShouldProcess = $true)]
-    param(
-        [ValidateSet('Debug','Release')]
-        [string]$Configuration,
-
-        [Alias('h','help')]
-        [switch]$ShowHelp
-    )
-
-    # Help check before module load
-    if (Test-HelpRequested -ShowHelp:$ShowHelp) {
-        Write-Host ""
-        Write-Host "dpgov  - Governance local restart workflow" -ForegroundColor Cyan
-        Write-Host ""
-        Write-Host "Syntax:" -ForegroundColor Yellow
-        Write-Host "  dpgov [-Configuration Debug|Release] [-WhatIf]"
-        Write-Host ""
-        Write-Host "Options:" -ForegroundColor Yellow
-        Write-Host "  -Configuration  Build/publish configuration for Governance.Service.Api."
-        Write-Host "                  Debug or Release (default depends on module function)."
-        Write-Host "  -WhatIf         Preview actions without executing."
-        Write-Host ""
-        Write-Host "Notes:" -ForegroundColor Yellow
-        Write-Host "  -Debug is a PowerShell common parameter (debug tracing),"
-        Write-Host "  not the same as -Configuration Debug."
-        Write-Host ""
-        Write-Host "Examples:" -ForegroundColor Yellow
-        Write-Host "  dpgov"
-        Write-Host "    Run the full Governance restart workflow."
-        Write-Host "  dpgov -Configuration Debug"
-        Write-Host "    Run the workflow using Debug publish output."
-        Write-Host "  dpgov -WhatIf"
-        Write-Host "    Preview actions without changing anything."
-        Write-Host "  dpgov -Configuration Release -WhatIf"
-        Write-Host "    Preview a Release workflow."
-        Write-Host ""
-        return
-    }
-
-    Import-GeneModuleOnce "Gene.DevOpsTools"
-
-    $invoke = @{}
-    if ($PSBoundParameters.ContainsKey('Configuration')) { $invoke.Configuration = $Configuration }
-    if ($WhatIfPreference) { $invoke.WhatIf = $true }
-
-    Dev-ProfiseeGovRestart @invoke
-}
 
 function Publish-SpeedMerchantsPackage {
     <#
