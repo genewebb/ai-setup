@@ -1118,7 +1118,7 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     Case 'deps: Revise-Task states a reason for an existing edge' ($LASTEXITCODE -eq 0 -and (T $dr 'D2.X').dependsWhy['D1.B'] -eq 'reads the B table') ($drv -join ' | ')
     @{ note = 'bad'; edits = @(@{ task = 'D2.X'; dependsWhy = @{ 'D1.A' = 'no such edge' }; release = 'keep' }) } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $Scratch 'depwhy2.json')
     $drv2 = @(& "$S\Revise-Task.ps1" -Repo $dr -Session plan-d -File (Join-Path $Scratch 'depwhy2.json'))
-    Case 'deps: a reason for an edge the row does not hold is refused' ($LASTEXITCODE -eq 2 -and ($drv2 -join ' ') -match 'WHY-NO-EDGE D2\.X') ($drv2 -join ' | ')
+    Case 'deps: a reason for an edge the row does not hold is refused' ($LASTEXITCODE -eq 2 -and ($drv2 -join ' ') -match 'DEPWHY-NO-EDGE D2\.X') ($drv2 -join ' | ')
     # build A, start B on top of it, bounce A while B builds: B gets the DEP-MOVED note
     $da = & "$S\Claim-Task.ps1" -Repo $dr -Role build -Session build-da | ConvertFrom-Json
     Case 'deps: A claims first' ($da.id -eq 'D1.A') $da.id

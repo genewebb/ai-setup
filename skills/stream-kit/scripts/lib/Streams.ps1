@@ -777,7 +777,8 @@ function Get-DependencyBaseDrift($P, $doc, $Task) {
 # dependsOn says THAT a row waits; nothing said WHY. On the live board 1,550 of 5,740 edges shared no write-set file, and
 # nobody could tell a real "B uses A's new type" edge from a cautious one. dependsWhy is a sibling map id -> reason.
 # Add-Tasks.ps1 and Revise-Task.ps1 fill the mechanical reasons; the planner writes the rest; an edge with no stated
-# reason reads 'unstated', which is what the DEP-REVIEW board flag looks for.
+# reason reads 'unstated', which is what the DEP-REVIEW board flag looks for. A stated reason outlives its edge
+# (Revise-Task.ps1 removeDependsOn keeps it, so a file-order flip that drops and re-adds the edge keeps the why).
 #   shared file   the two write sets overlap, so the edge orders edits to one file (Board.ps1 UNORDERED rule)
 #   group order   the dependency is a group's integration task or a gate, or the row is an integration task
 #   mockup first  the dependency is a mockup row (its code row follows it by rule)
@@ -804,6 +805,13 @@ function Set-DependsWhyDefaults($Tasks, $Row, [hashtable] $ById = $null) {
             elseif ([string]$dt['kind'] -eq 'mockup') { 'mockup first' }
             elseif (Test-WriteSetOverlap $rowWs $dt['writeSet']) { 'shared file' }
             else { $script:DependsWhyUnstated }
+    }
+    # A stated reason outlives its edge (Revise-Task removeDependsOn keeps it), so a file-order flip that drops an edge
+    # and puts it back keeps the why; only mechanical and unstated leftovers go.
+    foreach ($k in @($why.Keys)) {
+        if ($kept.Contains([string]$k)) { continue }
+        $v = "$($why[$k])".Trim()
+        if ($v -and $v -notin @($script:DependsWhyUnstated, 'shared file', 'group order', 'mockup first')) { $kept[[string]$k] = $v }
     }
     if ($Row -is [Collections.IDictionary]) { $Row['dependsWhy'] = $kept } else { $Row | Add-Member -NotePropertyName dependsWhy -NotePropertyValue $kept -Force }
     $kept

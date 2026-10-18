@@ -2113,6 +2113,30 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $or55r = "$(@($c55r | Where-Object { $_ -match 'OPEN-ROWS' })[0])"
     Case 'retire: the close rule does not count a retired row as open' (($or55r -match 'G1\.B') -and ($or55r -notmatch 'G1\.A\b')) "$or55r"
 
+    # ---- 55w. dependsWhy: a per-edge reason (kit item IN-20261018144201-44e6, owner request IN-20261018143920-ebda).
+    # An unstated edge cannot be told apart from an artificial file-order wait, so the planner states why an edge exists.
+    $r55w = New-Repo 'r55w' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok'); 'G1.B' = (ContentGrader 'G1.B' 'ok'); 'G1.C' = (ContentGrader 'G1.C' 'ok') }); $repos += $r55w
+    $o55wa = @(& "$S\Revise-Task.ps1" -Repo $r55w -Session plan-55w -Task G1.B -DependsWhy @{ 'G1.A' = 'reads the table A adds' } -Note 'why'); $x55wa = $LASTEXITCODE
+    Case 'dependsWhy: a reason for an edge the row does not hold is refused and nothing is written' (($x55wa -eq 2) -and (($o55wa -join ' ') -match 'DEPWHY-NO-EDGE G1\.B -> G1\.A') -and -not (@((T $r55w 'G1.B')['dependsWhy'].Keys) -contains 'G1.A')) "exit $x55wa : $($o55wa -join ' | ')"   # Add-Tasks gives every row a dependsWhy map (mechanical defaults), so "nothing written" = no G1.A key
+    $o55wb = @(& "$S\Revise-Task.ps1" -Repo $r55w -Session plan-55w -Task G1.B -AddDependsOn G1.A -DependsWhy @{ 'G1.A' = 'reads the table A adds' } -Release keep -Note 'B waits on A'); $x55wb = $LASTEXITCODE
+    $t55wb = T $r55w 'G1.B'
+    Case 'dependsWhy: an edge added with its reason stores both' (($x55wb -eq 0) -and (@($t55wb.dependsOn) -contains 'G1.A') -and ($t55wb['dependsWhy']['G1.A'] -eq 'reads the table A adds') -and (($o55wb -join ' ') -match 'depwhy G1\.A')) "exit $x55wb : $($o55wb -join ' | ')"
+    $o55wc = @(& "$S\Revise-Task.ps1" -Repo $r55w -Session plan-55w -Task G1.B -DependsWhy @{ 'G1.A' = "two`nlines" }); $x55wc = $LASTEXITCODE
+    Case 'dependsWhy: a multi-line reason is refused' (($x55wc -eq 2) -and (($o55wc -join ' ') -match 'DEPWHY-BAD G1\.B -> G1\.A') -and ((T $r55w 'G1.B')['dependsWhy']['G1.A'] -eq 'reads the table A adds')) "exit $x55wc : $($o55wc -join ' | ')"
+    [void](& "$S\Revise-Task.ps1" -Repo $r55w -Session plan-55w -Task G1.C -Release block -Note 'park')
+    [void](& "$S\Revise-Task.ps1" -Repo $r55w -Session plan-55w -Task G1.C -AddDependsOn G1.A -Release keep -Note 'C waits on A')
+    $o55wd = @(& "$S\Revise-Task.ps1" -Repo $r55w -Session plan-55w -Task G1.C -DependsWhy @{ 'G1.A' = 'calls the API A adds' }); $x55wd = $LASTEXITCODE
+    Case 'dependsWhy: a reason-only edit keeps a blocked row blocked' (($x55wd -eq 0) -and ((T $r55w 'G1.C').state -eq 'blocked') -and ((T $r55w 'G1.C')['dependsWhy']['G1.A'] -eq 'calls the API A adds')) "exit $x55wd : $($o55wd -join ' | ') state $((T $r55w 'G1.C').state)"
+    $o55we = @(& "$S\Revise-Task.ps1" -Repo $r55w -Session plan-55w -Task G1.B -RemoveDependsOn G1.A -Release keep -Note 'flip'); $x55we = $LASTEXITCODE
+    $t55we = T $r55w 'G1.B'
+    Case 'dependsWhy: dropping the edge keeps its reason for when it comes back' (($x55we -eq 0) -and (@($t55we.dependsOn) -notcontains 'G1.A') -and ($t55we['dependsWhy']['G1.A'] -eq 'reads the table A adds')) "exit $x55we : $($o55we -join ' | ')"
+    $f55w = Join-Path $Scratch 'r55w-why.json'
+    @{ note = 'clear'; edits = @(@{ task = 'G1.C'; dependsWhy = @{ 'G1.A' = '' }; release = 'keep' }) } | ConvertTo-Json -Depth 5 | Set-Content $f55w
+    $o55wf = @(& "$S\Revise-Task.ps1" -Repo $r55w -Session plan-55w -File $f55w); $x55wf = $LASTEXITCODE
+    # Cleared = the planner's text is gone and the edge reads its mechanical default again (Set-DependsWhyDefaults refills
+    # every held edge; here A and C share no file, so 'unstated', which is what DEP-REVIEW looks for).
+    $v55wf = [string](T $r55w 'G1.C')['dependsWhy']['G1.A']
+    Case 'dependsWhy: an empty reason in a batch file clears it back to the mechanical default' (($x55wf -eq 0) -and (($o55wf -join ' ') -match 'depwhy -G1\.A') -and ($v55wf -ne 'calls the API A adds') -and ($v55wf -in @('unstated', 'shared file', 'group order', 'mockup first'))) "exit $x55wf : $($o55wf -join ' | ') now '$v55wf'"
     # ---- 55s. retire backfill (kit item IN-20261009155410-5b5e): rows moved to done as a withdrawal before retire existed
     # (G5.T101, G5.T134, G5.T143, G2.T114 at 2026-10-09T15:21:48Z) counted as landed work. A done row that never reached
     # integrated and holds no patch is marked retired in place; one that delivered work stays done.
