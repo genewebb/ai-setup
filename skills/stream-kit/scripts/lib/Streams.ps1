@@ -788,37 +788,39 @@ $script:DependsWhyUnstated = 'unstated'
 # least MinDays is a planner question (state the reason or drop the edge). Env overrides exist for the self-tests.
 $script:DepReviewMinWaiters = if ("$env:STREAM_DEP_REVIEW_MIN_WAITERS" -match '^\d+$') { [int]$env:STREAM_DEP_REVIEW_MIN_WAITERS } else { 2 }
 $script:DepReviewMinDays = if ("$env:STREAM_DEP_REVIEW_MIN_DAYS" -match '^\d+(\.\d+)?$') { [double]$env:STREAM_DEP_REVIEW_MIN_DAYS } else { 2 }
+$script:DependsWhyMechanical = @('shared file', 'group order', 'mockup first')
 function Set-DependsWhyDefaults($Tasks, $Row, [hashtable] $ById = $null) {
-    $byId = if ($null -ne $ById) { $ById } else { Get-TaskIndex $Tasks }
-    $deps = @(if ($Row -is [Collections.IDictionary]) { if ($Row.Contains('dependsOn')) { @($Row['dependsOn'] | Where-Object { $_ }) } else { @() } } else { @($Row.dependsOn | Where-Object { $_ }) })
+    <# Normalizes a row's dependsWhy map to PLANNER TEXT ONLY: the mechanical classes and 'unstated' are derived by
+       Get-DependsWhy, never stored, so "an entry exists" means "the planner stated it" for every reader (Get-StreamStatus
+       DEP-REVIEW, Find-ArtificialBlockers, Find-TestBlockers). A stated reason outlives its edge (Revise-Task.ps1
+       removeDependsOn keeps it), so a file-order flip that drops an edge and puts it back keeps the why. #>
     $why = if ($Row -is [Collections.IDictionary] -and $Row.Contains('dependsWhy') -and $Row['dependsWhy'] -is [Collections.IDictionary]) { $Row['dependsWhy'] } else { [ordered]@{} }
     $kept = [ordered]@{}
-    foreach ($d in $deps) {
-        $d = [string]$d
-        $given = if ($why.Contains($d) -and "$($why[$d])".Trim()) { "$($why[$d])".Trim() } else { '' }
-        if ($given -and $given -ne $script:DependsWhyUnstated) { $kept[$d] = $given; continue }
-        $dt = $byId[$d]
-        $rowKind = [string]$(if ($Row -is [Collections.IDictionary]) { $Row['kind'] } else { $Row.kind })
-        $rowWs = $(if ($Row -is [Collections.IDictionary]) { $Row['writeSet'] } else { $Row.writeSet })
-        $kept[$d] = if (-not $dt) { $script:DependsWhyUnstated }
-            elseif ($rowKind -eq 'integration' -or [string]$dt['kind'] -in @('integration', 'gate')) { 'group order' }
-            elseif ([string]$dt['kind'] -eq 'mockup') { 'mockup first' }
-            elseif (Test-WriteSetOverlap $rowWs $dt['writeSet']) { 'shared file' }
-            else { $script:DependsWhyUnstated }
-    }
-    # A stated reason outlives its edge (Revise-Task removeDependsOn keeps it), so a file-order flip that drops an edge
-    # and puts it back keeps the why; only mechanical and unstated leftovers go.
     foreach ($k in @($why.Keys)) {
-        if ($kept.Contains([string]$k)) { continue }
         $v = "$($why[$k])".Trim()
-        if ($v -and $v -notin @($script:DependsWhyUnstated, 'shared file', 'group order', 'mockup first')) { $kept[[string]$k] = $v }
+        if ($v -and $v -ne $script:DependsWhyUnstated -and $v -notin $script:DependsWhyMechanical) { $kept[[string]$k] = $v }
     }
     if ($Row -is [Collections.IDictionary]) { $Row['dependsWhy'] = $kept } else { $Row | Add-Member -NotePropertyName dependsWhy -NotePropertyValue $kept -Force }
     $kept
 }
-function Get-DependsWhy($Row, [string] $Dep) {
-    $why = if ($Row -is [Collections.IDictionary] -and $Row.Contains('dependsWhy')) { $Row['dependsWhy'] } else { $null }
-    if ($why -is [Collections.IDictionary] -and $why.Contains($Dep) -and "$($why[$Dep])".Trim()) { return "$($why[$Dep])".Trim() }
+function Get-DependsWhy($Row, [string] $Dep, $Tasks = $null) {
+    <# The reason an edge exists: the planner's stated text; else the mechanical class when $Tasks (a list or a
+       Get-TaskIndex map) is given - 'group order' (a gate or integration row on either end), 'mockup first', 'shared file'
+       (the write sets overlap); else 'unstated'. #>
+    $why = if ($Row -is [Collections.IDictionary]) { if ($Row.Contains('dependsWhy')) { $Row['dependsWhy'] } } elseif ($Row.PSObject.Properties['dependsWhy']) { $Row.dependsWhy }
+    if ($why -is [Collections.IDictionary]) { if ($why.Contains($Dep) -and "$($why[$Dep])".Trim()) { return "$($why[$Dep])".Trim() } }
+    elseif ($why -and $why.PSObject.Properties[$Dep] -and "$($why.PSObject.Properties[$Dep].Value)".Trim()) { return "$($why.PSObject.Properties[$Dep].Value)".Trim() }
+    if ($null -eq $Tasks) { return $script:DependsWhyUnstated }
+    $byId = if ($Tasks -is [Collections.IDictionary]) { $Tasks } else { Get-TaskIndex $Tasks }
+    $dt = $byId[$Dep]
+    if (-not $dt) { return $script:DependsWhyUnstated }
+    $rowKind = [string]$(if ($Row -is [Collections.IDictionary]) { $Row['kind'] } else { $Row.kind })
+    $rowWs = $(if ($Row -is [Collections.IDictionary]) { $Row['writeSet'] } else { $Row.writeSet })
+    $depKind = [string]$(if ($dt -is [Collections.IDictionary]) { $dt['kind'] } else { $dt.kind })
+    $depWs = $(if ($dt -is [Collections.IDictionary]) { $dt['writeSet'] } else { $dt.writeSet })
+    if ($rowKind -eq 'integration' -or $depKind -in @('integration', 'gate')) { return 'group order' }
+    if ($depKind -eq 'mockup') { return 'mockup first' }
+    if (Test-WriteSetOverlap $rowWs $depWs) { return 'shared file' }
     $script:DependsWhyUnstated
 }
 

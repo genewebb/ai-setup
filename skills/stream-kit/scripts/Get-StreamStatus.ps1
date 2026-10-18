@@ -606,30 +606,7 @@ if ($fc.pulled.Count) {
     if ($fc.pulled.Count -gt 8) { $pulledNamed += " +$($fc.pulled.Count - 8) more" }
     $flags.Add("FOCUS-PULL $($fc.pulled.Count) row(s) outside the focus groups are in the focus set as dependencies of focus work: $pulledNamed")
 }
-# DEP-REVIEW: an UNSTATED edge (no dependsWhy, lib\Streams.ps1 Get-DependsWhy) whose target has held several ticketed
-# rows for days. The board cannot tell a real edge from a cautious one; the planner can, by stating the reason or
-# dropping the edge (Revise-Task.ps1 dependsWhy / removeDependsOn).
-$depHold = @{}
-foreach ($w in $waitingOnDeps) {
-    foreach ($d in @($w.dependsOn)) {
-        if (-not $d) { continue }
-        $dt = $byId[[string]$d]
-        if (-not $dt -or $dt.state -in $script:BuildReadyStates) { continue }
-        if ((Get-DependsWhy $w ([string]$d)) -ne $script:DependsWhyUnstated) { continue }
-        if (-not $depHold.ContainsKey([string]$d)) { $depHold[[string]$d] = [Collections.Generic.List[string]]::new() }
-        $depHold[[string]$d].Add([string]$w.id)
-    }
-}
-foreach ($d in @($depHold.Keys | Sort-Object)) {
-    $ids = $depHold[$d]
-    if ($ids.Count -lt $script:DepReviewMinWaiters) { continue }
-    $dt = $byId[$d]
-    $entry = Get-StateEntry $dt ([string]$dt.state)
-    $days = if ($entry -and $entry.at) { [math]::Round(((Get-Date).ToUniversalTime() - [datetime]::Parse($entry.at, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)).TotalDays, 1) } else { 0 }
-    if ($days -lt $script:DepReviewMinDays) { continue }
-    $shown = @($ids | Select-Object -First 6) -join ', '; if ($ids.Count -gt 6) { $shown += " +$($ids.Count - 6) more" }
-    $flags.Add("DEP-REVIEW $d ($($dt.kind), $($dt.state) $days d) holds $($ids.Count) ticketed row(s) on edges with no stated reason: $shown - planner: state the reason (dependsWhy) or drop the edge")
-}
+# DEP-REVIEW is emitted below (root-based, model field depReview), after the deadlock check.
 # DEP-MOVED: a building row whose base stacked a dependency that has since left built (lib\Streams.ps1
 # Add-DependentBounceNotes, finding F6). Its hand-off meets BASE-STALE at integration unless the dependency lands unchanged.
 foreach ($t in @($doc.tasks | Where-Object { $_.state -eq 'building' -and $_.claim -and $_.claim.at })) {
@@ -689,6 +666,43 @@ foreach ($t in @($doc.tasks)) {
 # named, because it finishes after the suites and so the group cannot close before it.
 if ($deadlocks.Count) { $flags.Add("$($deadlocks.Count) row(s) dependsOn their own group's integration task, so each builds only after that group's green run (step-B exception, IN-20260930190044-8bf9); the group closes after them: $($deadlocks -join ', ')") }
 
+# DEP-REVIEW (owner request IN-20261018143920-ebda, kit item IN-20261018144658-c28b): a dependsOn edge nobody stated a
+# reason for (no entry in the row's dependsWhy map, written by Revise-Task.ps1) can be an order that no longer holds,
+# and it costs most when its ROOT - the unmet ancestor with no unmet dependency of its own - holds several ticketed rows
+# that have waited for days. Edges with a derived mechanical reason (lib\Streams.ps1 Get-DependsWhy: a gate or integration
+# row on either end, a mockup, a shared write-set file) and edges onto a row the dependent's title names count as stated.
+# Thresholds: $script:DepReviewMinWaiters waiters, $script:DepReviewMinDays days (STREAM_DEP_REVIEW_MIN_WAITERS / _MIN_DAYS
+# override them, for the self-tests). Read only; the plan reviews the edges (never a gate or integration edge without
+# the owner's sign-off).
+$DepReviewWaitMinutes = [double] $script:DepReviewMinDays * 24 * 60
+$depById = @{}; foreach ($t in @($doc.tasks)) { $depById[[string] $t.id] = $t }
+function Get-UnmetRoots([string] $id, $seen) {
+    if ($seen.Contains($id)) { return @() }; [void] $seen.Add($id)
+    $row = $depById[$id]; if (-not $row) { return @() }
+    $up = @(@($row.dependsOn) | Where-Object { $depById[[string] $_] -and $depById[[string] $_].state -notin @('built', 'integrated', 'done') })
+    if (-not $up.Count) { return @($id) }
+    @($up | ForEach-Object { Get-UnmetRoots ([string] $_) $seen })
+}
+$depRoots = [ordered]@{}
+foreach ($t in @($doc.tasks)) {
+    if ($t.state -ne 'ticketed') { continue }
+    $tAt = $null; foreach ($h in @($t['history'])) { if ($h -and [string] $h.to -eq 'ticketed' -and $h.at) { $tAt = [string] $h.at } }
+    $waited = Age $tAt
+    if ($null -eq $waited -or $waited -lt $DepReviewWaitMinutes) { continue }
+    foreach ($d in @($t.dependsOn)) {
+        $d = [string] $d; $dep = $depById[$d]
+        if (-not $dep -or $dep.state -in @('built', 'integrated', 'done') -or $dep['kind'] -in @('gate', 'integration')) { continue }
+        if ((Get-DependsWhy $t $d $depById) -ne $script:DependsWhyUnstated) { continue }
+        if ([string] $t['title'] -match ('(?<![\w.])' + [regex]::Escape($d) + '(?!\w)')) { continue }
+        foreach ($root in @(Get-UnmetRoots $d ([Collections.Generic.HashSet[string]]::new()) | Select-Object -Unique)) {
+            if (-not $depRoots.Contains($root)) { $depRoots[$root] = [ordered]@{ root = $root; waiters = [Collections.Generic.List[string]]::new(); edges = [Collections.Generic.List[string]]::new() } }
+            if (-not $depRoots[$root].waiters.Contains([string] $t.id)) { $depRoots[$root].waiters.Add([string] $t.id) }
+            $depRoots[$root].edges.Add("$($t.id)->$d")
+        }
+    }
+}
+$depReview = @($depRoots.Values | Where-Object { $_.waiters.Count -ge $script:DepReviewMinWaiters } | Sort-Object { -$_.waiters.Count }, { $_.root } | ForEach-Object { [ordered]@{ root = $_.root; waiters = @($_.waiters); edges = @($_.edges) } })
+if ($depReview.Count) { $flags.Add("DEP-REVIEW: $($depReview.Count) root(s) hold $($script:DepReviewMinWaiters)+ ticketed rows waiting $($script:DepReviewMinDays)+ days behind dependsOn edges with no stated reason (dependsWhy); roots by waiters: $(@($depReview | ForEach-Object { "$($_.root) ($($_.waiters.Count): $($_.edges -join ', '))" }) -join '; ') - planner: state the reason or drop the edge") }
 # The board finishes when its LAST group does. The focus groups run concurrently and the queued groups one after
 # another behind them (see "queued groups"), so the latest group date IS the last queued group's sequential finish:
 # the maximum is taken, never a sum of independent dates. A group with no date leaves the board date open, and the
@@ -864,7 +878,7 @@ function Get-LeftToPlan($doc, [string] $repo) {
 $leftToPlan = Get-LeftToPlan $doc $Repo
 
 $model = [ordered]@{
-    at = Get-Now; repo = $Repo; groups = @($groups); tasks = @($tasks); flags = @($flags); rolesSeen = $roles; sessions = $sessions; claimable = $claimable; buffer = $buffer; mainLock = $mainLock; releases = $releases; authorRank = $authorRank; inbox = $inbox; forecast = $boardForecast
+    at = Get-Now; repo = $Repo; groups = @($groups); tasks = @($tasks); flags = @($flags); rolesSeen = $roles; sessions = $sessions; claimable = $claimable; buffer = $buffer; mainLock = $mainLock; releases = $releases; depReview = @($depReview); authorRank = $authorRank; inbox = $inbox; forecast = $boardForecast
     leftToPlan = $leftToPlan
     disks = @($diskReport)
     # The page renders whatever this lists, in this order, so a bucket can never be added here and missed there.

@@ -163,12 +163,13 @@ Rules:
      the verify. No suite time is included, because suites run once in the integration task.
 6. **Order.** `dependsOn` per task, including dependencies across groups when several are planned together. Show the
    lanes (tasks that can run at the same time) and the critical path.
-   - **Say why each edge exists** (`dependsWhy`, id -> reason; 2026-10-18 dependency review F3). `Add-Tasks.ps1` fills
-     `shared file` (the write sets overlap), `group order` (an integration task or gate) and `mockup first` itself;
-     write the reason for every other edge in a few words ("uses the IMutationRunSchema type", "reads the table B
-     creates"). An edge with no stated reason reads `unstated`, and once such an edge has held two or more ticketed
-     rows for two days the board flags it `DEP-REVIEW` for you: state the reason (`Revise-Task.ps1` batch edit
-     `"dependsWhy": { "<id>": "<why>" }`) or drop the edge. On 2026-10-18 the live board held 1,550 edges with no
+   - **Say why each edge exists** (`dependsWhy`, id -> reason; 2026-10-18 dependency review F3). The kit derives
+     `shared file` (the write sets overlap), `group order` (an integration task or gate) and `mockup first` itself and
+     never questions those; write the reason for every other edge in a few words ("uses the IMutationRunSchema type",
+     "reads the table B creates"). An edge with no stated reason reads `unstated`, and once such edges hold two or
+     more ticketed rows for two days behind one root the board flags `DEP-REVIEW: <n> root(s) ...` for you: state the
+     reason (`Revise-Task.ps1 -DependsWhy @{ '<id>' = '<why>' }`, or the batch key `"dependsWhy": { "<id>": "<why>" }`)
+     or drop the edge. On 2026-10-18 the live board held 1,550 edges with no
      shared file and no stated reason, 325 of them holding a ticketed row, and nobody could tell a real edge from a
      cautious one.
 7. **Record page.** Publish one artifact per group:
