@@ -650,6 +650,41 @@ foreach ($t in @($doc.tasks)) {
 # named, because it finishes after the suites and so the group cannot close before it.
 if ($deadlocks.Count) { $flags.Add("$($deadlocks.Count) row(s) dependsOn their own group's integration task, so each builds only after that group's green run (step-B exception, IN-20260930190044-8bf9); the group closes after them: $($deadlocks -join ', ')") }
 
+# DEP-REVIEW (owner request IN-20261018143920-ebda, kit item IN-20261018144658-c28b): a dependsOn edge nobody stated a
+# reason for (no entry in the row's dependsWhy map, written by Revise-Task.ps1) can be an order that no longer holds,
+# and it costs most when its ROOT - the unmet ancestor with no unmet dependency of its own - holds several ticketed rows
+# that have waited for days. Edges onto gate and integration rows, and onto a row the dependent's title names, count as
+# stated. Read only; the plan reviews the edges (never a gate or integration edge without the owner's sign-off).
+$DepReviewWaitMinutes = 2 * 24 * 60
+$depById = @{}; foreach ($t in @($doc.tasks)) { $depById[[string] $t.id] = $t }
+function Get-UnmetRoots([string] $id, $seen) {
+    if ($seen.Contains($id)) { return @() }; [void] $seen.Add($id)
+    $row = $depById[$id]; if (-not $row) { return @() }
+    $up = @(@($row.dependsOn) | Where-Object { $depById[[string] $_] -and $depById[[string] $_].state -notin @('built', 'integrated', 'done') })
+    if (-not $up.Count) { return @($id) }
+    @($up | ForEach-Object { Get-UnmetRoots ([string] $_) $seen })
+}
+$depRoots = [ordered]@{}
+foreach ($t in @($doc.tasks)) {
+    if ($t.state -ne 'ticketed') { continue }
+    $tAt = $null; foreach ($h in @($t['history'])) { if ($h -and [string] $h.to -eq 'ticketed' -and $h.at) { $tAt = [string] $h.at } }
+    $waited = Age $tAt
+    if ($null -eq $waited -or $waited -lt $DepReviewWaitMinutes) { continue }
+    $why = $t['dependsWhy']
+    foreach ($d in @($t.dependsOn)) {
+        $d = [string] $d; $dep = $depById[$d]
+        if (-not $dep -or $dep.state -in @('built', 'integrated', 'done') -or $dep['kind'] -in @('gate', 'integration')) { continue }
+        if ($why -and $why.Contains($d) -and [string] $why[$d]) { continue }
+        if ([string] $t['title'] -match ('(?<![\w.])' + [regex]::Escape($d) + '(?!\w)')) { continue }
+        foreach ($root in @(Get-UnmetRoots $d ([Collections.Generic.HashSet[string]]::new()) | Select-Object -Unique)) {
+            if (-not $depRoots.Contains($root)) { $depRoots[$root] = [ordered]@{ root = $root; waiters = [Collections.Generic.List[string]]::new(); edges = [Collections.Generic.List[string]]::new() } }
+            if (-not $depRoots[$root].waiters.Contains([string] $t.id)) { $depRoots[$root].waiters.Add([string] $t.id) }
+            $depRoots[$root].edges.Add("$($t.id)->$d")
+        }
+    }
+}
+$depReview = @($depRoots.Values | Where-Object { $_.waiters.Count -ge 2 } | Sort-Object { -$_.waiters.Count }, { $_.root } | ForEach-Object { [ordered]@{ root = $_.root; waiters = @($_.waiters); edges = @($_.edges) } })
+if ($depReview.Count) { $flags.Add("DEP-REVIEW: $($depReview.Count) root(s) hold 2+ ticketed rows waiting 2+ days behind dependsOn edges with no stated reason (dependsWhy); roots by waiters: $(@($depReview | ForEach-Object { "$($_.root) ($($_.waiters.Count): $($_.edges -join ', '))" }) -join '; ')") }
 # The board finishes when its LAST group does. The focus groups run concurrently and the queued groups one after
 # another behind them (see "queued groups"), so the latest group date IS the last queued group's sequential finish:
 # the maximum is taken, never a sum of independent dates. A group with no date leaves the board date open, and the
@@ -825,7 +860,7 @@ function Get-LeftToPlan($doc, [string] $repo) {
 $leftToPlan = Get-LeftToPlan $doc $Repo
 
 $model = [ordered]@{
-    at = Get-Now; repo = $Repo; groups = @($groups); tasks = @($tasks); flags = @($flags); rolesSeen = $roles; sessions = $sessions; claimable = $claimable; buffer = $buffer; mainLock = $mainLock; releases = $releases; authorRank = $authorRank; inbox = $inbox; forecast = $boardForecast
+    at = Get-Now; repo = $Repo; groups = @($groups); tasks = @($tasks); flags = @($flags); rolesSeen = $roles; sessions = $sessions; claimable = $claimable; buffer = $buffer; mainLock = $mainLock; releases = $releases; depReview = @($depReview); authorRank = $authorRank; inbox = $inbox; forecast = $boardForecast
     leftToPlan = $leftToPlan
     disks = @($diskReport)
     # The page renders whatever this lists, in this order, so a bucket can never be added here and missed there.

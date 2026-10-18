@@ -19,6 +19,7 @@
 # the build-claimable count before and after, which also goes to decisions.md.
 param([Parameter(Mandatory)] [string] $Repo, [string[]] $Hubs = @(), [string] $Session, [switch] $Json, [switch] $Apply)
 $ErrorActionPreference = 'Stop'
+function Get-DepWhy($x, [string] $d) { $w = if ($x -is [Collections.IDictionary]) { if ($x.Contains('dependsWhy')) { $x['dependsWhy'] } } elseif ($x.PSObject.Properties['dependsWhy']) { $x.dependsWhy }; if (-not $w) { return '' }; if ($w -is [Collections.IDictionary]) { if ($w.Contains($d)) { return [string]$w[$d] }; return '' }; $p = $w.PSObject.Properties[$d]; if ($p) { [string]$p.Value } else { '' } }
 . (Join-Path $PSScriptRoot 'lib\Streams.ps1')
 $P = Get-StreamPaths $Repo
 if ($Apply -and -not $Session) { 'REFUSED -Apply needs -Session'; exit 2 }
@@ -28,6 +29,8 @@ function Get-EdgeKind($x, [string] $d) {
     $dt = $by[$d]
     if (-not $dt) { return @{ kind = 'logical'; reason = 'unknown row'; files = @() } }
     if ($d -in $Hubs) { return @{ kind = 'logical'; reason = 'hub'; files = @() } }
+    # A reason in the row's dependsWhy map states the order (plan item IN-20261018143920-ebda, kit IN-20261018144659-fdff).
+    if (Get-DepWhy $x $d) { return @{ kind = 'logical'; reason = 'stated'; files = @() } }
     if ([string]$dt.kind -in @('gate', 'integration')) { return @{ kind = 'gate'; reason = [string]$dt.kind; files = @() } }
     if ([string]$dt.state -eq 'building' -or (Test-ClaimLive $dt)) { return @{ kind = 'landing'; reason = [string]$dt.state; files = @() } }
     # A title that names d states the order itself (G13.T012 'extends G13.T011 ...'): kit item IN-20261018071721-f123.
@@ -93,7 +96,11 @@ if ($Apply) {
         foreach ($y in $doc.tasks) {
             if (@($y.dependsOn) -notcontains $c.id -or [string]$y.state -in $landed) { continue }
             $add = @($direct | Where-Object { @($y.dependsOn) -notcontains $_ })
-            if ($add.Count) { $edits += @{ task = [string]$y.id; addDependsOn = $add; release = 'keep'; note = "$why; keeps $($y.id) after $($add -join ',')" } }
+            if ($add.Count) {
+                # A moved edge takes its stated reason with it (kit item IN-20261018144659-fdff).
+                $dw = @{}; foreach ($a in $add) { if (Get-DepWhy $x $a) { $dw[$a] = Get-DepWhy $x $a } }
+                $edits += @{ task = [string]$y.id; addDependsOn = $add; dependsWhy = $dw; release = 'keep'; note = "$why; keeps $($y.id) after $($add -join ',')" }
+            }
         }
         $bf = Join-Path ([IO.Path]::GetTempPath()) "speedy-artblk-$PID-$([guid]::NewGuid().ToString('N').Substring(0, 8)).json"
         @{ note = $why; edits = $edits } | ConvertTo-Json -Depth 6 | Set-Content $bf -Encoding utf8

@@ -19,6 +19,7 @@
 # lines, then 'SUMMARY ...'; -Json the model; -Session logs the summary to decisions.md.
 param([Parameter(Mandatory)] [string] $Repo, [string] $Session, [switch] $Json)
 $ErrorActionPreference = 'Stop'
+function Get-DepWhy($x, [string] $d) { $w = if ($x -is [Collections.IDictionary]) { if ($x.Contains('dependsWhy')) { $x['dependsWhy'] } } elseif ($x.PSObject.Properties['dependsWhy']) { $x.dependsWhy }; if (-not $w) { return '' }; if ($w -is [Collections.IDictionary]) { if ($w.Contains($d)) { return [string]$w[$d] }; return '' }; $p = $w.PSObject.Properties[$d]; if ($p) { [string]$p.Value } else { '' } }
 . (Join-Path $PSScriptRoot 'lib\Streams.ps1')
 $P = Get-StreamPaths $Repo
 $doc = Read-Tasks $P
@@ -96,6 +97,7 @@ foreach ($x in $doc.tasks) {
         $dt = $by[[string]$d]
         if (-not $d -or -not $dt -or [string]$dt.state -in $landed -or [string]$dt.kind -in @('gate', 'integration')) { continue }
         if ([string]$dt.state -eq 'building' -or (Test-ClaimLive $dt)) { continue }
+        if (Get-DepWhy $x $d) { continue }
         if (@(@($dt.writeSet) | Where-Object { @($x.writeSet) -contains $_ }).Count) { continue }
         $edges += [pscustomobject]@{ id = $id; dep = [string]$d; depState = [string]$dt.state }
     }

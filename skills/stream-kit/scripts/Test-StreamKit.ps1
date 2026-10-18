@@ -1081,6 +1081,26 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $pn = (& "$S\Get-StreamStatus.ps1" -Repo $lr -Json | ConvertFrom-Json).leftToPlan
     Case 'a repo with no requirements folder reads left to plan unknown' (-not $pn.known -and $pn.reason -match '^no requirements folder: ') ($pn | ConvertTo-Json -Compress -Depth 6)
 
+    # DEP-REVIEW (kit item IN-20261018144658-c28b): unstated edges whose root holds 2+ ticketed rows waiting 2+ days.
+    $dr = Join-Path $Scratch 'depreview'; New-Item -ItemType Directory -Path $dr -Force | Out-Null
+    git -C $dr init -q -b main; Set-Content (Join-Path $dr 'x.txt') 'x'; git -C $dr add -A; git -C $dr -c user.email=t@t -c user.name=t commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $dr | Out-Null
+    $dOld = (Get-Date).ToUniversalTime().AddDays(-3).ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $dRoot = CTask 'D1.T1' 'D1' 'planned' 5 @() ''
+    $dM = CTask 'D1.T2' 'D1' 'ticketed' 5 @('D1.T1') ''; $dM.history[0].at = $dOld
+    $dA = CTask 'D1.T3' 'D1' 'ticketed' 5 @('D1.T2') ''; $dA.history[0].at = $dOld
+    $dB = CTask 'D1.T4' 'D1' 'ticketed' 5 @('D1.T1') ''; $dB.history[0].at = $dOld
+    $dS = CTask 'D1.T5' 'D1' 'ticketed' 5 @('D1.T1') ''; $dS.history[0].at = $dOld; $dS.dependsWhy = @{ 'D1.T1' = 'reads its table' }
+    $dN = CTask 'D1.T6' 'D1' 'ticketed' 5 @('D1.T1') ''; $dN.title = 'after D1.T1 lands'; $dN.history[0].at = $dOld
+    $dF = CTask 'D1.T7' 'D1' 'ticketed' 5 @('D1.T1') ''
+    @{ groups = @(@{ id = 'D1'; name = 'd'; state = 'released'; origin = 'plan' }); tasks = @($dRoot, $dM, $dA, $dB, $dS, $dN, $dF) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $dr '.streams\tasks.json') -Encoding utf8
+    $dj = & "$S\Get-StreamStatus.ps1" -Repo $dr -Json | ConvertFrom-Json
+    $dv = @($dj.depReview)
+    Case 'DEP-REVIEW lists a root holding 2+ old ticketed rows behind unstated edges; stated, title-named and fresh edges do not count' ($dv.Count -eq 1 -and $dv[0].root -eq 'D1.T1' -and ((@($dv[0].waiters) | Sort-Object) -join ',') -eq 'D1.T2,D1.T3,D1.T4' -and @($dj.flags | Where-Object { $_ -like 'DEP-REVIEW: 1 root(s)*D1.T1 (3: *' }).Count -eq 1) ($dj.depReview | ConvertTo-Json -Compress -Depth 5)
+    $dB.dependsWhy = @{ 'D1.T1' = 'x' }; $dM.dependsWhy = @{ 'D1.T1' = 'y' }
+    @{ groups = @(@{ id = 'D1'; name = 'd'; state = 'released'; origin = 'plan' }); tasks = @($dRoot, $dM, $dA, $dB, $dS, $dN, $dF) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $dr '.streams\tasks.json') -Encoding utf8
+    $dj2 = & "$S\Get-StreamStatus.ps1" -Repo $dr -Json | ConvertFrom-Json
+    Case 'DEP-REVIEW stays quiet when a root has fewer than 2 waiters behind unstated edges' (@($dj2.depReview).Count -eq 0 -and @($dj2.flags | Where-Object { $_ -like 'DEP-REVIEW*' }).Count -eq 0) ($dj2.depReview | ConvertTo-Json -Compress -Depth 5)
     # Find-ArtificialBlockers (kit item IN-20261018044413-259b): a wait that runs only through a shared composition file
     # is a candidate; a wait on a row it shares no file with, or on a named hub, is logical and kept.
     $ar = Join-Path $Scratch 'artdeps'; New-Item -ItemType Directory -Path $ar -Force | Out-Null
@@ -1095,6 +1115,13 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $ah = @(& "$S\Find-ArtificialBlockers.ps1" -Repo $ar -Hubs 'A1.T1' -Session kit-test)
     $adec = Get-Content -Raw (Join-Path $ar '.streams\decisions.md')
     Case 'Find-ArtificialBlockers: a composition-file-only wait is a candidate, a no-shared-file wait is kept, a hub is never jumped' (($ao -match '^CANDIDATE composition\tA1\.T2 ahead of A1\.T1 \| src/Composition/Reg\.cs$').Count -eq 1 -and ($ao -match 'A1\.T3').Count -eq 0 -and ($ao -match '^CANDIDATE composition\tA1\.T4 ').Count -eq 1 -and $ao[-1] -match '^SUMMARY waiting 3 candidates 2 .*logical 1 ' -and ($ah -match '^CANDIDATE').Count -eq 0 -and $ah[-1] -match 'logical 3 ' -and $adec -match '\[kit-test\] Find-ArtificialBlockers: SUMMARY waiting 3 candidates 0') "plain: $($ao -join ' / ') hub: $($ah -join ' / ')"
+    # Kit item IN-20261018144659-fdff: an edge with a dependsWhy reason is logical: never a candidate, never an EDGE line.
+    $wT4 = CTask 'A1.T4' 'A1' 'ticketed' 5 @('A1.T1') ''; $wT4.writeSet = @('src/Composition/Reg.cs', 'd.cs'); $wT4.dependsWhy = @{ 'A1.T1' = 'reads the registration T1 adds' }
+    $wT3 = CTask 'A1.T3' 'A1' 'ticketed' 5 @('A1.T1') ''; $wT3.writeSet = @('c.cs'); $wT3.dependsWhy = @{ 'A1.T1' = 'calls the API T1 adds' }
+    @{ groups = @(@{ id = 'A1'; name = 'a'; state = 'released'; origin = 'plan' }); tasks = @($aT1, $aT2, $wT3, $wT4) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $ar '.streams\tasks.json') -Encoding utf8
+    $wo = @(& "$S\Find-ArtificialBlockers.ps1" -Repo $ar)
+    $wt = @(& "$S\Find-TestBlockers.ps1" -Repo $ar)
+    Case 'Find-ArtificialBlockers / Find-TestBlockers: an edge with a dependsWhy reason is logical, never a candidate or a no-shared-file EDGE' (($wo -match '^CANDIDATE composition\tA1\.T2 ').Count -eq 1 -and ($wo -match '^CANDIDATE.*A1\.T4').Count -eq 0 -and $wo[-1] -match '^SUMMARY waiting 3 candidates 1 .*logical 2 ' -and ($wt -match '^EDGE no-shared-file\tA1\.T3').Count -eq 0) "fab: $($wo -join ' / ') ftb: $($wt -join ' / ')"
     # -Apply (kit item IN-20261018051443-4d10): A1.T2 jumps A1.T1, A1.T1 now waits on A1.T2, A1.T5 (after A1.T2) keeps
     # its order after A1.T1 as an explicit edge, and A1.T4 / A1.T1 never jump a row moved in the same run.
     $aT5 = CTask 'A1.T5' 'A1' 'ticketed' 5 @('A1.T2') ''; $aT5.writeSet = @('b.cs')
