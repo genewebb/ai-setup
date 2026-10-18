@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 3754e77a-a9e8-42e9-b3f4-cd17c62e480c
-  modified: 2026-10-17T23:43:39.798Z
+  modified: 2026-10-18T00:32:23.550Z
 ---
 
 Stream host = **SMVMTR1, account CORP\genewe** (Gene's choice 2026-10-17: log on as genewe, admin shell = same user,
@@ -16,8 +16,8 @@ streams in NON-elevated windows). The old agenewe install there is orphaned (lef
 `D:\devops\repos\speedmerchants` on branch `users/agenewe/stream-sync`, worktrees `D:\devops\worktrees`, scratch `D:\tmp`,
 StreamHostDir `D:\devops\stream-host`, Rancher disks `D:\RancherDesktop\{distro,distro-data}` (genewe, moby, k8s off,
 autostart + background), status page https://smvmtr1.corp.profisee.com/speedy/status.html (IIS C:\inetpub\wwwroot\speedy).
-Old speedmerchants-account Rancher disks DELETED (Gene). Old TR1 worktrees moved to `D:\devops\worktrees-old-20261014`
-(all rows integrated; delete when Gene says).
+Old speedmerchants-account Rancher disks DELETED (Gene). Old TR1 worktrees (all rows integrated) were moved aside and Gene
+deleted them 2026-10-17 20:06.
 
 **Deploy steps that worked:** profile edits (AIWorkRoot, StreamHostDir, access + git rows) -> clone ai-setup -> install.ps1
 -> Claude native install + `.local\bin` on User PATH -> `uv` + `uv tool install claude-swap` (cswap.exe is a uv stub,
@@ -44,3 +44,9 @@ Rancher "timed out dialing Hyper-V socket" after first start: rdctl shutdown, ws
 lines in LOCAL time, a 'doing'/'failed' line under each code, every wait names its next-look clock time.
 Test-StreamKitRecovery `-List` / `-Only '^74\.,^112\.'` runs only those sections (33 s vs ~40 min); Gene does not
 want the full 40-minute run for a narrow change: run the sections that read the changed code.
+
+**Lost-edit lesson (ai-setup d1dfac5):** the status page's category totals line (owner ask 10/16) was edited straight
+into CORPVM17's INSTALLED copy (~\.claude\skills), never published, and vanished on the host move. Kit edits go into
+the ai-setup repo (Publish-KitFile) only. Before retiring a host, compare its installed skills to git history
+(hash-object vs every committed blob): on 10/17 only Build-StatusPage.ps1 was missing.
+Same commit: stream-build verifier runs FOREGROUND (background verifier + Monitors swallowed /exit, RESULT-GRACE).
