@@ -6,10 +6,11 @@
 # addWriteSet splits a comma- or semicolon-joined value into separate paths; removeWriteSet does NOT, so an entry
 # stored in that broken shape can be named exactly as it is stored. Pass an array to remove several paths.
 #   -File <json>   { "note": "why (inbox ids)", "edits": [ { "task": "G3.T025", "addWriteSet": [], "removeWriteSet": [],
-#                    "addDependsOn": [], "removeDependsOn": [], "title": "...", "tests": ["FullyQualifiedName~X"],
+#                    "addDependsOn": [], "removeDependsOn": [], "dependsWhy": { "G3.T010": "reads the table T010 adds" },
+#                    "title": "...", "tests": ["FullyQualifiedName~X"],
 #                    "addWhy": [], "removeWhy": [], "estMinutes": 130, "estBasis": "why that many minutes",
 #                    "release": "auto|planned|ticketed|keep|block|retire", "note": "..." } ] }
-#   or one task inline: -Task -AddWriteSet -RemoveWriteSet -AddDependsOn -RemoveDependsOn -AddWhy -RemoveWhy -Title -Group -EstMinutes -EstBasis -Release -Note
+#   or one task inline: -Task -AddWriteSet -RemoveWriteSet -AddDependsOn -RemoveDependsOn -DependsWhy @{dep=reason} -AddWhy -RemoveWhy -Title -Group -EstMinutes -EstBasis -Release -Note
 # group: a row's GROUP is the planner's only lever on the claim ORDER, because Claim-Task.ps1:47 sorts fix-first, then
 # group rank, then chain depth - so a short row that gates the FIRST group's close can sit almost last while it lives
 # in a later group (owner ruling on G3.T149, kit item IN-20260930210139-4afa). A move KEEPS the row's id: G3.T149 in
@@ -25,6 +26,12 @@
 # G2.T99 45 for a row two files wider, so every watchdog line and every group ETA read from them was wrong. A change
 # must be a positive whole number and must state its new estBasis in the SAME edit, because the old basis is exactly
 # what the new number makes false. estBasis may also be corrected on its own. kind is still not changeable here.
+# dependsWhy: a map of dependency id -> one-line reason the edge exists (owner request, plan item IN-20261018143920-ebda,
+# kit item IN-20261018144201-44e6). An unstated edge cannot be told apart from an artificial file-order wait, so the
+# status page and the blocker reviews treat a stated one as logical. A key must name an edge the row holds after this
+# edit (DEPWHY-NO-EDGE), the reason is one line of at most 200 characters (DEPWHY-BAD), and an empty reason clears it.
+# removeDependsOn KEEPS the stored reason, so an edge that is dropped and put back (a file-order flip) keeps its why.
+# A reason-only edit is not a scope change: like a note it never releases a blocked row.
 # why ids: a REQ/AC that no task carries is never counted by a group's evidence matrix, and before 2026-09-29 a plan
 # session could only give an orphaned AC an owner by creating a task for it (kit item IN-20260929161555-34cc). A task
 # always keeps at least one why id: an edit that would empty the list is refused.
@@ -48,6 +55,7 @@ param(
     [string[]] $RemoveWriteSet = @(),
     [string[]] $AddDependsOn = @(),
     [string[]] $RemoveDependsOn = @(),
+    [hashtable] $DependsWhy = @{},
     [string[]] $AddWhy = @(),
     [string[]] $RemoveWhy = @(),
     [string] $Title = '',
@@ -63,7 +71,7 @@ $P = Get-StreamPaths (Resolve-Path $Repo).Path
 
 if ($File) { $in = Get-Content -Raw $File | ConvertFrom-Json -AsHashtable -Depth 20 }
 elseif ($Task) {
-    $in = @{ note = $Note; edits = @(@{ task = $Task; addWriteSet = $AddWriteSet; removeWriteSet = $RemoveWriteSet; addDependsOn = $AddDependsOn; removeDependsOn = $RemoveDependsOn; addWhy = $AddWhy; removeWhy = $RemoveWhy; title = $Title; group = $Group; estMinutes = $EstMinutes; estBasis = $EstBasis; release = $(if ($PSBoundParameters.ContainsKey('Release')) { $Release } else { '' }); note = $Note }) }
+    $in = @{ note = $Note; edits = @(@{ task = $Task; addWriteSet = $AddWriteSet; removeWriteSet = $RemoveWriteSet; addDependsOn = $AddDependsOn; removeDependsOn = $RemoveDependsOn; dependsWhy = $DependsWhy; addWhy = $AddWhy; removeWhy = $RemoveWhy; title = $Title; group = $Group; estMinutes = $EstMinutes; estBasis = $EstBasis; release = $(if ($PSBoundParameters.ContainsKey('Release')) { $Release } else { '' }); note = $Note }) }
 } else { 'REFUSED give -File or -Task'; exit 2 }
 function Arr($h, $k) { if ($h.Contains($k) -and $null -ne $h[$k]) { @($h[$k] | Where-Object { $_ }) } else { @() } }
 
@@ -111,6 +119,17 @@ trap { if ("$_" -like 'TRANSITION-REFUSED*') { "REFUSED $_"; exit 2 } else { bre
             $t.dependsOn = @(@($t.dependsOn | Where-Object { $_ -and $_ -notin $rd }) + $ad | Select-Object -Unique)
             if ($ad.Count) { $parts += "deps +$($ad -join ', +')" }; if ($rd.Count) { $parts += "deps -$($rd -join ', -')" }
         }
+        $dw = if ($e.Contains('dependsWhy') -and $e['dependsWhy'] -is [Collections.IDictionary]) { $e['dependsWhy'] } else { @{} }
+        $whyParts = @(); $bad = $false
+        foreach ($k in @($dw.Keys | Sort-Object)) {
+            $reason = ([string] $dw[$k]).Trim()
+            if ($reason -match '[\r\n]' -or $reason.Length -gt 200) { $problems.Add("DEPWHY-BAD $($t.id) -> $k : a reason is one line of at most 200 characters"); $bad = $true; continue }
+            if (-not $t.Contains('dependsWhy') -or $t['dependsWhy'] -isnot [Collections.IDictionary]) { $t['dependsWhy'] = [ordered]@{} }
+            if (-not $reason) { if ($t['dependsWhy'].Contains($k)) { $t['dependsWhy'].Remove($k); $whyParts += "depwhy -$k" }; continue }
+            if (@($t.dependsOn) -notcontains $k) { $problems.Add("DEPWHY-NO-EDGE $($t.id) -> $k : the row does not dependsOn $k after this edit; add the edge in the same edit"); $bad = $true; continue }
+            $t['dependsWhy'][$k] = $reason; $whyParts += "depwhy $k"
+        }
+        if ($bad) { continue }
         $aw = @(Arr $e 'addWhy'); $rw = @(Arr $e 'removeWhy')
         if ($aw.Count -or $rw.Count) {
             $left = @(@($t.why | Where-Object { $_ -and $_ -notin $rw }) + $aw | Select-Object -Unique)
@@ -163,6 +182,7 @@ trap { if ("$_" -like 'TRANSITION-REFUSED*') { "REFUSED $_"; exit 2 } else { bre
         # applies only when the edit changed something or named its release; a named release always applies.
         $named = [bool] $e['release']
         $rel = if ($named) { $e['release'] } elseif ($parts.Count) { 'auto' } else { 'keep' }
+        $parts += $whyParts
         $to = $null
         if ($rel -eq 'retire') {
             $why0 = if ($e['note']) { [string] $e['note'] } elseif ($in['note']) { [string] $in['note'] } else { '' }
