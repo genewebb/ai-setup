@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: f72b1fa1-4f0b-4455-a732-6236fcf25583
-  modified: 2026-10-18T15:00:49.184Z
+  modified: 2026-10-18T15:41:22.528Z
 ---
 
 Review of how the stream kit handles `dependsOn` (2026-10-18, Gene asked for an objective critical review, then "make your suggested improvements"). Source of truth is `C:\devops\repos\ai-setup\skills\stream-kit\scripts` (installed copies under `~\.claude\skills` are copies).
@@ -27,6 +27,8 @@ Review of how the stream kit handles `dependsOn` (2026-10-18, Gene asked for an 
 **State 10/18 10:40:** Test-StreamKit 222/222, Test-StreamKitRecovery fails=0; laptop installed; PUBLISHED b1cfe17 (Gene typed yes at the secret guard: the Add-Lesson refusal fixture in Test-StreamKitRecovery.ps1:2759 trips the conn-password rule, and so does quoting it in a memory file - never quote that fixture). prof HUB pwsh profile WIP went in the same commit (Gene's choice). Planner audit item FILED on SMVMTR1: `IN-20261018143920-ebda stream-plan` (semantic-edge audit of focus groups via DEP-REVIEW flags; G9.G90 + integration edges need owner sign-off).
 
 **10/18 10:59 MERGE d05c226:** `prof setup push` refused: SMVMTR1's clone had its own kit commit 28f1de6 (ORDERED-BY-MERGE composition-file rule, Find-ArtificialBlockers, Find-TestBlockers, 15 files) conflicting in 3 SKILL.md + Test-StreamKit.ps1 (whole-file conflicts, real diffs small: fetch `\\SMVMTR1\D$\devops\repos\ai-setup main`, `checkout --ours`, re-apply their sentences by hand, keep both test blocks). Merged suites: unit 231/231, recovery 706 PASS fails=0. Versions after merge: integrate v0.19, plan v0.15.
+
+**10/18 11:40 second merge aca808b:** `prof setup push` failed again because publish.ps1 ran `git pull --rebase` with origin unchanged, which replayed 28f1de6 alone and FLATTENED the hand-made merge (fixed in 5833609: fetch, rebase --rebase-merges only when behind; Publish.Tests 9/9). SMVMTR1's planner had meanwhile built its own `dependsWhy` edit in Revise-Task.ps1 (77143de, kit item IN-20261018144201-44e6, acting on my inbox item before my version reached it): kept ITS semantics (`-DependsWhy`, `DEPWHY-NO-EDGE`/`DEPWHY-BAD`, 200 chars, empty clears, removeDependsOn keeps the reason, reason-only edit never releases) + my defaults refill; `Set-DependsWhyDefaults` keeps a stated reason for a removed edge. Suites: unit 231, recovery 712, fails=0. LESSON: filing a planner item about a feature before the kit carrying it is installed on the host makes the host build it twice.
 
 **Open:** SMVMTR1 needs the rollout (`prof setup reload` / `prof setup push -Machine SMVMTR1 -AllowSecrets` / `prof streams update -RestartSessions`) before DEP-REVIEW / FOCUS-PULL / BASE-STALE appear on its status page and the freshness tick runs there.
 
