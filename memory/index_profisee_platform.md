@@ -2,7 +2,10 @@
 name: index_profisee_platform
 description: Profisee platform & Connect - sub-index of MEMORY.md
 metadata:
+  node_type: memory
   type: reference
+  originSessionId: f72b1fa1-4f0b-4455-a732-6236fcf25583
+  modified: 2026-10-18T14:31:16.358Z
 ---
 
 Profisee, Connect, Matching, Model Import and the corp/SMVM2 environment notes. Moved out of MEMORY.md 2026-09-10 to keep the index under its read limit; nothing was dropped.
@@ -23,3 +26,8 @@ Profisee, Connect, Matching, Model Import and the corp/SMVM2 environment notes. 
 - [ModelSource RetailClient has TWO shapes](reference_modelsource_retailclient_two_shapes.md)
 - [UnifiedMatching PROD timing audit 9/30: wall-clock OK, chain wrong ($LastChgDTM), 3b no creates, 3c 613 Pending](project_unified_matching_prod_timing_audit_2026-09-30.md)
 - [ADO 165390 Sentara first-call 2 s](project_ado_165390_sentara_first_call_2s.md)
+
+## Moved from MEMORY.md 2026-10-18
+
+- **[Connect: NEVER delete an entity Connect didn't create; no teardown (clean start, create, run) 10/15](feedback_connect_never_delete_entities.md)**
+- [Matching lookup 400 status 2219 = no existing record (no-match), NOT error; LookupThenCreate still creates](reference_matching_lookup_2219_is_no_match.md) · [sqlcmd needs -I for Profisee table writes; backfill Monitor start marker by direct INSERT](reference_sqlcmd_quoted_identifier_profisee.md) · [Prod step config CHUNKREF decode: STRING_AGG tTestAutoScenarioConfiguration by GroupKey; batch metrics tUnifiedMatchingApiExecution](reference_prod_chunkref_config_decode_sql.md)

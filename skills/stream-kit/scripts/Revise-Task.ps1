@@ -111,6 +111,16 @@ trap { if ("$_" -like 'TRANSITION-REFUSED*') { "REFUSED $_"; exit 2 } else { bre
             $t.dependsOn = @(@($t.dependsOn | Where-Object { $_ -and $_ -notin $rd }) + $ad | Select-Object -Unique)
             if ($ad.Count) { $parts += "deps +$($ad -join ', +')" }; if ($rd.Count) { $parts += "deps -$($rd -join ', -')" }
         }
+        # dependsWhy (2026-10-18 dependency review): an edit may state the reason for an edge ({ "dependsWhy": { "<id>":
+        # "<why>" } }); the mechanical reasons are filled for every edge the row holds after this edit, and a removed
+        # edge drops its reason (lib\Streams.ps1 Set-DependsWhyDefaults).
+        $dw = if ($e.Contains('dependsWhy') -and $e['dependsWhy'] -is [Collections.IDictionary]) { $e['dependsWhy'] } else { $null }
+        if ($dw) {
+            if (-not $t.Contains('dependsWhy') -or $t['dependsWhy'] -isnot [Collections.IDictionary]) { $t['dependsWhy'] = [ordered]@{} }
+            foreach ($k in $dw.Keys) { if ([string]$k -in @($t.dependsOn)) { $t['dependsWhy'][[string]$k] = [string]$dw[$k] } else { $problems.Add("WHY-NO-EDGE $($t.id): dependsWhy names $k, which is not in its dependsOn after this edit") } }
+            $parts += "why-deps $(@($dw.Keys) -join ', ')"
+        }
+        if ($ad.Count -or $rd.Count -or $dw) { [void](Set-DependsWhyDefaults $doc.tasks $t) }
         $aw = @(Arr $e 'addWhy'); $rw = @(Arr $e 'removeWhy')
         if ($aw.Count -or $rw.Count) {
             $left = @(@($t.why | Where-Object { $_ -and $_ -notin $rw }) + $aw | Select-Object -Unique)

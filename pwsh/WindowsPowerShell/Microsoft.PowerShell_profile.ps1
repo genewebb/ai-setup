@@ -67,6 +67,7 @@ function rp {
 # -----------------------------
 function cdevops { Set-Location C:\devops\repos }
 function cspeed  { Set-Location C:\devops\repos\speed-merchants }
+function csm     { Set-Location C:\devops\repos\speedmerchants }
 
 # -----------------------------
 # Quick nav (personal GitHub repos)

@@ -739,6 +739,99 @@ function Test-BuildReady($doc, $Task) {
     $Task.state -eq 'ticketed' -and $Task.kind -in $script:BuildKinds -and (Test-DepsBaseReady $doc $Task)
 }
 
+# ---- dependency base drift (2026-10-18 dependency review, finding F1) ----
+# New-TaskWorktree.ps1 records base.deps as '<patch leaf>:<16-hex sha256>' for every built dependency patch it stacked,
+# and until this check nothing ever READ it. A dependency that bounced after the dependent was built (REBASE, REVERSED;
+# 6 of 25 in-flight bounces on the live board by 10/18) lands a DIFFERENT patch, the dependent's own patch usually still
+# applies, and its verifier graded against code that never landed. Returns one entry per stacked dependency whose
+# current patch is not the one the base was laid on: @{ dep; leaf; recorded; now } (now = 'gone' when the file is
+# missing). Empty when the row has no base.deps, or every hash matches. A SUSPECT bounce keeps the patch unchanged, so
+# it does not drift here.
+function Get-FileHash16([string] $Path) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($Path))).Replace('-', '').Substring(0, 16) } finally { $sha.Dispose() }
+}
+function Get-DependencyBaseDrift($P, $doc, $Task) {
+    $out = [Collections.Generic.List[object]]::new()
+    $base = if ($Task -is [Collections.IDictionary] -and $Task.Contains('base')) { $Task['base'] } else { $null }
+    if ($base -isnot [Collections.IDictionary] -or -not $base.Contains('deps')) { return , $out }
+    $leafToId = @{}
+    foreach ($t in $doc.tasks) {
+        $a = if ($t -is [Collections.IDictionary] -and $t.Contains('artifacts')) { $t['artifacts'] } else { $null }
+        $pp = if ($a -is [Collections.IDictionary] -and $a.Contains('patch') -and $a['patch']) { [string]$a['patch'] } else { '' }
+        if ($pp) { $leafToId[(Split-Path -Leaf $pp)] = [string]$t.id }
+    }
+    foreach ($e in @($base['deps'])) {
+        $s = [string]$e; $i = $s.LastIndexOf(':')
+        if ($i -lt 1) { continue }
+        $leaf = $s.Substring(0, $i); $recorded = $s.Substring($i + 1)
+        $dep = if ($leafToId.ContainsKey($leaf)) { $leafToId[$leaf] } else { $leaf -replace '\.patch$', '' }
+        $f = Join-Path $P.Patches $leaf
+        $now = if (Test-Path -LiteralPath $f) { Get-FileHash16 $f } else { 'gone' }
+        if ($now -ne $recorded) { $out.Add([ordered]@{ dep = $dep; leaf = $leaf; recorded = $recorded; now = $now }) }
+    }
+    , $out
+}
+
+# ---- dependsWhy (2026-10-18 dependency review, finding F3) ----
+# dependsOn says THAT a row waits; nothing said WHY. On the live board 1,550 of 5,740 edges shared no write-set file, and
+# nobody could tell a real "B uses A's new type" edge from a cautious one. dependsWhy is a sibling map id -> reason.
+# Add-Tasks.ps1 and Revise-Task.ps1 fill the mechanical reasons; the planner writes the rest; an edge with no stated
+# reason reads 'unstated', which is what the DEP-REVIEW board flag looks for.
+#   shared file   the two write sets overlap, so the edge orders edits to one file (Board.ps1 UNORDERED rule)
+#   group order   the dependency is a group's integration task or a gate, or the row is an integration task
+#   mockup first  the dependency is a mockup row (its code row follows it by rule)
+#   unstated      none of the above and the planner gave no reason
+$script:DependsWhyUnstated = 'unstated'
+# DEP-REVIEW board flag thresholds: an unstated edge whose target has held at least MinWaiters ticketed rows for at
+# least MinDays is a planner question (state the reason or drop the edge). Env overrides exist for the self-tests.
+$script:DepReviewMinWaiters = if ("$env:STREAM_DEP_REVIEW_MIN_WAITERS" -match '^\d+$') { [int]$env:STREAM_DEP_REVIEW_MIN_WAITERS } else { 2 }
+$script:DepReviewMinDays = if ("$env:STREAM_DEP_REVIEW_MIN_DAYS" -match '^\d+(\.\d+)?$') { [double]$env:STREAM_DEP_REVIEW_MIN_DAYS } else { 2 }
+function Set-DependsWhyDefaults($Tasks, $Row, [hashtable] $ById = $null) {
+    $byId = if ($null -ne $ById) { $ById } else { Get-TaskIndex $Tasks }
+    $deps = @(if ($Row -is [Collections.IDictionary]) { if ($Row.Contains('dependsOn')) { @($Row['dependsOn'] | Where-Object { $_ }) } else { @() } } else { @($Row.dependsOn | Where-Object { $_ }) })
+    $why = if ($Row -is [Collections.IDictionary] -and $Row.Contains('dependsWhy') -and $Row['dependsWhy'] -is [Collections.IDictionary]) { $Row['dependsWhy'] } else { [ordered]@{} }
+    $kept = [ordered]@{}
+    foreach ($d in $deps) {
+        $d = [string]$d
+        $given = if ($why.Contains($d) -and "$($why[$d])".Trim()) { "$($why[$d])".Trim() } else { '' }
+        if ($given -and $given -ne $script:DependsWhyUnstated) { $kept[$d] = $given; continue }
+        $dt = $byId[$d]
+        $rowKind = [string]$(if ($Row -is [Collections.IDictionary]) { $Row['kind'] } else { $Row.kind })
+        $rowWs = $(if ($Row -is [Collections.IDictionary]) { $Row['writeSet'] } else { $Row.writeSet })
+        $kept[$d] = if (-not $dt) { $script:DependsWhyUnstated }
+            elseif ($rowKind -eq 'integration' -or [string]$dt['kind'] -in @('integration', 'gate')) { 'group order' }
+            elseif ([string]$dt['kind'] -eq 'mockup') { 'mockup first' }
+            elseif (Test-WriteSetOverlap $rowWs $dt['writeSet']) { 'shared file' }
+            else { $script:DependsWhyUnstated }
+    }
+    if ($Row -is [Collections.IDictionary]) { $Row['dependsWhy'] = $kept } else { $Row | Add-Member -NotePropertyName dependsWhy -NotePropertyValue $kept -Force }
+    $kept
+}
+function Get-DependsWhy($Row, [string] $Dep) {
+    $why = if ($Row -is [Collections.IDictionary] -and $Row.Contains('dependsWhy')) { $Row['dependsWhy'] } else { $null }
+    if ($why -is [Collections.IDictionary] -and $why.Contains($Dep) -and "$($why[$Dep])".Trim()) { return "$($why[$Dep])".Trim() }
+    $script:DependsWhyUnstated
+}
+
+# ---- dependency bounce cascade (2026-10-18 dependency review, finding F6) ----
+# When a BUILT row leaves built for anything but landed, every row still BUILDING whose base stacked it is told so with
+# one history line, so the builder (which beats the row and the status page both read it) knows its base holds a patch
+# that may change. Call inside Invoke-TasksLocked after the state move. Returns the dependents noted.
+function Add-DependentBounceNotes($doc, $Task, [string] $By, [string] $From, [string] $To, [string] $Note = '') {
+    $out = [Collections.Generic.List[string]]::new()
+    if ($From -ne 'built' -or $To -in @('integrated', 'done')) { return , $out }
+    $id = [string]$Task.id
+    $byId = Get-TaskIndex $doc.tasks
+    foreach ($o in $doc.tasks) {
+        if ([string]$o.state -ne 'building' -or [string]$o.id -eq $id) { continue }
+        if (-not (Test-DependsOnChain $doc.tasks $o $id $byId)) { continue }
+        Add-History $o $By 'building' "DEP-MOVED $id built -> ${To}: a dependency this base stacked left built$(if ($Note) { " ($Note)" }); the base may hold a patch that will change, so expect BASE-STALE at integration unless $id lands unchanged"
+        $out.Add([string]$o.id)
+    }
+    , $out
+}
+
 # Session liveness, shared by Get-StreamStatus.ps1 (the board and its claimable buffer) and any script that counts
 # live builders, so they never disagree about how many builders are live. A session is live when it wrote history, beat a claim, beat
 # the integrator lock or left an idle beat inside its role's limit (the limits the watchdog breaks claims on). A role
@@ -1139,19 +1232,49 @@ function Get-FocusLabel($doc, $P = $null) { $f = Get-FocusGroups $doc $P; if ($f
 # "effective rank at or before the focus group's". With an owner-set focus a row of an OPEN group that is not listed is
 # frozen, even when a listed group's row waits on it: list that group too if its work should run. Empty when every group
 # is closed.
-function Get-FocusSet($doc, $P = $null) {
+function Get-FocusSet($doc, $P = $null) { , (Get-FocusClosure $doc $P).set }
+# The focus set with its DEPENDENCY CLOSURE (2026-10-18 dependency review, finding F3). The effective-rank rule above
+# pulls in a LATER group's root that a focus row waits on, but not an EARLIER open group's: a focus G13 row waiting on
+# an open G6 row read G6's rank, G6 was not listed, and the row was frozen for ever while the board named only "wait on
+# roots G6.T307" with no word that the root was outside the focus. So every unlanded row a focus row depends on,
+# transitively, is in the set too, whatever its group - a dependency is work the focus cannot finish without, and the
+# owner who listed the focus group asked for that group to finish. Only dependencies are pulled, never dependents: an
+# unlisted group's row that merely waits on focus work stays frozen, as the owner-focus rule says. Claims stay safe: a
+# pulled row of a group that is not released is still refused by the released gate.
+# Returns @{ set = HashSet of ids; pulled = [ordered] id -> via (the focus row whose chain pulled it) }.
+function Get-FocusClosure($doc, $P = $null) {
     $set = [Collections.Generic.HashSet[string]]::new()
+    $pulled = [ordered]@{}
     $f = Get-FocusGroups $doc $P
-    if (-not $f.groups.Count) { return , $set }
+    if (-not $f.groups.Count) { return @{ set = $set; pulled = $pulled } }
     $groupAt = @(foreach ($g in $doc.groups) { [string]$g.id })
     $in = @{}; foreach ($id in $f.groups) { $in[$id] = $true }
     foreach ($g in $doc.groups) { if ([string]$g.state -eq 'closed') { $in[[string]$g.id] = $true } }
     $erank = Get-EffectiveGroupRank $doc
+    $byId = @{}; foreach ($t in $doc.tasks) { $byId[[string]$t.id] = $t }
     foreach ($t in $doc.tasks) {
         if ($in.ContainsKey([string]$t.group)) { [void]$set.Add([string]$t.id); continue }
         if ($erank[$t.id] -and $in.ContainsKey($groupAt[$erank[$t.id].rank])) { [void]$set.Add([string]$t.id) }
     }
-    , $set
+    # Dependency closure: walk dependsOn from every UNLANDED row already in the set (a row that is integrated or done needs
+    # nothing, so its edges pull nothing); an unlanded row not yet in the set is pulled.
+    $stack = [Collections.Generic.Stack[object]]::new()
+    foreach ($id in @($set)) { $stack.Push(@($id, $id)) }
+    while ($stack.Count) {
+        $frame = $stack.Pop(); $id = [string]$frame[0]; $via = [string]$frame[1]
+        $t = $byId[$id]; if (-not $t) { continue }
+        if ([string]$t.state -in @('integrated', 'done')) { continue }
+        foreach ($d in @($t.dependsOn)) {
+            if (-not $d) { continue }
+            $d = [string]$d
+            if ($set.Contains($d)) { continue }
+            $dt = $byId[$d]; if (-not $dt) { continue }
+            if ([string]$dt.state -in @('integrated', 'done')) { continue }
+            [void]$set.Add($d); $pulled[$d] = $via
+            $stack.Push(@($d, $via))
+        }
+    }
+    @{ set = $set; pulled = $pulled }
 }
 # FOCUS PRIORITY (owner ruling 2026-10-14, coordinator-13c4c8a7): the claim sort's group rank. The owner wrote focus
 # ["G13","G14","G6"] to put G13 first, but every rank read board order, so G6 still sorted first. Focus groups rank

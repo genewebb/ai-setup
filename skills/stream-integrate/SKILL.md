@@ -1,6 +1,6 @@
 ---
 name: stream-integrate
-description: v0.17. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes, even while a suite run is going, and each cycle first handles the oldest open item in its inbox (.streams\inbox\stream-integrate.md), then applies each built, verified patch to the dirty main tree as soon as it is ready and re-runs that task's grader there. When a whole group is integrated it starts one Tier 2 run (Start-SuiteRun.ps1, in a snapshot of main, so main stays open), the scripts screen flaky tests and attribute failures to fix tasks, a Tier 3 retest runs only the failed tests once the fixes land, and Test-GroupClose.ps1 says when the group may close; then it activates the next group (Activate-Group.ps1). Use for /stream-integrate (run under /loop), /stream-integrate once, /stream-integrate gate <task> pass|fail "<note>", /stream-integrate status.
+description: v0.18. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes, even while a suite run is going, and each cycle first handles the oldest open item in its inbox (.streams\inbox\stream-integrate.md), then applies each built, verified patch to the dirty main tree as soon as it is ready and re-runs that task's grader there. When a whole group is integrated it starts one Tier 2 run (Start-SuiteRun.ps1, in a snapshot of main, so main stays open), the scripts screen flaky tests and attribute failures to fix tasks, a Tier 3 retest runs only the failed tests once the fixes land, and Test-GroupClose.ps1 says when the group may close; then it activates the next group (Activate-Group.ps1). Use for /stream-integrate (run under /loop), /stream-integrate once, /stream-integrate gate <task> pass|fail "<note>", /stream-integrate status.
 ---
 
 # stream-integrate
@@ -101,7 +101,9 @@ in local time.
 ### A. Apply one patch
 
 FOCUS (2026-10-05, priority-focus-design 3.1; owner-set since 2026-10-06): you are offered rows from the FOCUS SET only -
-the rows of the focus group(s), plus the rows their work depends on (`lib\Streams.ps1 Get-FocusSet`). The owner names
+the rows of the focus group(s), plus every unlanded row their work depends on, transitively, whatever its group
+(`lib\Streams.ps1 Get-FocusSet` / `Get-FocusClosure`; since 2026-10-18 an EARLIER open group's dependency is pulled in
+too, and the board names each pulled row as `FOCUS-PULL`). The owner names
 the focus group(s) in `.streams\config.json` as `"focus": { "groups": ["G4"] }` (one or more); an empty list means the
 first unclosed group in board order. A claim that reads NONE means the focus has nothing for you now; never look for
 work in another group, and never file an author or build inbox item about a row outside the focus
@@ -114,6 +116,7 @@ and leaves it built. With more than one focus group, "the focus group" in the st
    - every `dependsOn` task is `integrated` or `done`.
 
    Dependency order keeps each patch's base true. Run ONE `Integrate-Patch.ps1` at a time: a second run while one is going prints `DRAIN-BUSY` (exit 4) and does nothing, so wait for the first to print its outcome before starting the next.
+   - **BASE-STALE** (before any apply; 2026-10-18 dependency review F1): the builder's base stacked its built dependencies' patches and recorded their hashes (`base.deps`). A dependency that bounced and was rebuilt since landed a DIFFERENT patch, so this row's verifier graded against code that is not on main even when its own patch still applies. The row goes to `ticketed` with the patch kept; the next build restores it on the true base (`Restore-TaskPatch.ps1`) and re-verifies.
 2. Run `git -C <repo> apply --check --binary <patch>`.
    - **Clean**: apply it.
    - **Not clean**: set the task back to `ticketed`, note `rebase: base moved`, and append history. A builder then
@@ -290,7 +293,7 @@ There is no clock check: the nightly is the scheduled task's, not yours. When ev
 - Every cycle starts with `Enter-Integrator.ps1 -Session <id>`. Exit 5 = another integrator holds the lock: print status only.
 - 0: `Get-InboxItems.ps1 -Skill stream-integrate -Open` lists the open items, oldest first;
   `Set-InboxItem.ps1 -Skill stream-integrate -Id <id> -By <session> -Status taken|done|declined|forwarded [-Note] [-ForwardTo]`.
-- A: `Integrate-Patch.ps1 -Session <id>` (repeat until `NONE`). It prints `INTEGRATED` + `COMMITTED`, `REBASE`, `SUSPECT` or `REVERSED`.
+- A: `Integrate-Patch.ps1 -Session <id>` (repeat until `NONE`). It prints `INTEGRATED` + `COMMITTED`, `BASE-STALE`, `REBASE`, `SUSPECT` or `REVERSED`.
 - B: `Start-SuiteRun.ps1 -Group <g> -Reason complete|manual|nightly`, `Invoke-Retest.ps1 -Group <g> -Mode fix`, `Test-GroupClose.ps1 -Group <g>`;
   read `.streams\suites\runs\<run>.attribution.json`. Hand-made fix tasks (an unowned failure the planner assigned, a gate fail) go
   through `Add-Tasks.ps1 -Role integrate -File .streams\plans\<group>.fix-<run>.json`. The same file can set

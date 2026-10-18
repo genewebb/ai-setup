@@ -20,12 +20,20 @@
 #  4. Writes the activation record (stale, skipped, gates, known failures, milestones) and one decisions.md line.
 # Prints one line per action, then "ACTIVATED <G> stale <n> skipped <n> gates <n> fixes <n>". -DryRun prints the same
 # lines and writes nothing. Exit 2 = unknown group.
+#  -FreshnessOnly (2026-10-18 dependency review, finding F2): step 1 alone, run by the status tick EVERY cycle for each
+#     focus group that is already active. Activation ran once per group, so the 174 write-set widenings and every
+#     integration commit after it drifted tickets with no re-check until a planner noticed by hand. The continuous
+#     check judges a row by its OWN write set only, not its dependencies': a dependency landing its own files is the
+#     expected order of work and the stacked base carries it into the builder's tree, while another row's commit into
+#     MY files is real staleness. Prints "FRESHNESS <G> stale <n> skipped <n>", writes no activation record, logs a
+#     decision line only when a row moved. It needs no activation record and never prints ALREADY-ACTIVE.
 param(
     [Parameter(Mandatory)] [string] $Repo,
     [Parameter(Mandatory)] [string] $Session,
     [Parameter(Mandatory)] [string] $Group,
     [switch] $DryRun,
-    [switch] $Force
+    [switch] $Force,
+    [switch] $FreshnessOnly
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\lib\Streams.ps1"
@@ -36,7 +44,7 @@ $P = Get-StreamPaths $Repo
 $doc = Read-Tasks $P
 if (-not @($doc.groups | Where-Object { [string]$_.id -eq $Group }).Count) { "REFUSED unknown group $Group"; exit 2 }
 $actPath = Get-ActivationPath $P $Group
-if ((Test-Path -LiteralPath $actPath) -and -not $Force) { "ALREADY-ACTIVE $Group ($actPath)"; exit 0 }
+if ((Test-Path -LiteralPath $actPath) -and -not $Force -and -not $FreshnessOnly) { "ALREADY-ACTIVE $Group ($actPath)"; exit 0 }
 
 $set = Get-GroupSet $doc $Group
 $byId = @{}; foreach ($t in $doc.tasks) { $byId[[string]$t.id] = $t }
@@ -60,7 +68,7 @@ foreach ($t in @($doc.tasks | Where-Object { $_.state -eq 'ticketed' -and $set.C
     # Whose write set each changed file hits: the row's own, then each dependency's. Index loops (lib\Streams.ps1
     # Test-WriteSetOverlap: nested foreach over bound arrays skips pairs on PowerShell 7.6.6).
     $owners = [ordered]@{ $id = @($t.writeSet) }
-    foreach ($d in @($t.dependsOn)) { if ($d -and $byId[[string]$d]) { $owners[[string]$d] = @($byId[[string]$d].writeSet) } }
+    if (-not $FreshnessOnly) { foreach ($d in @($t.dependsOn)) { if ($d -and $byId[[string]$d]) { $owners[[string]$d] = @($byId[[string]$d].writeSet) } } }
     $hitFiles = [Collections.Generic.List[string]]::new(); $hitBy = [Collections.Generic.List[string]]::new()
     for ($i = 0; $i -lt $changed.Count; $i++) {
         foreach ($k in @($owners.Keys)) {
@@ -78,6 +86,21 @@ foreach ($t in @($doc.tasks | Where-Object { $_.state -eq 'ticketed' -and $set.C
     "STALE $id $note"
     $stale.Add([ordered]@{ id = $id; since = $since; ticketedAt = $at; files = @($hitFiles); by = @($hitBy) })
     $edits.Add([ordered]@{ task = $id; release = 'planned'; note = $note })
+}
+
+if ($FreshnessOnly) {
+    if ($DryRun) { "DRY-RUN FRESHNESS $Group stale $($stale.Count) skipped $($skipped.Count)"; exit 0 }
+    if ($edits.Count) {
+        $bf = Join-Path $P.Plans "$Group.freshness-revise.json"
+        if (-not (Test-Path $P.Plans)) { New-Item -ItemType Directory -Path $P.Plans -Force | Out-Null }
+        Write-AtomicText $bf ([ordered]@{ note = "freshness tick of $Group (own write-set files changed on main since ticketed)"; edits = @($edits) } | ConvertTo-Json -Depth 6)
+        $out = @(& "$PSScriptRoot\Revise-Task.ps1" -Repo $Repo -Session $Session -File $bf)
+        $out | ForEach-Object { "  $_" }
+        if ($LASTEXITCODE) { "REVISE-FAILED exit $LASTEXITCODE (nothing released; see the lines above)"; exit 3 }
+        Add-Decision $P $Session "FRESHNESS $Group at $($head.Substring(0, 10)): $($stale.Count) ticketed row(s) to planned (own files changed on main since ticketed): $(@($stale | ForEach-Object { $_.id }) -join ', ')"
+    }
+    "FRESHNESS $Group stale $($stale.Count) skipped $($skipped.Count)"
+    exit 0
 }
 
 # ---- 2. known failures ----

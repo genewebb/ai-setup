@@ -1081,6 +1081,116 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $pn = (& "$S\Get-StreamStatus.ps1" -Repo $lr -Json | ConvertFrom-Json).leftToPlan
     Case 'a repo with no requirements folder reads left to plan unknown' (-not $pn.known -and $pn.reason -match '^no requirements folder: ') ($pn | ConvertTo-Json -Compress -Depth 6)
 
+    # ---- dependency review (2026-10-18): dependsWhy defaults, the DEP-MOVED cascade, BASE-STALE at integration, the
+    # focus dependency closure and the DEP-REVIEW flag. Its own repo: D1.A (a.txt) <- D1.B (b.txt) <- D2.X, D2.Y; D1.C
+    # shares a.txt with D1.A and follows mockup D1.M; D1.E shares b.txt with D1.B.
+    $dr = Join-Path $Scratch 'deprepo'; New-Item -ItemType Directory -Path $dr -Force | Out-Null
+    git -C $dr init -q -b main; git -C $dr config user.email t@t; git -C $dr config user.name t; Grant-GitPolicy $dr
+    foreach ($f in 'a', 'b', 'c', 'd', 'e') { Set-Content (Join-Path $dr "$f.txt") "$f base" }
+    git -C $dr add -A; git -C $dr commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $dr | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $dr '.streams\graders') -Force | Out-Null
+    Grader (Join-Path $dr '.streams\graders\D1.A.ps1') 'a.txt' 'DONE-A'
+    Grader (Join-Path $dr '.streams\graders\D1.B.ps1') 'b.txt' 'DONE-B'
+    $DArt = { param($id) @{ ticket = ".streams\tickets\$id.md"; grader = ".streams\graders\$id.ps1" } }
+    $dplan = @{
+        groups = @(@{ id = 'D1'; name = 'dep'; state = 'released'; scope = @{ include = @('F-D') }; origin = 'plan' }, @{ id = 'D2'; name = 'later'; state = 'released'; scope = @{ include = @('F-E') }; origin = 'plan' })
+        tasks  = @(
+            @{ id = 'D1.A'; group = 'D1'; title = 'A'; why = @('AC-A'); kind = 'code'; writeSet = @('a.txt'); dependsOn = @(); estMinutes = 10; artifacts = (& $DArt 'D1.A') }
+            @{ id = 'D1.B'; group = 'D1'; title = 'B'; why = @('AC-B'); kind = 'code'; writeSet = @('b.txt'); dependsOn = @('D1.A'); estMinutes = 10; artifacts = (& $DArt 'D1.B') }
+            @{ id = 'D1.M'; group = 'D1'; title = 'mock'; why = @('AC-M'); kind = 'mockup'; writeSet = @('Documentation/mockups/D1.M/'); dependsOn = @(); estMinutes = 5 }
+            @{ id = 'D1.C'; group = 'D1'; title = 'C'; why = @('AC-C'); kind = 'code'; writeSet = @('a.txt', 'c.txt'); dependsOn = @('D1.A', 'D1.M'); dependsWhy = @{ 'D1.A' = 'uses the A type' }; estMinutes = 10 }
+            @{ id = 'D1.E'; group = 'D1'; title = 'E'; why = @('AC-E'); kind = 'code'; writeSet = @('b.txt'); dependsOn = @('D1.B'); estMinutes = 10 }
+            @{ id = 'D1.T9'; group = 'D1'; title = 'suites'; why = @('AC-A'); kind = 'integration'; writeSet = @(); dependsOn = @('D1.A', 'D1.B', 'D1.C', 'D1.E', 'D1.M'); estMinutes = 5 }
+            @{ id = 'D2.X'; group = 'D2'; title = 'X'; why = @('AC-X'); kind = 'code'; writeSet = @('d.txt'); dependsOn = @('D1.B'); estMinutes = 10; artifacts = (& $DArt 'D2.X') }
+            @{ id = 'D2.Y'; group = 'D2'; title = 'Y'; why = @('AC-Y'); kind = 'code'; writeSet = @('e.txt'); dependsOn = @('D1.B'); estMinutes = 10; artifacts = (& $DArt 'D2.Y') }
+            @{ id = 'D2.T9'; group = 'D2'; title = 'suites2'; why = @('AC-X'); kind = 'integration'; writeSet = @(); dependsOn = @('D2.X', 'D2.Y'); estMinutes = 5 }
+        ) }
+    $dpf = Join-Path $Scratch 'depplan.json'; $dplan | ConvertTo-Json -Depth 10 | Set-Content $dpf
+    $dadd = @(& "$S\Add-Tasks.ps1" -Repo $dr -Role plan -Session plan-d -File $dpf)
+    Case 'deps: the plan with dependsWhy is accepted' ($LASTEXITCODE -eq 0) ($dadd -join ' | ')
+    $dw = @{}; foreach ($id in 'D1.B', 'D1.C', 'D1.E', 'D1.T9', 'D2.X') { $dw[$id] = (T $dr $id).dependsWhy }
+    Case 'deps: dependsWhy defaults - unstated / planner text kept / mockup first / shared file / group order' (
+        $dw['D1.B']['D1.A'] -eq 'unstated' -and $dw['D1.C']['D1.A'] -eq 'uses the A type' -and $dw['D1.C']['D1.M'] -eq 'mockup first' -and
+        $dw['D1.E']['D1.B'] -eq 'shared file' -and $dw['D1.T9']['D1.A'] -eq 'group order' -and $dw['D2.X']['D1.B'] -eq 'unstated') (($dw | ConvertTo-Json -Compress -Depth 4))
+    @{ note = 'why'; edits = @(@{ task = 'D2.X'; dependsWhy = @{ 'D1.B' = 'reads the B table' }; release = 'keep' }) } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $Scratch 'depwhy.json')
+    $drv = @(& "$S\Revise-Task.ps1" -Repo $dr -Session plan-d -File (Join-Path $Scratch 'depwhy.json'))
+    Case 'deps: Revise-Task states a reason for an existing edge' ($LASTEXITCODE -eq 0 -and (T $dr 'D2.X').dependsWhy['D1.B'] -eq 'reads the B table') ($drv -join ' | ')
+    @{ note = 'bad'; edits = @(@{ task = 'D2.X'; dependsWhy = @{ 'D1.A' = 'no such edge' }; release = 'keep' }) } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $Scratch 'depwhy2.json')
+    $drv2 = @(& "$S\Revise-Task.ps1" -Repo $dr -Session plan-d -File (Join-Path $Scratch 'depwhy2.json'))
+    Case 'deps: a reason for an edge the row does not hold is refused' ($LASTEXITCODE -eq 2 -and ($drv2 -join ' ') -match 'WHY-NO-EDGE D2\.X') ($drv2 -join ' | ')
+    # build A, start B on top of it, bounce A while B builds: B gets the DEP-MOVED note
+    $da = & "$S\Claim-Task.ps1" -Repo $dr -Role build -Session build-da | ConvertFrom-Json
+    Case 'deps: A claims first' ($da.id -eq 'D1.A') $da.id
+    $dwa = & "$S\New-TaskWorktree.ps1" -Repo $dr -Task D1.A -Session build-da -WorktreeRoot $wtRoot | Select-Object -Last 1
+    Set-Content (Join-Path $dwa 'a.txt') 'a DONE-A v1'
+    & "$S\Export-TaskPatch.ps1" -Repo $dr -Task D1.A -Worktree $dwa | Out-Null
+    & "$S\Update-Task.ps1" -Repo $dr -Task D1.A -Role build -Session build-da -To built -Release -Artifacts @{ patch = '.streams\patches\D1.A.patch' } | Out-Null
+    $db = & "$S\Claim-Task.ps1" -Repo $dr -Role build -Session build-db | ConvertFrom-Json
+    Case 'deps: B claims once A is built' ($db.id -eq 'D1.B') $db.id
+    $dwb = & "$S\New-TaskWorktree.ps1" -Repo $dr -Task D1.B -Session build-db -WorktreeRoot $wtRoot | Select-Object -Last 1
+    Case 'deps: B base records the stacked A patch hash' (@(@((T $dr 'D1.B').base.deps) -match '^D1\.A\.patch:[0-9A-F]{16}$').Count -eq 1) (@((T $dr 'D1.B').base.deps) -join ',')
+    $bounce = @(& "$S\Update-Task.ps1" -Repo $dr -Task D1.A -Role integrate -Session integ-d -To ticketed -Note 'test bounce of A')
+    $bh = (T $dr 'D1.B').history | Select-Object -Last 1
+    Case 'deps: bouncing a built dependency notes DEP-MOVED on its building dependent' (($bounce -join ' ') -match 'DEP-MOVED noted on building dependent\(s\): D1\.B' -and $bh.note -like 'DEP-MOVED D1.A built -> ticketed*' -and (T $dr 'D1.B').state -eq 'building') "$($bounce -join ' | ') :: $($bh.note)"
+    $sjd = & "$S\Get-StreamStatus.ps1" -Repo $dr -Json | ConvertFrom-Json
+    Case 'deps: the board flags the building row whose dependency moved' (@(@($sjd.flags) -match '^DEP-MOVED D1\.B ').Count -eq 1) (@($sjd.flags) -join ' | ')
+    Set-Content (Join-Path $dwb 'b.txt') 'b DONE-B'
+    & "$S\Export-TaskPatch.ps1" -Repo $dr -Task D1.B -Worktree $dwb | Out-Null
+    & "$S\Update-Task.ps1" -Repo $dr -Task D1.B -Role build -Session build-db -To built -Release -Artifacts @{ patch = '.streams\patches\D1.B.patch' } | Out-Null
+    # A is rebuilt with different content and lands; B's base stacked the old A, so B is BASE-STALE, patch kept
+    $da2 = & "$S\Claim-Task.ps1" -Repo $dr -Role build -Session build-da2 | ConvertFrom-Json
+    Case 'deps: A is claimable again after the bounce' ($da2.id -eq 'D1.A') $da2.id
+    $dwa2 = & "$S\New-TaskWorktree.ps1" -Repo $dr -Task D1.A -Session build-da2 -WorktreeRoot $wtRoot | Select-Object -Last 1
+    Set-Content (Join-Path $dwa2 'a.txt') 'a DONE-A v2 rebuilt'
+    & "$S\Export-TaskPatch.ps1" -Repo $dr -Task D1.A -Worktree $dwa2 | Out-Null
+    & "$S\Update-Task.ps1" -Repo $dr -Task D1.A -Role build -Session build-da2 -To built -Release -Artifacts @{ patch = '.streams\patches\D1.A.patch' } | Out-Null
+    & "$S\Enter-Integrator.ps1" -Repo $dr -Session integ-d | Out-Null
+    $di1 = @(& "$S\Integrate-Patch.ps1" -Repo $dr -Session integ-d)
+    Case 'deps: the rebuilt A integrates' ($di1[0] -eq 'INTEGRATED D1.A') ($di1 -join ' | ')
+    $di2 = @(& "$S\Integrate-Patch.ps1" -Repo $dr -Session integ-d)
+    $tb = T $dr 'D1.B'
+    Case 'deps: B built on the old A patch is BASE-STALE, ticketed, patch kept, main untouched' (($di2 -join ' ') -match '^BASE-STALE D1\.B \(D1\.A \(D1\.A\.patch was [0-9A-F]{16}, now [0-9A-F]{16}\)\)' -and $tb.state -eq 'ticketed' -and (Test-Path (Join-Path $dr '.streams\patches\D1.B.patch')) -and (($tb.history | Select-Object -Last 1).note -like 'BASE-STALE:*') -and (Get-Content -Raw (Join-Path $dr 'b.txt')).Trim() -eq 'b base') ($di2 -join ' | ')
+    Case 'deps: BASE-STALE is logged as a decision' ((Get-Content -Raw (Join-Path $dr '.streams\decisions.md')) -match 'BASE-STALE D1\.B to ticketed')
+    # focus closure: the owner names D2 only; D2.X and D2.Y wait on D1.B (ticketed, group D1), so D1.B is pulled into the
+    # focus set and offered to a builder, and the board says so. D1.C (nobody in D2 needs it) stays frozen.
+    $dcfg = Join-Path $dr '.streams\config.json'
+    Set-Content -LiteralPath $dcfg -Encoding utf8 -Value '{ "focus": { "groups": ["D2"] } }'
+    . "$S\lib\Streams.ps1"
+    $dP = Get-StreamPaths $dr
+    $dfc = Get-FocusClosure (J $dr) $dP
+    Case 'deps: focus closure pulls an unlisted earlier-group dependency in, and nothing else of its group' ($dfc.set.Contains('D1.B') -and $dfc.set.Contains('D2.X') -and -not $dfc.set.Contains('D1.C') -and -not $dfc.set.Contains('D1.E') -and $dfc.pulled['D1.B'] -in @('D2.X', 'D2.Y')) "set=$($dfc.set -join ',') pulled=$(@($dfc.pulled.Keys) -join ',')"
+    $dcl = & "$S\Claim-Task.ps1" -Repo $dr -Role build -Session build-dfocus | ConvertFrom-Json
+    Case 'deps: with focus D2 a builder is offered the pulled D1 dependency' ($dcl.id -eq 'D1.B') "$($dcl.id)"
+    & "$S\Update-Task.ps1" -Repo $dr -Task D1.B -Role build -Session build-dfocus -To ticketed -Release -Note 'test: release' | Out-Null
+    $env:STREAM_DEP_REVIEW_MIN_DAYS = '0'
+    $sjf = & "$S\Get-StreamStatus.ps1" -Repo $dr -Json | ConvertFrom-Json
+    Remove-Item Env:\STREAM_DEP_REVIEW_MIN_DAYS -ErrorAction SilentlyContinue
+    Case 'deps: the board flags FOCUS-PULL with the pulled row and the focus row that needs it' (@(@($sjf.flags) -match '^FOCUS-PULL 1 row\(s\) .*D1\.B \(D1 ticketed, for D2\.[XY]\)').Count -eq 1) (@($sjf.flags) -join ' | ')
+    # D2.Y -> D1.B is unstated (D2.X's reason was stated above), so one waiter: under the threshold of two. State D2.X's
+    # back to unstated and both wait on an unstated edge: DEP-REVIEW names the dependency and both rows.
+    Case 'deps: DEP-REVIEW stays quiet while only one row waits on an unstated edge' (-not @(@($sjf.flags) -match '^DEP-REVIEW').Count) (@($sjf.flags) -join ' | ')
+    @{ note = 'unstate'; edits = @(@{ task = 'D2.X'; dependsWhy = @{ 'D1.B' = 'unstated' }; release = 'keep' }) } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $Scratch 'depwhy3.json')
+    & "$S\Revise-Task.ps1" -Repo $dr -Session plan-d -File (Join-Path $Scratch 'depwhy3.json') | Out-Null
+    $env:STREAM_DEP_REVIEW_MIN_DAYS = '0'
+    $sjg = & "$S\Get-StreamStatus.ps1" -Repo $dr -Json | ConvertFrom-Json
+    Remove-Item Env:\STREAM_DEP_REVIEW_MIN_DAYS -ErrorAction SilentlyContinue
+    Case 'deps: DEP-REVIEW names an unstated dependency holding two ticketed rows' (@(@($sjg.flags) -match '^DEP-REVIEW D1\.B \(code, ticketed [\d.]+ d\) holds 2 ticketed row\(s\) .*D2\.X, D2\.Y').Count -eq 1) (@($sjg.flags) -join ' | ')
+    $sjh = & "$S\Get-StreamStatus.ps1" -Repo $dr -Json | ConvertFrom-Json
+    Case 'deps: DEP-REVIEW waits out its day threshold by default' (-not @(@($sjh.flags) -match '^DEP-REVIEW').Count) (@($sjh.flags) -join ' | ')
+    Remove-Item -LiteralPath $dcfg -Force
+    # B rebuilt on the landed A restores its kept patch and integrates clean: no drift once the dependency is on main
+    $db2 = & "$S\Claim-Task.ps1" -Repo $dr -Role build -Session build-db2 | ConvertFrom-Json
+    Case 'deps: B claims again on the true base' ($db2.id -eq 'D1.B') $db2.id
+    $dwb2 = & "$S\New-TaskWorktree.ps1" -Repo $dr -Task D1.B -Session build-db2 -WorktreeRoot $wtRoot | Select-Object -Last 1
+    $drs = & "$S\Restore-TaskPatch.ps1" -Repo $dr -Task D1.B -Worktree $dwb2
+    Case 'deps: the kept patch restores onto the new base' ($LASTEXITCODE -eq 0 -and "$drs" -like 'APPLIED *' -and (Get-Content -Raw (Join-Path $dwb2 'a.txt')) -match 'v2 rebuilt') "$drs"
+    & "$S\Export-TaskPatch.ps1" -Repo $dr -Task D1.B -Worktree $dwb2 | Out-Null
+    & "$S\Update-Task.ps1" -Repo $dr -Task D1.B -Role build -Session build-db2 -To built -Release -Artifacts @{ patch = '.streams\patches\D1.B.patch' } | Out-Null
+    $di3 = @(& "$S\Integrate-Patch.ps1" -Repo $dr -Session integ-d)
+    Case 'deps: B integrates once its base is true (no base.deps left to drift)' ($di3[0] -eq 'INTEGRATED D1.B') ($di3 -join ' | ')
+    foreach ($w in @(git -C $dr worktree list --porcelain | Where-Object { $_ -like 'worktree *' } | Select-Object -Skip 1)) { git -C $dr worktree remove --force ($w.Substring(9)) 2>&1 | Out-Null }
+
     # E4 timed-role backoff: an idle streak doubles the wait up to 20 minutes; integrate never backs off; no streak
     # keeps the interval.
     $bw = @((Get-RunnerWait 'plan' 300 0), (Get-RunnerWait 'plan' 300 1), (Get-RunnerWait 'plan' 300 3), (Get-RunnerWait 'status' 900 1), (Get-RunnerWait 'integrate' 600 5), (Get-RunnerWait 'coordinator' 1200 2))

@@ -71,6 +71,7 @@ $holdRefused = ''
 $manifest = ''
 $overlap = @()
 $added = @()
+$cascaded = @()
 trap { if ("$_" -like 'TRANSITION-REFUSED*') { Write-Output "$_"; exit 6 } else { break } }
 [void](Invoke-TasksLocked $P $Session {
     param($doc)
@@ -118,7 +119,14 @@ trap { if ("$_" -like 'TRANSITION-REFUSED*') { Write-Output "$_"; exit 6 } else 
     if ($To -eq 'ticketed' -and $Role -eq 'author' -and -not ($t.artifacts -and [string] $t.artifacts['ticket'])) {
         throw "TRANSITION-REFUSED $($t.id): planned -> ticketed by an author needs artifacts.ticket, and the row has none (pass -Artifacts in the same call or before it)"
     }
-    if ($To) { Set-TaskState $t $To $Role $Session $Note }
+    $from = [string]$t.state
+    if ($To) {
+        Set-TaskState $t $To $Role $Session $Note
+        # A built row leaving built (REBASE, REVERSED, SUSPECT, a bounce before the apply) tells every building dependent
+        # that stacked its patch (lib\Streams.ps1 Add-DependentBounceNotes, 2026-10-18 dependency review F6).
+        $noted = Add-DependentBounceNotes $doc $t $Session $from $To $Note
+        foreach ($dn in $noted) { $script:cascaded += [string]$dn }
+    }
     # Hand-off of a folder delivered in place carries a fingerprint, because there is no patch to carry it: without one
     # the integrator cannot tell the folder it lands from the folder the verifier graded. Written only AFTER the state
     # move is accepted, so a refused transition leaves no manifest claiming a hand-off that did not happen.
@@ -137,5 +145,6 @@ if ($holdRefused) { Write-Output "REFUSED $Task : $holdRefused"; exit 2 }
 if ($overlap.Count) { $overlap | ForEach-Object { "WRITESET-OVERLAP $_" }; exit 7 }
 if ($manifest) { "MANIFEST $manifest" }
 if ($added.Count) { Add-Decision $P $Session "$Task write set widened (auto-accepted): $($added -join ', ')$(if ($Note) { " -- $Note" })" }
+if ($cascaded.Count) { "DEP-MOVED noted on building dependent(s): $($cascaded -join ', ')" }
 "ok $Task"
 exit 0

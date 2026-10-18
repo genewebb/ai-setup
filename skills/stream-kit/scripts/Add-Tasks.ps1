@@ -65,6 +65,9 @@ $report = [Collections.Generic.List[string]]::new()
         # Same rule as -AddWriteSet: one JSON element holding several comma-separated paths becomes several entries,
         # because a joined entry overlaps nothing and exports nothing (see Expand-PathList).
         $t['writeSet'] = @(Expand-PathList $t['writeSet'])
+        # Every edge gets its reason (lib\Streams.ps1 Set-DependsWhyDefaults): the planner's own text is kept, the
+        # mechanical ones are filled in, the rest read 'unstated' for the DEP-REVIEW board flag.
+        [void](Set-DependsWhyDefaults $known $t $byId)
         if (-not $t.ContainsKey('artifacts') -or -not $t.artifacts) { $t.artifacts = [ordered]@{ ticket = $null; grader = $null; patch = $null; verdict = $null } }
         if (-not $t.ContainsKey('origin')) { $t.origin = if ($Role -eq 'integrate') { 'integration' } else { 'plan' } }
         $state = if ($t.artifacts.ticket -and $t.artifacts.grader) { 'ticketed' } else { 'planned' }

@@ -1,6 +1,6 @@
 ---
 name: stream-plan
-description: v0.11. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
+description: v0.12. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
 ---
 
 # stream-plan
@@ -153,6 +153,14 @@ Rules:
      the verify. No suite time is included, because suites run once in the integration task.
 6. **Order.** `dependsOn` per task, including dependencies across groups when several are planned together. Show the
    lanes (tasks that can run at the same time) and the critical path.
+   - **Say why each edge exists** (`dependsWhy`, id -> reason; 2026-10-18 dependency review F3). `Add-Tasks.ps1` fills
+     `shared file` (the write sets overlap), `group order` (an integration task or gate) and `mockup first` itself;
+     write the reason for every other edge in a few words ("uses the IMutationRunSchema type", "reads the table B
+     creates"). An edge with no stated reason reads `unstated`, and once such an edge has held two or more ticketed
+     rows for two days the board flags it `DEP-REVIEW` for you: state the reason (`Revise-Task.ps1` batch edit
+     `"dependsWhy": { "<id>": "<why>" }`) or drop the edge. On 2026-10-18 the live board held 1,550 edges with no
+     shared file and no stated reason, 325 of them holding a ticketed row, and nobody could tell a real edge from a
+     cautious one.
 7. **Record page.** Publish one artifact per group:
    - scope in and out;
    - the gap matrix;
@@ -216,7 +224,8 @@ Location: `<repo>\.streams\tasks.json`, excluded through `.git\info\exclude`.
       "kind": "code|mockup|integration|gate|docs", "origin": "plan|import|integration",
       "writeSet": ["src/Cli/Verbs/BackupLocationSetupVerb.cs", "tests/Tests.Unit/BackupLocationSetup*.cs"],
       "tests": { "targeted": ["FullyQualifiedName~BackupLocationSetup"] },
-      "dependsOn": [], "estMinutes": 45, "estBasis": "change 20 + overhead 25",
+      "dependsOn": ["G2.T00"], "dependsWhy": { "G2.T00": "uses the BackupLocation record it adds" },
+      "estMinutes": 45, "estBasis": "change 20 + overhead 25",
       "state": "planned", "claim": null,
       "artifacts": { "ticket": null, "grader": null, "patch": null, "verdict": null },
       "history": [ { "at": "2026-09-27T16:30", "by": "stream-plan", "to": "planned", "note": "released" } ] }

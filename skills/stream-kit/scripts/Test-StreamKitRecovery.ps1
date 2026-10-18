@@ -3378,6 +3378,25 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case '95 a second activation changes nothing' (($act2 -join ' ') -match '^ALREADY-ACTIVE A1') ($act2 -join ' | ')
     $aq2 = Get-Content -Raw (Join-Path $ar '.streams\owner\questions.md')
     Case '95 the gate line is written once' (([regex]::Matches($aq2, 'ACTIVATION-GATE A1\.G')).Count -eq 1) $aq2
+    # FRESHNESS TICK (2026-10-18 dependency review F2): -FreshnessOnly runs on an ACTIVE group every status tick. It
+    # judges a row by its OWN write set only: A1.F (f.txt, dependsOn A1.Z) stays ticketed when d.txt moves again, while
+    # A1.K (b.txt) goes to planned when b.txt moves. A full -Force activation still stales A1.F through its dependency.
+    $fdoc = J $ar
+    $fdoc.tasks += (& $A 'A1.F' 'A1' 'ticketed' 'f.txt' @('A1.Z'))
+    $fdoc | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $ar '.streams\tasks.json') -Encoding utf8
+    Set-Content (Join-Path $ar 'd.txt') 'd changed again'; git -C $ar add -A; git -C $ar commit -q -m 'd moves again'
+    $fr0 = @(& "$S\Activate-Group.ps1" -Repo $ar -Session status-a -Group A1 -FreshnessOnly)
+    Case '95 freshness tick: a dependency''s file moving does not stale a ticketed row (own write set only)' ((T $ar 'A1.F').state -eq 'ticketed' -and (T $ar 'A1.K').state -eq 'ticketed' -and ($fr0 -join ' ') -match 'FRESHNESS A1 stale 0') ($fr0 -join ' | ')
+    Set-Content (Join-Path $ar 'b.txt') 'b changed'; git -C $ar add -A; git -C $ar commit -q -m 'b moves'
+    $fr1 = @(& "$S\Activate-Group.ps1" -Repo $ar -Session status-a -Group A1 -FreshnessOnly)
+    $ak = T $ar 'A1.K'
+    Case '95 freshness tick: a row whose OWN file moved since it was ticketed goes to planned with a STALE: note' ($ak.state -eq 'planned' -and (($ak.history | Select-Object -Last 1).note -match 'STALE: b\.txt since \w+ by A1\.K') -and ($fr1 -join ' ') -match 'FRESHNESS A1 stale 1 skipped 1') (($fr1 -join ' | ') + ' :: ' + (($ak.history | Select-Object -Last 1) | ConvertTo-Json -Compress))
+    Case '95 freshness tick: the activation record is not changed by it' (@((Get-Content -Raw (Join-Path $ar '.streams\plans\A1.activation.json') | ConvertFrom-Json).stale).Count -eq 2 -and (Test-Path (Join-Path $ar '.streams\plans\A1.freshness-revise.json')))
+    Case '95 freshness tick: a stale move is a decision line' ((Get-Content -Raw (Join-Path $ar '.streams\decisions.md')) -match 'FRESHNESS A1 at \w+: 1 ticketed row\(s\) to planned .*A1\.K')
+    $fr2 = @(& "$S\Activate-Group.ps1" -Repo $ar -Session status-a -Group A1 -FreshnessOnly)
+    Case '95 freshness tick is idempotent' (($fr2 -join ' ') -match 'FRESHNESS A1 stale 0' -and (T $ar 'A1.F').state -eq 'ticketed') ($fr2 -join ' | ')
+    $fr3 = @(& "$S\Activate-Group.ps1" -Repo $ar -Session integ-a -Group A1 -Force)
+    Case '95 a forced full activation still stales a row through its dependency''s file' ((T $ar 'A1.F').state -eq 'planned' -and (((T $ar 'A1.F').history | Select-Object -Last 1).note -match 'STALE: d\.txt .*by A1\.Z')) ($fr3 -join ' | ')
 
     # ---- 96. tiered testing (3.3): a Tier 2 run, the flaky screen, attribution, Tier 3 retest, the close rule, nightly.
     # The dotnet leg is a fake runner that writes a trx from a control file, so the cases exercise the kit's scripts,

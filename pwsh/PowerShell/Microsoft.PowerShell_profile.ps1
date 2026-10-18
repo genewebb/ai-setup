@@ -868,6 +868,20 @@ function ccrew {
     Set-Location $path
 }
 
+function csm {
+    [CmdletBinding()]
+    param([Alias('h','help')][switch]$ShowHelp)
+
+    if (Test-HelpRequested -ShowHelp:$ShowHelp) {
+        Write-Usage "csm [-h|--help]" @("Navigate to $($global:GeneMachine.SpeedyRepo) (the Speedy repo, speedmerchants)")
+        return
+    }
+
+    $path = $global:GeneMachine.SpeedyRepo
+    Assert-PathExists -PathToCheck $path
+    Set-Location $path
+}
+
 # -----------------------------
 # Quick nav (personal GitHub repos)
 # -----------------------------

@@ -512,14 +512,24 @@ function Invoke-StatusTick([string] $Session) {
     }
     # A focus group with no activation record is activated (Activate-Group.ps1: stale tickets back to planned, known
     # failures to fix tasks, owner gates up front), which the coordinator used to do when it happened to notice.
-    $actNotes = @()
+    $actNotes = @(); $freshNotes = @()
     try {
         $doc = Read-Tasks $P
         foreach ($g in @((Get-FocusGroups $doc $P).groups)) {
-            if (Test-Path -LiteralPath (Join-Path $P.Root "plans\$g.activation.json")) { continue }
-            $ac = Invoke-TickStep 'Activate-Group.ps1' @{ Repo = $Repo; Session = $Session; Group = $g }; $steps.Add($ac)
-            foreach ($l in $ac.Text) { "  activate  $l" }
-            $actNotes += "$g $(Get-TickNote $ac)"
+            if (-not (Test-Path -LiteralPath (Join-Path $P.Root "plans\$g.activation.json"))) {
+                $ac = Invoke-TickStep 'Activate-Group.ps1' @{ Repo = $Repo; Session = $Session; Group = $g }; $steps.Add($ac)
+                foreach ($l in $ac.Text) { "  activate  $l" }
+                $actNotes += "$g $(Get-TickNote $ac)"
+                continue
+            }
+            # An ACTIVE focus group gets the freshness check every tick (Activate-Group.ps1 -FreshnessOnly, 2026-10-18
+            # dependency review F2): a ticketed row whose own files changed on main since it was ticketed goes back to
+            # an author now, not when the group is next activated.
+            $fr = Invoke-TickStep 'Activate-Group.ps1' @{ Repo = $Repo; Session = $Session; Group = $g; FreshnessOnly = $true }; $steps.Add($fr)
+            foreach ($l in @($fr.Text | Where-Object { $_ -match '^(STALE|SKIP-CLAIMED|REVISE-FAILED|  )' })) { "  freshness $l" }
+            $frLine = [string](@($fr.Text | Where-Object { $_ -like 'FRESHNESS *' }) | Select-Object -Last 1)
+            if ($frLine -match 'stale (\d+) skipped (\d+)' -and ([int]$Matches[1] -gt 0 -or [int]$Matches[2] -gt 0)) { $freshNotes += "$g stale $($Matches[1]) skipped $($Matches[2])" }
+            elseif (-not $fr.Ok) { $freshNotes += "$g $(Get-TickNote $fr)" }
         }
     } catch { $actNotes += "FAILED to read the board: $(("$_" -split "`n")[0])" }
     foreach ($s in $steps) {
@@ -532,7 +542,7 @@ function Invoke-StatusTick([string] $Session) {
         }
     }
     $script:ticks++
-    "$(Get-TabNow) STATUS-TICK $Session $([int]$sw.Elapsed.TotalSeconds)s | $wdLine | $inboxLine | page: $(Get-TickNote $pg) | cost: $(Get-TickNote $cp) | priority: $(Get-TickNote $pr) | archive: $archiveNote | activation: $(if ($actNotes.Count) { $actNotes -join '; ' } else { 'none needed' }) | next tick at $(Get-TabAt $IntervalSeconds)"
+    "$(Get-TabNow) STATUS-TICK $Session $([int]$sw.Elapsed.TotalSeconds)s | $wdLine | $inboxLine | page: $(Get-TickNote $pg) | cost: $(Get-TickNote $cp) | priority: $(Get-TickNote $pr) | archive: $archiveNote | activation: $(if ($actNotes.Count) { $actNotes -join '; ' } else { 'none needed' }) | freshness: $(if ($freshNotes.Count) { $freshNotes -join '; ' } else { 'clean' }) | next tick at $(Get-TabAt $IntervalSeconds)"
     $state.lastTick = Get-Now; $state.ticks = $script:ticks
     $state.status = "ticked $(Get-Now); next tick in $IntervalSeconds s$(if ($openItems.Count) { "; $($openItems.Count) open inbox item(s): launching a unit" })"
     Write-RunnerState $state
@@ -1318,7 +1328,7 @@ if ($DryRun) {
         "GATE $why"
     }
     if ($statusTick) {
-        "TICK every $IntervalSeconds s, scripts only (no model call): Invoke-Watchdog, Get-StreamStatus, Build-StatusPage, Get-StreamCost + Build-CostPage, Build-PriorityPage, Archive-TaskHistory (first tick of each UTC day), Activate-Group (a focus group without plans\<G>.activation.json); one STATUS-TICK heartbeat line per tick"
+        "TICK every $IntervalSeconds s, scripts only (no model call): Invoke-Watchdog, Get-StreamStatus, Build-StatusPage, Get-StreamCost + Build-CostPage, Build-PriorityPage, Archive-TaskHistory (first tick of each UTC day), Activate-Group (a focus group without plans\<G>.activation.json; -FreshnessOnly every tick for an active one); one STATUS-TICK heartbeat line per tick"
         $openStatus = @(Get-ActionableInboxItems (Read-Tasks $P))
         if (-not $openStatus.Count) { $script:timedWhy = @("$skill inbox: no open item (the tick itself needs no unit)"); & $dryIdle "IDLE no open $skill inbox item: no unit"; exit 0 }
         "GATE inbox $($openStatus.Count) actionable ($($openStatus[0].id))"

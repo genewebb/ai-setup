@@ -1,6 +1,6 @@
 ---
 name: stream-build
-description: v0.10. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
+description: v0.11. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
 ---
 
 # stream-build
@@ -93,7 +93,9 @@ builders. `/stream-build once` builds one task and stops.
 ## One cycle
 
 FOCUS (2026-10-05, priority-focus-design 3.1; owner-set since 2026-10-06): you are offered rows from the FOCUS SET only -
-the rows of the focus group(s), plus the rows their work depends on (`lib\Streams.ps1 Get-FocusSet`). The owner names
+the rows of the focus group(s), plus every unlanded row their work depends on, transitively, whatever its group
+(`lib\Streams.ps1 Get-FocusSet`; since 2026-10-18 an EARLIER open group's dependency counts too, flagged `FOCUS-PULL` on
+the board, so a claim may hand you a row of a group the owner did not list: it is a dependency of focus work, build it). The owner names
 the focus group(s) in `.streams\config.json` as `"focus": { "groups": ["G4"] }` (one or more); an empty list means the
 first unclosed group in board order. A claim that reads NONE means the focus has nothing for you now; never look for
 work in another group, and never file an author or build inbox item about a row outside the focus
@@ -148,7 +150,9 @@ do the held item's work (an item). Never run them again.
    unstaged. Record the base fingerprint (the hash of the main diff, the untracked list and the dependency patch hashes)
    on the task.
 
-   **3b. Kept patch.** A task that bounced back (rebase, grader red on main, grader-suspect) keeps `artifacts.patch`.
+   **3b. Kept patch.** A task that bounced back (rebase, grader red on main, grader-suspect, or `BASE-STALE`: a
+   dependency patch its base stacked changed before landing, so the new worktree lays the true base and the kept patch
+   is re-verified on it) keeps `artifacts.patch`.
    Run `Restore-TaskPatch.ps1 -Task <t> -Worktree <path>` before anything else:
    When the row has no `artifacts.red` yet and has an author grader, run step 4a on the fresh worktree BEFORE the
    restore, because step 4a needs a tree with no edit in it.
@@ -305,6 +309,11 @@ A build failure that blames the host is checked against the host before it is be
 ## Claims and liveness
 
 - Refresh `claim.beat` under the lock at each step boundary, and at least every 10 minutes during step 5.
+- **`DEP-MOVED` on your row** (a history line `DEP-MOVED <dep> built -> <state>`, written when a dependency your base
+  stacked left `built`; 2026-10-18 dependency review F6): your base holds a patch that may change. Finish the build as
+  it stands - the integrator's `BASE-STALE` check bounces the row with the patch kept if the dependency lands different,
+  and the next build restores your work on the true base - but do not widen onto that dependency's files, and say in
+  the test record which dependency moved.
 - A claim whose `beat` is older than 45 minutes is stale. Another builder may take it over. It logs the takeover, keeps
   the old worktree listed for the owner, and starts a new worktree named `<task>-2`.
 - A session that finds its claim taken over stops that task. It leaves its worktree in place and claims another.

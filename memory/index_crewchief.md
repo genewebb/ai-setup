@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: acc1f014-7b40-4f0e-b985-81edf62b4a29
-  modified: 2026-09-06T23:56:56.716Z
+  modified: 2026-10-18T14:31:13.469Z
 ---
 
 - Core: [standalone](project_crewchief_standalone.md) · [activity merge](project_crewchief_activity_merge.md) · [arch review 7/17](project_crewchief_review_2026-07-17.md) no-auth RCE open · [duplication audit](project_crewchief_duplication_audit.md) · [vs AutomationUtility](project_crewchief_vs_automationutility.md)
@@ -27,3 +27,8 @@ metadata:
 
 - [CrewChief: Steps and Workloads have SEPARATE folder lists](project_crewchief_separate_folder_lists.md) · [Run disabled = single run slot held](reference_crewchief_run_disabled_single_slot_remote_installs.md)
 - [CrewChief remaining port approved 9/23](project_crewchief_remaining_port_2026-09-23.md) · [bundle import + workload Run As 9/24](project_crewchief_bundle_import_and_workload_runas.md) · [metric/version/scenario profiles 9/24 + TRACKER MP-0..12](project_metric_version_scenario_profiles_2026-09-24.md)
+
+## Moved from MEMORY.md 2026-10-18
+
+- **[CrewChief connect restructure 10/13: `connect` folder, PData* entities; generator -Environment Local|SMVMTR1 (SMVMTR1 set deployed, secrets SMVMTR1_connect_crewchief.json built); prod TestAuto writes blocked on ScenarioMgt key](project_crewchief_connect_restructure_2026-10-13.md)**
+- **[CrewChief secrets -> reference data 10/15: only creds/keys/thumbprints secret; reference-kv parent folders; CrewChief folder types + configuration-bindings + builtIn/description markers + list/edit screen (uncommitted); SMVMTR1 non-connect workloads deleted (backed up); slim secrets built, import after rebuild](project_crewchief_secrets_to_reference_data_2026-10-15.md)**

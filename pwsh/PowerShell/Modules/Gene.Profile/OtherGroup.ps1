@@ -13,6 +13,7 @@ $script:ProfOtherCatalog = [ordered]@{
             New-GeneOtherEntry 'cdevops' 'Go to the repos root (ReposRoot)' @('cdevops')
             New-GeneOtherEntry 'cspeed' 'Go to the speed-merchants repo (TestAuto, CrewChief, DataGen, Mutate)' @('cspeed')
             New-GeneOtherEntry 'ccrew' 'Go to CrewChief inside speed-merchants' @('ccrew')
+            New-GeneOtherEntry 'csm' 'Go to the Speedy repo, speedmerchants (SpeedyRepo)' @('csm')
             New-GeneOtherEntry 'caiprof' 'Go to the shared Profisee AI repo (ai-profisee)' @('caiprof')
             New-GeneOtherEntry 'cpower' 'Go to the PowerShell scripts folder (PowershellScriptsDir)' @('cpower')
             New-GeneOtherEntry 'csql' 'Go to the SQL scripts folder (SqlScriptsDir)' @('csql')

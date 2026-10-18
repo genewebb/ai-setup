@@ -597,6 +597,45 @@ $spillDrift = Get-SpillDrift $P $doc
 foreach ($dr in $spillDrift) {
     $flags.Add("STALE-TICKET $($dr.id): author spill ticket written against $($dr.base.Substring(0, [Math]::Min(10, $dr.base.Length))); write-set files changed on main since: $($dr.files -join ', ')")
 }
+# ---- dependency review flags (2026-10-18 dependency review) ----
+# FOCUS-PULL: rows of unlisted groups that are in the focus set because focus work depends on them (lib\Streams.ps1
+# Get-FocusClosure, finding F3). Named so the owner sees why a builder is working a group the focus does not list.
+$fc = Get-FocusClosure $doc $P
+if ($fc.pulled.Count) {
+    $pulledNamed = @($fc.pulled.Keys | Select-Object -First 8 | ForEach-Object { $x = $byId[[string]$_]; "$_ ($(if ($x) { "$($x.group) $($x.state)" } else { '?' }), for $($fc.pulled[$_]))" }) -join ', '
+    if ($fc.pulled.Count -gt 8) { $pulledNamed += " +$($fc.pulled.Count - 8) more" }
+    $flags.Add("FOCUS-PULL $($fc.pulled.Count) row(s) outside the focus groups are in the focus set as dependencies of focus work: $pulledNamed")
+}
+# DEP-REVIEW: an UNSTATED edge (no dependsWhy, lib\Streams.ps1 Get-DependsWhy) whose target has held several ticketed
+# rows for days. The board cannot tell a real edge from a cautious one; the planner can, by stating the reason or
+# dropping the edge (Revise-Task.ps1 dependsWhy / removeDependsOn).
+$depHold = @{}
+foreach ($w in $waitingOnDeps) {
+    foreach ($d in @($w.dependsOn)) {
+        if (-not $d) { continue }
+        $dt = $byId[[string]$d]
+        if (-not $dt -or $dt.state -in $script:BuildReadyStates) { continue }
+        if ((Get-DependsWhy $w ([string]$d)) -ne $script:DependsWhyUnstated) { continue }
+        if (-not $depHold.ContainsKey([string]$d)) { $depHold[[string]$d] = [Collections.Generic.List[string]]::new() }
+        $depHold[[string]$d].Add([string]$w.id)
+    }
+}
+foreach ($d in @($depHold.Keys | Sort-Object)) {
+    $ids = $depHold[$d]
+    if ($ids.Count -lt $script:DepReviewMinWaiters) { continue }
+    $dt = $byId[$d]
+    $entry = Get-StateEntry $dt ([string]$dt.state)
+    $days = if ($entry -and $entry.at) { [math]::Round(((Get-Date).ToUniversalTime() - [datetime]::Parse($entry.at, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)).TotalDays, 1) } else { 0 }
+    if ($days -lt $script:DepReviewMinDays) { continue }
+    $shown = @($ids | Select-Object -First 6) -join ', '; if ($ids.Count -gt 6) { $shown += " +$($ids.Count - 6) more" }
+    $flags.Add("DEP-REVIEW $d ($($dt.kind), $($dt.state) $days d) holds $($ids.Count) ticketed row(s) on edges with no stated reason: $shown - planner: state the reason (dependsWhy) or drop the edge")
+}
+# DEP-MOVED: a building row whose base stacked a dependency that has since left built (lib\Streams.ps1
+# Add-DependentBounceNotes, finding F6). Its hand-off meets BASE-STALE at integration unless the dependency lands unchanged.
+foreach ($t in @($doc.tasks | Where-Object { $_.state -eq 'building' -and $_.claim -and $_.claim.at })) {
+    $moved = @($t.history | Where-Object { $_.note -and ([string]$_.note).StartsWith('DEP-MOVED ') -and $_.at -ge $t.claim.at })
+    if ($moved.Count) { $flags.Add("DEP-MOVED $($t.id) is building on a base whose dependency left built: $((([string]$moved[-1].note) -split ':')[0])") }
+}
 # ---- main tree lock and author release rate (kit item IN-20261002161450-c89b) ----
 # One holder of .streams\main-grader.lock for more than 20 minutes starves every author RED re-run and every apply. On
 # 2026-10-02 that went unseen for 15 hours, while releases fell from 16-20/h to 0-7/h; both are now on the board.

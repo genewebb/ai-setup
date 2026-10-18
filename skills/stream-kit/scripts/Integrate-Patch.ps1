@@ -1,6 +1,8 @@
 # Step A of stream-integrate: applies the next ready built patch to the main tree and re-runs its grader there.
 #   clean + grader PASS : task -> integrated, then the patch's paths (and only those) are committed
 #   not clean           : task -> ticketed ("rebase: base moved"), main tree untouched; the patch stays for reuse
+#   BASE-STALE          : a dependency patch the builder's base stacked (base.deps) changed before it landed; task ->
+#                         ticketed before any apply, patch kept (lib\Streams.ps1 Get-DependencyBaseDrift)
 #   grader red on main  : patch reversed, then one of
 #       RETRY    the main log shows a build/IO environment failure (file locked, CS2012, MSB3021/3027, main tree busy):
 #                the task stays built and the next pass retries it; after 3 such failures it goes to ticketed
@@ -122,6 +124,17 @@ if (-not (Get-Field $t 'artifacts', 'check') -and -not (Get-Field $t 'artifacts'
     & $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To ticketed -Note 'integrate: bounced before the apply, the row has neither a check nor a grader to verify it on main (patch kept; the builder records artifacts.check and hands off again)' | Out-Null
     Add-Decision $P $Session "bounced $($t.id) to ticketed before the apply: neither artifacts.check nor a grader"
     "BOUNCED $($t.id) (neither a check nor a grader)"; exit 0
+}
+# BASE-STALE (2026-10-18 dependency review, finding F1): the builder's base stacked its built dependencies' patches and
+# recorded their hashes (base.deps); a dependency that bounced and was rebuilt since landed a DIFFERENT patch, so this
+# row's verifier graded against code that is not on main even when its own patch still applies. Bounced to ticketed
+# with the patch kept: the next build restores it on a true base (Restore-TaskPatch) and re-verifies.
+$drift = Get-DependencyBaseDrift $P $doc $t
+if ($drift.Count) {
+    $what = @($drift | ForEach-Object { "$($_.dep) ($($_.leaf) was $($_.recorded), now $($_.now))" }) -join '; '
+    & $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To ticketed -Note "BASE-STALE: built on dependency patch(es) that changed before landing: $what (patch kept; rebuild restores it on the current base and re-verifies)" | Out-Null
+    Add-Decision $P $Session "BASE-STALE $($t.id) to ticketed: $what"
+    "BASE-STALE $($t.id) ($what)"; exit 0
 }
 $patch = $t.artifacts.patch
 if (-not [IO.Path]::IsPathRooted($patch)) { $patch = Join-Path $Repo $patch }

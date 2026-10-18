@@ -85,7 +85,8 @@ working status session with an empty inbox from a dead one, and a silent run rea
 ## One tick
 
 FOCUS (2026-10-05, priority-focus-design 3.1): you are offered rows from the FOCUS SET only - the rows whose effective
-group is the first unclosed group (`lib\Streams.ps1 Get-FocusSet`). A claim that reads NONE means the focus group has
+group is a focus group, plus every unlanded row they depend on, transitively (`lib\Streams.ps1 Get-FocusSet`; the board
+flags a pulled row of an unlisted group as `FOCUS-PULL`, and its dependency flags are `DEP-REVIEW` and `DEP-MOVED`). A claim that reads NONE means the focus group has
 nothing for you now; never look for work in a later group, and never file an author or build inbox item about a
 later-group row (`Send-InboxItem.ps1` refuses it: NOT-FOCUS). `Integrate-Patch.ps1` prints NOT-FOCUS for a built
 later-group row and leaves it built.
