@@ -11,8 +11,10 @@
       2. secret scan of those files: on a hit it lists file, line, rule and the masked match, and commits only
          if you type 'yes' (no console to answer on = nothing committed)
       3. git add -A; git commit
-      4. git pull --rebase: a CONFLICT stops here with the files to resolve; a remote that cannot be reached stops
-         here too, with your commit kept locally (re-run when the remote is back)
+      4. git fetch, then git rebase --rebase-merges onto origin/main ONLY when origin moved (a rebase onto an unchanged
+         upstream replays every local commit and flattens a hand-made merge; --rebase-merges keeps one when there is
+         something to rebase onto): a CONFLICT stops here with the files to resolve; a remote that cannot be reached
+         stops here too, with your commit kept locally (re-run when the remote is back)
       5. git push; a push rejected because someone pushed meanwhile is rebased and pushed once more
     Ends with the published commit, its file count and the remote it went to. Your own installed runtime picks the
     change up at the next 'ai' start (or run install.ps1 -NoPull).
@@ -86,21 +88,26 @@ if ($staged.Count) {
     Invoke-Git @('commit', '-q', '-m', $Message) | Out-Null
 }
 
-# 4. Rebase on the remote. A conflict and an unreachable remote are different problems with different fixes.
-& git -C $repo pull --rebase
-if ($LASTEXITCODE -ne 0) {
-    if (Test-Path -LiteralPath (Join-Path $gitDir 'rebase-merge')) {
+# 4. Rebase on the remote, only when it moved. `git pull --rebase` onto an UNCHANGED upstream still replays every local
+#    commit and flattens a hand-made merge commit (2026-10-18: the SMVMTR1 merge was thrown away and its four conflicts
+#    came straight back); --rebase-merges keeps a merge when there is something to rebase onto. A conflict and an
+#    unreachable remote are different problems with different fixes.
+& git -C $repo fetch origin
+if ($LASTEXITCODE -ne 0) { throw "Could not fetch from origin (network, VPN or credentials; git's message is above). Your commit is safe in this clone; re-run publish when the remote is reachable." }
+$behind = [int]((Invoke-Git @('rev-list', '--count', 'HEAD..@{u}')) | Select-Object -First 1)
+if ($behind) {
+    & git -C $repo rebase --rebase-merges '@{u}'
+    if ($LASTEXITCODE -ne 0) {
         $conflicts = @(& git -C $repo diff --name-only --diff-filter=U)
         throw "Rebase stopped on a conflict in: $($conflicts -join ', '). Resolve each file, git add it, git rebase --continue (or git rebase --abort to undo), then re-run publish."
     }
-    throw "Could not fetch from origin (network, VPN or credentials; git's message is above). Your commit is safe in this clone; re-run publish when the remote is reachable."
 }
 
 # 5. Push, with one retry for a push that lost the race to someone else's push.
 & git -C $repo push
 if ($LASTEXITCODE -ne 0) {
     Write-Host 'Push rejected; rebasing once more and retrying.' -ForegroundColor Yellow
-    & git -C $repo pull --rebase
+    & git -C $repo pull --rebase=merges
     if ($LASTEXITCODE -ne 0) { throw 'The retry rebase failed (see above). Resolve as git says, then re-run publish.' }
     & git -C $repo push
     if ($LASTEXITCODE -ne 0) { throw 'git push failed twice (see above). Credentials or permissions: fix as git says, then re-run publish; the commit is safe in this clone.' }

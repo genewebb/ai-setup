@@ -70,6 +70,23 @@ try {
         Assert-True ((Test-Path (Join-Path $clone 'other.md')) -and (Test-Path (Join-Path $clone 'mine.md'))) 'both changes should be in the tree'
     }
 
+    # A hand-made merge commit while origin has not moved: no rebase runs (a rebase onto an unchanged upstream replays
+    # every local commit and flattens the merge), and the merge commit itself reaches origin.
+    $baseSha = (& git -C $clone rev-parse 'HEAD~1').Trim()
+    & git -C $clone checkout -q -b side $baseSha
+    Set-Content (Join-Path $clone 'side.md') 'from a side clone'; & git -C $clone add -A; & git -C $clone commit -q -m 'side work'
+    & git -C $clone checkout -q main
+    & git -C $clone merge -q --no-ff -m 'merge side work' side
+    $mergeSha = CloneHead
+    $r4m = Run @('-Yes')
+    Test-Case 'a local merge commit publishes as-is when origin has not moved: no rebase, the merge commit reaches origin' {
+        Assert-Equal 0 $r4m.Code $r4m.Out
+        Assert-Equal $mergeSha (CloneHead) 'the merge commit was rewritten by a rebase'
+        Assert-Equal $mergeSha (OriginHead) 'origin did not receive the merge commit'
+        Assert-Match $r4m.Out '2 earlier commit\(s\) pushed'   # the side commit and the merge commit
+    }
+    & git -C $clone branch -q -D side
+
     # A conflict: the same line changed on both sides. The other clone is behind origin after the race above, so it
     # pulls first, or ITS push is the rejected one and no conflict reaches origin.
     & git -C $other pull -q --rebase 2>$null
