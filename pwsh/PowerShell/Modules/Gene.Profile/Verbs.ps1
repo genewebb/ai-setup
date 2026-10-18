@@ -284,7 +284,12 @@ function Invoke-GeneProfReload {
     param([switch]$WhatIf)
     $code = Invoke-GeneLocalInstall -Hub (Get-GeneHubRoot) -WhatIf:$WhatIf
     if ($code -ne 0) { Write-ProfWarn "install.ps1 exited $code (see above)." }
-    elseif (-not $WhatIf) { Write-ProfNote 'Installed. Open a new tab to use it. In this window: . $PROFILE reloads the profile, but modules already loaded (prof itself) stay old until: Get-Module Gene.* | Import-Module -Force' }
+    elseif (-not $WhatIf) {
+        # By name: piping Get-Module's output to Import-Module -Force does not re-read the files. -Global: from inside
+        # a module, Import-Module would otherwise load into this module's own scope, not the window's.
+        foreach ($m in @(Get-Module -Name 'Gene.*' | Select-Object -ExpandProperty Name -Unique)) { Import-Module -Name $m -Force -Global -DisableNameChecking }
+        Write-ProfNote 'Installed, and prof and the other Gene modules are reloaded in this window. For the profile''s own commands (dp*, addStreams ...): . $PROFILE. Any other window: . $PROFILE there reloads both.'
+    }
 }
 
 function Invoke-GeneProfShow {

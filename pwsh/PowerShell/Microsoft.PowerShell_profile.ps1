@@ -5256,3 +5256,11 @@ function updateStreams {
     Write-Host 'updateStreams done.' -ForegroundColor Green
 }
 #endregion Stream sessions -------------------------------------------------------
+
+# A re-run of this profile (. $PROFILE, e.g. after prof setup reload) also reloads the Gene.* modules this window has
+# already loaded: PowerShell otherwise keeps a loaded module's old code. Re-imported BY NAME, because piping
+# Get-Module's output to Import-Module -Force reuses the loaded module and does not re-read its files (tested 10/17).
+foreach ($geneModule in @(Get-Module -Name 'Gene.*' | Select-Object -ExpandProperty Name -Unique)) {
+    Import-Module -Name $geneModule -Force -Global -DisableNameChecking
+}
+Remove-Variable -Name geneModule -ErrorAction SilentlyContinue

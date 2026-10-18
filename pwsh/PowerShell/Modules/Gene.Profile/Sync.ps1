@@ -134,7 +134,10 @@ function Invoke-GenePushToTarget {
     #>
     param([Parameter(Mandatory)][string]$Hub, [Parameter(Mandatory)]$Repo)
     $before = (Invoke-GeneRepoGitResult $Repo @('rev-parse', 'HEAD')).Out | Select-Object -First 1
-    Invoke-GeneGit $Hub @('push', '-q', '--no-verify', $Repo.Url, '+HEAD:refs/prof/incoming') | Out-Null
+    # A push to a folder path starts its own receive-pack, and git does not hand it our -c settings. On a clone another
+    # account owns (genewe's on SMVMTR1, pushed from agenewe here) it then refuses with "dubious ownership", so
+    # receive-pack gets safe.directory itself. git runs this string through sh: the quotes stop the * globbing.
+    Invoke-GeneGit $Hub @('push', '-q', '--no-verify', "--receive-pack=git -c 'safe.directory=*' receive-pack", $Repo.Url, '+HEAD:refs/prof/incoming') | Out-Null
     $r = Invoke-GeneRepoGitResult $Repo @('merge', '--ff-only', '-q', 'refs/prof/incoming')
     if ($r.Code -ne 0) {
         throw "Fast-forwarding $($Repo.Name) was refused; nothing there changed: $($r.Out -join ' '). Usually a Claude session there wrote after the harvest: run prof setup push again."
