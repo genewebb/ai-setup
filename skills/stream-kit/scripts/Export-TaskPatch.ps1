@@ -1,6 +1,8 @@
 # Saves the builder's change (everything unstaged in the worktree, new files included) as the task's patch.
 # Refuses (exit 2, no patch written) when any changed file is outside the task's write set, and lists each one:
 # the builder narrows its change or marks the task blocked; it never widens the write set.
+# Refuses (exit 3, no patch written) with COMPOSITION-EDIT lines when the change removes or changes a line of a
+# composition file another open row shares with no dependsOn order (lib Get-CompositionEditRefusals).
 param(
     [Parameter(Mandatory)] [string] $Repo,
     [Parameter(Mandatory)] [string] $Task,
@@ -39,6 +41,13 @@ if ($LASTEXITCODE -ne 0) { throw "git diff --name-only failed in $Worktree" }
 if (-not $changed.Count) { 'EMPTY no change in worktree'; exit 2 }
 $outside = @($changed | Where-Object { -not (Test-InWriteSet $_ $t.writeSet) })
 if ($outside.Count) { $outside | ForEach-Object { "OUTSIDE $_" }; exit 2 }
+# ORDERED-BY-MERGE (kit item IN-20261018134209-b23c): a composition file shared with an unordered open row takes only
+# added lines, or the integrator's merge of the two patches is not safe. A salvage export (-OutFile) is never refused:
+# it keeps work, and the builder's own hand-off is checked again.
+if (-not $OutFile) {
+    $comp = @(Get-CompositionEditRefusals (Read-Tasks $P).tasks $Task $Worktree $changed)
+    if ($comp.Count) { $comp; exit 3 }
+}
 
 $patch = if ($OutFile) { if ([IO.Path]::IsPathRooted($OutFile)) { $OutFile } else { Join-Path $Repo $OutFile } } else { Join-Path $P.Patches "$Task.patch" }
 & git -C $Worktree -c core.safecrlf=false diff --binary --output=$patch

@@ -1,6 +1,6 @@
 ---
 name: stream-build
-description: v0.10. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
+description: v0.11. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
 ---
 
 # stream-build
@@ -358,7 +358,12 @@ A build failure that blames the host is checked against the host before it is be
   claim still breaks and another builder can take the task out from under you.
 - Step 6: `Export-TaskPatch.ps1 -Task <t> -Worktree <path>`. Exit 2 lists `OUTSIDE` files; widen with
   `Update-Task.ps1 -Role build -AddWriteSet <file[,file]> -Note "<why>"` (exit 7 = `WRITESET-OVERLAP`, nothing written),
-  then export again.
+  then export again. Exit 3 lists `COMPOSITION-EDIT <file> ...` lines (ORDERED-BY-MERGE, kit item
+  IN-20261018134209-b23c): the row shares that composition / registration file (`src/Composition/`, `Program.cs`,
+  `*Module.cs`, `*ServiceCollectionExtensions.cs`, `Routes.razor`) with another open row and no dependsOn order, so the
+  integrator merges the two patches by their added lines and your change there may only APPEND lines. Keep the
+  existing lines byte-identical and add yours, then export again; when the ticket truly needs an existing line changed
+  or removed, move the row `-To blocked -Note "needs an order with <row> on <file>"` so the plan adds one.
 - Step 8: `Update-Task.ps1 -Role build -To built -Release -Artifacts @{patch='.streams\patches\<t>.patch'; verdict='.streams\verdicts\<t>.md'; testRecord='.streams\verdicts\<t>.tests.md'}`.
   A row handed off without `artifacts.check` cannot be re-verified on main except by an author grader; a row with
   neither is bounced by the integrator.

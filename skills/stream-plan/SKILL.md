@@ -1,6 +1,6 @@
 ---
 name: stream-plan
-description: v0.11. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
+description: v0.14. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
 ---
 
 # stream-plan
@@ -106,6 +106,16 @@ Each cycle:
    `decisions.md`.
 3. Also re-check the rows that are `blocked` on a planner condition (for example "release once G3.T202 is ticketed").
    Release a row whose condition now holds; leave the others.
+   Then run `Find-ArtificialBlockers.ps1 -Repo <repo> -Session <id>` (read-only). When it prints a `CANDIDATE`, run it
+   again with `-Apply`: it flips each candidate's file-order edges in one `Revise-Task.ps1` batch per candidate that
+   keeps every order through the moved row as an explicit edge, prints `APPLIED` / `SKIPPED` lines and `APPLY ...
+   claimable before <n> after <n>`; then `Test-BoardOrder.ps1` must still print `CLEAN`. `SUMMARY ... candidates 0`
+   needs nothing.
+   Then run `Find-TestBlockers.ps1 -Repo <repo> -Session <id>` (read-only). A `FLAG main-red` or `guard-test` line
+   routed to plan is yours: order the two rows or move the test file (`Revise-Task.ps1`), or send the red-on-main test
+   to the integrator as a fix. A `live-stack` flag goes to the owner queue once per row; a `stale-pin` flag goes back
+   to an author (`Revise-Task.ps1 -Release planned`). Review each `EDGE no-shared-file` line: drop an edge that orders
+   nothing real.
 4. A decision that only the owner can make goes to the owner queue (`.streams\owner\questions.md`) with the default
    applied, the same as the auto-approve rule, as `<task> | question | default applied | why`. Only a decision with NO
    safe default is an escalation, written `ESCALATE <task> | question | why no default`. The status board counts

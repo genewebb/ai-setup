@@ -75,6 +75,9 @@ function Get-CommandPathTokens([string] $cmd) {
     foreach ($m in [regex]::Matches($cmd, '"([^"]*)"|''([^'']*)''')) {
         $v = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
         if ($v) { $tokens.Add($v) }
+        # A quoted string with whitespace may be a nested command (pwsh -Command "...", bash -c '...'): its own tokens
+        # are checked too, since the whole string reads as no path and would hide an outside one (IN-20261018050026-e429).
+        if ($v -match '\s') { foreach ($i in (Get-CommandPathTokens $v)) { $tokens.Add($i) } }
     }
     $stripped = [regex]::Replace($cmd, '"[^"]*"|''[^'']*''', ' ')
     # cmd.exe-family tools take /x switches (cmd /c, mklink /J, robocopy /MIR, icacls /grant). Without
@@ -100,7 +103,9 @@ function Find-OutsideScopeToken($Tokens, $Roots) {
         # Anchoring here keeps relative tokens like src/obj or HEAD:CrewChief/x.cs from reading as absolute.
         $p = $t
         # example-path: the optional prefix is lazy (??) so "C:/x" is read as a drive path first, not as prefix "C:" + POSIX "/x".
-        if ($p -match '^(?:[^=:]*[=:])??(?<path>(?:[A-Za-z]:[\\/]|\\\\|/[A-Za-z]/|/|~|\$env:USERPROFILE|\$HOME|%USERPROFILE%|%HOMEPATH%).*)$') { $p = $Matches['path'] }
+        # The prefix holds no whitespace, quote or comma: an option name is one word, and a nested command's
+        # "... 'C:/x' ..." must not read as prefix "... 'C:" + POSIX "/x" (its own tokens are checked instead).
+        if ($p -match '^(?:[^=:\s''",]*[=:])??(?<path>(?:[A-Za-z]:[\\/]|\\\\|/[A-Za-z]/|/|~|\$env:USERPROFILE|\$HOME|%USERPROFILE%|%HOMEPATH%).*)$') { $p = $Matches['path'] }
         else { continue }
 
         if ($p -match '^(/dev/null|/dev/stdout|/dev/stderr)$') { continue }

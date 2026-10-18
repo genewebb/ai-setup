@@ -131,8 +131,21 @@ if (-not [IO.Path]::IsPathRooted($patch)) { $patch = Join-Path $Repo $patch }
 $applyLock = Enter-MainTreeLock $P "integrate $($t.id) apply" 600
 if (-not $applyLock) { "RETRY $($t.id) (main tree busy: $(Get-MainTreeLockHolder $P))"; exit 0 }
 & git -C $Repo apply --check --binary --whitespace=nowarn $patch 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    & $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To ticketed -Note 'rebase: base moved (patch kept as the builder''s starting point)' | Out-Null
+# ORDERED-BY-MERGE (kit item IN-20261018134210-ede5): rows that share a composition file unordered only append there,
+# so a patch that no longer applies only because another row appended to the same file is merged by its added lines
+# (lib New-CompositionMergedPatch) and that merged patch is applied, graded, reversed and committed instead. Anything
+# else that does not apply is still a REBASE.
+$clean = $LASTEXITCODE -eq 0; $mergeWhy = ''
+if (-not $clean) {
+    $merge = New-CompositionMergedPatch $Repo $patch (Join-Path $P.Patches "$($t.id).merged.patch")
+    if ($merge.Ok) {
+        $clean = $true; $patch = $merge.Path
+        Add-Decision $P $Session "$($t.id): patch merged by its added lines into $($merge.Files -join ', ') (ORDERED-BY-MERGE), applying $($t.id).merged.patch"
+        "MERGED $($t.id) $($merge.Files -join ',')"
+    } elseif ($merge.Reason -ne 'the conflict is not in a composition file') { $mergeWhy = "; composition merge refused: $($merge.Reason)" }
+}
+if (-not $clean) {
+    & $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To ticketed -Note "rebase: base moved (patch kept as the builder's starting point)$mergeWhy" | Out-Null
     $applyLock.Dispose()
     "REBASE $($t.id)"; exit 0
 }

@@ -1081,11 +1081,138 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $pn = (& "$S\Get-StreamStatus.ps1" -Repo $lr -Json | ConvertFrom-Json).leftToPlan
     Case 'a repo with no requirements folder reads left to plan unknown' (-not $pn.known -and $pn.reason -match '^no requirements folder: ') ($pn | ConvertTo-Json -Compress -Depth 6)
 
+    # Find-ArtificialBlockers (kit item IN-20261018044413-259b): a wait that runs only through a shared composition file
+    # is a candidate; a wait on a row it shares no file with, or on a named hub, is logical and kept.
+    $ar = Join-Path $Scratch 'artdeps'; New-Item -ItemType Directory -Path $ar -Force | Out-Null
+    git -C $ar init -q -b main; Set-Content (Join-Path $ar 'x.txt') 'x'; git -C $ar add -A; git -C $ar -c user.email=t@t -c user.name=t commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $ar | Out-Null
+    $aT1 = CTask 'A1.T1' 'A1' 'ticketed' 5 @() ''; $aT1.writeSet = @('src/Composition/Reg.cs')
+    $aT2 = CTask 'A1.T2' 'A1' 'ticketed' 5 @('A1.T1') ''; $aT2.writeSet = @('src/Composition/Reg.cs', 'b.cs')
+    $aT3 = CTask 'A1.T3' 'A1' 'ticketed' 5 @('A1.T1') ''; $aT3.writeSet = @('c.cs')
+    $aT4 = CTask 'A1.T4' 'A1' 'ticketed' 5 @('A1.T1') ''; $aT4.writeSet = @('src/Composition/Reg.cs', 'd.cs')
+    @{ groups = @(@{ id = 'A1'; name = 'a'; state = 'released'; origin = 'plan' }); tasks = @($aT1, $aT2, $aT3, $aT4) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $ar '.streams\tasks.json') -Encoding utf8
+    $ao = @(& "$S\Find-ArtificialBlockers.ps1" -Repo $ar)
+    $ah = @(& "$S\Find-ArtificialBlockers.ps1" -Repo $ar -Hubs 'A1.T1' -Session kit-test)
+    $adec = Get-Content -Raw (Join-Path $ar '.streams\decisions.md')
+    Case 'Find-ArtificialBlockers: a composition-file-only wait is a candidate, a no-shared-file wait is kept, a hub is never jumped' (($ao -match '^CANDIDATE composition\tA1\.T2 ahead of A1\.T1 \| src/Composition/Reg\.cs$').Count -eq 1 -and ($ao -match 'A1\.T3').Count -eq 0 -and ($ao -match '^CANDIDATE composition\tA1\.T4 ').Count -eq 1 -and $ao[-1] -match '^SUMMARY waiting 3 candidates 2 .*logical 1 ' -and ($ah -match '^CANDIDATE').Count -eq 0 -and $ah[-1] -match 'logical 3 ' -and $adec -match '\[kit-test\] Find-ArtificialBlockers: SUMMARY waiting 3 candidates 0') "plain: $($ao -join ' / ') hub: $($ah -join ' / ')"
+    # -Apply (kit item IN-20261018051443-4d10): A1.T2 jumps A1.T1, A1.T1 now waits on A1.T2, A1.T5 (after A1.T2) keeps
+    # its order after A1.T1 as an explicit edge, and A1.T4 / A1.T1 never jump a row moved in the same run.
+    $aT5 = CTask 'A1.T5' 'A1' 'ticketed' 5 @('A1.T2') ''; $aT5.writeSet = @('b.cs')
+    @{ groups = @(@{ id = 'A1'; name = 'a'; state = 'released'; origin = 'plan' }); tasks = @($aT1, $aT2, $aT3, $aT4, $aT5) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $ar '.streams\tasks.json') -Encoding utf8
+    $aa = @(& "$S\Find-ArtificialBlockers.ps1" -Repo $ar -Apply -Session kit-test)
+    $aDoc = Get-Content -Raw (Join-Path $ar '.streams\tasks.json') | ConvertFrom-Json
+    $aDep = @{}; foreach ($t in $aDoc.tasks) { $aDep[$t.id] = (@($t.dependsOn) | Sort-Object) -join ',' }
+    $adec2 = Get-Content -Raw (Join-Path $ar '.streams\decisions.md')
+    Case 'Find-ArtificialBlockers -Apply flips a candidate, keeps every order through it explicit, and never jumps a row moved this run' (($aa -match '^APPLIED A1\.T2 ahead of A1\.T1$').Count -eq 1 -and ($aa -match '^SKIPPED A1\.T4 ').Count -eq 1 -and $aa[-1] -match '^APPLY applied 1 skipped 2 claimable before \d+ after \d+$' -and $aDep['A1.T2'] -eq '' -and $aDep['A1.T1'] -eq 'A1.T2' -and $aDep['A1.T5'] -eq 'A1.T1,A1.T2' -and $aDep['A1.T4'] -eq 'A1.T1' -and $adec2 -match '\[kit-test\] Find-ArtificialBlockers: APPLY applied 1 ' -and @(& "$S\Find-ArtificialBlockers.ps1" -Repo $ar -Apply)[0] -eq 'REFUSED -Apply needs -Session') "out: $($aa -join ' / ') deps: $(@($aDep.GetEnumerator() | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' ')"
+    # Kit item IN-20261018071721-f123: a row whose title names the row it would jump states a logical order (kept), and
+    # a building row is never jumped, directly or as an ancestor.
+    $tT1 = CTask 'A1.T1' 'A1' 'ticketed' 5 @() ''; $tT1.writeSet = @('src/Composition/Reg.cs')
+    $tT6 = CTask 'A1.T6' 'A1' 'ticketed' 5 @('A1.T1') ''; $tT6.writeSet = @('src/Composition/Reg.cs', 'e.cs'); $tT6.title = 'Extend the A1.T1 registry with e'
+    $tT7 = CTask 'A1.T7' 'A1' 'building' 5 @() ''; $tT7.writeSet = @('src/Composition/Reg2.cs')
+    $tT8 = CTask 'A1.T8' 'A1' 'ticketed' 5 @('A1.T7') ''; $tT8.writeSet = @('src/Composition/Reg2.cs', 'f.cs')
+    $tT9 = CTask 'A1.T9' 'A1' 'ticketed' 5 @('A1.T8') ''; $tT9.writeSet = @('src/Composition/Reg2.cs', 'g.cs')
+    @{ groups = @(@{ id = 'A1'; name = 'a'; state = 'released'; origin = 'plan' }); tasks = @($tT1, $tT6, $tT7, $tT8, $tT9) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $ar '.streams\tasks.json') -Encoding utf8
+    $at = @(& "$S\Find-ArtificialBlockers.ps1" -Repo $ar)
+    $atj = (& "$S\Find-ArtificialBlockers.ps1" -Repo $ar -Json | ConvertFrom-Json).rows
+    $at6 = @($atj | Where-Object id -eq 'A1.T6')[0]
+    Case 'Find-ArtificialBlockers: a wait on a row the title names is logical, and a building row is never jumped (direct or ancestor)' (($at -match '^CANDIDATE').Count -eq 0 -and $at[-1] -match '^SUMMARY waiting 3 candidates 0 ' -and $at6.keptBecause -match '^A1\.T1 logical \(named in title\)$' -and @($atj | Where-Object id -eq 'A1.T9')[0].keptBecause -match '^A1\.T7 landing') "out: $($at -join ' / ') rows: $($atj | ConvertTo-Json -Compress -Depth 4)"
+
+    # Find-TestBlockers (kit item IN-20261018051443-6c23): a row whose test cannot pass for a reason outside it is
+    # flagged and routed; a clean row is not; a wait on a row it shares no file with is listed for plan review.
+    $br = Join-Path $Scratch 'testblk'; New-Item -ItemType Directory -Path $br -Force | Out-Null
+    git -C $br init -q -b main; Set-Content (Join-Path $br 'x.txt') 'x'; git -C $br add -A; git -C $br -c user.email=t@t -c user.name=t commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $br | Out-Null
+    $bT1 = CTask 'B1.T1' 'B1' 'ticketed' 5 @() ''; $bT1.writeSet = @('tests/Guard.cs')
+    $bT2 = CTask 'B1.T2' 'B1' 'ticketed' 5 @() ''; $bT2.writeSet = @('b.cs')
+    $bT3 = CTask 'B1.T3' 'B1' 'ticketed' 5 @('B1.T1') ''; $bT3.writeSet = @('c.cs'); $bT3.history += @{ at = '2026-10-18T00:00:00Z'; by = 'build-1'; to = 'ticketed'; note = 'A2 is already red on main' }
+    $bT4 = CTask 'B1.T4' 'B1' 'ticketed' 5 @() ''; $bT4.writeSet = @('e.cs')
+    New-Item -ItemType Directory -Path (Join-Path $br '.streams\tickets') -Force | Out-Null
+    Set-Content (Join-Path $br '.streams\tickets\B1.T2.md') "A1: tests/Guard.cs passes. A2: needs dotnet dev-certs trusted."
+    Set-Content (Join-Path $br '.streams\tickets\B1.T4.md') "A1: tests/E.cs passes."
+    @{ groups = @(@{ id = 'B1'; name = 'b'; state = 'released'; origin = 'plan' }); tasks = @($bT1, $bT2, $bT3, $bT4) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $br '.streams\tasks.json') -Encoding utf8
+    $bo = @(try { & "$S\Find-TestBlockers.ps1" -Repo $br -Session kit-test } catch { "THREW $_" })
+    $bdec = Get-Content -Raw (Join-Path $br '.streams\decisions.md')
+    Case 'Find-TestBlockers: a guard test, a live-stack prereq and red-on-main are flagged and routed; a clean row is not' (($bo -match '^FLAG guard-test\tB1\.T2 -> plan \| tests/Guard\.cs owned by B1\.T1; unordered$').Count -eq 1 -and ($bo -match '^FLAG live-stack\tB1\.T2 -> owner ').Count -eq 1 -and ($bo -match '^FLAG main-red\tB1\.T3 -> plan ').Count -eq 1 -and ($bo -match '^EDGE no-shared-file\tB1\.T3 -> B1\.T1 \(ticketed\) -> plan$').Count -eq 1 -and ($bo -match 'B1\.T4').Count -eq 0 -and $bo[-1] -match '^SUMMARY rows 4 flagged 2 \(main-red 1, live-stack 1, guard-test 1, stale-pin 0\) edges-no-shared-file 1$' -and $bdec -match '\[kit-test\] Find-TestBlockers: SUMMARY rows 4') ($bo -join ' / ')
+
+    # Kit item IN-20261018063247-abde: stale-pin takes only an unresolved STALE marker, never the bare word; a guard
+    # test whose waiter is already ordered after its owner is not flagged, and the other orders are named.
+    $cr = Join-Path $Scratch 'testblk2'; New-Item -ItemType Directory -Path $cr -Force | Out-Null
+    git -C $cr init -q -b main; Set-Content (Join-Path $cr 'x.txt') 'x'; git -C $cr add -A; git -C $cr -c user.email=t@t -c user.name=t commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $cr | Out-Null
+    $cT1 = CTask 'C1.T1' 'C1' 'ticketed' 5 @() ''; $cT1.writeSet = @('tests/Guard.cs')
+    $cT2 = CTask 'C1.T2' 'C1' 'ticketed' 5 @('C1.T1') ''; $cT2.writeSet = @('b.cs')
+    $cT3 = CTask 'C1.T3' 'C1' 'ticketed' 5 @('C1.T2') ''; $cT3.writeSet = @('c.cs')
+    $cT4 = CTask 'C1.T4' 'C1' 'ticketed' 5 @('C1.T5') ''; $cT4.writeSet = @('tests/Own.cs')
+    $cT5 = CTask 'C1.T5' 'C1' 'ticketed' 5 @() ''; $cT5.writeSet = @('e.cs')
+    $cT3.history += @{ at = '2026-10-18T00:00:00Z'; by = 'coord'; to = 'planned'; note = 'plan revise:  -- STALE: c.cs since abc by C1.T9' }
+    $cT3.history += @{ at = '2026-10-18T00:10:00Z'; by = 'author-1'; to = 'ticketed'; note = 'refresh: STALE c.cs since abc touch no clause' }
+    $cT5.history += @{ at = '2026-10-18T00:00:00Z'; by = 'plan-1'; to = 'ticketed'; note = 'plan revise: stale order edge on C1.T9 dropped' }
+    $cT6 = CTask 'C1.T6' 'C1' 'planned' 5 @() ''; $cT6.writeSet = @('f.cs')
+    $cT6.history += @{ at = '2026-10-18T00:00:00Z'; by = 'activate'; to = 'planned'; note = 'STALE: f.cs since abc by C1.T9' }
+    New-Item -ItemType Directory -Path (Join-Path $cr '.streams\tickets') -Force | Out-Null
+    Set-Content (Join-Path $cr '.streams\tickets\C1.T3.md') "A1: tests/Guard.cs passes. A2: the stale alert banner shows."
+    Set-Content (Join-Path $cr '.streams\tickets\C1.T5.md') "A1: tests/Own.cs passes."
+    @{ groups = @(@{ id = 'C1'; name = 'c'; state = 'released'; origin = 'plan' }); tasks = @($cT1, $cT2, $cT3, $cT4, $cT5, $cT6) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $cr '.streams\tasks.json') -Encoding utf8
+    $co = @(try { & "$S\Find-TestBlockers.ps1" -Repo $cr } catch { "THREW $_" })
+    Case 'Find-TestBlockers: stale-pin only on an unresolved STALE marker; guard-test skips a waiter ordered after its owner and names the order' (($co -match '^FLAG stale-pin\tC1\.T6 -> author \| unresolved STALE note at ').Count -eq 1 -and ($co -match '^FLAG stale-pin').Count -eq 1 -and ($co -match '^FLAG guard-test\tC1\.T5 -> plan \| tests/Own\.cs owned by C1\.T4; owner after waiter$').Count -eq 1 -and ($co -match '^FLAG guard-test').Count -eq 1 -and $co[-1] -match 'guard-test 1, stale-pin 1\)') ($co -join ' / ')
+
     # E4 timed-role backoff: an idle streak doubles the wait up to 20 minutes; integrate never backs off; no streak
     # keeps the interval.
     $bw = @((Get-RunnerWait 'plan' 300 0), (Get-RunnerWait 'plan' 300 1), (Get-RunnerWait 'plan' 300 3), (Get-RunnerWait 'status' 900 1), (Get-RunnerWait 'integrate' 600 5), (Get-RunnerWait 'coordinator' 1200 2))
     Case 'E4: an idle streak doubles a timed role''s wait up to 20 min; integrate keeps its cadence' (($bw -join ',') -eq '300,600,1200,1200,600,1200') ($bw -join ',')
 
+    # ORDERED-BY-MERGE (kit item IN-20261018133755-8c9f): two unchained open rows sharing only an exact composition
+    # file are ordered; one more shared ordinary file, or a wildcard over the composition file, is still UNORDERED.
+    . (Join-Path $S 'lib\Board.ps1')
+    $mo = @(
+        (Test-MergeOrderedOverlap @('src/App/Program.cs', 'src/a.cs') @('src\App\Program.cs', 'src/b.cs')),
+        (Test-MergeOrderedOverlap @('src/Coordinator/CoordinatorModule.cs', 'src/a.cs') @('src/Coordinator/CoordinatorModule.cs', 'src/a.cs')),
+        (Test-MergeOrderedOverlap @('src/Composition/*') @('src/Composition/Web.cs')),
+        (Test-MergeOrderedOverlap @('src/a.cs') @('src/b.cs')))
+    Case 'ORDERED-BY-MERGE: only an exact composition-file overlap is merge-ordered' (($mo -join ',') -eq 'True,False,False,False') ($mo -join ',')
+    $mb = @(
+        [ordered]@{ id = 'M.T1'; state = 'ticketed'; kind = 'build'; dependsOn = @(); writeSet = @('src/Web/Routes.razor', 'src/x.cs') },
+        [ordered]@{ id = 'M.T2'; state = 'planned'; kind = 'build'; dependsOn = @(); writeSet = @('src/Web/Routes.razor', 'src/y.cs') },
+        [ordered]@{ id = 'M.T3'; state = 'planned'; kind = 'build'; dependsOn = @(); writeSet = @('src/y.cs') })
+    $mp = @(Get-BoardProblems $mb | ForEach-Object { $_ })   # it returns , $problems (one List)
+    Case 'ORDERED-BY-MERGE: the board accepts a shared Routes.razor, still refuses a shared ordinary file' ($mp.Count -eq 1 -and $mp[0] -match '^UNORDERED (M\.T2 / M\.T3|M\.T3 / M\.T2) : src/y\.cs$') ($mp -join ' | ')
+
+    # ORDERED-BY-MERGE, builder side (kit item IN-20261018134209-b23c): a composition file shared with an unordered
+    # open row takes only added lines; a removed line is refused, an append passes, and an ordered sharer allows edits.
+    $cg = Join-Path $Scratch 'compedit'; New-Item -ItemType Directory -Path "$cg\src\Web" -Force | Out-Null
+    git -C $cg init -q -b main; git -C $cg config user.email t@t; git -C $cg config user.name t
+    Set-Content "$cg\src\Web\Program.cs" "line1`nline2"; git -C $cg add -A; git -C $cg commit -q -m base
+    $ct = @(
+        [ordered]@{ id = 'C.T1'; state = 'building'; dependsOn = @(); writeSet = @('src/Web/Program.cs', 'src/a.cs') },
+        [ordered]@{ id = 'C.T2'; state = 'ticketed'; dependsOn = @(); writeSet = @('src\Web\Program.cs') },
+        [ordered]@{ id = 'C.T3'; state = 'planned'; dependsOn = @('C.T1'); writeSet = @('src/Web/Program.cs') })
+    Set-Content "$cg\src\Web\Program.cs" "line1`nline2`nline3"
+    $ca = @(Get-CompositionEditRefusals $ct 'C.T1' $cg @('src/Web/Program.cs'))
+    Set-Content "$cg\src\Web\Program.cs" "line1`nline2 changed"
+    $cr = @(Get-CompositionEditRefusals $ct 'C.T1' $cg @('src/Web/Program.cs'))
+    $ct[1].dependsOn = @('C.T1')
+    $co = @(Get-CompositionEditRefusals $ct 'C.T1' $cg @('src/Web/Program.cs'))
+    Case 'ORDERED-BY-MERGE: a shared composition file takes appends only, unless the sharer is ordered' ($ca.Count -eq 0 -and $cr.Count -eq 1 -and $cr[0] -match '^COMPOSITION-EDIT src/Web/Program\.cs removes or changes 1 line\(s\); shared with C\.T2 ' -and $co.Count -eq 0) ("append=$($ca -join '|') change=$($cr -join '|') ordered=$($co -join '|')")
+
+    # ORDERED-BY-MERGE, integrator side (kit item IN-20261018134210-ede5): an append that no longer applies because
+    # another row appended at the same place is merged by its added lines and reverses clean; a patch that changes a
+    # composition line, or that also conflicts in an ordinary file, is refused and main is left alone.
+    $mg = Join-Path $Scratch 'compmerge'; New-Item -ItemType Directory -Path "$mg\src\Web" -Force | Out-Null
+    git -C $mg init -q -b main; git -C $mg config user.email t@t; git -C $mg config user.name t; git -C $mg config core.autocrlf false
+    $pf = "$mg\src\Web\Program.cs"; $of = "$mg\src\o.cs"
+    [IO.File]::WriteAllText($pf, "s.AddA();`ns.AddB();`n}`n"); [IO.File]::WriteAllText($of, "o1`n"); git -C $mg add -A; git -C $mg commit -q -m base
+    [IO.File]::WriteAllText($pf, "s.AddA();`ns.AddB();`ns.AddC();`n}`n"); git -C $mg diff --output="$mg\..\m-add.patch"
+    [IO.File]::WriteAllText($pf, "s.AddA();`ns.AddB2();`n}`n"); git -C $mg diff --output="$mg\..\m-chg.patch"
+    [IO.File]::WriteAllText($pf, "s.AddA();`ns.AddB();`ns.AddC();`n}`n"); [IO.File]::WriteAllText($of, "o1 mine`n"); git -C $mg diff --output="$mg\..\m-both.patch"
+    git -C $mg checkout -q -- .
+    [IO.File]::WriteAllText($pf, "s.AddA();`ns.AddB();`ns.AddD();`n}`n"); [IO.File]::WriteAllText($of, "o1 theirs`n")
+    & git -C $mg apply --check "$mg\..\m-add.patch" 2>&1 | Out-Null; $mgRaw = $LASTEXITCODE
+    $mgA = New-CompositionMergedPatch $mg "$mg\..\m-add.patch" "$mg\..\m-add.merged.patch"
+    $mgApplied = ''; if ($mgA.Ok) { git -C $mg apply "$mg\..\m-add.merged.patch"; $mgApplied = [IO.File]::ReadAllText($pf); git -C $mg apply -R "$mg\..\m-add.merged.patch" }
+    $mgBack = [IO.File]::ReadAllText($pf)
+    $mgC = New-CompositionMergedPatch $mg "$mg\..\m-chg.patch" "$mg\..\m-chg.merged.patch"
+    $mgB = New-CompositionMergedPatch $mg "$mg\..\m-both.patch" "$mg\..\m-both.merged.patch"
+    Case 'ORDERED-BY-MERGE: the integrator merges an append by its added lines, refuses a change or an ordinary conflict' ($mgRaw -ne 0 -and $mgA.Ok -and $mgApplied -eq "s.AddA();`ns.AddB();`ns.AddC();`ns.AddD();`n}`n" -and $mgBack -eq "s.AddA();`ns.AddB();`ns.AddD();`n}`n" -and -not $mgC.Ok -and $mgC.Reason -match 'not add-only' -and -not $mgB.Ok -and $mgB.Reason -match 'outside the composition' -and [IO.File]::ReadAllText($of) -eq "o1 theirs`n") ("raw=$mgRaw a=$($mgA.Ok)/$($mgA.Reason) applied=$($mgApplied -replace "`n", '\n') back=$($mgBack -replace "`n", '\n') c=$($mgC.Reason) b=$($mgB.Reason)")
 } catch {
     "FAIL harness: $_ at $($_.InvocationInfo.PositionMessage)`n$($_.ScriptStackTrace)"; $fails++
 } finally {
