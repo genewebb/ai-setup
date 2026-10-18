@@ -8,8 +8,9 @@
 #
 # Worktree commands (status, add, commit, merge) always run on the clone's own machine: across the share, git status
 # on a 1,400-file clone took 40 s and every run re-hashed the index the other machine wrote. Only object transfer
-# (fetch from it, push to the side ref refs/prof/incoming) crosses the share. Every call passes -c safe.directory=*:
-# command-line scope is the protected configuration git honours for that setting, for that one call.
+# (fetch from it; a bundle file into it, fetched there as the side ref refs/prof/incoming) crosses the share. Every call passes -c safe.directory=*:
+# command-line scope is the protected configuration git honours for that setting, for that one call. Pushing into a
+# target goes as a bundle file the target's git fetches (Invoke-GenePushToTarget), not as a push over the share.
 
 function New-GeneRepo {
     param([Parameter(Mandatory)][string]$Path, $Session, [string]$Machine)
@@ -128,16 +129,31 @@ function Invoke-GeneMergeFromTarget {
 
 function Invoke-GenePushToTarget {
     <#
-    Sends the hub's HEAD to the target as refs/prof/incoming (objects only cross the share; the target's work tree is
-    not touched), then fast-forwards the target's main to it ON the target. Refused, with nothing changed there, when
-    that is not a fast-forward or an uncommitted file would be overwritten (a Claude session wrote after the harvest).
+    Sends the hub's HEAD to the target as refs/prof/incoming (the target's work tree is not touched), then fast-forwards
+    the target's main to it ON the target. Refused, with nothing changed there, when that is not a fast-forward or an
+    uncommitted file would be overwritten (a Claude session wrote after the harvest).
+
+    The commits travel as ONE bundle file written into the target's .git folder, and the target's own git fetches from
+    it. A plain git push to the share path ran receive-pack on this machine against the target's .git over SMB: it
+    needed safe.directory handed to it, and on SMVMTR1 (10/17) it wrote the objects and then sat for minutes without
+    updating the ref.
     #>
     param([Parameter(Mandatory)][string]$Hub, [Parameter(Mandatory)]$Repo)
     $before = (Invoke-GeneRepoGitResult $Repo @('rev-parse', 'HEAD')).Out | Select-Object -First 1
-    # A push to a folder path starts its own receive-pack, and git does not hand it our -c settings. On a clone another
-    # account owns (genewe's on SMVMTR1, pushed from agenewe here) it then refuses with "dubious ownership", so
-    # receive-pack gets safe.directory itself. git runs this string through sh: the quotes stop the * globbing.
-    Invoke-GeneGit $Hub @('push', '-q', '--no-verify', "--receive-pack=git -c 'safe.directory=*' receive-pack", $Repo.Url, '+HEAD:refs/prof/incoming') | Out-Null
+    # Only the commits the target lacks, when the hub has its HEAD; otherwise the whole branch.
+    $range = @('HEAD')
+    if ($before -and (Invoke-GeneGitResult $Hub @('merge-base', '--is-ancestor', $before, 'HEAD')).Code -eq 0) { $range += "^$before" }
+    $name = "prof-incoming-$(Get-Date -Format yyyyMMdd-HHmmss).bundle"
+    $here = Join-Path ([IO.Path]::GetTempPath()) $name
+    $thereRead = Join-Path $Repo.ReadPath ".git\$name"
+    $thereLocal = Join-Path $Repo.Path ".git\$name"
+    try {
+        Invoke-GeneGit $Hub (@('bundle', 'create', '-q', $here) + $range) | Out-Null
+        Copy-Item -LiteralPath $here -Destination $thereRead -Force
+        $f = Invoke-GeneRepoGitResult $Repo @('fetch', '-q', '--no-write-fetch-head', $thereLocal, '+HEAD:refs/prof/incoming')
+        if ($f.Code -ne 0) { throw "Fetching the bundle into $($Repo.Name) failed; nothing there changed: $($f.Out -join ' ')" }
+    }
+    finally { foreach ($x in $here, $thereRead) { if (Test-Path -LiteralPath $x) { Remove-Item -LiteralPath $x -Force -ErrorAction SilentlyContinue } } }
     $r = Invoke-GeneRepoGitResult $Repo @('merge', '--ff-only', '-q', 'refs/prof/incoming')
     if ($r.Code -ne 0) {
         throw "Fast-forwarding $($Repo.Name) was refused; nothing there changed: $($r.Out -join ' '). Usually a Claude session there wrote after the harvest: run prof setup push again."
