@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: f72b1fa1-4f0b-4455-a732-6236fcf25583
-  modified: 2026-10-18T14:37:39.576Z
+  modified: 2026-10-18T14:40:04.091Z
 ---
 
 Review of how the stream kit handles `dependsOn` (2026-10-18, Gene asked for an objective critical review, then "make your suggested improvements"). Source of truth is `C:\devops\repos\ai-setup\skills\stream-kit\scripts` (installed copies under `~\.claude\skills` are copies).
@@ -24,9 +24,9 @@ Review of how the stream kit handles `dependsOn` (2026-10-18, Gene asked for an 
 
 **Verdict on a dedicated dependency-revalidation agent: NO.** Mechanical parts are scripts (Gene's rule: mechanical stream work outside Claude); the judgment part belongs to the planner/coordinator who already own `dependsOn` via `Revise-Task.ps1`; a third writer recreates the 9/28 two-planners failure.
 
-**State 10/18 10:40:** Test-StreamKit 222/222, Test-StreamKitRecovery fails=0, installed on laptop (install.ps1 -NoPull -Yes). Publish stopped on the secret guard (fixture `password=hunter2` in Test-StreamKitRecovery.ps1:2759, needs typed yes on a console); Gene runs publish.ps1 in his own terminal. publish.ps1 = `git add -A`, so the prof HUB pwsh profile WIP goes in the same commit (Gene's choice).
+**State 10/18 10:40:** Test-StreamKit 222/222, Test-StreamKitRecovery fails=0; laptop installed; PUBLISHED b1cfe17 (Gene typed yes at the secret guard: the Add-Lesson refusal fixture in Test-StreamKitRecovery.ps1:2759 trips the conn-password rule, and so does quoting it in a memory file - never quote that fixture). prof HUB pwsh profile WIP went in the same commit (Gene's choice). Planner audit item FILED on SMVMTR1: `IN-20261018143920-ebda stream-plan` (semantic-edge audit of focus groups via DEP-REVIEW flags; G9.G90 + integration edges need owner sign-off).
 
-**Open:** file a `stream-plan` inbox item on SMVMTR1 (live host, as CORP\genewe) asking for a semantic-edge audit of the focus groups (DEP-REVIEW flags will name the targets once installed there). Not filed from the laptop: laptop board is sync-only. Install on SMVMTR1 via ai-setup publish/install.
+**Open:** SMVMTR1 needs `install.ps1` (pull) before DEP-REVIEW / FOCUS-PULL / BASE-STALE appear on its status page and the freshness tick runs there.
 
 **Why:** 85% of ticketed rows wait on dependencies, and nothing on the board could say whether an edge was real or whether a landed base matched what the verifier graded.
 **How to apply:** when a dependency question comes up, read `FOCUS-PULL` / `DEP-REVIEW` / `DEP-MOVED` / `BASE-STALE` on the status page first; adjust edges only through `Revise-Task.ps1`. See [[reference_stream_kit_mtime_grader_clause_breaks_on_integrate]], [[feedback_stream_mechanical_work_outside_claude]], [[project_smvmtr1_stream_host_genewe_2026-10-17]].

@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: d68106f8-6760-4f72-b54d-4b3babaf10b2
-  modified: 2026-10-17T23:20:00.000Z
+  modified: 2026-10-18T14:42:18.002Z
 ---
 
 Design `{AIWorkRoot}\docs\manageprofile-design.md` (approved 10/17), plan `docs\superpowers\plans\2026-10-17-prof.md`. Code: `pwsh\PowerShell\Modules\Gene.Profile\` (Target, Sync, Menu, Verbs .ps1 + psm1/psd1, aliases `prof`/`manageProfile`), `machines.yaml` at clone root, `.gitattributes` union for memory indexes, `install.ps1 -PassphraseFromStdin`, `pwsh\AddOrUpdateMyTerminal.ps1 -ForUser`, profile `sp`/`ep` call prof. Tests `setup\tests\Prof.Tests.ps1` 33/33.
@@ -26,6 +26,8 @@ Design `{AIWorkRoot}\docs\manageprofile-design.md` (approved 10/17), plan `docs\
 **10/17 later still (Gene):** governance RETIRED from all tooling (GovernanceRepo key, cgov, dpgov, Dev-ProfiseeGovRestart + app-pool helpers in Gene.DevOpsTools, WindowsPowerShell gov block, prof build gov); laptop + SMVMTR1 machine profiles edited (backups `*.bak-20261017-2011-gov`), governance memory notes deleted. ai-profisee ADDED: key `AIProfiseeRepo` (C: laptop, D: SMVMTR1), `caiprof`, Git policy row `{ReposRoot}\ai-profisee` commit yes / push no on both machines. Group `other` (OtherGroup.ps1) = catalog of every other profile command by category, census test keeps it complete; tests 58/58. Until `prof setup reload` installs the new profile, shells warn "unknown key 'AIProfiseeRepo'" (machine profile already updated).
 
 **10/17 RENAME (Gene):** profile-sync group `streams` is now `setup` (prof setup push|pull|status|check|bootstrap|terminal|secrets|config|edit|reload|show). `streams` = the stream BOARD (StreamsGroup.ps1, thin layer over addStreams..updateStreams; -WhatIf -> -DryRun) plus `status-rebuild` (touches <SpeedyRepo>\.streams\inbox\stream-status.md). New group `ai` (AiGroup.ps1) = dpAI modes as commands. git: scripts folders (PowershellScriptsDir, SqlScriptsDir, CursorRulesDir) in the repo list, `-AIOnly` = pushrules. build: `containers` (dpContainers, Speedy only). Menu order streams, setup, git, build, ai, other. Tests 63/63.
+
+**10/18: COMMITTED in b1cfe17** (swept with the stream-kit dependency review publish, Gene's choice). Rollout recipe Gene uses: `prof setup reload` → `. $PROFILE` → `prof setup push -Machine SMVMTR1 -AllowSecrets` (machines.yaml gives CORP\genewe, no -User needed) → `. $PROFILE` → `prof streams update -RestartSessions`. See [[feedback_ai_setup_rollout_via_prof]].
 
 **Earlier decisions (still hold):** laptop = only GitHub publisher; one clone per user on multi-user machines; `-User` param, creds prompted every run; speedmerchants on SMVMTR1 = retire; terminal = settings-only `-ForUser`; any machine, current target SMVMTR1; later hubs deploy/streams/tab/go; streams proposal rebased on the hub.
 
