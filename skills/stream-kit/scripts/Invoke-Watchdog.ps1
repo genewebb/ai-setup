@@ -182,7 +182,15 @@ function Save-BeforeReap([string] $Id, [string] $Dir, [string] $State) {
     $existing = Join-Path $P.Patches "$Id.patch"
     $aside = (Test-Path $existing)
     $outFile = if ($aside) { ".streams\patches\$Id.salvage.patch" } else { '' }
-    $out = @(& "$PSScriptRoot\Export-TaskPatch.ps1" -Repo $Repo -Task $Id -Worktree $Dir -OutFile $outFile 2>&1)
+    # A throw from the export (git cannot read the tree) must keep the tree, never end the pass: on 2026-10-18
+    # G9.T010's tree had a git admin folder with no commondir (its `git worktree add` died part-way), `git ls-files`
+    # failed, and the throw took the whole watchdog and the status tick with it (kit item IN-20261018010634-24c4).
+    try {
+        $out = @(& "$PSScriptRoot\Export-TaskPatch.ps1" -Repo $Repo -Task $Id -Worktree $Dir -OutFile $outFile 2>&1)
+    } catch {
+        $acts.Add("KEPT $Id ${Dir}: the patch export threw, so git cannot read this tree and it stays for a person to inspect ($($_.Exception.Message))")
+        return $false
+    }
     $line = ($out -join ' ')
     if ($line -match 'EMPTY no change') { return $true }
     if ($out | Where-Object { $_ -like 'OUTSIDE *' }) {

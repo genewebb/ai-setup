@@ -1115,6 +1115,31 @@ try {
 $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the runner cases
     Case 'the history says the salvage is UNVERIFIED' ((@($t43.history | ForEach-Object { $_.note }) -join ' ') -match 'UNVERIFIED salvage') 'no unverified note on the task'
 
+    # ---- 43b. a tree git cannot read is KEPT, and the pass goes on (kit item IN-20261018010634-24c4). G9.T010's
+    # `git worktree add` died part-way and left an admin folder with no commondir, so `git ls-files` failed inside
+    # Export-TaskPatch.ps1, its throw ended the watchdog, and every status tick reported THREW.
+    $r43b = New-Repo 'r43b' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok') }); $repos += $r43b
+    $now43b = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $j = J $r43b
+    foreach ($t in $j.tasks) { if ($t.id -eq 'G1.A') {
+        $t.state = 'building'
+        $t.claim = @{ session = 'build-43c'; role = 'build'; at = $now43b; beat = $now43b } } }
+    Set-Content -Path (Join-Path $r43b '.streams\tasks.json') -Encoding utf8 -Value ($j | ConvertTo-Json -Depth 50)
+    $wt43b = & "$S\New-TaskWorktree.ps1" -Repo $r43b -Task 'G1.A' -Session 'build-43c' -WorktreeRoot (Join-Path $Scratch 'wt43b') | Select-Object -Last 1
+    if (-not (Test-Path -PathType Container $wt43b)) { throw "case 43b: New-TaskWorktree.ps1 returned '$wt43b'" }
+    Set-Content (Join-Path $wt43b 'G1.A.txt') 'half-built'
+    $admin43b = ((Get-Content (Join-Path $wt43b '.git') -Raw) -replace '^gitdir:\s*', '').Trim()
+    Remove-Item (Join-Path $admin43b 'commondir') -Force
+    $j = J $r43b
+    foreach ($t in $j.tasks) { if ($t.id -eq 'G1.A') { $t.state = 'ticketed'; $t.claim = $null; $t.base = @{ worktree = $wt43b } } }
+    Set-Content -Path (Join-Path $r43b '.streams\tasks.json') -Encoding utf8 -Value ($j | ConvertTo-Json -Depth 50)
+    foreach ($f in @(Get-ChildItem $wt43b -Recurse -File -Force)) { $f.LastWriteTimeUtc = (Get-Date).ToUniversalTime().AddMinutes(-90) }
+    (Get-Item $wt43b).LastWriteTimeUtc = (Get-Date).ToUniversalTime().AddMinutes(-90)
+    $threw43b = $null
+    try { $w43c = @(& "$S\Invoke-Watchdog.ps1" -Repo $r43b -Session 'status-43b') } catch { $threw43b = $_.Exception.Message }
+    Case 'a tree git cannot read does not end the watchdog' (-not $threw43b) "threw: $threw43b"
+    Case 'that tree is KEPT and named' ((($w43c -join ' ') -match 'KEPT G1\.A .*export threw') -and (Test-Path (Join-Path $wt43b 'G1.A.txt'))) ($w43c -join ' | ')
+
     # ---- 44. a FAILED worktree removal must be retried and must never read as QUIET. `git worktree remove --force`
     # drops the registration before the directory delete, so when the delete loses a race with an open file the next
     # pass no longer sees the tree as one of this repo's worktrees and the empty-husk rule skips it in silence:
