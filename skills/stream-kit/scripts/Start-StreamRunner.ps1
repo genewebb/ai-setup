@@ -243,7 +243,8 @@ function Get-WaitingDeps($doc, $Task) {
     $open = @(foreach ($d in @($Task.dependsOn)) { if (-not $d) { continue }; $dt = Get-Task $doc $d; if ($dt.state -notin $script:BuildReadyStates) { "$d [$($dt.state)]" } })
     if ($open.Count) { $open -join ', ' } else { 'a built dependency whose own base is no longer whole' }
 }
-function Format-Local([datetime] $Utc) { $Utc.ToLocalTime().ToString('HH:mm:ss') }
+# Idle report clock times carry the local zone (owner ruling 2026-10-18: owner-facing times in local machine time).
+function Format-Local([datetime] $Utc) { Format-LocalStamp ([datetime]::SpecifyKind($Utc, [DateTimeKind]::Utc)) 'HH:mm:ss' }
 # TAB LINES IN PLAIN WORDS (owner 2026-10-17: "This is cryptic ... it should also show the next time it will poll").
 # Every line the tab prints starts with LOCAL time (the idle report already spoke local time, so one tab showed two
 # clocks), each code line (GATE, START-JITTER, EXIT ... FAILED, BACKOFF) is followed by an indented line saying what it
@@ -327,7 +328,7 @@ function Show-IdleStatus {
     $key = $rep.Why -join '|'
     $fallback = $now.AddSeconds($IntervalSeconds)
     $state.idle = [ordered]@{ since = $script:idleSince.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); why = @($rep.Why); nextLook = $fallback.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); lastUnit = $rep.LastUnit; tally = $rep.Tally }
-    if ($state.status -notlike 'idle since*') { $state.status = "idle since $(Get-Now)" }
+    if ($state.status -notlike 'idle since*') { $state.status = "idle since $(Format-LocalStamp)" }
     Write-RunnerState $state
     if ($key -ne $script:idleLastWhy -or -not $script:idleLastPrint) {
         "$(Get-TabNow) IDLE nothing to take for $Role$(if ($script:idleLastPrint) { " (reason changed; idle since $(Format-Local $script:idleSince.ToUniversalTime()))" })"
@@ -469,14 +470,22 @@ function Set-TimedLaunch { $script:lastTimedLaunch = (Get-Date).ToUniversalTime(
 # as a stream-kit bug item.
 $script:ticks = 0
 $script:tickFailures = @{}
+$script:tickBusy = @{}
+$tickBusyReport = if ("$env:STREAM_TICK_BUSY_REPORT" -match '^\d+$') { [Math]::Max(1, [int]$env:STREAM_TICK_BUSY_REPORT) } else { 3 }
 function Invoke-TickStep([string] $Script, [hashtable] $ScriptArgs) {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $r = $null
     try { $r = Invoke-KitScript $Script $ScriptArgs } catch { $r = [pscustomobject]@{ Text = @(("$_" -split "`n")[0]); Warnings = @(); Code = 'THREW' } }
-    [pscustomobject]@{ Script = $Script; Text = @($r.Text); Warnings = @($r.Warnings); Code = $r.Code; Ok = ($null -eq $r.Code -or "$($r.Code)" -eq '0'); Seconds = [int]$sw.Elapsed.TotalSeconds }
+    $ok = ($null -eq $r.Code -or "$($r.Code)" -eq '0')
+    # A step that lost a lock race (tasks.json or an inbox held past its wait, or a file another process holds) is BUSY,
+    # not broken: the next tick runs it again. A builder held tasks.json past the watchdog's 15 s on 2026-10-18 and the
+    # tick filed it as a kit bug (kit item IN-20261018192923-9972).
+    $busy = (-not $ok) -and ((@(@($r.Text) + @($r.Warnings)) -join "`n") -match 'lock busy for \d+s|being used by another process')
+    [pscustomobject]@{ Script = $Script; Text = @($r.Text); Warnings = @($r.Warnings); Code = $r.Code; Ok = $ok; Busy = $busy; Seconds = [int]$sw.Elapsed.TotalSeconds }
 }
 function Get-TickNote($Step, [string] $Skipped = 'skipped') {
     if (-not $Step) { return $Skipped }
+    if ($Step.Busy) { return 'BUSY (lock contention; the next tick retries)' }
     if (-not $Step.Ok) { return "FAILED exit $($Step.Code)" }
     $last = @($Step.Text | Where-Object { "$_".Trim() }) | Select-Object -Last 1
     $t = if ($last) { ("$last" -replace '\s+', ' ').Trim() } else { 'ok' }
@@ -488,13 +497,13 @@ function Invoke-StatusTick([string] $Session) {
     $wd = Invoke-TickStep 'Invoke-Watchdog.ps1' @{ Repo = $Repo; Session = $Session }; $steps.Add($wd)
     foreach ($l in $wd.Text) { "  watchdog  $l" }
     $acts = @($wd.Text | Where-Object { "$_".Trim() -and $_ -notmatch '^(QUIET|JUNK|WARN)\b' })
-    $wdLine = if (-not $wd.Ok) { "Watchdog FAILED (exit $($wd.Code)): $(Get-TickNote $wd)" } elseif ($acts.Count) { "Watchdog: $($acts -join '; ')" } else { 'Watchdog QUIET: no stale claim.' }
+    $wdLine = if ($wd.Busy) { "Watchdog $(Get-TickNote $wd)." } elseif (-not $wd.Ok) { "Watchdog FAILED (exit $($wd.Code)): $(Get-TickNote $wd)" } elseif ($acts.Count) { "Watchdog: $($acts -join '; ')" } else { 'Watchdog QUIET: no stale claim.' }
     if ($wdLine.Length -gt 400) { $wdLine = $wdLine.Substring(0, 400) + '...' }
     $openItems = @(Read-InboxItems (Get-InboxPath $P $inboxSkill) | Where-Object { Test-InboxOpen $_ $inboxSkill })
     $inboxLine = if ($openItems.Count) { "Own inbox: $($openItems.Count) open item(s) ($((@($openItems | Select-Object -First 3 | ForEach-Object { $_.id })) -join ', ')); a status unit is launched for them." } else { 'Own inbox: no open items.' }
     $st = Invoke-TickStep 'Get-StreamStatus.ps1' @{ Repo = $Repo }; $steps.Add($st)
     foreach ($l in $st.Text) { "  $l" }
-    $pg = Invoke-TickStep 'Build-StatusPage.ps1' @{ Repo = $Repo; Session = $Session; WatchdogLine = $wdLine; InboxLine = $inboxLine }; $steps.Add($pg)
+    $pg = Invoke-TickStep 'Build-StatusPage.ps1' @{ Repo = $Repo; Session = $Session; WatchdogLine = $wdLine; InboxLine = $inboxLine; NextUpdateSeconds = $IntervalSeconds }; $steps.Add($pg)
     $gc = Invoke-TickStep 'Get-StreamCost.ps1' @{ Repo = $Repo }; $steps.Add($gc)
     $cp = $null
     if ($gc.Ok) { $cp = Invoke-TickStep 'Build-CostPage.ps1' @{ Repo = $Repo; Session = $Session }; $steps.Add($cp) }
@@ -533,9 +542,17 @@ function Invoke-StatusTick([string] $Session) {
         }
     } catch { $actNotes += "FAILED to read the board: $(("$_" -split "`n")[0])" }
     foreach ($s in $steps) {
-        if ($s.Ok) { continue }
+        if ($s.Ok) { $script:tickBusy[$s.Script] = 0; continue }
         $detail = [string](@(@($s.Text) + @($s.Warnings) | Where-Object { "$_".Trim() }) | Select-Object -Last 1)
-        "$(Get-TabNow) TICK-FAILED $($s.Script) exit $($s.Code): $detail"
+        if ($s.Busy) {
+            # Lock contention files a bug only when it repeats on STREAM_TICK_BUSY_REPORT (3) ticks in a row: that is a
+            # lock nobody lets go, not a slow holder.
+            $script:tickBusy[$s.Script] = 1 + [int]$script:tickBusy[$s.Script]
+            "$(Get-TabNow) TICK-BUSY $($s.Script) ($($script:tickBusy[$s.Script]) in a row): $detail"
+            if ($script:tickBusy[$s.Script] -lt $tickBusyReport) { continue }
+        } else {
+            "$(Get-TabNow) TICK-FAILED $($s.Script) exit $($s.Code): $detail"
+        }
         if (-not $script:tickFailures.ContainsKey($s.Script)) {
             $script:tickFailures[$s.Script] = Get-Now
             try { [void](Invoke-KitScript 'Send-InboxItem.ps1' @{ Repo = $Repo; To = 'stream-kit'; From = $Session; Kind = 'bug'; Ask = "$($s.Script) failed in the status runner's script tick (exit $($s.Code)): $(($detail -replace '\s+', ' ').Trim())"; Evidence = $logDir }) } catch { }
@@ -544,7 +561,7 @@ function Invoke-StatusTick([string] $Session) {
     $script:ticks++
     "$(Get-TabNow) STATUS-TICK $Session $([int]$sw.Elapsed.TotalSeconds)s | $wdLine | $inboxLine | page: $(Get-TickNote $pg) | cost: $(Get-TickNote $cp) | priority: $(Get-TickNote $pr) | archive: $archiveNote | activation: $(if ($actNotes.Count) { $actNotes -join '; ' } else { 'none needed' }) | freshness: $(if ($freshNotes.Count) { $freshNotes -join '; ' } else { 'clean' }) | next tick at $(Get-TabAt $IntervalSeconds)"
     $state.lastTick = Get-Now; $state.ticks = $script:ticks
-    $state.status = "ticked $(Get-Now); next tick in $IntervalSeconds s$(if ($openItems.Count) { "; $($openItems.Count) open inbox item(s): launching a unit" })"
+    $state.status = "ticked $(Format-LocalStamp); next tick in $IntervalSeconds s$(if ($openItems.Count) { "; $($openItems.Count) open inbox item(s): launching a unit" })"
     Write-RunnerState $state
     # The open count goes through a script variable, never the pipeline: every line this function prints IS its output,
     # so a caller that assigned the call would read the heartbeat and status lines as the count (recovery case STATUS TICK).
@@ -1169,7 +1186,7 @@ function Exit-OwnerWait([string] $Session, [string] $Token, [string] $How) {
             $lines = [IO.File]::ReadAllLines($P.Questions)
             $hit = $false
             for ($i = 0; $i -lt $lines.Count; $i++) {
-                if ($lines[$i] -like "- ESCALATE *``[$Token``]") { $lines[$i] = "RESOLVED $($lines[$i]) ($How $(Get-Now))"; $hit = $true }
+                if ($lines[$i] -like "- ESCALATE *``[$Token``]") { $lines[$i] = "RESOLVED $($lines[$i]) ($How $(Format-LocalStamp))"; $hit = $true }
             }
             if ($hit) { Write-AtomicText $P.Questions (($lines -join "`n") + "`n") }
         }

@@ -129,7 +129,7 @@ $qText = if (Test-Path -LiteralPath $P.Questions) { [IO.File]::ReadAllText($P.Qu
 foreach ($g in @($doc.tasks | Where-Object { [string]$_.group -eq $Group -and $_.kind -eq 'gate' -and $_.state -ne 'done' })) {
     $tag = "ACTIVATION-GATE $($g.id)"
     "GATE $($g.id) $($g.state): $($g.title)"
-    if (-not $qText.Contains($tag)) { $gateLines.Add("- $(Get-Now) $tag ($Group is the focus group): $($g.title). Run /stream-integrate gate $($g.id) pass|fail when its evidence is ready.") }
+    if (-not $qText.Contains($tag)) { $gateLines.Add("- $(Format-LocalStamp) $tag ($Group is the focus group): $($g.title). Run /stream-integrate gate $($g.id) pass|fail when its evidence is ready.") }
 }
 
 $m = Get-GroupMilestones $P $doc $Group

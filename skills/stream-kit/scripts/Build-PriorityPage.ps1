@@ -63,13 +63,16 @@ $taskUsd = if ($sum -and $sum['byTask'] -is [Collections.IDictionary]) { $sum['b
 $focusUsd = 0.0; foreach ($t in $rows) { if ($taskUsd.Contains([string]$t.id)) { $focusUsd += [double]$taskUsd[[string]$t.id] } }
 
 # ---- ETA from the status model ----
+# Owner-facing times are local machine time with the zone (owner ruling 2026-10-18, kit item IN-20261019012533-2cc1);
+# a stamp that does not parse is shown as written.
+function Get-LocalAt([string] $s) { try { Format-LocalStamp (ConvertTo-UtcTime $s) } catch { $s } }
 $model = $null
 try { $model = (& "$PSScriptRoot\Get-StreamStatus.ps1" -Repo $Repo -Json) -join "`n" | ConvertFrom-Json -AsHashtable -DateKind String } catch { }
 $gm = if ($model) { @($model['groups'] | Where-Object { $_ -and $_['id'] -eq $focus }) | Select-Object -First 1 } else { $null }
 $eta = '-'
 if ($gm -and $gm['forecast'] -is [Collections.IDictionary]) {
     $f = $gm['forecast']
-    $eta = if ($f['predictedAt']) { "$($f['predictedAt']) (rate $($f['ratePerHour']) min/h, chain floor $($f['floorMinutes']) min)" } else { "no forecast yet (chain floor $($f['floorMinutes']) min)" }
+    $eta = if ($f['predictedAt']) { "$(Get-LocalAt ([string]$f['predictedAt'])) (rate $($f['ratePerHour']) min/h, chain floor $($f['floorMinutes']) min)" } else { "no forecast yet (chain floor $($f['floorMinutes']) min)" }
 }
 
 # ---- order: open rows in claim order, then landed rows by integration time ----
@@ -134,12 +137,12 @@ if (-not $i) { [void]$tb.Append('<tr><td colspan="12" class="empty">the focus se
 [void]$tb.Append('</table></div>')
 
 # ---- page ----
-$at = Get-Now
+$at = Format-LocalStamp
 [void]$b.Append("<header><h1>Speedy priority &middot; focus $(Enc $focus)</h1><div class=`"meta`">$(Enc $at) &middot; $($rows.Count) rows in the focus set</div></header>")
 [void]$b.Append('<section><div class="ms">')
 foreach ($k in 'M1', 'M2', 'M3') {
     $label = @{ M1 = 'Authored'; M2 = 'Claimable'; M3 = 'Integrator-ready' }[$k]
-    $when = if ($act -and $act['milestones'] -is [Collections.IDictionary] -and $act['milestones'][$k]) { " &middot; $(Enc ([string]$act['milestones'][$k]))" } else { '' }
+    $when = if ($act -and $act['milestones'] -is [Collections.IDictionary] -and $act['milestones'][$k]) { " &middot; $(Enc (Get-LocalAt ([string]$act['milestones'][$k])))" } else { '' }
     $why = if (-not $ms[$k] -and $ms.detail[$k]) { " &middot; $(Enc $ms.detail[$k])" } else { '' }
     [void]$b.Append("<span class=`"chip$(if ($ms[$k]) { ' on' })`">$k $label$when$why</span>")
 }

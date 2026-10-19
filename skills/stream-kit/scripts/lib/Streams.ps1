@@ -293,6 +293,15 @@ function Get-PreStageOnlySessions($P) {
     , $only
 }
 function Get-Now { (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+# Owner-facing display time (owner ruling 2026-10-18, kit item IN-20261019000559-20fa): local machine time with the
+# zone's initials, e.g. '2026-10-18 19:43 EDT'. Display only: stored stamps stay Get-Now's UTC Z form.
+function Format-LocalStamp($At = $null, [string] $Format = 'yyyy-MM-dd HH:mm') {
+    $d = if ($null -eq $At) { Get-Date } elseif (([datetime]$At).Kind -eq [DateTimeKind]::Utc) { ([datetime]$At).ToLocalTime() } else { [datetime]$At }
+    $tz = [TimeZoneInfo]::Local
+    $name = if ($tz.IsDaylightSavingTime($d)) { $tz.DaylightName } else { $tz.StandardName }
+    $abbr = if ($name -match '\s') { -join @($name -split '\s+' | Where-Object { $_ } | ForEach-Object { $_[0] }) } else { $name }
+    '{0} {1}' -f $d.ToString($Format), $abbr
+}
 
 function New-SessionId([string] $Role) {
     '{0}-{1}-{2}' -f $Role, (Get-Date).ToString('yyyyMMddHHmm'), ([guid]::NewGuid().ToString('N').Substring(0, 4))

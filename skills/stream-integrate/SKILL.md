@@ -1,6 +1,6 @@
 ---
 name: stream-integrate
-description: v0.19. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes, even while a suite run is going, and each cycle first handles the oldest open item in its inbox (.streams\inbox\stream-integrate.md), then applies each built, verified patch to the dirty main tree as soon as it is ready and re-runs that task's grader there. When a whole group is integrated it starts one Tier 2 run (Start-SuiteRun.ps1, in a snapshot of main, so main stays open), the scripts screen flaky tests and attribute failures to fix tasks, a Tier 3 retest runs only the failed tests once the fixes land, and Test-GroupClose.ps1 says when the group may close; then it activates the next group (Activate-Group.ps1). Use for /stream-integrate (run under /loop), /stream-integrate once, /stream-integrate gate <task> pass|fail "<note>", /stream-integrate status.
+description: v0.20. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes, even while a suite run is going, and each cycle first handles the oldest open item in its inbox (.streams\inbox\stream-integrate.md), then applies each built, verified patch to the dirty main tree as soon as it is ready and re-runs that task's grader there. When a whole group is integrated it starts one Tier 2 run (Start-SuiteRun.ps1, in a snapshot of main, so main stays open), the scripts screen flaky tests and attribute failures to fix tasks, a Tier 3 retest runs only the failed tests once the fixes land, and Test-GroupClose.ps1 says when the group may close; then it activates the next group (Activate-Group.ps1). Use for /stream-integrate (run under /loop), /stream-integrate once, /stream-integrate gate <task> pass|fail "<note>", /stream-integrate status.
 ---
 
 # stream-integrate
@@ -120,6 +120,7 @@ and leaves it built. With more than one focus group, "the focus group" in the st
 2. Run `git -C <repo> apply --check --binary <patch>`.
    - **Clean**: apply it.
    - **Not clean, composition files only (ORDERED-BY-MERGE, kit item IN-20261018134210-ede5)**: when every failing section is a composition / registration file (lib `$script:CompositionFileRx`) whose hunks only add lines, `Integrate-Patch.ps1` re-inserts the added lines beside the unchanged lines around them on main (lib `New-CompositionMergedPatch`), prints `MERGED <id> <files>`, and applies, grades, reverses and commits `.streams\patches\<id>.merged.patch` instead. A changed or removed composition line, a missing or ambiguous anchor, or a conflict in any other file is still a REBASE (the note says why the merge was refused).
+   - **Not clean, empty stray files (STRAY-EMPTY, kit item IN-20261019112954-86bc)**: a 0-byte UNTRACKED file in the main tree at a path the patch creates (left by a builder whose `[IO.File]` call with a relative path resolved against the main tree) is moved to `.streams\stray\<id>-<stamp>\`, never deleted, and the check re-run. When the patch then applies, `Integrate-Patch.ps1` prints `STRAY-EMPTY <id> <files>`, logs `decisions.md` and goes on with the apply; when it still does not apply the files are put back and the usual REBASE / MERGED path follows.
    - **Not clean**: set the task back to `ticketed`, note `rebase: base moved`, and append history. A builder then
      rebuilds it on a fresh worktree, starting from the kept patch (`Restore-TaskPatch.ps1`). The old worktree stays
      listed for the owner.
@@ -294,7 +295,7 @@ There is no clock check: the nightly is the scheduled task's, not yours. When ev
 - Every cycle starts with `Enter-Integrator.ps1 -Session <id>`. Exit 5 = another integrator holds the lock: print status only.
 - 0: `Get-InboxItems.ps1 -Skill stream-integrate -Open` lists the open items, oldest first;
   `Set-InboxItem.ps1 -Skill stream-integrate -Id <id> -By <session> -Status taken|done|declined|forwarded [-Note] [-ForwardTo]`.
-- A: `Integrate-Patch.ps1 -Session <id>` (repeat until `NONE`). It prints `INTEGRATED` + `COMMITTED`, `BASE-STALE`, `REBASE`, `SUSPECT` or `REVERSED`.
+- A: `Integrate-Patch.ps1 -Session <id>` (repeat until `NONE`). It prints `INTEGRATED` + `COMMITTED` (after a `STRAY-EMPTY` line when it cleared empty stray files), `BASE-STALE`, `REBASE`, `SUSPECT` or `REVERSED`.
 - B: `Start-SuiteRun.ps1 -Group <g> -Reason complete|manual|nightly`, `Invoke-Retest.ps1 -Group <g> -Mode fix`, `Test-GroupClose.ps1 -Group <g>`;
   read `.streams\suites\runs\<run>.attribution.json`. Hand-made fix tasks (an unowned failure the planner assigned, a gate fail) go
   through `Add-Tasks.ps1 -Role integrate -File .streams\plans\<group>.fix-<run>.json`. The same file can set

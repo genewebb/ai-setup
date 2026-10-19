@@ -161,7 +161,7 @@ if ($blocked.Count) {
     if (-not $DryRun) {
         [void](Invoke-TasksLocked $P $Session { param($d) foreach ($g in @($d.groups | Where-Object { [string]$_.id -eq $Group -and $_.state -notin @('closed', 'blocked') })) { $g['blockedFrom'] = [string]$g.state; $g.state = 'blocked' }; $d })
         $q = if (Test-Path -LiteralPath $P.Questions) { [IO.File]::ReadAllText($P.Questions) } else { '' }
-        $lines = @($blocked | Where-Object { -not $q.Contains("CLOSE-BLOCKED $Group $_") } | ForEach-Object { "- $(Get-Now) CLOSE-BLOCKED $Group $_ : failed 3 Tier 3 fix attempts of $($run['id']); $Group is blocked until you decide: try again with Test-GroupClose.ps1 -Repo <repo> -Group $Group -Unblock (it files the next fix attempt), or accept the failure by moving it out of the run's attribution first." })
+        $lines = @($blocked | Where-Object { -not $q.Contains("CLOSE-BLOCKED $Group $_") } | ForEach-Object { "- $(Format-LocalStamp) CLOSE-BLOCKED $Group $_ : failed 3 Tier 3 fix attempts of $($run['id']); $Group is blocked until you decide: try again with Test-GroupClose.ps1 -Repo <repo> -Group $Group -Unblock (it files the next fix attempt), or accept the failure by moving it out of the run's attribution first." })
         if ($lines.Count) { if (-not (Test-Path $P.Owner)) { New-Item -ItemType Directory -Path $P.Owner -Force | Out-Null }; [IO.File]::AppendAllText($P.Questions, (($lines -join "`n") + "`n")) }
         Add-Decision $P $Session "CLOSE-BLOCKED $Group : $($blocked -join '; ')"
     }

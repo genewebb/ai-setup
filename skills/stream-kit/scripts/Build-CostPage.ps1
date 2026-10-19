@@ -130,7 +130,9 @@ $head = Get-Content -Raw (Join-Path $PSScriptRoot 'status-page-head.html')
 $b = [Text.StringBuilder]::new()
 [void]$b.Append($head.TrimEnd())
 [void]$b.Append('<style>.flag.ok{background:var(--panel);color:var(--muted)}</style>')
-[void]$b.Append("<h1>Speedy stream cost</h1><p class=`"muted`">$(Enc ([string]$s['at'])) &middot; notional: list prices ($(Enc ([string]$s['pricesVersion']))); the stream account is a subscription &middot; $($s['rows']) ledger rows &middot; unpriced rows $($s['unpriced'])</p>")
+# Owner-facing times read in local machine time with the zone (owner ruling, kit item IN-20261019004254-2880); summary.json keeps UTC.
+$atText = try { Format-LocalStamp (ConvertTo-UtcTime ([string]$s['at'])) } catch { [string]$s['at'] }
+[void]$b.Append("<h1>Speedy stream cost</h1><p class=`"muted`">$(Enc $atText) &middot; notional: list prices ($(Enc ([string]$s['pricesVersion']))); the stream account is a subscription &middot; $($s['rows']) ledger rows &middot; unpriced rows $($s['unpriced'])</p>")
 [void]$b.Append("<div class=`"tiles`"><div class=`"tile`"><b>$(Money ([double]$s['total']))</b><span>total</span></div><div class=`"tile`"><b>$(Money ([double]$s['unattributed']))</b><span>unattributed &middot; $($s['unattributedPct'])%</span></div><div class=`"tile`"><b>$(Money ([double]$s['addedUsd']))</b><span>added last tick</span></div></div>")
 [void]$b.Append('<section id="flags"><h2>Flags</h2>')
 if ($flags.Count) { foreach ($f in $flags) { [void]$b.Append("<div class=`"flag warn`">$(Enc $f)</div>") } } else { [void]$b.Append('<div class="flag ok">none</div>') }

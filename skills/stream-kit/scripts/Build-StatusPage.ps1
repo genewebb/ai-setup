@@ -17,7 +17,8 @@ param(
   [string]$InboxLine = 'Own inbox: no open items.',
   [string]$HeadFile,
   [string]$Out,
-  [string]$MirrorFile
+  [string]$MirrorFile,
+  [int]$NextUpdateSeconds = 900
 )
 $ErrorActionPreference = 'Stop'
 $scripts = $PSScriptRoot
@@ -69,7 +70,7 @@ function FinCell($f) {
   }
   if ([int]$f.predictedMinutes -le 0) { return '<span class="pill s-integrated">finished</span>' }
   $d = FinDate $f
-  return '<b>' + $d.ToString('ddd dd MMM HH:mm') + '</b><div class="muted mono" title="' + (E ([string]$f.basis)) + '">in ' + (Dur $f.predictedMinutes) + '</div>'
+  return '<b>' + (Format-LocalStamp $d 'ddd dd MMM HH:mm') + '</b><div class="muted mono" title="' + (E ([string]$f.basis)) + '">in ' + (Dur $f.predictedMinutes) + '</div>'
 }
 function Linkify([string]$s) {
   $e = E $s
@@ -103,7 +104,13 @@ function W([string]$s) { [void]$sb.AppendLine($s) }
 W (Get-Content $HeadFile -Raw).TrimEnd()
 W ('<header><div><h1>Speedy Pit Wall</h1>')
 W ('<div class="meta">' + (E $Repo) + '</div></div>')
-W ('<div class="meta">generated ' + $now.ToString('ddd dd MMM yyyy HH:mm') + ' &middot; ' + ([datetime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')) + ' UTC</div></header>')
+# Owner ruling 2026-10-18 (kit items IN-20261019000952-12f5, IN-20261019001501-706e): the header shows local machine
+# time only, and when the next status tick should rebuild the page. The page is static, so the overdue check runs in
+# the viewer's browser against the UTC instant in data-next.
+. "$PSScriptRoot\lib\Streams.ps1"
+$nextAt = $now.AddSeconds([Math]::Max(60, $NextUpdateSeconds))
+W ('<div class="meta">generated ' + $now.ToString('ddd dd MMM yyyy ') + (Format-LocalStamp $now).Substring(11) + ' &middot; <span id="next-update" data-next="' + $nextAt.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') + '">next update ' + (Format-LocalStamp $nextAt).Substring(11) + '</span></div></header>')
+W '<script>(function(){var e=document.getElementById("next-update");if(e&&Date.now()>Date.parse(e.dataset.next)+60000){e.textContent+=" \u00b7 update overdue";e.style.color="var(--bad,#c33)";}})();</script>'
 
 # ---- tiles ----
 # The buckets come from the model, in the model's order, so the page can never show a different set from the counts
@@ -408,7 +415,7 @@ foreach ($g in $model.groups) {
   # The finish date leads now; the downstream chain stays, labelled for what it is.
   $gf = $g.forecast
   $fd = FinDate $gf
-  $etaTxt = if ($fd) { '<b>' + $fd.ToString('ddd dd MMM HH:mm') + '</b> <small>predicted finish &middot; in ' + (Dur $gf.predictedMinutes) + '</small>' }
+  $etaTxt = if ($fd) { '<b>' + (Format-LocalStamp $fd 'ddd dd MMM HH:mm') + '</b> <small>predicted finish &middot; in ' + (Dur $gf.predictedMinutes) + '</small>' }
             else { '<b>no date</b> <small>' + (E ([string]$gf.basis)) + '</small>' }
   W ('<div class="eta">' + $etaTxt + '</div></div>')
   W '<div class="bar">'

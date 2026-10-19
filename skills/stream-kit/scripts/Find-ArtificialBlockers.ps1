@@ -25,12 +25,16 @@ $P = Get-StreamPaths $Repo
 if ($Apply -and -not $Session) { 'REFUSED -Apply needs -Session'; exit 2 }
 $landed = @('built', 'integrated', 'done')
 $compRx = '(^|/)src/Composition/|(^|/)Program\.cs$|Module\.cs$|ServiceCollectionExtensions\.cs$|(^|/)Routes\.razor$'
+$fileOrderWhyRx = '^\s*(file[- ]order\b|shared[- ]file\b|orders?\s+(the\s+)?(edits?|writes?)\s+(to|of|on|in)\b|both\s+(rows?\s+)?(write|edit|touch)\b)'
 function Get-EdgeKind($x, [string] $d) {
     $dt = $by[$d]
     if (-not $dt) { return @{ kind = 'logical'; reason = 'unknown row'; files = @() } }
     if ($d -in $Hubs) { return @{ kind = 'logical'; reason = 'hub'; files = @() } }
     # A reason in the row's dependsWhy map states the order (plan item IN-20261018143920-ebda, kit IN-20261018144659-fdff).
-    if (Get-DepWhy $x $d) { return @{ kind = 'logical'; reason = 'stated'; files = @() } }
+    # A reason that only states the shared-file order ('file order: both write X', 'orders edits to shared X') is not a
+    # logical prerequisite: the edge is still classed by its files below (kit item IN-20261018194608-2617).
+    $why = Get-DepWhy $x $d
+    if ($why -and $why -notmatch $fileOrderWhyRx) { return @{ kind = 'logical'; reason = 'stated'; files = @() } }
     if ([string]$dt.kind -in @('gate', 'integration')) { return @{ kind = 'gate'; reason = [string]$dt.kind; files = @() } }
     if ([string]$dt.state -eq 'building' -or (Test-ClaimLive $dt)) { return @{ kind = 'landing'; reason = [string]$dt.state; files = @() } }
     # A title that names d states the order itself (G13.T012 'extends G13.T011 ...'): kit item IN-20261018071721-f123.

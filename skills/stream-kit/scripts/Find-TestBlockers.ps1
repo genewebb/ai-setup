@@ -8,6 +8,7 @@
 #               and no dependsOn path puts the owner first: the pair is 'unordered' (no path either way) or 'owner
 #               after waiter'. A waiter already ordered after the owner is not flagged. Route plan (order the rows, or
 #               move the file). Kit item IN-20261018063247-abde: 40 of 63 first-run pairs were already ordered.
+#               An owner in a LATER group is listed with route 'none' ('later-group owner') and counted apart.
 #   stale-pin   an unresolved STALE marker (a note starting 'STALE:' or 'STALE-TICKET', or Revise-Task's
 #               'plan revise: ... -- STALE:') with no later re-ticket or 'refresh' note, or it was spilled at a commit
 #               after which a write-set file changed on main: route author (refresh the ticket's pins). The bare word
@@ -64,6 +65,7 @@ function Get-ChangedSince([string] $sha) {
     }
     $changedSince[$sha]
 }
+$groupRank = @{}; $gi = 0; foreach ($gr in @($doc.groups)) { $groupRank[[string]$gr.id] = $gi++ }
 $flags = @(); $edges = @(); $rowsSeen = 0
 foreach ($x in $doc.tasks) {
     $id = [string]$x.id
@@ -80,6 +82,14 @@ foreach ($x in $doc.tasks) {
     foreach ($g in $guard) {
         $o = $owners[$g]
         if (Test-DependsPath $id $o) { continue }
+        # Kit item IN-20261018212852-6c4d: an owner in a LATER group is never ordered first (groups close in board
+        # order; Revise-Task refuses an integration row's edge as LATER-GROUP-DEP, ruling IN-20261001193348-5979: a
+        # failure becomes a fix row in the later group). Listed, routed nowhere, left out of the guard-test count.
+        $og = [string]$by[$o].group; $xg = [string]$x.group
+        if ($groupRank.ContainsKey($og) -and $groupRank.ContainsKey($xg) -and $groupRank[$og] -gt $groupRank[$xg]) {
+            $flags += [pscustomobject]@{ signal = 'guard-test'; id = $id; route = 'none'; detail = "$g owned by $o; later-group owner ($og): no order, a failure is a fix row in $og" }
+            continue
+        }
         $order = $(if (Test-DependsPath $o $id) { 'owner after waiter' } else { 'unordered' })
         $flags += [pscustomobject]@{ signal = 'guard-test'; id = $id; route = 'plan'; detail = "$g owned by $o; $order" }
     }
@@ -102,9 +112,11 @@ foreach ($x in $doc.tasks) {
         $edges += [pscustomobject]@{ id = $id; dep = [string]$d; depState = [string]$dt.state }
     }
 }
-$c = @{}; foreach ($s in 'main-red', 'live-stack', 'guard-test', 'stale-pin') { $c[$s] = @($flags | Where-Object signal -eq $s).Count }
-$flagged = @($flags | Select-Object -ExpandProperty id -Unique).Count
-$summary = "SUMMARY rows $rowsSeen flagged $flagged (main-red $($c['main-red']), live-stack $($c['live-stack']), guard-test $($c['guard-test']), stale-pin $($c['stale-pin'])) edges-no-shared-file $($edges.Count)"
+$routed = @($flags | Where-Object route -ne 'none')
+$c = @{}; foreach ($s in 'main-red', 'live-stack', 'guard-test', 'stale-pin') { $c[$s] = @($routed | Where-Object signal -eq $s).Count }
+$flagged = @($routed | Select-Object -ExpandProperty id -Unique).Count
+$later = @($flags | Where-Object route -eq 'none').Count
+$summary = "SUMMARY rows $rowsSeen flagged $flagged (main-red $($c['main-red']), live-stack $($c['live-stack']), guard-test $($c['guard-test']), stale-pin $($c['stale-pin'])) guard-later-group $later edges-no-shared-file $($edges.Count)"
 if ($Session) { Add-Decision $P $Session "Find-TestBlockers: $summary" }
 if ($Json) { @{ flags = $flags; edges = $edges; summary = $summary } | ConvertTo-Json -Depth 5; return }
 foreach ($f in $flags) { "FLAG $($f.signal)`t$($f.id) -> $($f.route) | $($f.detail)" }

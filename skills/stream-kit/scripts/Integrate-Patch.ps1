@@ -1,6 +1,8 @@
 # Step A of stream-integrate: applies the next ready built patch to the main tree and re-runs its grader there.
 #   clean + grader PASS : task -> integrated, then the patch's paths (and only those) are committed
 #   not clean           : task -> ticketed ("rebase: base moved"), main tree untouched; the patch stays for reuse
+#   already on main     : the patch reverse-applies clean: held uncommitted it is graded in place (ALREADY-APPLIED, then
+#                         as an apply); held in HEAD the row is integrated with nothing applied or committed
 #   BASE-STALE          : a dependency patch the builder's base stacked (base.deps) changed before it landed; task ->
 #                         ticketed before any apply, patch kept (lib\Streams.ps1 Get-DependencyBaseDrift)
 #   grader red on main  : patch reversed, then one of
@@ -143,12 +145,42 @@ if (-not [IO.Path]::IsPathRooted($patch)) { $patch = Join-Path $Repo $patch }
 # IN-20260929183913-7850). The lock is released before the grader, which takes it itself.
 $applyLock = Enter-MainTreeLock $P "integrate $($t.id) apply" 600
 if (-not $applyLock) { "RETRY $($t.id) (main tree busy: $(Get-MainTreeLockHolder $P))"; exit 0 }
-& git -C $Repo apply --check --binary --whitespace=nowarn $patch 2>&1 | Out-Null
+& git -C $Repo apply --check --binary --whitespace=nowarn $patch 2>&1 | Out-Null; $applyExit = $LASTEXITCODE
+# STRAY-EMPTY (kit item IN-20261019112954-86bc): a 0-byte UNTRACKED file at a path the patch creates is not a moved
+# base. A builder's [IO.File] call with a relative path resolves against the process directory, the main tree, not
+# its Set-Location worktree, and left an empty tests/Tests.Web/CredentialPickerTests.cs there; G14.T028 REBASEd twice
+# on it. Such files are moved to .streams\stray\<id>-<stamp>\ (never deleted) and the check re-run; when the patch
+# still does not apply they are put back, so only a stray that alone blocked the apply is cleared.
+if ($applyExit -ne 0) {
+    $created = [Collections.Generic.List[string]]::new(); $cur = $null
+    foreach ($l in [IO.File]::ReadLines($patch)) {
+        if ($l -match '^diff --git a/(.+?) b/(.+)$') { $cur = $Matches[2] } elseif ($cur -and $l -match '^new file mode') { $created.Add($cur) }
+    }
+    $strays = @()
+    if ($created.Count) {
+        $strays = @(& git -C $Repo ls-files --others -- @created 2>$null | Where-Object {
+                $sp = Join-Path $Repo $_; (Test-Path -LiteralPath $sp -PathType Leaf) -and (Get-Item -LiteralPath $sp).Length -eq 0 })
+    }
+    if ($strays.Count) {
+        $strayDir = Join-Path $P.Root "stray\$($t.id)-$((Get-Date).ToUniversalTime().ToString('yyyyMMddHHmmss'))"
+        foreach ($s in $strays) {
+            $dst = Join-Path $strayDir $s; New-Item -ItemType Directory -Path (Split-Path $dst) -Force | Out-Null
+            Move-Item -LiteralPath (Join-Path $Repo $s) -Destination $dst
+        }
+        & git -C $Repo apply --check --binary --whitespace=nowarn $patch 2>&1 | Out-Null; $applyExit = $LASTEXITCODE
+        if ($applyExit -eq 0) {
+            Add-Decision $P $Session "$($t.id): moved empty untracked file(s) at patch paths out of the main tree to $strayDir before apply: $($strays -join ', ')"
+            "STRAY-EMPTY $($t.id) $($strays -join ',')"
+        } else {
+            foreach ($s in $strays) { Move-Item -LiteralPath (Join-Path $strayDir $s) -Destination (Join-Path $Repo $s) }
+        }
+    }
+}
 # ORDERED-BY-MERGE (kit item IN-20261018134210-ede5): rows that share a composition file unordered only append there,
 # so a patch that no longer applies only because another row appended to the same file is merged by its added lines
 # (lib New-CompositionMergedPatch) and that merged patch is applied, graded, reversed and committed instead. Anything
 # else that does not apply is still a REBASE.
-$clean = $LASTEXITCODE -eq 0; $mergeWhy = ''
+$clean = $applyExit -eq 0; $mergeWhy = ''
 if (-not $clean) {
     $merge = New-CompositionMergedPatch $Repo $patch (Join-Path $P.Patches "$($t.id).merged.patch")
     if ($merge.Ok) {
@@ -157,12 +189,36 @@ if (-not $clean) {
         "MERGED $($t.id) $($merge.Files -join ',')"
     } elseif ($merge.Reason -ne 'the conflict is not in a composition file') { $mergeWhy = "; composition merge refused: $($merge.Reason)" }
 }
+# ALREADY-ON-MAIN (kit item IN-20261019062723-9b6e): a patch that does not apply because main already holds it (it
+# reverse-applies clean) is not a moved base. Bouncing it looped: G13.T033 sat on main uncommitted, REBASE sent it to a
+# builder, the rebuilt identical patch REBASEd again. Held uncommitted, it is graded in place and committed like an
+# apply (a red grader reverses it, so main keeps no work the row does not record). Held in HEAD already, there is
+# nothing to apply or commit: the row is integrated with a note.
+$alreadyOnMain = $false
+if (-not $clean) {
+    & git -C $Repo apply --check --reverse --binary --whitespace=nowarn $patch 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        $held = @(Get-PatchPaths $patch)
+        & git -C $Repo diff --quiet HEAD -- @held 2>&1 | Out-Null; $sameAsHead = $LASTEXITCODE -eq 0
+        $untracked = @(& git -C $Repo ls-files --others --exclude-standard -- @held 2>$null)
+        if ($sameAsHead -and -not $untracked.Count) {
+            $applyLock.Dispose()
+            $u = @(& $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To integrated -Note 'already on main: the patch content is committed on HEAD; nothing applied or committed')
+            if ($LASTEXITCODE -ne 0) { throw "state write -To integrated refused (exit $LASTEXITCODE): $($u -join ' ')" }
+            Add-Decision $P $Session "$($t.id): patch already committed on HEAD (reverse-applies clean, no diff); integrated with no apply or commit"
+            "INTEGRATED $($t.id) (already in HEAD)"; exit 0
+        }
+        $clean = $true; $alreadyOnMain = $true
+        Add-Decision $P $Session "$($t.id): patch already applied on main uncommitted (reverse-applies clean); grading in place instead of REBASE"
+        "ALREADY-APPLIED $($t.id)"
+    }
+}
 if (-not $clean) {
     & $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To ticketed -Note "rebase: base moved (patch kept as the builder's starting point)$mergeWhy" | Out-Null
     $applyLock.Dispose()
     "REBASE $($t.id)"; exit 0
 }
-[void](Invoke-Git $Repo @('apply', '--binary', '--whitespace=nowarn', $patch))
+if (-not $alreadyOnMain) { [void](Invoke-Git $Repo @('apply', '--binary', '--whitespace=nowarn', $patch)) }
 $script:appliedPatch = $patch; $script:appliedTask = $t.id
 $applyLock.Dispose()
 # A grader that crashes must never leave the patch half-integrated on main: reverse it and bounce the task.
@@ -190,7 +246,7 @@ if (-not (Test-IntegratorLock $P $Session)) {
     "LOCK-LOST $($t.id) (patch reversed, still built)"; exit 5
 }
 if ($gcode -eq 0) {
-    $u = @(& $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To integrated -Note 'applied; grader PASS on main')
+    $u = @(& $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To integrated -Note $(if ($alreadyOnMain) { 'already applied on main (uncommitted, reverse-applies clean); grader PASS on main in place' } else { 'applied; grader PASS on main' }))
     if ($LASTEXITCODE -ne 0) { throw "state write -To integrated refused (exit $LASTEXITCODE): $($u -join ' ')" }
     $script:appliedPatch = $null
     "INTEGRATED $($t.id)"

@@ -1733,6 +1733,19 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     [void](& "$S\Set-InboxItem.ps1" -Repo $r40 -Skill stream-build -Id $id40 -Status done -By 'author-40' -Note 'test: closed')
     $cl40 = & "$S\Claim-Task.ps1" -Repo $r40 -Role build -Session 'build-40d' | ConvertFrom-Json
     Case 'claim churn: a closed item parks nothing' ($cl40.id -eq 'G1.A') "claimed $($cl40.id)"
+    # An OPEN stream-integrate item is different: the integrator, not an author or builder, takes it, and it asks for a
+    # state move on the row it names. G13.T056 was released planned by an author for the integrator to undo
+    # planned>built, and the next author unit reclaimed it 6 s later, before the integrator took the item (kit item
+    # IN-20261018181037-f5b0). Such an item parks its row while it is open too, inside the integrate inbox's limit.
+    [void](& "$S\Update-Task.ps1" -Repo $r40 -Task 'G1.A' -Role build -Session 'build-40d' -To ticketed -Release -Note 'test: back for the integrate case')
+    $si40 = @(& "$S\Send-InboxItem.ps1" -Repo $r40 -To stream-integrate -From 'author-40' -Kind request -Task 'G1.A' -Ask 'test: undo planned>built' -Evidence '-')
+    $ii40 = @($si40 -join ' ' -split ' ' | Where-Object { $_ -like 'IN-*' })[0]
+    $ni40 = @(& "$S\Claim-Task.ps1" -Repo $r40 -Role build -Session 'build-40e' 3>&1 2>&1) -join ' '
+    Case 'claim churn: an OPEN stream-integrate item naming a row parks it' (($ni40 -match 'NONE') -and ((T $r40 'G1.A').state -eq 'ticketed')) $ni40
+    [void](& "$S\Set-InboxItem.ps1" -Repo $r40 -Skill stream-integrate -Id $ii40 -Status taken -By 'integ-40')
+    [void](& "$S\Set-InboxItem.ps1" -Repo $r40 -Skill stream-integrate -Id $ii40 -Status done -By 'integ-40' -Note 'test: closed')
+    $ci40 = & "$S\Claim-Task.ps1" -Repo $r40 -Role build -Session 'build-40f' | ConvertFrom-Json
+    Case 'claim churn: a closed stream-integrate item parks nothing' ($ci40.id -eq 'G1.A') "claimed $($ci40.id)"
 
     # ---- 26. A NON-GATE ROW THAT DEPENDS ON ITS OWN GROUP'S INTEGRATION TASK DEADLOCKS THE GROUP. stream-integrate
     # claims the integration task once every code, docs and mockup row in the group is integrated, and Claim-Task.ps1
@@ -2415,7 +2428,8 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case 'runner: a live claim on the only row leaves a builder IDLE' (($b67b -join "`n") -match '(?m)^IDLE nothing to take for build') "$($b67b -join ' | ')"
     # IDLE REPORT (owner request 2026-10-17): an idle runner says what it is offered, why nothing is claimable, what its
     # last unit did and when it looks again, instead of one cryptic line.
-    Case 'runner idle report: the author names the focus and released groups, says no planned row exists, and when it looks again' ((($a67 -join "`n") -match '(?m)^  priorities : focus G1 \(.*\); released groups: G1') -and (($a67 -join "`n") -match '(?m)^  why idle   : no planned row anywhere on the board') -and (($a67 -join "`n") -match '(?m)^  last unit  : none yet from this runner') -and (($a67 -join "`n") -match '(?m)^  next look  : on any tasks.json or stream-author inbox write \(checked every 5 s\), else at \d\d:\d\d:\d\d \(300 s\)')) "$($a67 -join ' | ')"
+    # LOCAL-TIME (owner ruling 2026-10-18): the report's clock times carry the local zone, as the status pages do.
+    Case 'runner idle report: the author names the focus and released groups, says no planned row exists, and when it looks again (LOCAL-TIME: with the zone)' ((($a67 -join "`n") -match '(?m)^  priorities : focus G1 \(.*\); released groups: G1') -and (($a67 -join "`n") -match '(?m)^  why idle   : no planned row anywhere on the board') -and (($a67 -join "`n") -match '(?m)^  last unit  : none yet from this runner') -and (($a67 -join "`n") -match '(?m)^  next look  : on any tasks.json or stream-author inbox write \(checked every 5 s\), else at \d\d:\d\d:\d\d [A-Za-z]+ \(300 s\)') -and (($a67 -join "`n") -match '(?m)^  this runner: no unit yet since \d\d:\d\d:\d\d [A-Za-z]+$')) "$($a67 -join ' | ')"
     # A build claim moves the row to 'building': the report says no ticketed row is left AND names the row a live builder is on.
     Case 'runner idle report: the builder says no ticketed row is left and names the row a live builder is building' ((($b67b -join "`n") -match '(?m)^  why idle   : no ticketed build row anywhere on the board: waiting for an author to ticket one') -and (($b67b -join "`n") -match '(?m)^             : 1 row\(s\) being built now by live builders \(G1\.R\)')) "$($b67b -join ' | ')"
     [void](& "$S\Send-InboxItem.ps1" -Repo $r67 -To stream-build -From test-67 -Kind request -Ask 'retry G1.R' -Task G1.R)
@@ -2439,7 +2453,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     foreach ($g in $doc67.groups) { if ($g.id -eq 'G1') { $g.state = 'released' } }
     Set-Content -LiteralPath (Join-Path $r67 '.streams\tasks.json') -Encoding utf8 -Value ($doc67 | ConvertTo-Json -Depth 50)
     $k67 = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role kit -DryRun)
-    Case 'runner: a kit runner with an empty inbox is IDLE and says so' ((($k67 -join "`n") -match '(?m)^IDLE nothing to take for kit') -and (($k67 -join "`n") -match '(?m)^  why idle   : stream-kit inbox: no open item') -and (($k67 -join "`n") -match '(?m)^  next look  : on any stream-kit inbox write \(checked every 5 s\), else at \d\d:\d\d:\d\d \(600 s\)') -and (($k67 -join "`n") -notmatch '(?m)^RUN ')) "$($k67 -join ' | ')"
+    Case 'runner: a kit runner with an empty inbox is IDLE and says so' ((($k67 -join "`n") -match '(?m)^IDLE nothing to take for kit') -and (($k67 -join "`n") -match '(?m)^  why idle   : stream-kit inbox: no open item') -and (($k67 -join "`n") -match '(?m)^  next look  : on any stream-kit inbox write \(checked every 5 s\), else at \d\d:\d\d:\d\d [A-Za-z]+ \(600 s\)') -and (($k67 -join "`n") -notmatch '(?m)^RUN ')) "$($k67 -join ' | ')"
     $kSent67 = "$(& "$S\Send-InboxItem.ps1" -Repo $r67 -To stream-kit -From test-67 -Kind bug -Ask 'Claim-Task prints a warning twice')"
     $kId67 = ($kSent67 -split ' ')[1]
     $k67b = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role kit -DryRun)
@@ -2534,6 +2548,19 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case 'status tick: one tick prints one STATUS-TICK heartbeat with the watchdog, inbox, page, cost, priority, archive and activation notes' ((-not $eST) -and $tickST.Count -eq 1 -and $tickST[0] -match '^\S+ STATUS-TICK status-\S+ \d+s \| Watchdog QUIET: no stale claim\. \| Own inbox: no open items\. \| page: .+ \| cost: .+ \| priority: .+ \| archive: .+ \| activation: G1 ') "err='$eST' lines=$($oST.Count) tick=$($tickST -join ' || ') out=$(($oST | Select-Object -Last 6) -join ' | ')"
     Case 'status tick: the status page is written, the archive day is recorded, the focus group is activated, and no unit was launched' ((Test-Path (Join-Path $rST '.streams\status.html')) -and (Test-Path (Join-Path $rST '.streams\runners\status-archive.day')) -and (Test-Path (Join-Path $rST '.streams\plans\G1.activation.json')) -and -not (Test-Path -LiteralPath $markST) -and (($oST -join "`n") -notmatch '(?m)^\S+ RUN ')) "page=$(Test-Path (Join-Path $rST '.streams\status.html')) day=$(Test-Path (Join-Path $rST '.streams\runners\status-archive.day')) act=$(Test-Path (Join-Path $rST '.streams\plans\G1.activation.json')) called=$(Test-Path -LiteralPath $markST)"
     Case 'status tick: the runner header says the role is a script tick with a unit only for an inbox item' (($oST -join "`n") -match '(?m)^RUNNER runner-status-\S+ role status mode print every 1 s \(script tick; a unit only for an open inbox item\)') "$(($oST | Select-Object -First 2) -join ' | ')"
+    # A tick whose watchdog loses the tasks.json lock race (a live holder past the wait) is BUSY: the heartbeat says so,
+    # TICK-BUSY is printed, and no stream-kit bug is filed until it repeats (kit item IN-20261018192923-9972).
+    $rSTB = New-Repo 'runnerSTB' ([ordered]@{ 'G1.S' = (ContentGrader 'G1.S' 'done') }); $repos += $rSTB
+    $lockSTB = Join-Path $rSTB '.streams\tasks.json.lock'
+    Set-Content -LiteralPath $lockSTB -Value '{"session":"build-live-holder","at":"now"}'
+    $savedSTB = $env:STREAM_RUNNER_CLAUDE; $env:STREAM_RUNNER_CLAUDE = $clST; $env:STREAM_TASKS_LOCK_WAIT_SECONDS = '1'
+    $oSTB = @(); $eSTB = ''
+    try { $oSTB = @(& "$S\Start-StreamRunner.ps1" -Repo $rSTB -Role status -IntervalSeconds 1 -MaxRuns 1 2>&1 | ForEach-Object { "$_" }) } catch { $eSTB = ("$_" -split "`n")[0] }
+    finally { if ($null -ne $savedSTB) { $env:STREAM_RUNNER_CLAUDE = $savedSTB } else { Remove-Item Env:\STREAM_RUNNER_CLAUDE -ErrorAction SilentlyContinue }; Remove-Item Env:\STREAM_TASKS_LOCK_WAIT_SECONDS -ErrorAction SilentlyContinue; Remove-Item -LiteralPath $lockSTB -Force -ErrorAction SilentlyContinue }
+    $kitSTB = Join-Path $rSTB '.streams\inbox\stream-kit.md'
+    $kitTextSTB = if (Test-Path -LiteralPath $kitSTB) { Get-Content -Raw -LiteralPath $kitSTB } else { '' }
+    $tickSTB = @($oSTB | Where-Object { $_ -match '^\S+ STATUS-TICK ' })
+    Case 'status tick: a watchdog that loses the tasks.json lock race is BUSY on the heartbeat and TICK-BUSY, and files no kit bug' ((-not $eSTB) -and $tickSTB.Count -eq 1 -and $tickSTB[0] -match '\| Watchdog BUSY \(lock contention; the next tick retries\)\. \|' -and (($oSTB -join "`n") -match '(?m)^\S+ TICK-BUSY Invoke-Watchdog\.ps1 \(1 in a row\): .*lock busy') -and (($oSTB -join "`n") -notmatch 'TICK-FAILED Invoke-Watchdog') -and $kitTextSTB -notmatch 'status runner''s script tick') "err='$eSTB' tick=$($tickSTB -join ' || ') busy=$(@($oSTB | Where-Object { $_ -match 'TICK-(BUSY|FAILED)' }) -join ' || ') kit=$($kitTextSTB.Length)"
 
     # ---- 71. every runner session runs on the applied machine config (kit item IN-20261004143031-d21b), and the check
     # that applies it runs once per -LaunchCheckMinutes, not once per unit (ai's Install-AIMachine.ps1 -Launch took 111 s
@@ -2766,7 +2793,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $c75h = if (Test-Path $pid75q) { [int](Get-Content -Raw $pid75q) } else { 0 }
     if ($launched75h -and $c75h) { Stop-Process -Id $c75h -Force -ErrorAction SilentlyContinue }
     Remove-Item Env:\STREAM_RUNNER_AI, Env:\STREAM_RUNNER_CLAUDE, Env:\STREAM_CLAUDE_PROJECTS, Env:\STREAM_RUNNER_QUOTA_CHECK_SECONDS -ErrorAction SilentlyContinue
-    Case 'usage limit: another runner of the repo waits on the hold and launches nothing' ((($o75h -join "`n") -match 'QUOTA-HOLD until \d\d:\d\d:\d\d \(\d+ s\): five_hour limit seen by ') -and -not $launched75h) "launched=$launched75h out=$($o75h -join ' | ')"
+    Case 'usage limit: another runner of the repo waits on the hold and launches nothing' ((($o75h -join "`n") -match 'QUOTA-HOLD until \d\d:\d\d:\d\d [A-Za-z]+ \(\d+ s\): five_hour limit seen by ') -and -not $launched75h) "launched=$launched75h out=$($o75h -join ' | ')"
 
     # ---- 76. Add-Lesson (EnhanceStream E): one line per lesson in .streams\lessons\<role>.md, at most 40 kept (the
     # oldest dropped and logged in decisions.md), and a multi-line, empty or secret-looking lesson refused with nothing
@@ -3138,6 +3165,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case 'runner -Live: a prompt retitles the Wave block NEEDS YOU with a bell badge, and the answer puts both back' (($titles87 -join '|') -eq 'setmeta -b this frame:title=Builder 9|setmeta -b this frame:title=Builder 9|setmeta -b this frame:title=Builder 9 - NEEDS YOU|badge bell --color #e5484d --beep|setmeta -b this frame:title=Builder 9|badge --clear|setmeta -b this frame:title=Builder 9') "calls=$($titles87 -join ' | ')"
     Case 'runner -Live: the state says waiting on owner while the prompt is open' ($mid87 -match 'waiting on owner since .*destructive-path-guard: stub87') "state=$mid87"
     Case 'runner -Live: one ESCALATE line in the owner queue, re-written RESOLVED once answered' (($q87.Count -eq 1) -and ($q87[0] -match '^RESOLVED - ESCALATE kit-\S+ \| permission prompt in tab Builder 9 : Bash: destructive-path-guard: stub87 \|.*\(answered ')) "queue=$($q87 -join ' | ')"
+    Case 'runner -Live: the RESOLVED stamp is local time with the zone, not UTC' (($q87.Count -eq 1) -and ($q87[0] -match '\(answered \d{4}-\d\d-\d\d \d\d:\d\d [A-Za-z]+\)$')) "queue=$($q87 -join ' | ')"
     Case 'runner -Live: the unit sees STREAM_UNIT_TAB' ((Test-Path $tab87) -and ((Get-Content -Raw $tab87).Trim() -eq 'Builder 9')) "tab=$(if (Test-Path $tab87) { Get-Content -Raw $tab87 })"
     # ---- 88. the same waiting signal in a Windows Terminal tab (WT_SESSION): the runner retitles the tab through the
     # console title: '<tab>' at start and again before and after each unit (every pwsh started in the console, such as the
@@ -3291,6 +3319,9 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case '93 the page lists roles, groups and top tasks' ($cph -match '>build<' -and $cph -match '>G1<' -and $cph -match 'G1\.T1')
     Case '93 unattributed share above 5% raises a flag' ($cph -match 'class="flag[^"]*">unattributed 5\.9%')
     Case '93 the page closes the head''s wrapper' ($cph.TrimEnd().EndsWith('</div></body></html>'))
+    # Owner ruling (kit item IN-20261019004254-2880): owner-facing times read in local machine time with the zone.
+    $cpMeta = ([regex]::Match($cph, '<h1>Speedy stream cost</h1><p class="muted">[^<]*')).Value
+    Case '93 LOCAL-TIME: the page header time is local with the zone, no UTC stamp' ($cpMeta -match '<p class="muted">\d{4}-\d\d-\d\d \d\d:\d\d [A-Za-z]{2,6} &middot; notional' -and $cpMeta -notmatch '\d\d:\d\d(:\d\d)?(\.\d+)?Z') $cpMeta
 
     # ---- 94. cost ledger hardening (final review I4-I6, M1-M3).
     # I4: a message's usage line repeats and GROWS (measured: output 16 then 190 for one id). The newest message of a
@@ -3399,6 +3430,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case '95 a second activation changes nothing' (($act2 -join ' ') -match '^ALREADY-ACTIVE A1') ($act2 -join ' | ')
     $aq2 = Get-Content -Raw (Join-Path $ar '.streams\owner\questions.md')
     Case '95 the gate line is written once' (([regex]::Matches($aq2, 'ACTIVATION-GATE A1\.G')).Count -eq 1) $aq2
+    Case '95 the gate line carries local time with the zone, not UTC' ($aq2 -match '(?m)^- \d{4}-\d\d-\d\d \d\d:\d\d [A-Za-z]+ ACTIVATION-GATE A1\.G') $aq2
     # FRESHNESS TICK (2026-10-18 dependency review F2): -FreshnessOnly runs on an ACTIVE group every status tick. It
     # judges a row by its OWN write set only: A1.F (f.txt, dependsOn A1.Z) stays ticketed when d.txt moves again, while
     # A1.K (b.txt) goes to planned when b.txt moves. A full -Force activation still stales A1.F through its dependency.
@@ -3607,6 +3639,7 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $c4 = @(& "$S\Test-GroupClose.ps1" -Repo $tr -Group T1 -Session integ-t); $c4x = $LASTEXITCODE
     $tq = Get-Content -Raw (Join-Path $tr '.streams\owner\questions.md') -ErrorAction SilentlyContinue
     Case '96 three consecutive failing Tier 3 retests block the group and ask the owner' ($c4x -eq 3 -and ($c4 -join ' ') -match 'CLOSE-BLOCKED T1 NS\.FooTests\.Flaky' -and (@((J $tr).groups | Where-Object { $_.id -eq 'T1' }))[0].state -eq 'blocked' -and $tq -match 'CLOSE-BLOCKED T1 NS\.FooTests\.Flaky') (($c4 -join ' | ') + ' ' + $tq)
+    Case '96 the CLOSE-BLOCKED owner line carries local time with the zone, not UTC' ($tq -match '(?m)^- \d{4}-\d\d-\d\d \d\d:\d\d [A-Za-z]+ CLOSE-BLOCKED T1 ') $tq
     # The owner's way out: -Unblock releases the group, starts the strike count again and files the next fix attempt.
     $ub = @(); $ubx = -1; try { $ub = @(& "$S\Test-GroupClose.ps1" -Repo $tr -Group T1 -Session owner -Unblock); $ubx = $LASTEXITCODE } catch { $ub = @("threw: $(("$_" -split "`n")[0])") }
     $c5 = @(& "$S\Test-GroupClose.ps1" -Repo $tr -Group T1 -DryRun); $c5x = $LASTEXITCODE
@@ -3647,6 +3680,23 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
         $np = [Diagnostics.Process]::Start($psi); [void]$np.WaitForExit(120000) }
     $nl = if (Test-Path $nlog) { Get-Content -Raw $nlog } else { '' }
     Case '96 the nightly command line runs and logs time-stamped output' ($nl -match '(?m)^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2} \S' -and $nl -notmatch 'ParserError') "exit=$(if ($np) { $np.ExitCode }) log=$nl"
+    # A registration Task Scheduler refuses (non-elevated pwsh, S4U principal: 'Access is denied') is REFUSED, never
+    # REGISTERED. The ScheduledTasks cmdlets live in a module that does not see this script's ErrorActionPreference, so
+    # their error is non-terminating unless -ErrorAction Stop is passed. The stand-in prints the error and goes on then.
+    # Those cmdlets are CDXML functions, so the stand-ins are imported after the real module, or its autoload shadows them.
+    Import-Module ScheduledTasks
+    $kitT96 = New-Module -Name kitT96 -ScriptBlock {
+        function Register-ScheduledTask { [CmdletBinding()] param($TaskName, $Action, $Trigger, $Principal, $Settings, [switch] $Force)
+            if ($env:KIT_T96_REG -eq 'silent') { return }
+            if ($PSBoundParameters['ErrorAction'] -eq 'Stop') { throw 'Access is denied.' }
+            [Console]::Error.WriteLine('Access is denied.') }
+        function Get-ScheduledTask { [CmdletBinding()] param($TaskName) }
+    } | Import-Module -PassThru
+    $env:KIT_T96_REG = 'deny'; $rd = @(& "$S\Register-NightlySuite.ps1" -Repo $tr 2>&1 | ForEach-Object { "$_" }); $rdx = $LASTEXITCODE
+    Case '96 a denied nightly registration is REFUSED, not REGISTERED' ($rdx -ne 0 -and ($rd -join ' ') -match 'REFUSED .*elevated' -and ($rd -join ' ') -notmatch 'REGISTERED') "exit=$rdx $($rd -join ' | ')"
+    $env:KIT_T96_REG = 'silent'; $rs = @(& "$S\Register-NightlySuite.ps1" -Repo $tr 2>&1 | ForEach-Object { "$_" }); $rsx = $LASTEXITCODE
+    Case '96 a registration that leaves no task is REFUSED' ($rsx -ne 0 -and ($rs -join ' ') -match 'REFUSED .*not found' -and ($rs -join ' ') -notmatch 'REGISTERED') "exit=$rsx $($rs -join ' | ')"
+    Remove-Module $kitT96; Remove-Item Env:\KIT_T96_REG
     # An empty trx (a filter that matched nothing) and a namespaced one, as VSTest writes them, export without a throw.
     $rx = Join-Path $rdir 'run-TX-1'; New-Item -ItemType Directory -Path (Join-Path $rx 'Empty'), (Join-Path $rx 'Full') -Force | Out-Null
     $ns = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'
@@ -3773,7 +3823,11 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     Case '97 the footer shows the next group only' ($pph -match 'Next: A2' -and $pph -notmatch '>A2\.X<') ''
     $arec2 = Get-Content -Raw (Join-Path $ar '.streams\plans\A1.activation.json') | ConvertFrom-Json
     Case '97 the tick records the milestone state on the activation record' ($null -ne $arec2.now -and $null -ne $arec2.now.M3) ($arec2.now | ConvertTo-Json -Compress -Depth 4)
-    # A closed group's rows are in the CLAIM scope (Get-FocusSet) but not in the focus matrix: on 2026-10-06 the G4
+    # Owner ruling 2026-10-18 (kit item IN-20261019012533-2cc1): owner-facing times are local machine time with the
+    # zone (lib Format-LocalStamp); the activation record keeps its UTC stamps.
+    $ppMs = [regex]::Match($pph, '(?s)<div class="ms">.*?</div>').Value
+    $ppMeta = [regex]::Match($pph, '<div class="meta">[^<]*</div>').Value
+    Case '97 LOCAL-TIME: the priority page header and milestone times are local with the zone, no UTC stamp' ($ppMeta -match '<div class="meta">\d{4}-\d\d-\d\d \d\d:\d\d [A-Za-z]{2,6} &middot;' -and $ppMs -notmatch '\d\d:\d\d(:\d\d)?(\.\d+)?Z' -and ($ppMs -match '&middot; \d{4}-\d\d-\d\d \d\d:\d\d [A-Za-z]{2,6}' -or $ppMs -notmatch '&middot; \d{4}') -and $pph -notmatch 'ETA \d{4}-\d\d-\d\dT') "$ppMeta / $ppMs"    # A closed group's rows are in the CLAIM scope (Get-FocusSet) but not in the focus matrix: on 2026-10-06 the G4
     # page listed 568 rows, 566 of them done rows of G1-G3 (kit item IN-20261006113826-4fb1). A closed group's leftover
     # OPEN row still shows, because the claim offers it.
     $arKeep = [IO.File]::ReadAllText((Join-Path $ar '.streams\tasks.json'))

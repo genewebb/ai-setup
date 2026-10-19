@@ -100,15 +100,19 @@ function Test-InboxOpen($Item, [string] $Skill) {
 # rows in its sort and Get-StreamStatus.ps1 counts them out of the claimable rows, so both read them from here: two
 # copies of the rule would let the board call a row claimable that no claim will ever take. Only a TAKEN hold inside its
 # inbox's silence limit counts: an open item names a row nobody is editing yet, and a dead hold must not park a row.
+# The one exception is an OPEN stream-integrate item: the integrator takes it, not an author or builder, and it asks for
+# a state move on the row it names, so the row is parked from the moment it is filed. G13.T056 was released planned for
+# the integrator to undo planned>built, and the next author unit reclaimed it 6 s later, before the integrator took
+# the item (kit item IN-20261018181037-f5b0). It parks the row only inside the integrate inbox's limit, like a hold.
 function Get-InboxHeldRows($P) {
     $busy = @{}
     foreach ($skill in $script:InboxSkills) {
         foreach ($it in @(Read-InboxItems (Get-InboxPath $P $skill))) {
-            if ($it.status -ne 'taken') { continue }
+            if ($it.status -ne 'taken' -and -not ($it.status -eq 'open' -and $skill -eq 'stream-integrate')) { continue }
             if ((Get-InboxAgeMinutes $it) -ge $script:InboxLimitMinutes[$skill]) { continue }
             $id = [string] $it.task
             if (-not $id -or $id -eq '-') { continue }
-            if (-not $busy.Contains($id)) { $busy[$id] = "$($it.id) held by $($it.statusBy) in $skill" }
+            if (-not $busy.Contains($id)) { $busy[$id] = if ($it.status -eq 'open') { "$($it.id) open for $skill" } else { "$($it.id) held by $($it.statusBy) in $skill" } }
         }
     }
     $busy

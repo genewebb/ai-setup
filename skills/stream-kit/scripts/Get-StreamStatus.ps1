@@ -893,7 +893,7 @@ function FinText($f) {
     if ($f.predictedMinutes -le 0) { return 'finished' }
     $m = [int]$f.predictedMinutes
     $in = if ($m -lt 60) { "$m" + 'm' } elseif ($m -lt 1440) { '{0}h{1}m' -f [math]::Floor($m / 60), ($m % 60) } else { '{0}d{1}h' -f [math]::Floor($m / 1440), [math]::Floor(($m % 1440) / 60) }
-    'fin ' + ([datetime]::Parse($f.predictedAt, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)).ToLocalTime().ToString('d MMM HH:mm') + " (in $in)"
+    'fin ' + (Format-LocalStamp ([datetime]::Parse($f.predictedAt, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)) 'd MMM HH:mm') + " (in $in)"
 }
 "groups: " + (($groups | ForEach-Object { "$($_.id) $($_.state) $(FinText $_.forecast)" }) -join ' | ') + " || board $(FinText $boardForecast)"
 # Sessions ride on the tasks line, not a line of their own: the terminal summary is six lines by contract.

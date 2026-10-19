@@ -326,6 +326,7 @@ try {
     $pg = Join-Path $Scratch 'status-tile.html'
     [void](& "$S\Build-StatusPage.ps1" -Repo $repo -Session status-tile -Out $pg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
     $html = Get-Content -Raw $pg
+    Case 'LOCAL-TIME: status page header shows local time and the next update, no UTC stamp' (($html -notmatch '\d\dZ UTC</div>') -and ($html -match 'id="next-update" data-next="\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ">next update \d\d:\d\d \S+</span>') -and ($html -match 'update overdue')) 'header still shows UTC or lacks next update / overdue check'
     Case 'the status page carries an owner-questions tile' ($html -match '<span>owner questions') 'no owner-questions tile'
     Case 'the tile counts only the escalation bullets' ($html -match '(?s)<a class="tile owner"[^>]*><b>2</b>') 'tile count is not 2'
     Case 'the tile does NOT count the whole queue' ($html -notmatch '(?s)<a class="tile owner"[^>]*><b>5</b>') 'tile shows the whole-queue count'
@@ -511,6 +512,14 @@ try {
     [void](& "$S\Build-StatusPage.ps1" -Repo $fr -Session status-fc -Out $fpg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
     $fhtml = Get-Content -Raw $fpg
     Case 'the page has a predicted finish column' ($fhtml -match '<th>Predicted finish</th>') 'no Predicted finish column'
+    # Owner ruling (kit item IN-20261019004254-2880): a finish date names the local zone. The focus is F2 here, which
+    # is undated and so dates nothing; a page built with F1 as focus has dated cells to check.
+    Set-FcFocus @('F1')
+    $lpg = Join-Path $Scratch 'status-forecast-local.html'
+    [void](& "$S\Build-StatusPage.ps1" -Repo $fr -Session status-fc -Out $lpg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
+    $lhtml = Get-Content -Raw $lpg
+    Set-FcFocus @('F2')
+    Case 'LOCAL-TIME: predicted finish cells name the local zone' (($lhtml -match '<b>\w{3} \d\d \w{3} \d\d:\d\d [A-Za-z]{2,6}</b>') -and ($lhtml -notmatch '<b>\w{3} \d\d \w{3} \d\d:\d\d</b>')) ('a finish date lacks the local zone: ' + ((([regex]::Matches($lhtml, '<b>[^<]{8,30}</b>')) | ForEach-Object Value) -join ' ; '))
     Case 'the page shows the undated group as undated' ($fhtml -match 'no date') 'undated group not shown as undated'
     Case 'the page says how the prediction is made' ($fhtml -match 'How the predicted finish is worked out') 'method panel missing'
     Case 'the page says the categories are dated in focus order' ($fhtml -match 'In focus order' -and $fhtml -match 'last queued category') 'focus-order notes missing'
@@ -1237,6 +1246,12 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $wo = @(& "$S\Find-ArtificialBlockers.ps1" -Repo $ar)
     $wt = @(& "$S\Find-TestBlockers.ps1" -Repo $ar)
     Case 'Find-ArtificialBlockers / Find-TestBlockers: an edge with a dependsWhy reason is logical, never a candidate or a no-shared-file EDGE' (($wo -match '^CANDIDATE composition\tA1\.T2 ').Count -eq 1 -and ($wo -match '^CANDIDATE.*A1\.T4').Count -eq 0 -and $wo[-1] -match '^SUMMARY waiting 3 candidates 1 .*logical 2 ' -and ($wt -match '^EDGE no-shared-file\tA1\.T3').Count -eq 0) "fab: $($wo -join ' / ') ftb: $($wt -join ' / ')"
+    # Kit item IN-20261018194608-2617: a stated reason that only names the shared file order is still a file-order edge.
+    $fT4 = CTask 'A1.T4' 'A1' 'ticketed' 5 @('A1.T1') ''; $fT4.writeSet = @('src/Composition/Reg.cs', 'd.cs'); $fT4.dependsWhy = @{ 'A1.T1' = 'file order: both write src/Composition/Reg.cs' }
+    $fT2 = CTask 'A1.T2' 'A1' 'ticketed' 5 @('A1.T1') ''; $fT2.writeSet = @('src/Composition/Reg.cs', 'b.cs'); $fT2.dependsWhy = @{ 'A1.T1' = 'orders edits to shared src/Composition/Reg.cs' }
+    @{ groups = @(@{ id = 'A1'; name = 'a'; state = 'released'; origin = 'plan' }); tasks = @($aT1, $fT2, $wT3, $fT4) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $ar '.streams\tasks.json') -Encoding utf8
+    $fo = @(& "$S\Find-ArtificialBlockers.ps1" -Repo $ar)
+    Case 'Find-ArtificialBlockers: a dependsWhy reason that only states file order (file order: / orders edits to) stays a file-order candidate' (($fo -match '^CANDIDATE composition\tA1\.T2 ').Count -eq 1 -and ($fo -match '^CANDIDATE composition\tA1\.T4 ').Count -eq 1 -and $fo[-1] -match '^SUMMARY waiting 3 candidates 2 .*logical 1 ') "fab: $($fo -join ' / ')"
     # -Apply (kit item IN-20261018051443-4d10): A1.T2 jumps A1.T1, A1.T1 now waits on A1.T2, A1.T5 (after A1.T2) keeps
     # its order after A1.T1 as an explicit edge, and A1.T4 / A1.T1 never jump a row moved in the same run.
     $aT5 = CTask 'A1.T5' 'A1' 'ticketed' 5 @('A1.T2') ''; $aT5.writeSet = @('b.cs')
@@ -1274,7 +1289,7 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     @{ groups = @(@{ id = 'B1'; name = 'b'; state = 'released'; origin = 'plan' }); tasks = @($bT1, $bT2, $bT3, $bT4) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $br '.streams\tasks.json') -Encoding utf8
     $bo = @(try { & "$S\Find-TestBlockers.ps1" -Repo $br -Session kit-test } catch { "THREW $_" })
     $bdec = Get-Content -Raw (Join-Path $br '.streams\decisions.md')
-    Case 'Find-TestBlockers: a guard test, a live-stack prereq and red-on-main are flagged and routed; a clean row is not' (($bo -match '^FLAG guard-test\tB1\.T2 -> plan \| tests/Guard\.cs owned by B1\.T1; unordered$').Count -eq 1 -and ($bo -match '^FLAG live-stack\tB1\.T2 -> owner ').Count -eq 1 -and ($bo -match '^FLAG main-red\tB1\.T3 -> plan ').Count -eq 1 -and ($bo -match '^EDGE no-shared-file\tB1\.T3 -> B1\.T1 \(ticketed\) -> plan$').Count -eq 1 -and ($bo -match 'B1\.T4').Count -eq 0 -and $bo[-1] -match '^SUMMARY rows 4 flagged 2 \(main-red 1, live-stack 1, guard-test 1, stale-pin 0\) edges-no-shared-file 1$' -and $bdec -match '\[kit-test\] Find-TestBlockers: SUMMARY rows 4') ($bo -join ' / ')
+    Case 'Find-TestBlockers: a guard test, a live-stack prereq and red-on-main are flagged and routed; a clean row is not' (($bo -match '^FLAG guard-test\tB1\.T2 -> plan \| tests/Guard\.cs owned by B1\.T1; unordered$').Count -eq 1 -and ($bo -match '^FLAG live-stack\tB1\.T2 -> owner ').Count -eq 1 -and ($bo -match '^FLAG main-red\tB1\.T3 -> plan ').Count -eq 1 -and ($bo -match '^EDGE no-shared-file\tB1\.T3 -> B1\.T1 \(ticketed\) -> plan$').Count -eq 1 -and ($bo -match 'B1\.T4').Count -eq 0 -and $bo[-1] -match '^SUMMARY rows 4 flagged 2 \(main-red 1, live-stack 1, guard-test 1, stale-pin 0\) guard-later-group 0 edges-no-shared-file 1$' -and $bdec -match '\[kit-test\] Find-TestBlockers: SUMMARY rows 4') ($bo -join ' / ')
 
     # Kit item IN-20261018063247-abde: stale-pin takes only an unresolved STALE marker, never the bare word; a guard
     # test whose waiter is already ordered after its owner is not flagged, and the other orders are named.
@@ -1297,6 +1312,22 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     @{ groups = @(@{ id = 'C1'; name = 'c'; state = 'released'; origin = 'plan' }); tasks = @($cT1, $cT2, $cT3, $cT4, $cT5, $cT6) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $cr '.streams\tasks.json') -Encoding utf8
     $co = @(try { & "$S\Find-TestBlockers.ps1" -Repo $cr } catch { "THREW $_" })
     Case 'Find-TestBlockers: stale-pin only on an unresolved STALE marker; guard-test skips a waiter ordered after its owner and names the order' (($co -match '^FLAG stale-pin\tC1\.T6 -> author \| unresolved STALE note at ').Count -eq 1 -and ($co -match '^FLAG stale-pin').Count -eq 1 -and ($co -match '^FLAG guard-test\tC1\.T5 -> plan \| tests/Own\.cs owned by C1\.T4; owner after waiter$').Count -eq 1 -and ($co -match '^FLAG guard-test').Count -eq 1 -and $co[-1] -match 'guard-test 1, stale-pin 1\)') ($co -join ' / ')
+
+    # Kit item IN-20261018212852-6c4d: a guard test owned by a LATER group's row cannot be ordered first (LATER-GROUP-DEP,
+    # ruling IN-20261001193348-5979), so it is listed with route none and kept out of the plan-routed count.
+    $tbL = Join-Path $Scratch 'testblk3'; New-Item -ItemType Directory -Path $tbL -Force | Out-Null
+    git -C $tbL init -q -b main; Set-Content (Join-Path $tbL 'x.txt') 'x'; git -C $tbL add -A; git -C $tbL -c user.email=t@t -c user.name=t commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $tbL | Out-Null
+    $tbL1 = CTask 'D1.T1' 'D1' 'ticketed' 5 @() ''; $tbL1.writeSet = @('a.cs')
+    $tbL2 = CTask 'D1.T2' 'D1' 'ticketed' 5 @() ''; $tbL2.writeSet = @('tests/Early.cs')
+    $tbL3 = CTask 'D1.T3' 'D1' 'ticketed' 5 @() ''; $tbL3.writeSet = @('c.cs')
+    $tbL4 = CTask 'D2.T1' 'D2' 'ticketed' 5 @() ''; $tbL4.writeSet = @('tests/Later.cs')
+    New-Item -ItemType Directory -Path (Join-Path $tbL '.streams\tickets') -Force | Out-Null
+    Set-Content (Join-Path $tbL '.streams\tickets\D1.T1.md') "A1: tests/Later.cs passes."
+    Set-Content (Join-Path $tbL '.streams\tickets\D1.T3.md') "A1: tests/Early.cs passes."
+    @{ groups = @(@{ id = 'D1'; name = 'd1'; state = 'released'; origin = 'plan' }, @{ id = 'D2'; name = 'd2'; state = 'released'; origin = 'plan' }); tasks = @($tbL1, $tbL2, $tbL3, $tbL4) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $tbL '.streams\tasks.json') -Encoding utf8
+    $tbLo = @(try { & "$S\Find-TestBlockers.ps1" -Repo $tbL } catch { "THREW $_" })
+    Case 'Find-TestBlockers: a guard test owned by a later group is routed nowhere and not counted; a same-group owner still goes to plan' (($tbLo -match '^FLAG guard-test\tD1\.T1 -> none \| tests/Later\.cs owned by D2\.T1; later-group owner \(D2\)').Count -eq 1 -and ($tbLo -match '^FLAG guard-test\tD1\.T3 -> plan \| tests/Early\.cs owned by D1\.T2; unordered$').Count -eq 1 -and $tbLo[-1] -match '^SUMMARY rows 3 flagged 1 \(main-red 0, live-stack 0, guard-test 1, stale-pin 0\) guard-later-group 1 ') ($tbLo -join ' / ')
 
     # E4 timed-role backoff: an idle streak doubles the wait up to 20 minutes; integrate never backs off; no streak
     # keeps the interval.
@@ -1355,6 +1386,84 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $mgC = New-CompositionMergedPatch $mg "$mg\..\m-chg.patch" "$mg\..\m-chg.merged.patch"
     $mgB = New-CompositionMergedPatch $mg "$mg\..\m-both.patch" "$mg\..\m-both.merged.patch"
     Case 'ORDERED-BY-MERGE: the integrator merges an append by its added lines, refuses a change or an ordinary conflict' ($mgRaw -ne 0 -and $mgA.Ok -and $mgApplied -eq "s.AddA();`ns.AddB();`ns.AddC();`ns.AddD();`n}`n" -and $mgBack -eq "s.AddA();`ns.AddB();`ns.AddD();`n}`n" -and -not $mgC.Ok -and $mgC.Reason -match 'not add-only' -and -not $mgB.Ok -and $mgB.Reason -match 'outside the composition' -and [IO.File]::ReadAllText($of) -eq "o1 theirs`n") ("raw=$mgRaw a=$($mgA.Ok)/$($mgA.Reason) applied=$($mgApplied -replace "`n", '\n') back=$($mgBack -replace "`n", '\n') c=$($mgC.Reason) b=$($mgB.Reason)")
+    # Owner ruling 2026-10-18 (kit item IN-20261019000559-20fa): the runner's status field shows local machine time.
+    $lsNow = Format-LocalStamp; $lsUtc = Format-LocalStamp ([datetime]::new(2026, 1, 15, 12, 0, 0, [DateTimeKind]::Utc))
+    $lsWant = [datetime]::new(2026, 1, 15, 12, 0, 0, [DateTimeKind]::Utc).ToLocalTime().ToString('yyyy-MM-dd HH:mm')
+    $lsRunner = [IO.File]::ReadAllText((Join-Path $S 'Start-StreamRunner.ps1'))
+    Case 'LOCAL-TIME: runner status text shows local time with the zone, stored stamps stay UTC' ($lsNow -match '^\d{4}-\d\d-\d\d \d\d:\d\d \S+$' -and $lsUtc.StartsWith("$lsWant ") -and $lsRunner.Contains('"idle since $(Format-LocalStamp)"') -and $lsRunner.Contains('"ticked $(Format-LocalStamp); next tick') -and -not $lsRunner.Contains('"idle since $(Get-Now)"') -and (Get-Now) -match 'Z$') "now=$lsNow utc=$lsUtc want=$lsWant"
+    # Owner ruling 2026-10-18 (kit item IN-20261019004254-2880): a terminal finish names its local zone, as
+    # Format-LocalStamp does, so a reader can tell local time from UTC.
+    # The fixture forecasts read 'fin unknown', so the case checks the format and that FinText uses it.
+    $fzText = Format-LocalStamp ([datetime]::new(2026, 1, 15, 12, 0, 0, [DateTimeKind]::Utc)) 'd MMM HH:mm'
+    $fzSrc = [IO.File]::ReadAllText((Join-Path $S 'Get-StreamStatus.ps1'))
+    Case 'LOCAL-TIME: a terminal finish carries the local zone' ($fzText -match '^\d{1,2} \S{3} \d\d:\d\d \S+$' -and $fzSrc.Contains("'fin ' + (Format-LocalStamp (") -and -not $fzSrc.Contains(".ToLocalTime().ToString('d MMM HH:mm')")) "text=$fzText"
+    # STRAY-EMPTY (kit item IN-20261019112954-86bc): a 0-byte untracked file at a path the patch creates is moved
+    # aside and the patch applies; a stray with content still REBASEs and stays where it is.
+    $seR = Join-Path $Scratch 'serepo'; New-Item -ItemType Directory -Path $seR -Force | Out-Null
+    git -C $seR init -q -b main; git -C $seR config user.email t@t; git -C $seR config user.name t; Grant-GitPolicy $seR
+    foreach ($f in 'p', 'q') { Set-Content (Join-Path $seR "$f.txt") "$f base" }
+    git -C $seR add -A; git -C $seR commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $seR | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $seR '.streams\graders') -Force | Out-Null
+    Grader (Join-Path $seR '.streams\graders\S1.P.ps1') 'p.txt' 'DONE-P'
+    Grader (Join-Path $seR '.streams\graders\S1.Q.ps1') 'q.txt' 'DONE-Q'
+    $sePlan = @{
+        groups = @(@{ id = 'S1'; name = 'se'; state = 'released'; scope = @{ include = @('F-SE') }; origin = 'plan' })
+        tasks  = @(
+            @{ id = 'S1.P'; group = 'S1'; title = 'P'; why = @('AC-P'); kind = 'code'; writeSet = @('p.txt', 'pn.txt'); dependsOn = @(); estMinutes = 10; artifacts = @{ ticket = '.streams\tickets\S1.P.md'; grader = '.streams\graders\S1.P.ps1' } }
+            @{ id = 'S1.Q'; group = 'S1'; title = 'Q'; why = @('AC-Q'); kind = 'code'; writeSet = @('q.txt', 'qn.txt'); dependsOn = @(); estMinutes = 10; artifacts = @{ ticket = '.streams\tickets\S1.Q.md'; grader = '.streams\graders\S1.Q.ps1' } }
+        ) }
+    $sePf = Join-Path $Scratch 'seplan.json'; $sePlan | ConvertTo-Json -Depth 10 | Set-Content $sePf
+    & "$S\Add-Tasks.ps1" -Repo $seR -Role plan -Session plan-se -File $sePf | Out-Null
+    foreach ($seId in 'S1.P', 'S1.Q') {
+        & "$S\Claim-Task.ps1" -Repo $seR -Role build -Session "build-$seId" -Task $seId | Out-Null
+        $seWt = & "$S\New-TaskWorktree.ps1" -Repo $seR -Task $seId -Session "build-$seId" -WorktreeRoot $wtRoot | Select-Object -Last 1
+        $seL = $seId.Substring(3).ToLower()
+        Set-Content (Join-Path $seWt "$seL.txt") "$seL DONE-$($seId.Substring(3))"; Set-Content (Join-Path $seWt "${seL}n.txt") 'new file'
+        & "$S\Export-TaskPatch.ps1" -Repo $seR -Task $seId -Worktree $seWt | Out-Null
+        & "$S\Update-Task.ps1" -Repo $seR -Task $seId -Role build -Session "build-$seId" -To built -Release -Artifacts @{ patch = ".streams\patches\$seId.patch" } | Out-Null
+    }
+    [IO.File]::WriteAllBytes((Join-Path $seR 'pn.txt'), [byte[]]@()); Set-Content (Join-Path $seR 'qn.txt') 'not empty'
+    & "$S\Enter-Integrator.ps1" -Repo $seR -Session integ-se | Out-Null
+    $seI1 = @(& "$S\Integrate-Patch.ps1" -Repo $seR -Session integ-se -Task S1.P)
+    $seI2 = @(& "$S\Integrate-Patch.ps1" -Repo $seR -Session integ-se -Task S1.Q)
+    $seMoved = @(Get-ChildItem -Recurse -File (Join-Path $seR '.streams\stray') -Filter pn.txt -ErrorAction SilentlyContinue)
+    Case 'STRAY-EMPTY: an empty untracked file at a created path is moved aside; a non-empty one still REBASEs' ($seI1[0] -eq 'STRAY-EMPTY S1.P pn.txt' -and $seI1 -contains 'INTEGRATED S1.P' -and (T $seR 'S1.P').state -eq 'integrated' -and (Get-Content -Raw (Join-Path $seR 'pn.txt')).Trim() -eq 'new file' -and $seMoved.Count -eq 1 -and $seI2[-1] -eq 'REBASE S1.Q' -and (Get-Content -Raw (Join-Path $seR 'qn.txt')).Trim() -eq 'not empty') (($seI1 -join ' | ') + ' :: ' + ($seI2 -join ' | '))
+    # ALREADY-ON-MAIN (kit item IN-20261019062723-9b6e): a built patch main already holds is graded in place and
+    # committed (uncommitted on main), or integrated with nothing to do (already in HEAD), never REBASE-looped.
+    $amR = Join-Path $Scratch 'amrepo'; New-Item -ItemType Directory -Path $amR -Force | Out-Null
+    git -C $amR init -q -b main; git -C $amR config user.email t@t; git -C $amR config user.name t; Grant-GitPolicy $amR
+    foreach ($f in 'p', 'q') { Set-Content (Join-Path $amR "$f.txt") "$f base" }
+    git -C $amR add -A; git -C $amR commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $amR | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $amR '.streams\graders') -Force | Out-Null
+    Grader (Join-Path $amR '.streams\graders\A1.P.ps1') 'p.txt' 'DONE-P'
+    Grader (Join-Path $amR '.streams\graders\A1.Q.ps1') 'q.txt' 'DONE-Q'
+    $amPlan = @{
+        groups = @(@{ id = 'A1'; name = 'am'; state = 'released'; scope = @{ include = @('F-AM') }; origin = 'plan' })
+        tasks  = @(
+            @{ id = 'A1.P'; group = 'A1'; title = 'P'; why = @('AC-P'); kind = 'code'; writeSet = @('p.txt', 'pn.txt'); dependsOn = @(); estMinutes = 10; artifacts = @{ ticket = '.streams\tickets\A1.P.md'; grader = '.streams\graders\A1.P.ps1' } }
+            @{ id = 'A1.Q'; group = 'A1'; title = 'Q'; why = @('AC-Q'); kind = 'code'; writeSet = @('q.txt'); dependsOn = @(); estMinutes = 10; artifacts = @{ ticket = '.streams\tickets\A1.Q.md'; grader = '.streams\graders\A1.Q.ps1' } }
+        ) }
+    $amPf = Join-Path $Scratch 'amplan.json'; $amPlan | ConvertTo-Json -Depth 10 | Set-Content $amPf
+    & "$S\Add-Tasks.ps1" -Repo $amR -Role plan -Session plan-am -File $amPf | Out-Null
+    foreach ($amId in 'A1.P', 'A1.Q') {
+        & "$S\Claim-Task.ps1" -Repo $amR -Role build -Session "build-$amId" -Task $amId | Out-Null
+        $amWt = & "$S\New-TaskWorktree.ps1" -Repo $amR -Task $amId -Session "build-$amId" -WorktreeRoot $wtRoot | Select-Object -Last 1
+        if ($amId -eq 'A1.P') { Set-Content (Join-Path $amWt 'p.txt') 'p DONE-P'; Set-Content (Join-Path $amWt 'pn.txt') 'new file' } else { Set-Content (Join-Path $amWt 'q.txt') 'q DONE-Q' }
+        & "$S\Export-TaskPatch.ps1" -Repo $amR -Task $amId -Worktree $amWt | Out-Null
+        & "$S\Update-Task.ps1" -Repo $amR -Task $amId -Role build -Session "build-$amId" -To built -Release -Artifacts @{ patch = ".streams\patches\$amId.patch" } | Out-Null
+    }
+    # P sits on main uncommitted (a new file too); Q is already committed on HEAD
+    git -C $amR apply --binary (Join-Path $amR '.streams\patches\A1.P.patch')
+    git -C $amR apply --binary (Join-Path $amR '.streams\patches\A1.Q.patch'); git -C $amR add -A -- q.txt; git -C $amR commit -q -m 'Q by hand' -- q.txt
+    & "$S\Enter-Integrator.ps1" -Repo $amR -Session integ-am | Out-Null
+    $amI1 = @(& "$S\Integrate-Patch.ps1" -Repo $amR -Session integ-am -Task A1.P)
+    $amC1 = @(git -C $amR show --name-only --format='%s' HEAD) | Where-Object { $_ }
+    Case 'ALREADY-ON-MAIN: a patch held uncommitted on main is graded in place and committed, not REBASEd' ($amI1[0] -eq 'ALREADY-APPLIED A1.P' -and $amI1[1] -eq 'INTEGRATED A1.P' -and $amI1[2] -like 'COMMITTED A1.P *' -and (T $amR 'A1.P').state -eq 'integrated' -and $amC1[0] -like 'A1.P:*' -and ((@($amC1 | Select-Object -Skip 1) | Sort-Object) -join ',') -eq 'p.txt,pn.txt' -and (Get-Content -Raw (Join-Path $amR 'p.txt')).Trim() -eq 'p DONE-P') (($amI1 -join ' | ') + ' :: ' + ($amC1 -join ','))
+    $amHead = git -C $amR rev-parse HEAD
+    $amI2 = @(& "$S\Integrate-Patch.ps1" -Repo $amR -Session integ-am -Task A1.Q)
+    Case 'ALREADY-ON-MAIN: a patch already committed on HEAD is integrated with nothing applied or committed' ($amI2[0] -eq 'INTEGRATED A1.Q (already in HEAD)' -and (T $amR 'A1.Q').state -eq 'integrated' -and (git -C $amR rev-parse HEAD) -eq $amHead -and -not (git -C $amR status --porcelain -- q.txt)) ($amI2 -join ' | ')
 } catch {
     "FAIL harness: $_ at $($_.InvocationInfo.PositionMessage)`n$($_.ScriptStackTrace)"; $fails++
 } finally {
