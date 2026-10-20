@@ -1,6 +1,6 @@
 ---
 name: stream-plan
-description: v0.15. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
+description: v0.16. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
 ---
 
 # stream-plan
@@ -136,6 +136,15 @@ Rules:
 - **Stop** the loop (ScheduleWakeup `stop: true`) when every group is `closed`, or when the owner says stop.
 - An interactive `/stream-plan` session may still run beside the watcher. Both take items through `Set-InboxItem.ps1`,
   whose exit 8 stops a double take.
+- **Owner wake (kit item IN-20261020104236-1401).** The planner is the owner's wake front end, the one continuous
+  session. An owner message `wake <role | tab list | all> [force]` ("wake integrator", "wake builders 1, 2, 3", "wake
+  status", "wake authors", "wake all") is handled at once, in that turn, before anything else and with no
+  AskUserQuestion: run `pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Wake-StreamRunner.ps1" -Repo
+  <repo> -Session <id> -Reason '<owner words>'` with `-Role <role>` for a whole role (integrator = `integrate`,
+  builders = `build`, authors = `author`; `all` = `-Role all`), or `-Tab 'Builder 1','Builder 2','Builder 3'` for
+  numbered runners (the tab names the `tab` field of `.streams\runners\runner-*.json` holds). Add `-Force` only when
+  the owner says force. Report the `WAKE` line(s) and the `runner` lines it printed. `UNKNOWN-TAB` (exit 2) wrote
+  nothing: report it with the live tabs it lists.
 
 ## Steps for each group
 

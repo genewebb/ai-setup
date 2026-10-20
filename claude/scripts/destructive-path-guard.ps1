@@ -48,7 +48,7 @@ try {
             hookSpecificOutput = @{
                 hookEventName            = 'PreToolUse'
                 permissionDecision       = 'ask'
-                permissionDecisionReason = "destructive-path-guard: destructive command targets a path outside the repo/scratch roots ($offender). Confirm before it runs."
+                permissionDecisionReason = "destructive-path-guard: destructive command targets a path outside the repo/scratch roots ($offender). Trusted roots: $((@($roots) | ForEach-Object { $_.TrimEnd('\') }) -join ', '). Confirm before it runs."
             }
         } | ConvertTo-Json -Compress -Depth 5
     }

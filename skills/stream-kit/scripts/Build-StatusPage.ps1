@@ -68,6 +68,8 @@ function FinCell($f) {
   if ($null -eq $f.predictedMinutes) {
     return '<span class="pill s-blocked">no date</span><div class="muted mono">' + (E ([string]$f.basis)) + '</div>'
   }
+  $hl = if ($f -is [Collections.IDictionary]) { $f['heldLabel'] } else { $($hp = $f.PSObject.Properties['heldLabel']; if ($hp) { $hp.Value }) }
+  if ([int]$f.predictedMinutes -le 0 -and $hl) { return '<span class="pill s-building">' + (E ([string]$hl)) + '</span><div class="muted mono">' + (E ([string]$f.basis)) + '</div>' }
   if ([int]$f.predictedMinutes -le 0) { return '<span class="pill s-integrated">finished</span>' }
   $d = FinDate $f
   return '<b>' + (Format-LocalStamp $d 'ddd dd MMM HH:mm') + '</b><div class="muted mono" title="' + (E ([string]$f.basis)) + '">in ' + (Dur $f.predictedMinutes) + '</div>'

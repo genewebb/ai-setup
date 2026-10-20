@@ -11,9 +11,13 @@
 #   graders    : the run record's graders list: test 'grader:<task>', outcome by exit code.
 # outcome is passed, failed, skipped or not-measured (a perf leg the host never let run). A leg whose command failed but left no result file gets one row
 # 'leg:<name>' failed, so a crash before the first test is never read as green. Prints "RESULTS <run> passed N failed N skipped N".
+# -Step sweep reads the record's 'sweep' legs instead (a Tier 3 retest's whole-leg sweeps, Invoke-Retest.ps1
+# retestSweeps; kit item IN-20261020141232-7f92) into <run>.sweep.results.json, with no grader rows, so a sweep never
+# changes the retest's own results or outcome.
 param(
     [Parameter(Mandatory)] [string] $Repo,
-    [Parameter(Mandatory)] [string] $Run
+    [Parameter(Mandatory)] [string] $Run,
+    [ValidateSet('leg', 'sweep')] [string] $Step = 'leg'
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\lib\Streams.ps1"
@@ -42,11 +46,19 @@ function Find-ClassFile([string] $ProjectDir, [string] $Class) {
 function ConvertTo-Outcome([string] $o) {
     switch -Regex ($o) { '^(Passed|passed|expected)$' { 'passed' } '^(NotExecuted|skipped|Inconclusive)$' { 'skipped' } default { 'failed' } }
 }
-foreach ($leg in @($rec['legs'] | Where-Object { $_ -and $_['step'] -eq 'leg' })) {
+foreach ($leg in @($rec['legs'] | Where-Object { $_ -and $_['step'] -eq $Step })) {
     # A batched retest leg (Invoke-Retest, kit item IN-20261010055151-65af) names its own folder in outDir.
     $name = [string]$leg['name']; $dir = if ($leg['outDir']) { [string]$leg['outDir'] } else { Join-Path $rec['runDir'] $name }; $before = $rows.Count
     # A perf leg the host never let run (Invoke-SuiteLegs / Invoke-Retest, kit item IN-20261010212643-92b1) is one
     # 'leg:<name>' row with outcome 'not-measured': no coverage, and never a failure.
+    # A leg the run never started because another session took the integrator lock (Invoke-SuiteLegs marks it
+    # 'lockLost'; an older record: exit 5 on the last leg of a 'lock-lost' run) is one 'leg:<name>' row with outcome
+    # 'not-run': no coverage, never a failure, so Register-SuiteFailures.ps1 files nothing for it (kit item
+    # IN-20261020115130-5b6f).
+    $lastLeg = @($rec['legs'] | Where-Object { $_ -and $_['step'] -eq $Step })[-1]
+    if ($leg['lockLost'] -or ([string]$rec['status'] -eq 'lock-lost' -and [int]$leg['exit'] -eq 5 -and [object]::ReferenceEquals($leg, $lastLeg))) {
+        $rows.Add([ordered]@{ test = "leg:$name"; suite = $name; outcome = 'not-run'; durationMs = 0; file = ''; project = [string]$leg['project']; head = $rec['head'] }); continue
+    }
     if ($leg['notMeasured']) { $rows.Add([ordered]@{ test = "leg:$name"; suite = $name; outcome = 'not-measured'; durationMs = 0; file = ''; project = [string]$leg['project']; head = $rec['head'] }); continue }
     if ($leg['kind'] -eq 'dotnet') {
         $proj = if ($leg['project']) { Join-Path $snap $leg['project'] } else { $snap }
@@ -101,11 +113,12 @@ foreach ($leg in @($rec['legs'] | Where-Object { $_ -and $_['step'] -eq 'leg' })
         $rows.Add([ordered]@{ test = "leg:$name"; suite = $name; outcome = 'failed'; durationMs = 0; file = ''; project = [string]$leg['project']; head = $rec['head'] })
     }
 }
-foreach ($g in @($rec['graders'])) {
+foreach ($g in @(if ($Step -eq 'leg') { $rec['graders'] })) {
     if (-not $g) { continue }
     $rows.Add([ordered]@{ test = "grader:$($g['task'])"; suite = 'graders'; outcome = $(if ([int]$g['exit'] -eq 0) { 'passed' } else { 'failed' }); durationMs = 0; file = ''; project = ''; head = $rec['head']; task = [string]$g['task'] })
 }
-Write-JsonFile (Join-Path $rd "$Run.results.json") ([ordered]@{ run = $Run; group = $rec['group']; head = $rec['head']; tests = @($rows) })
+$outName = if ($Step -eq 'sweep') { "$Run.sweep.results.json" } else { "$Run.results.json" }
+Write-JsonFile (Join-Path $rd $outName) ([ordered]@{ run = $Run; group = $rec['group']; head = $rec['head']; tests = @($rows) })
 $c = @{ passed = 0; failed = 0; skipped = 0 }; foreach ($r in $rows) { $c[$r.outcome]++ }
-"RESULTS $Run passed $($c.passed) failed $($c.failed) skipped $($c.skipped)$(if ($c['not-measured']) { " not-measured $($c['not-measured'])" })"
+"RESULTS $Run$(if ($Step -eq 'sweep') { ' sweep' }) passed $($c.passed) failed $($c.failed) skipped $($c.skipped)$(if ($c['not-measured']) { " not-measured $($c['not-measured'])" })$(if ($c['not-run']) { " not-run $($c['not-run'])" })"
 exit 0

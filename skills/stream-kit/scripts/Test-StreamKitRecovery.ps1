@@ -3564,6 +3564,28 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $src2 = @(& "$S\Test-GroupClose.ps1" -Repo $sr96 -Group S2 -DryRun) -join ' | '
     $src1 = @(& "$S\Test-GroupClose.ps1" -Repo $sr96 -Group S1 -DryRun) -join ' | '
     Case '96 each covered group''s close counts only the fixes filed in it, and sees the shared run' ($src2 -match 'UNRETESTED 1 .*NS\.B\.T' -and $src2 -notmatch 'NS\.A\.T' -and $src2 -match 'OPEN-FIX S2\.R1F1$|OPEN-FIX S2\.R1F1 ' -and $src1 -notmatch 'NO-TIER2' -and $src1 -match 'UNRETESTED 1 .*NS\.A\.T' -and $src1 -notmatch 'NS\.B\.T' -and $src1 -match 'OPEN-FIX S1\.R1F1') "S2: $src2 // S1: $src1"
+    # An exemption held only in the FIX group's file (S1), not the run group's (S2), is exempt with its reason; the
+    # lookup read the run group's table and died 'Cannot index into a null array' (kit item IN-20261020202159-4b5e).
+    @{ id = 'run-S2-2'; tier = '2'; group = 'S2'; groups = @('S2', 'S1'); reason = 'manual'; startedAt = '2026-10-19T11:00:00Z'; status = 'done'; head = 'abd' } | ConvertTo-Json | Set-Content (Join-Path $srd96 'run-S2-2.json') -Encoding utf8
+    @{ tests = @((& $srt96 'NS.A.T' 'tests/A.cs')) } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $srd96 'run-S2-2.results.json') -Encoding utf8
+    ConvertTo-Json @(@{ test = 'NS.A.T'; reason = 'owner ruling x1'; run = 'pending'; fixTask = '' }) | Set-Content (Join-Path $sr96 '.streams\suites\exempt.S1.json') -Encoding utf8
+    $sre96 = @(& "$S\Register-SuiteFailures.ps1" -Repo $sr96 -Session integ-t -Run run-S2-2 2>&1) -join ' | '
+    $srex96 = Get-Content -Raw (Join-Path $srd96 'run-S2-2.attribution.json') -ErrorAction SilentlyContinue | ConvertFrom-Json
+    Case '96 a shared run exempts a failure the fix group''s exemption file holds, with its reason' ($sre96 -match 'EXEMPT NS\.A\.T \(owner ruling x1\)' -and $sre96 -match 'ATTRIBUTED run-S2-2 fix 0 .* exempt 1' -and @($srex96.failures)[0].disposition -eq 'exempt') $sre96
+    # A failure whose owner is a fix row that landed AFTER the run started is that row's to retest, not a new row's: the
+    # run graded the code before it, and G13.R6F2 duplicated landed G13.R6F1 (kit item IN-20261020203944-8aeb). A fix
+    # row that landed BEFORE the run still gets a new fix row.
+    $srd3 = Get-Content -Raw (Join-Path $sr96 '.streams\tasks.json') | ConvertFrom-Json -AsHashtable
+    foreach ($lr in @(@('S2.R1F8', 'tests/E.cs', '2026-10-19T11:30:00Z'), @('S2.R1F9', 'tests/D.cs', '2026-10-19T12:30:00Z'))) {
+        $x = & $Tt $lr[0] 'S2' 'integrated' $lr[1]; $x.origin = 'integration'; $x.history = @(@{ at = $lr[2]; by = 'build-1'; to = 'integrated'; note = 'landed' }); $srd3.tasks += $x }
+    $srd3 | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $sr96 '.streams\tasks.json') -Encoding utf8
+    @{ id = 'run-S2-3'; tier = '2'; group = 'S2'; groups = @('S2', 'S1'); reason = 'manual'; startedAt = '2026-10-19T12:00:00Z'; status = 'done'; head = 'abe' } | ConvertTo-Json | Set-Content (Join-Path $srd96 'run-S2-3.json') -Encoding utf8
+    @{ tests = @((& $srt96 'NS.D.T' 'tests/D.cs'), (& $srt96 'NS.E.T' 'tests/E.cs')) } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $srd96 'run-S2-3.results.json') -Encoding utf8
+    $srl96 = @(& "$S\Register-SuiteFailures.ps1" -Repo $sr96 -Session integ-t -Run run-S2-3 2>&1) -join ' | '
+    $srlx96 = Get-Content -Raw (Join-Path $srd96 'run-S2-3.attribution.json') -ErrorAction SilentlyContinue | ConvertFrom-Json
+    $srlf96 = @{}; foreach ($x in @($srlx96.failures)) { $srlf96[$x.test] = "$($x.disposition)/$($x.fixTask)/$(if ($x.PSObject.Properties['landedAfterRun']) { $x.landedAfterRun })" }
+    $srlr96 = @((Get-Content -Raw (Join-Path $sr96 '.streams\tasks.json') | ConvertFrom-Json).tasks | Where-Object { $_.id -like 'S2.R3F*' } | ForEach-Object { "$($_.id):$($_.writeSet -join ',')" })
+    Case '96 a fix row that landed after the run is the failure''s fix task; one that landed before gets a new row' ($srlf96['NS.D.T'] -eq 'fix/S2.R1F9/True' -and $srlf96['NS.E.T'] -eq 'fix/S2.R3F1/' -and $srlr96.Count -eq 1 -and $srlr96[0] -eq 'S2.R3F1:tests/E.cs' -and $srl96 -match 'ATTRIBUTED run-S2-3 fix 2 ') "$srl96 :: $($srlf96 | ConvertTo-Json -Compress) :: $($srlr96 -join ';')"
     # A group every row of which an earlier group pulls forward has an EMPTY group set; its own rows still decide whether
     # a run covers it, and Add-SuiteRunGroup.ps1 counts a finished run for it (kit item IN-20261020100610-6c4b, G11).
     $at96 = Join-Path $Scratch 'attach96'; New-Item -ItemType Directory -Path $at96 -Force | Out-Null; $repos += $at96
@@ -4581,6 +4603,13 @@ if ($st -eq 'expected') { exit 0 } else { "STREAM_T107='$env:STREAM_T107'"; exit
     $g108 = @(if ($a108b) { @($a108b.failures | Where-Object { $_.test -eq 'NS.BarTests.Gone' }) })
     $newBar = @((J $er).tasks | Where-Object { $_.id -like 'E1.R2F*' -and @($_.writeSet) -contains 'tests/BarTests.cs' })
     Case '108d a later run attributes the exempted failure exempt, with no fix task' ($g108.Count -eq 1 -and $g108[0].disposition -eq 'exempt' -and -not $g108[0].fixTask -and -not $newBar.Count) "attr=$($a108b | ConvertTo-Json -Compress -Depth 4) newBar=$(@($newBar | ForEach-Object id) -join ',')"
+    # 108e (kit item IN-20261020152530-aead): the owner rules a test out BEFORE any run fails it; -Pending records it
+    # with run 'pending', refuses a row-id-shaped value, and a second call reads (already).
+    $y0 = @(); $y0x = -1; try { $y0 = @(& "$S\Test-GroupClose.ps1" -Repo $er -Group E1 -Session integ-e -Exempt 'NS.NewTests.Missing' -Pending -Reason 'OWNER 2026-10-20 (fixture): mockups absent'); $y0x = $LASTEXITCODE } catch { $y0 = @("threw: $(("$_" -split "`n")[0])") }
+    $y1 = @(); $y1x = -1; try { $y1 = @(& "$S\Test-GroupClose.ps1" -Repo $er -Group E1 -Session integ-e -Exempt 'E1.R9F1' -Pending -Reason 'OWNER test'); $y1x = $LASTEXITCODE } catch { $y1 = @("threw: $(("$_" -split "`n")[0])") }
+    $y2 = @(); $y2x = -1; try { $y2 = @(& "$S\Test-GroupClose.ps1" -Repo $er -Group E1 -Session integ-e -Exempt 'NS.NewTests.Missing' -Pending -Reason 'OWNER again'); $y2x = $LASTEXITCODE } catch { $y2 = @("threw: $(("$_" -split "`n")[0])") }
+    $ex108e = @($(if (Test-Path (Join-Path $er '.streams\suites\exempt.E1.json')) { Get-Content -Raw (Join-Path $er '.streams\suites\exempt.E1.json') | ConvertFrom-Json }) | Where-Object { $_.test -eq 'NS.NewTests.Missing' })
+    Case '108e -Exempt -Pending records an exemption no run has failed yet, refuses a row id, and is idempotent' ($y0x -eq 0 -and ($y0 -join ' ') -match 'EXEMPTED-PENDING E1 NS\.NewTests\.Missing' -and $y1x -eq 2 -and ($y1 -join ' ') -match 'REFUSED' -and $y2x -eq 0 -and ($y2 -join ' ') -match '\(already\)' -and $ex108e.Count -eq 1 -and $ex108e[0].run -eq 'pending' -and -not $ex108e[0].fixTask -and $ex108e[0].reason -match 'OWNER 2026-10-20') "p=$y0x/$($y0 -join ' ') id=$y1x/$($y1 -join ' ') again=$y2x/$($y2 -join ' ') file=$($ex108e | ConvertTo-Json -Compress)"
 
     # 109 (kit item IN-20261010152029-7e12): an author holding a stream-author item may rewrite the grader of a row that
     # is ticketed and not yet claimed (stream-author step 0), but could not record the path: Update-Task needed an
@@ -4983,6 +5012,128 @@ if ($args[0] -eq 'test' -and $env:STUB116_NOMATCH -eq '1') { 'No test matches th
     $text121 = if (Test-Path $log121) { Get-Content -Raw $log121 } else { '' }
     Case '121 a stray child holding the grader''s redirect files never fails the next run of that task' (-not $res121[0].err -and -not $res121[1].err -and $res121[1].code -eq 0 -and $res121[1].out -notmatch 'being used by another process' -and $text121 -match 'PASS C1' -and $text121 -match 'ERRLINE-121') "1: code=$($res121[0].code) err='$($res121[0].err)' 2: code=$($res121[1].code) err='$($res121[1].err)' out='$($res121[1].out)' log='$($text121 -replace '\s+', ' ')'"
     foreach ($s121 in @(Get-Content -LiteralPath $pid121 -ErrorAction SilentlyContinue)) { Stop-Process -Id ([int]$s121) -Force -ErrorAction SilentlyContinue }
+
+    # ---- 122. OWNER WAKE FILES (kit item IN-20261020102535-b7f2): Wake-StreamRunner.ps1 writes WAKE / WAKE-<role> /
+    # WAKE-<runner id>; Get-WakeRequest reports a write newer than what the runner has seen, never deletes the file (one
+    # write wakes every runner of the role), ignores another role's file, and reads 'force' and the reason.
+    $r122 = New-Repo 'r122' @{ 'G1.W' = (ContentGrader 'G1.W' 'ok') }; $repos += $r122
+    # The suite does not load the lib, so each lookup runs in a child pwsh that dot-sources it.
+    function Get-WakeRequest($Px, [string] $Role, [string] $Id, [long] $Seen) { $j = & pwsh -NoProfile -Command ". '$S\lib\Streams.ps1'; `$w = Get-WakeRequest (Get-StreamPaths '$r122') '$Role' '$Id' $Seen; if (`$w) { `$w | ConvertTo-Json -Compress } else { 'NULL' }"; if ("$j".Trim() -eq 'NULL') { $null } else { "$j" | ConvertFrom-Json } }
+    $P122 = $null
+    $seen122 = [long]("$(& pwsh -NoProfile -Command ". '$S\lib\Streams.ps1'; Get-WakeSeen (Get-StreamPaths '$r122') 'build' 'build-r1'")".Trim())
+    Case '122a wake: no wake file, nothing to wake' ($null -eq (Get-WakeRequest $P122 'build' 'build-r1' $seen122)) ''
+    $o122 = @(& "$S\Wake-StreamRunner.ps1" -Repo $r122 -Role build -Reason 'test wake' -Session kit-122)
+    $w122 = Get-WakeRequest $P122 'build' 'build-r1' $seen122
+    $w122b = Get-WakeRequest $P122 'build' 'build-r2' $seen122
+    Case '122b wake: WAKE-build wakes every build runner and stays on disk' ($w122 -and $w122b -and $w122.file -eq 'WAKE-build' -and -not $w122.force -and $w122.reason -eq 'test wake' -and (Test-Path (Join-Path $r122 '.streams\runners\WAKE-build')) -and ($o122 -join ' ') -match '^WAKE WAKE-build') "out=$($o122 -join '|') w=$($w122 | ConvertTo-Json -Compress)"
+    Case '122c wake: a seen wake does not wake again, another role ignores it' ($null -eq (Get-WakeRequest $P122 'build' 'build-r1' $w122.ticks) -and $null -eq (Get-WakeRequest $P122 'author' 'author-r1' 0)) ''
+    Start-Sleep -Milliseconds 50
+    [void](& "$S\Wake-StreamRunner.ps1" -Repo $r122 -Runner 'build-r1' -Force -Reason 'force one' -Session kit-122)
+    $w122d = Get-WakeRequest $P122 'build' 'build-r1' $w122.ticks
+    Case '122d wake: a forced runner-id wake reaches that runner only' ($w122d -and $w122d.force -and $w122d.file -eq 'WAKE-build-r1' -and $null -eq (Get-WakeRequest $P122 'build' 'build-r2' $w122.ticks) -and (Get-Content -Raw (Join-Path $r122 '.streams\decisions.md')) -match 'WAKE WAKE-build-r1 force') "w=$($w122d | ConvertTo-Json -Compress)"
+    # 122e-f (kit item IN-20261020104236-1401): -Tab names runners by their terminal tab ('tab' in runner-*.json),
+    # case-insensitive, several per call, the live runner only; an unknown tab writes nothing and exits 2.
+    $rd122 = Join-Path $r122 '.streams\runners'
+    Set-Content -LiteralPath (Join-Path $rd122 'runner-build-old122.json') -Value '{"role":"build","tab":"Builder 2","status":"stopped (STOP)"}'
+    Set-Content -LiteralPath (Join-Path $rd122 'runner-build-live122.json') -Value '{"role":"build","tab":"Builder 2","status":"idle since x"}'
+    Set-Content -LiteralPath (Join-Path $rd122 'runner-author-a122.json') -Value '{"role":"author","tab":"Author 1","status":"running y"}'
+    $o122e = @(& "$S\Wake-StreamRunner.ps1" -Repo $r122 -Tab 'builder 2', 'Author 1' -Reason 'tab wake' -Session kit-122)
+    Case '122e wake: -Tab wakes each named live runner by its runner id, never a stopped one' ((Test-Path (Join-Path $rd122 'WAKE-runner-build-live122')) -and (Test-Path (Join-Path $rd122 'WAKE-runner-author-a122')) -and -not (Test-Path (Join-Path $rd122 'WAKE-runner-build-old122')) -and ($o122e -join '|') -match 'WAKE WAKE-runner-build-live122' -and ($o122e -join '|') -match "runner runner-author-a122 role author tab 'Author 1'") "out=$($o122e -join '|')"
+    $n122 = @(Get-ChildItem -LiteralPath $rd122 -Filter 'WAKE*').Count
+    $o122f = @(& "$S\Wake-StreamRunner.ps1" -Repo $r122 -Tab 'Builder 9' -Session kit-122); $x122f = $LASTEXITCODE
+    Case '122f wake: an unknown tab exits 2, lists the live tabs and writes nothing' ($x122f -eq 2 -and ($o122f -join '|') -match 'UNKNOWN-TAB Builder 9' -and ($o122f -join '|') -match 'live tabs: Author 1, Builder 2' -and @(Get-ChildItem -LiteralPath $rd122 -Filter 'WAKE*').Count -eq $n122) "x=$x122f out=$($o122f -join '|')"
+    # ---- 123. A SUITE RUN KEEPS ITS LOCK (kit item IN-20261020115130-5b6f): run-G13-3 lost the integrator lock at its
+    # last leg when a restarted integrator took over a lock whose beat looked stale; the leg exited 5 and was attributed
+    # as a failure. Enter-Integrator must refuse while the holder owns a live 'running' run, and Export-SuiteResults must
+    # write a leg that never ran for LOCK-LOST as 'not-run', never 'failed'.
+    $r123 = New-Repo 'r123' @{ 'G1.L' = (ContentGrader 'G1.L' 'ok') }; $repos += $r123
+    $old123 = (Get-Date).ToUniversalTime().AddMinutes(-90).ToString('o')
+    Set-Content -LiteralPath (Join-Path $r123 '.streams\integrator.lock') -Value (@{ session = 'integ-old'; at = $old123; beat = $old123 } | ConvertTo-Json)
+    $rr123 = Join-Path $r123 '.streams\suites\runs'; New-Item -ItemType Directory -Path $rr123 -Force | Out-Null
+    $me123 = Get-Process -Id $PID
+    @{ id = 'run-G1-7'; tier = '2'; group = 'G1'; session = 'integ-old'; startedAt = $old123; status = 'running'; pid = $PID; pidStart = $me123.StartTime.ToUniversalTime().ToString('o') } | ConvertTo-Json | Set-Content (Join-Path $rr123 'run-G1-7.json')
+    $o123a = @(& "$S\Enter-Integrator.ps1" -Repo $r123 -Session integ-new); $x123a = $LASTEXITCODE
+    Case '123a a stale-beat lock whose holder owns a live suite run is not taken over' ($x123a -eq 5 -and ($o123a -join ' ') -match 'HELD by integ-old \(suite run run-G1-7 pid' -and (Get-Content -Raw (Join-Path $r123 '.streams\integrator.lock')) -match 'integ-old') "x=$x123a out=$($o123a -join ' | ')"
+    $rec123 = Get-Content -Raw (Join-Path $rr123 'run-G1-7.json') | ConvertFrom-Json -AsHashtable; $rec123.status = 'done'; $rec123 | ConvertTo-Json | Set-Content (Join-Path $rr123 'run-G1-7.json')
+    $o123b = @(& "$S\Enter-Integrator.ps1" -Repo $r123 -Session integ-new); $x123b = $LASTEXITCODE
+    Case '123b with that run ended the stale lock is taken over as before' ($x123b -eq 0 -and ($o123b -join ' ') -match 'INTEGRATOR integ-new') "x=$x123b out=$($o123b -join ' | ')"
+    $rx123 = Join-Path $rr123 'run-G1-8'; New-Item -ItemType Directory -Path (Join-Path $rx123 'Full') -Force | Out-Null
+    Set-Content (Join-Path $rx123 'Full\f.trx') "<TestRun xmlns=`"http://microsoft.com/schemas/VisualStudio/TeamTest/2010`"><TestDefinitions><UnitTest id=`"1`"><TestMethod className=`"NS.Q`" name=`"M`" /></UnitTest></TestDefinitions><Results><UnitTestResult testId=`"1`" testName=`"M`" outcome=`"Passed`" duration=`"00:00:00.1`" /></Results></TestRun>"
+    @{ id = 'run-G1-8'; tier = '2'; group = 'G1'; startedAt = $old123; status = 'lock-lost'; snapshot = $r123; runDir = $rx123; head = 'h'
+       legs = @(@{ step = 'leg'; name = 'Full'; kind = 'dotnet'; project = 'tests'; exit = 0 }, @{ step = 'leg'; name = 'Gone'; kind = 'dotnet'; project = 'tests'; exit = 5; lockLost = $true }, @{ step = 'leg'; name = 'Perf'; kind = 'dotnet'; project = 'tests'; exit = 5 }) } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $rr123 'run-G1-8.json')
+    $o123c = @(& "$S\Export-SuiteResults.ps1" -Repo $r123 -Run run-G1-8)
+    $res123 = Get-Content -Raw (Join-Path $rr123 'run-G1-8.results.json') | ConvertFrom-Json -AsHashtable
+    $nr123 = @($res123.tests | Where-Object { $_.outcome -eq 'not-run' } | ForEach-Object { $_.test }) -join ','
+    Case '123c a lock-lost leg (marked, or the last leg of an older lock-lost record) exports not-run, never failed' (($o123c -join ' ') -match 'RESULTS run-G1-8 passed 1 failed 0 skipped 0 not-run 2' -and $nr123 -eq 'leg:Gone,leg:Perf') "out=$($o123c -join ' | ') notrun=$nr123"
+
+    # ---- 124. RETEST SWEEPS (kit item IN-20261020141232-7f92 part A): a fix row that edits only docs or a test helper
+    # turned static sweeps red, and the Tier 3 retest, which re-runs only the failed tests, never saw it. A fix retest
+    # runs the run definition's retestSweeps (a whole leg, or a filter gated by whenPaths) on its snapshot, records the
+    # sweep's new failures (failed there, not in the base run) as sweepFailures / SWEEP-NEW, and its outcome is unchanged.
+    $sw124 = Join-Path $Scratch 'sweeprepo'; New-Item -ItemType Directory -Path (Join-Path $sw124 'tests') -Force | Out-Null; $repos += $sw124
+    git -C $sw124 init -q -b main; git -C $sw124 config user.email t@t; git -C $sw124 config user.name t; Grant-GitPolicy $sw124
+    Set-Content (Join-Path $sw124 'tests\FooTests.cs') 'namespace NS { public class FooTests { } }'
+    git -C $sw124 add -A; git -C $sw124 commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $sw124 | Out-Null
+    $fk124 = Join-Path $Scratch 'fake-test124.ps1'
+    Set-Content -Path $fk124 -Encoding utf8 -Value @'
+param([string] $Out, [string] $Mode, [string] $Filter = '', [string] $Control)
+$c = Get-Content -Raw $Control | ConvertFrom-Json -AsHashtable
+$map = $c[$Mode]
+$terms = @($Filter -split '\|' | Where-Object { $_ } | ForEach-Object { ($_ -replace '^FullyQualifiedName~', '') -replace '\\(.)', '$1' })
+New-Item -ItemType Directory -Path $Out -Force | Out-Null
+$defs = ''; $res = ''; $i = 0
+foreach ($name in @($map.Keys | Sort-Object)) {
+    if ($terms.Count -and -not @($terms | Where-Object { $name.Contains($_) }).Count) { continue }
+    $i++; $cls = $name.Substring(0, $name.LastIndexOf('.')); $m = $name.Substring($name.LastIndexOf('.') + 1)
+    $defs += "<UnitTest id=`"$i`"><TestMethod className=`"$cls`" name=`"$m`" /></UnitTest>"
+    $res += "<UnitTestResult testId=`"$i`" testName=`"$m`" outcome=`"$($map[$name])`" duration=`"00:00:00.1`" />"
+}
+Set-Content -Path (Join-Path $Out "r$([guid]::NewGuid().ToString('N').Substring(0,6)).trx") -Value "<TestRun><TestDefinitions>$defs</TestDefinitions><Results>$res</Results></TestRun>"
+if ($res -match 'Failed') { exit 1 } else { exit 0 }
+'@
+    $cu124 = Join-Path $Scratch 'fake-unit124.json'; $cc124 = Join-Path $Scratch 'fake-crit124.json'
+    @{ tier2 = @{ 'NS.FooTests.Real' = 'Failed'; 'NS.BarTests.Ok' = 'Passed' }; retest = @{ 'NS.FooTests.Real' = 'Failed'; 'NS.BarTests.Ok' = 'Failed' } } | ConvertTo-Json | Set-Content $cu124 -Encoding utf8
+    @{ tier2 = @{ 'NS.CritTests.Old' = 'Failed'; 'NS.CritTests.Keep' = 'Passed' } } | ConvertTo-Json | Set-Content $cc124 -Encoding utf8
+    $lu124 = @{ name = 'Tests.Unit'; kind = 'dotnet'; project = 'tests'
+        command = "& '$fk124' -Out '{runDir}\Tests.Unit' -Mode tier2 -Control '$cu124'"
+        retestCommand = "& '$fk124' -Out '{runDir}\Tests.Unit' -Mode retest -Filter '{filter}' -Control '$cu124'" }
+    $lc124 = @{ name = 'Tests.Criteria'; kind = 'dotnet'; project = 'tests'; command = "& '$fk124' -Out '{runDir}\Tests.Criteria' -Mode tier2 -Control '$cc124'" }
+    $sws124 = @(@{ leg = 'Tests.Criteria' }, @{ leg = 'Tests.Unit'; filter = 'FullyQualifiedName~Bar'; whenPaths = @('docs/**') }, @{ leg = 'Tests.Unit'; filter = 'FullyQualifiedName~Bar'; whenPaths = @('tests/**') })
+    New-Item -ItemType Directory -Path (Join-Path $sw124 '.streams\suites') -Force | Out-Null
+    @{ group = 'A2'; copyIgnored = @(); setup = @(); legs = @($lu124, $lc124); graders = $false; retestSweeps = $sws124 } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $sw124 '.streams\suites\A2.run.json') -Encoding utf8
+    @{ groups = @(@{ id = 'A2'; name = 'two'; state = 'integrating'; origin = 'plan'; scope = @{ include = @('F-1') } })
+       tasks = @((& $Tt 'A2.A' 'A2' 'integrated' 'tests/FooTests.cs'), (& $Tt 'A2.I' 'A2' 'ticketed' @() 'integration')) } |
+        ConvertTo-Json -Depth 20 | Set-Content (Join-Path $sw124 '.streams\tasks.json') -Encoding utf8
+    $s124 = @(& "$S\Start-SuiteRun.ps1" -Repo $sw124 -Session integ-w -Group A2 -Reason complete -Wait)
+    $rd124 = Join-Path $sw124 '.streams\suites\runs'
+    $run124 = Get-Content -Raw (Join-Path $rd124 'run-A2-1.json') | ConvertFrom-Json -DateKind String
+    # The fix lands after the run, and it turns a Criteria test that passed in the run red.
+    @{ tier2 = @{ 'NS.CritTests.Old' = 'Failed'; 'NS.CritTests.Keep' = 'Failed' } } | ConvertTo-Json | Set-Content $cc124 -Encoding utf8
+    $st124 = [datetime]::Parse([string]$run124.startedAt, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal).AddSeconds(1).ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $d124 = J $sw124; $fx124 = @($d124.tasks | Where-Object { $_.id -like 'A2.R1F*' })
+    foreach ($t in $fx124) { $t.state = 'integrated'; $t.history += @{ at = $st124; by = 'integ-w'; to = 'integrated'; note = 'fix landed' } }
+    # 124c: the regressed Criteria class gets a file an integrated row owns, so its sweep regression is attributable.
+    Set-Content (Join-Path $sw124 'tests\CritTests.cs') 'namespace NS { public class CritTests { } }'
+    git -C $sw124 add -A; git -C $sw124 commit -q -m crit
+    $d124.tasks += (& $Tt 'A2.B' 'A2' 'integrated' 'tests/CritTests.cs')
+    $d124 | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $sw124 '.streams\tasks.json') -Encoding utf8
+    $ba124 = Join-Path $rd124 'run-A2-1.attribution.json'; $bh124 = if (Test-Path $ba124) { (Get-FileHash $ba124).Hash } else { '' }
+    $r124 =@(& "$S\Invoke-Retest.ps1" -Repo $sw124 -Session integ-w -Group A2 -Mode fix); $r124t = $r124 -join ' | '
+    $rt124 = @(Get-ChildItem $rd124 -Filter 'retest-A2-*.json' | Where-Object { $_.Name -match '^retest-A2-\d+\.json$' } | Sort-Object Name | ForEach-Object { Get-Content -Raw $_.FullName | ConvertFrom-Json })
+    $fix124 = @($rt124 | Where-Object { $_.tier -eq '3' }) | Select-Object -Last 1
+    $sf124 = if ($fix124 -and $fix124.PSObject.Properties['sweepFailures']) { (@($fix124.sweepFailures) | Sort-Object) -join ',' } else { '<none>' }
+    $sp124 = if ($fix124) { Join-Path $rd124 "$($fix124.id).sweep.results.json" } else { '' }
+    $mainT124 = if ($fix124 -and (Test-Path (Join-Path $rd124 "$($fix124.id).results.json"))) { @((Get-Content -Raw (Join-Path $rd124 "$($fix124.id).results.json") | ConvertFrom-Json).tests | ForEach-Object { $_.test }) -join ',' } else { '' }
+    Case '124a a fix retest runs its whole-leg and gated sweeps and records only their new failures' ($fx124.Count -eq 1 -and $sf124 -eq 'NS.BarTests.Ok,NS.CritTests.Keep' -and $sp124 -and (Test-Path $sp124) -and $r124t -match 'SWEEP-NEW NS\.CritTests\.Keep' -and $r124t -match 'SWEEP-SKIP Tests\.Unit \(no fix row landed') "fix=$($fx124.Count) sweepFailures=$sf124 out=$r124t"
+    Case '124b sweeps leave the retest''s own tests and outcome alone' ($fix124 -and $fix124.outcome -eq 'fail' -and $mainT124 -eq 'NS.FooTests.Real' -and $r124t -match 'RETEST retest-A2-\d+ fail passed 0 failed 1') "outcome=$(if ($fix124) { $fix124.outcome }) tests=$mainT124 out=$r124t"
+    $all124 = @((J $sw124).tasks | Where-Object { $_.id -match '^A2\.R1F\d+$' }); $nw124 = @($all124 | Where-Object { [string]$_.title -match 'Tier 3 sweep' })
+    $ra124 = if ($fix124) { Join-Path $rd124 "$($fix124.id).attribution.json" } else { '' }
+    $rf124 = if ($ra124 -and (Test-Path $ra124)) { @((Get-Content -Raw $ra124 | ConvertFrom-Json).failures) } else { @() }
+    $rs124 = (@($rf124 | ForEach-Object { "$($_.test)=$($_.disposition)" }) | Sort-Object) -join ','
+    # The base run's attribution keeps only its own failures (a REFIX may rewrite its fixTask fields, so no hash check).
+    $bs124 = [bool]($bh124 -and -not @(@((Get-Content -Raw $ba124 | ConvertFrom-Json).failures) | Where-Object { $_.test -match 'CritTests\.Keep|BarTests\.Ok' }).Count)
+    Case '124c a sweep regression files one fix row in the retest''s own attribution, the base run''s untouched' ($all124.Count -eq 2 -and $nw124.Count -eq 1 -and (@($nw124[0].writeSet) -join ',') -eq 'tests/CritTests.cs' -and $rs124 -eq 'NS.BarTests.Ok=unowned,NS.CritTests.Keep=fix' -and $bs124 -and $r124t -match 'ATTRIBUTED retest-A2-\d+ fix 1') "fix=$($all124.Count) new=$(@($nw124 | ForEach-Object { "$($_.id):$(@($_.writeSet) -join ',')" }) -join ';') attr=$rs124 baseSame=$bs124 out=$r124t"
 } catch {
     "FAIL harness: $_ at $($_.InvocationInfo.PositionMessage)"; $fails++
 } finally {

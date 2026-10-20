@@ -14,6 +14,9 @@ function ConvertTo-ScopePath([string] $p) {
     $p = $p.Trim().Trim('"', "'", '`')
     if ($p -match '^/([a-zA-Z])(/|$)') { $p = "$($Matches[1]):" + $p.Substring(2) }   # example-path: /c/x -> c:/x
     $p = $p -replace '/', '\'
+    # A bash-escaped backslash (D:\\x\\y, kit item IN-20261020133758-c46f) and a doubled separator are one separator;
+    # a leading \\ (UNC) is kept.
+    $p = $p.Substring(0, [Math]::Min(2, $p.Length)) + ($p.Substring([Math]::Min(2, $p.Length)) -replace '\\{2,}', '\')
     $p = $p.ToLowerInvariant()
     # The harness hands out scratchpad paths with the 8.3 profile name (<users>\SPEEDM~1\...). Expand the CURRENT
     # user's short name so it matches the same root as the long form. 8.3 keeps the first 6 characters, so another
@@ -102,6 +105,10 @@ function Find-OutsideScopeToken($Tokens, $Roots) {
         # example-path: a path must start the token, or follow an option separator (--path=C:\x, -LiteralPath:C:\x).
         # Anchoring here keeps relative tokens like src/obj or HEAD:CrewChief/x.cs from reading as absolute.
         $p = $t
+        # A URL (https://host/..., a commit's Claude-Session trailer) names no file on this machine; it read as prefix
+        # "https:" + POSIX "//host" and stopped three runners on 2026-10-20 (kit item IN-20261020133758-c46f).
+        # A file: URL is a path and is still checked.
+        if ($p -match '^[A-Za-z][A-Za-z0-9+.-]+://' -and $p -notmatch '^file:') { continue }
         # example-path: the optional prefix is lazy (??) so "C:/x" is read as a drive path first, not as prefix "C:" + POSIX "/x".
         # The prefix holds no whitespace, quote or comma: an option name is one word, and a nested command's
         # "... 'C:/x' ..." must not read as prefix "... 'C:" + POSIX "/x" (its own tokens are checked instead).

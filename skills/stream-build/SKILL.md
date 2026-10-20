@@ -1,6 +1,6 @@
 ---
 name: stream-build
-description: v0.11. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
+description: v0.12. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
 ---
 
 # stream-build
@@ -180,6 +180,17 @@ do the held item's work (an item). Never run them again.
      - one entry per IMPACT test, `I<n>`: every EXISTING test that covers the files you will change (their own test
        classes, tests of the callers, tests that pin the same strings or types). Choose them now, from the write set
        and the code, and say why each was chosen.
+     - **Sweep impact for a fix row (v0.12, kit item IN-20261020141232-56fc).** A row with `origin` integration (a fix
+       row `<G>.R<n>F<k>`) whose write set touches `src/Web/Documentation/**` or `tests/Tests.E2E/helpers/**` must also
+       list the static sweeps that read those files as `I` entries: in `tests/Tests.Criteria`, the sweep and proof
+       classes (`FullyQualifiedName~Sweep|FullyQualifiedName~E2EProof`), and in `tests/Tests.Unit`, the doc, census,
+       sweep and help-page classes (`FullyQualifiedName~Docs|FullyQualifiedName~Census|FullyQualifiedName~Sweep|FullyQualifiedName~HelpPage`).
+       Run them in the worktree before handoff like any other `I` entry. These sweeps read the files as text, so a
+       change that compiles and passes its own clause tests can still break them: G14.R4F58 (a `cli.ts` spawn seam)
+       broke Criteria `E2EProofTargetsTests` and `FleetAgentNameSweepTests`, and G14.R4F55/R4F60 (`30_OpsCli.md`) broke
+       Unit `ResumeRuleDocsAgreementTests`, and neither builder nor verifier ran them. When the run definition
+       (`.streams\suites\<G>.run.json`) gains `retestSweeps` with `whenPaths`, those globs and filters replace the two
+       literal paths and filters here.
      Record it with `Update-Task.ps1 -Artifacts @{check='.streams\checks\<t>.ps1'}`, then run
      `Invoke-Grader.ps1 -Only check -Label red-check -ExpectRed` with `-BeatSession -BeatTask`. Every `A` entry must
      fail for its clause's reason; `I` entries pass (they guard existing behaviour). A clause test that already passes
@@ -213,7 +224,7 @@ do the held item's work (an item). Never run them again.
    - an acceptance clause with no test, or a test that does not prove its clause;
    - a test a wrong change could pass;
    - an existing test that was weakened, skipped or deleted;
-   - an impact list that misses an obvious caller or test of a changed file;
+   - an impact list that misses an obvious caller or test of a changed file, or a fix row's sweep impact (step 4b);
    - a RED that did not fail for the clause's stated reason.
    Its verdict goes to `.streams\verdicts\<task>.md`, auto-accepted decisions listed in it.
    - **Run the verifier in the FOREGROUND: an Agent call without `run_in_background`, and no Monitor, sleep loop or

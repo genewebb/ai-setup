@@ -34,6 +34,11 @@
 # and a performance row goes at the end of the board): rule 7 then skips that leg for this and later runs of the group.
 # A failure whose fix row was RETIRED as environment-only needs no
 # exemption: Invoke-Retest.ps1 -Mode fix re-runs it once after the retirement, and a pass there clears it.
+# -Exempt <exact test name> -Pending -Reason '<ruling>' (kit item IN-20261020152530-aead) records the exemption BEFORE
+# any run has failed the test (the owner rules a test out ahead of a Tier 2 run, e.g. one that needs files this host
+# lacks): when no finished run's 'fix' failure or NOT-MEASURED leg matches, it writes { test, fixTask '', run 'pending',
+# reason, by, at } and prints EXEMPTED-PENDING <G> <test> (exit 0); a match takes the normal path. A value shaped like
+# a row id (<G>.R<n>F.., <G>.KF.., <G>.T..) is REFUSED (exit 2): a pending exemption needs the exact test name.
 # Prints CLOSE-OK <G> ... (exit 0), one CLOSE-REFUSED <reason> line per unmet rule (exit 1), or
 # CLOSE-BLOCKED <G> <test> lines (exit 3). Closing itself (rows done, group closed) is Close-Group.ps1 (stream-integrate step C).
 param(
@@ -43,7 +48,8 @@ param(
     [switch] $DryRun,
     [switch] $Unblock,
     [string] $Exempt = '',
-    [string] $Reason = ''
+    [string] $Reason = '',
+    [switch] $Pending
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\lib\Streams.ps1"
@@ -66,6 +72,7 @@ function Get-IntegratedAt($t) {
 $exempted = Get-SuiteExemptions $P $Group
 if ($Exempt) {
     if (-not $Reason.Trim()) { 'REFUSED -Exempt needs -Reason naming the owner ruling'; exit 2 }
+    if ($Pending -and $Exempt -match '^[A-Za-z]+\d+\.(R\d+F|KF|T)') { "REFUSED -Pending '$Exempt' looks like a row id: a pending exemption needs the exact test name"; exit 2 }
     $run0 = @(Get-SuiteRunRecords $P $Group '2' | Where-Object { $_['status'] -eq 'done' }) | Select-Object -Last 1
     $attr0 = if ($run0) { Read-JsonFile (Join-Path $rd "$($run0['id']).attribution.json") } else { $null }
     $hit = @(@(if ($attr0) { $attr0['failures'] }) | Where-Object { $_ -and $_['disposition'] -eq 'fix' -and ([string]$_['fixTask'] -eq $Exempt -or [string]$_['test'] -eq $Exempt) })
@@ -74,6 +81,17 @@ if ($Exempt) {
         $res0 = Read-JsonFile (Join-Path $rd "$($run0['id']).results.json")
         $hit = @(@(if ($res0) { $res0['tests'] }) | Where-Object { $_ -and $_['outcome'] -eq 'not-measured' -and [string]$_['test'] -eq $Exempt } |
             ForEach-Object { @{ test = [string]$_['test']; fixTask = '' } })
+    }
+    if (-not $hit.Count -and $Pending) {
+        if ($exempted.ContainsKey($Exempt)) { "EXEMPTED-PENDING $Group $Exempt (already)"; exit 0 }
+        $pPath = Get-SuiteExemptPath $P $Group
+        $pHave = @(if (Test-Path -LiteralPath $pPath) { @(Get-Content -Raw -LiteralPath $pPath | ConvertFrom-Json -AsHashtable -DateKind String) | Where-Object { $_ -is [Collections.IDictionary] } })
+        if (-not $DryRun) {
+            Write-JsonFile $pPath @(@($pHave) + @([ordered]@{ test = $Exempt; fixTask = ''; run = 'pending'; reason = $Reason.Trim(); by = $Session; at = Get-Now }))
+            Add-Decision $P $Session "EXEMPTED-PENDING $Group $Exempt (no run has failed it yet): $($Reason.Trim())"
+        }
+        "EXEMPTED-PENDING $Group $Exempt"
+        exit 0
     }
     if (-not $hit.Count) { "NO-MATCH no 'fix' failure or NOT-MEASURED leg of $(if ($run0) { $run0['id'] } else { "$Group (no finished Tier 2 run)" }) has fixTask or test '$Exempt'"; exit 2 }
     $path = Get-SuiteExemptPath $P $Group

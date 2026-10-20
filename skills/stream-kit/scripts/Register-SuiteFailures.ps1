@@ -8,7 +8,9 @@
 #   fix     : this group or an EARLIER one owns it. A fix task in the run's group (Add-Tasks.ps1 -Role integrate), one
 #             per file: failures that share a file are one task. Write set = that file (a grader failure: the graded
 #             row's write set); the builder widens it with Update-Task.ps1 -AddWriteSet when the fix needs a product
-#             file. It blocks this group's close until a Tier 3 retest passes it (Test-GroupClose.ps1).
+#             file. It blocks this group's close until a Tier 3 retest passes it (Test-GroupClose.ps1). When the owner
+#             is itself a fix row that landed after the run started, no new task: the owner is the fix task
+#             (landedAfterRun), and its landing is what the Tier 3 retest checks.
 #   later   : only a LATER group's row owns it. NO fix task now: the failure goes to
 #             .streams\suites\known-failures.<later group>.json and becomes a fix task at that group's activation
 #             (Activate-Group.ps1 step 2). It does not block this close.
@@ -20,10 +22,16 @@
 # ownerGroup, disposition, fixTask, flakyPromoted } ] } and one decisions.md line. Idempotent: a run that already has
 # its attribution prints ALREADY-ATTRIBUTED. SCREEN-PENDING (exit 3, nothing written) while the run's flaky screen still runs. Prints one line per failure, then
 # "ATTRIBUTED <run> fix <n> later <n> unowned <n> flaky <n>". -DryRun prints the lines and writes nothing.
+# -Retest <id> (kit item IN-20261020141623-c8a3) attributes a Tier 3 fix retest's sweep regressions instead: only the
+# record's sweepFailures, read from <id>.sweep.results.json, against its base run's group, groups and head. Fix ids
+# continue the base run's numbering (<fixGroup>.R<base n>F<k>, taken ids skipped); it writes <id>.attribution.json,
+# never the base run's, so the close rule (which reads the base run's attribution) is unchanged: OPEN-FIX holds the
+# close on the new rows. -Run may be omitted with -Retest.
 param(
     [Parameter(Mandatory)] [string] $Repo,
     [Parameter(Mandatory)] [string] $Session,
-    [Parameter(Mandatory)] [string] $Run,
+    [string] $Run,
+    [string] $Retest,
     [switch] $DryRun
 )
 $ErrorActionPreference = 'Stop'
@@ -33,12 +41,23 @@ $ErrorActionPreference = 'Stop'
 $Repo = (Resolve-Path $Repo).Path
 $P = Get-StreamPaths $Repo
 $rd = Get-SuiteRunsDir $P
-$attrPath = Join-Path $rd "$Run.attribution.json"
-if (Test-Path -LiteralPath $attrPath) { "ALREADY-ATTRIBUTED $Run ($attrPath)"; exit 0 }
+$rt = $null
+if ($Retest) {
+    $rt = Read-JsonFile (Join-Path $rd "$Retest.json")
+    if (-not $rt -or [string]$rt['tier'] -ne '3') { "NO-RUN $Retest (no Tier 3 retest record)"; exit 2 }
+    if (-not $Run) { $Run = [string]$rt['baseRun'] }
+} elseif (-not $Run) { "NO-RUN (name -Run or -Retest)"; exit 2 }
+$label = if ($Retest) { $Retest } else { $Run }
+$attrPath = Join-Path $rd "$label.attribution.json"
+if (Test-Path -LiteralPath $attrPath) { "ALREADY-ATTRIBUTED $label ($attrPath)"; exit 0 }
 $rec = Read-JsonFile (Join-Path $rd "$Run.json")
-$res = Read-JsonFile (Join-Path $rd "$Run.results.json")
-if (-not $rec -or -not $res) { "NO-RUN $Run (record or results missing)"; exit 2 }
-if (Test-SuiteScreenPending $rec) { "SCREEN-PENDING $Run (its flaky screen is still running; Invoke-SuiteLegs.ps1 attributes the run after it)"; exit 3 }
+$res = if ($Retest) { Read-JsonFile (Join-Path $rd "$Retest.sweep.results.json") } else { Read-JsonFile (Join-Path $rd "$Run.results.json") }
+if (-not $rec -or -not $res) { "NO-RUN $label (record or results missing)"; exit 2 }
+if ($Retest) {
+    # Only the sweep regressions Invoke-Retest.ps1 recorded: a test that also failed in the base run is attributed there.
+    $sw = @($rt['sweepFailures'] | Where-Object { $_ } | ForEach-Object { [string]$_ })
+    $res = @{ tests = @(@($res['tests']) | Where-Object { $_ -and $_['outcome'] -eq 'failed' -and $sw -contains [string]$_['test'] }) }
+} elseif (Test-SuiteScreenPending $rec) { "SCREEN-PENDING $Run (its flaky screen is still running; Invoke-SuiteLegs.ps1 attributes the run after it)"; exit 3 }
 $group = [string]$rec['group']
 $doc = Read-Tasks $P
 $rank = Get-GroupRankMap $doc
@@ -49,6 +68,8 @@ $covered = @(Get-SuiteRunGroups $rec | Where-Object { $rank.ContainsKey($_) } | 
 function Get-FixGroup([string] $og) { @($covered | Where-Object { $rank[$_] -ge $rank[$og] }) | Select-Object -First 1 }
 $exemptBy = @{}; foreach ($cg in $covered) { $exemptBy[$cg] = Get-SuiteExemptions $P $cg }
 $runN = if ($Run -match '-(\d+)$') { $Matches[1] } else { '0' }
+# When the graded code was read: the retest's start for a sweep, else the run's.
+$runAt = try { ConvertTo-UtcTime ([string]$(if ($Retest) { $rt['startedAt'] } else { $rec['startedAt'] })) } catch { $null }
 
 $failures = [Collections.Generic.List[object]]::new()
 $fixByFile = [ordered]@{}     # fix group + file (or 'grader:<task>') -> @{ group; key; writeSet; why; tests }
@@ -67,7 +88,9 @@ foreach ($t in @($res['tests'] | Where-Object { $_ -and $_['outcome'] -eq 'faile
     $fg = if ($owner -and $rank.ContainsKey($og)) { Get-FixGroup $og } else { $null }
     if ($exempt.ContainsKey($name) -or ($fg -and $exemptBy[$fg].ContainsKey($name))) {
         $f.disposition = 'exempt'
-        "EXEMPT $name ($([string]$exempt[$name]['reason']))"
+        # The exemption may sit in the fix group's file only (a shared run, kit item IN-20261020202159-4b5e).
+        $ex = if ($exempt.ContainsKey($name)) { $exempt[$name] } else { $exemptBy[$fg][$name] }
+        "EXEMPT $name ($([string]$ex['reason']))"
     } elseif (-not $owner -or -not $rank.ContainsKey($og) -or -not $rank.ContainsKey($group)) {
         $f.disposition = 'unowned'; $unowned.Add($name)
         "UNOWNED $name$(if ($file) { " ($file)" })"
@@ -78,6 +101,12 @@ foreach ($t in @($res['tests'] | Where-Object { $_ -and $_['outcome'] -eq 'faile
         $later[$og].Add([ordered]@{ test = $name; suite = [string]$t['suite']; file = $file; ownerRow = [string]$owner.id; writeSet = $ws
             run = $Run; head = [string]$rec['head']; at = Get-Now; fixTask = $null })
         "LATER $name owned by $($owner.id) ($og): known failure, fix task at $og activation"
+    } elseif ([string]$owner['origin'] -eq 'integration' -and $runAt -and ($la = Get-FixLandedAt $owner) -and $la -gt $runAt) {
+        # The owner is a fix row that landed AFTER this run started, so the run graded the code before it: a new row
+        # would duplicate landed work and could never show a builder RED (kit item IN-20261020203944-8aeb, G13.R6F2).
+        # The failure stays 'fix' with the owner as its fix task, so the Tier 3 retest re-runs it once and a pass clears it.
+        $f.disposition = 'fix'; $f.fixGroup = $fg; $f.fixTask = [string]$owner.id; $f['landedAfterRun'] = $true
+        "FIX $name owned by $($owner.id) ($og): landed after the run, retest on it"
     } else {
         $f.disposition = 'fix'; $f.fixGroup = $fg
         $key = if ($name.StartsWith('grader:')) { $name } else { $file }
@@ -100,18 +129,18 @@ foreach ($slot in $fixByFile.Keys) {
     $id = "$fg.R$($runN)F$k"; while ($byId.ContainsKey($id)) { $k++; $id = "$fg.R$($runN)F$k" }
     $kBy[$fg] = $k + 1
     $tests = @($e.tests)
-    $fixTasks.Add([ordered]@{ id = $id; group = $fg; title = "Fix Tier 2 failure$(if ($tests.Count -gt 1) { 's' }) in ${key}: $(($tests | Select-Object -First 3) -join '; ')$(if ($tests.Count -gt 3) { " (+$($tests.Count - 3))" })"
+    $fixTasks.Add([ordered]@{ id = $id; group = $fg; title = "Fix $(if ($Retest) { "Tier 3 sweep ($Retest)" } else { 'Tier 2' }) failure$(if ($tests.Count -gt 1) { 's' }) in ${key}: $(($tests | Select-Object -First 3) -join '; ')$(if ($tests.Count -gt 3) { " (+$($tests.Count - 3))" })"
         why = $(if (@($e.why).Count) { @($e.why) } else { @('TIER2-FAILURE') }); kind = 'code'; origin = 'integration'; writeSet = @($e.writeSet); dependsOn = @()
         estMinutes = 45; estBasis = 'Tier 2 failure fix, sized as a typical fix task'
-        note = "Tier 2 run $Run at $($rec['head']): $($tests -join '; ') (owner row $($e.owner))" })
+        note = "$(if ($Retest) { "Tier 3 retest $Retest sweep, base run" } else { 'Tier 2 run' }) $Run at $($rec['head']): $($tests -join '; ') (owner row $($e.owner))" })
     foreach ($f in $failures) { if ($f.disposition -eq 'fix' -and $f.fixGroup -eq $fg -and $tests -contains $f.test) { $f.fixTask = $id } }
 }
 
-$summary = "ATTRIBUTED $Run fix $(@($failures | Where-Object { $_.disposition -eq 'fix' }).Count) later $(@($failures | Where-Object { $_.disposition -eq 'later' }).Count) unowned $($unowned.Count) flaky $flaky$(if ($exempt.Count) { " exempt $(@($failures | Where-Object { $_.disposition -eq 'exempt' }).Count)" })"
+$summary = "ATTRIBUTED $label fix $(@($failures | Where-Object { $_.disposition -eq 'fix' }).Count) later $(@($failures | Where-Object { $_.disposition -eq 'later' }).Count) unowned $($unowned.Count) flaky $flaky$(if ($exempt.Count -or @($failures | Where-Object { $_.disposition -eq 'exempt' }).Count) { " exempt $(@($failures | Where-Object { $_.disposition -eq 'exempt' }).Count)" })"
 if ($DryRun) { "DRY-RUN $summary"; exit 0 }
 
 if ($fixTasks.Count) {
-    $ff = Join-Path $rd "$Run.fixes.json"
+    $ff = Join-Path $rd "$label.fixes.json"
     Write-JsonFile $ff ([ordered]@{ groups = @(); tasks = @($fixTasks) })
     $out = @(& "$PSScriptRoot\Add-Tasks.ps1" -Repo $Repo -Role integrate -Session $Session -File $ff)
     $code = $LASTEXITCODE
@@ -130,10 +159,10 @@ foreach ($g in $later.Keys) {
     Write-JsonFile $kp @(@($have) + $add)
 }
 if ($unowned.Count) {
-    $ask = "Tier 2 run $Run ($group) has $($unowned.Count) failure(s) no row owns: $(($unowned | Select-Object -First 10) -join '; '). Decide the earliest group whose feature each covers and add the fix task there (stream-integrate B.3)."
+    $ask = "$(if ($Retest) { "Tier 3 retest $Retest sweep (base $Run)" } else { "Tier 2 run $Run" }) ($group) has $($unowned.Count) failure(s) no row owns: $(($unowned | Select-Object -First 10) -join '; '). Decide the earliest group whose feature each covers and add the fix task there (stream-integrate B.3)."
     & "$PSScriptRoot\Send-InboxItem.ps1" -Repo $Repo -To stream-plan -From $Session -Kind request -Ask $ask -Evidence $attrPath | Out-Null
 }
-Write-JsonFile $attrPath ([ordered]@{ run = $Run; group = $group; groups = @($covered); at = Get-Now; failures = @($failures) })
+Write-JsonFile $attrPath ([ordered]@{ run = $label; baseRun = $Run; group = $group; groups = @($covered); at = Get-Now; failures = @($failures) })
 Add-Decision $P $Session $summary
 $summary
 exit 0

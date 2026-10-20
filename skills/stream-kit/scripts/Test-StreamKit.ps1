@@ -463,6 +463,22 @@ try {
     $fcHPage = Get-Content -LiteralPath $fcHPg -Raw
     Remove-Item -LiteralPath $fcHoldFile -Force
     Case 'an owner hold on Tier 2 reads held, only for the groups it names, and the page says so' ([string]$fcH1.tier2.state -eq 'held' -and [string]$fcH1.tier2.hold.reason -eq 'wait for fixes, builders stopped' -and [string]$fcH1.fixRound.state -eq 'unknown' -and [string]$fcH2.tier2.state -eq 'pending' -and $fcHPage -match 'held by the owner since \d\d:\d\d [A-Z]+ \(wait for fixes, builders stopped\)') "F1 $($fcH1.tier2.state) '$($fcH1.tier2.hold.reason)' F2 $($fcH2.tier2.state) page match $($fcHPage -match 'held by the owner')"
+    # A group whose builder work has all landed but whose gate or integration row is still open is not 'finished':
+    # Progress counts those rows as to go, so the date says what is left (kit item IN-20261020100753-48cc).
+    $fcTasksFile = Join-Path $fr '.streams\tasks.json'; $fcTasksText = Get-Content -LiteralPath $fcTasksFile -Raw
+    $fcHeldDoc = $fcTasksText | ConvertFrom-Json -AsHashtable
+    $fcT5 = @($fcHeldDoc.tasks | Where-Object { $_.id -eq 'F1.T5' })[0]; $fcT5.state = 'integrated'
+    $fcT5.history += @{ at = $utc.AddHours(-1).ToString('yyyy-MM-ddTHH:mm:ssZ'); by = 'integ-1'; to = 'integrated'; note = 'applied' }
+    $fcHeldDoc | ConvertTo-Json -Depth 20 | Set-Content $fcTasksFile -Encoding utf8
+    $fcHeldA = @((& "$S\Get-StreamStatus.ps1" -Repo $fr -Json | ConvertFrom-Json).groups | Where-Object { $_.id -eq 'F1' })[0].forecast
+    @($fcHeldDoc.tasks | Where-Object { $_.id -eq 'F1.T900' })[0].state = 'building'
+    $fcHeldDoc | ConvertTo-Json -Depth 20 | Set-Content $fcTasksFile -Encoding utf8
+    $fcHeldB = @((& "$S\Get-StreamStatus.ps1" -Repo $fr -Json | ConvertFrom-Json).groups | Where-Object { $_.id -eq 'F1' })[0].forecast
+    $fcHeldText = (& "$S\Get-StreamStatus.ps1" -Repo $fr) -join "`n"
+    $fcHeldPg = Join-Path $fr 'held-status.html'; [void](& "$S\Build-StatusPage.ps1" -Repo $fr -Session kit-held -Out $fcHeldPg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
+    $fcHeldPage = Get-Content -LiteralPath $fcHeldPg -Raw
+    Set-Content -LiteralPath $fcTasksFile -Value $fcTasksText -NoNewline -Encoding utf8
+    Case 'a group with only gate or integration rows open says what is left, not finished' ([int]$fcHeldA.predictedMinutes -eq 0 -and [int]$fcHeldA.heldOpen -eq 2 -and [string]$fcHeldA.heldLabel -eq 'build done; 2 integration/gate left' -and [string]$fcHeldB.heldLabel -eq 'build done; Tier 2 run in flight; 1 gate(s) open' -and $fcHeldText -match 'F1 \S+ build done; Tier 2 run in flight; 1 gate\(s\) open' -and $fcHeldText -notmatch 'F1 \S+ finished' -and $fcHeldPage -match 'build done; Tier 2 run in flight') "A '$($fcHeldA.heldLabel)' ($($fcHeldA.predictedMinutes), $($fcHeldA.heldOpen)) B '$($fcHeldB.heldLabel)' text match $($fcHeldText -match 'F1 \S+ build done') page match $($fcHeldPage -match 'build done; Tier 2 run in flight')"
     $f4 = @($fj.groups | Where-Object { $_.id -eq 'F4' })[0].forecast
     $f5 = @($fj.groups | Where-Object { $_.id -eq 'F5' })[0].forecast
     # F4's OWN date: the focus pool (778) then caps it, which is the next case.

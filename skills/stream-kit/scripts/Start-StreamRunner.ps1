@@ -223,6 +223,7 @@ function Wait-ForBoardChange {
         $left = ($deadline - (Get-Date)).TotalMilliseconds
         Start-Sleep -Milliseconds ([int][Math]::Max(100, [Math]::Min(5000, $left)))
         if (Test-StopRequested) { return 'stop' }
+        if (Test-WakeRequested) { return 'wake' }
         if ((Get-Date) -ge $floor -and (& $stamp) -ne $before) { return 'change' }
     }
     'interval'
@@ -577,6 +578,7 @@ function Wait-ForTick([int] $Seconds) {
         $left = ($deadline - (Get-Date)).TotalMilliseconds
         Start-Sleep -Milliseconds ([int][Math]::Max(100, [Math]::Min(5000, $left)))
         if (Test-StopRequested) { return 'stop' }
+        if (Test-WakeRequested) { return 'wake' }
         if ((& $stamp) -ne $before) { return 'inbox' }
     }
     'interval'
@@ -975,6 +977,16 @@ function Test-StopRequested {
     $dir = Join-Path $P.Root 'runners'
     (Test-Path (Join-Path $dir 'STOP')) -or (Test-Path (Join-Path $dir "STOP-$Role")) -or
         @(Get-OwnStopFile | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0
+}
+
+# An owner wake (Wake-StreamRunner.ps1; lib\Streams.ps1 Get-WakeRequest): WAKE, WAKE-<role> or WAKE-<runner id> written
+# since this runner last acted on one. Every wait checks it; the main loop prints the WAKE line, resets the idle streak
+# and the failure backoff, and a 'force' wake skips the gate once.
+function Test-WakeRequested {
+    $w = Get-WakeRequest $P $Role $runnerId $script:wakeSeen
+    if (-not $w) { return $false }
+    $script:wakeSeen = $w.ticks; $script:wakeHit = $w
+    $true
 }
 
 # This runner's own stop files: STOP-<runner id>, and STOP-tab-<tab> under -Tab.
@@ -1386,6 +1398,10 @@ Write-RunnerState $state
 if ($Tab) { Set-RunnerTabTitle $Tab }
 $backoff = 0
 $idleStreak = 0
+# A wake file already there when the runner starts is old news (Get-WakeSeen); only a later write wakes it.
+$script:wakeSeen = Get-WakeSeen $P $Role $runnerId
+$script:wakeHit = $null
+$wakeForce = $false
 # Runners started together finish their first launch check together and race for the tasks.json lock (kit item
 # IN-20261010172833-eff6), so the first unit waits a random 0..STREAM_RUNNER_START_JITTER_SECONDS (30) after it, and a
 # pre-stage that lost a lock race retries after a random wait up to STREAM_RUNNER_BUSY_RETRY_SECONDS (30, at least a
@@ -1405,8 +1421,27 @@ while ($true) {
     if (Test-AllClosed) { $state.status = 'stopped (all groups closed)'; Write-RunnerState $state; "every group is closed; runner exits"; break }
     # For the status role -MaxRuns counts script ticks as well as units (a self-test runs one tick and stops).
     if ($MaxRuns -gt 0 -and ($state.runs -ge $MaxRuns -or ($statusTick -and $script:ticks -ge $MaxRuns))) { $state.status = "stopped (MaxRuns $MaxRuns)"; Write-RunnerState $state; break }
+    # A wake seen while waiting (or now, between waits) re-runs the gate at once with the idle streak and failure
+    # backoff reset; a forced one launches a unit without asking the gate (a work runner still claims in its pre-stage,
+    # so with nothing claimable it goes back to the gate, no failed run).
+    if ($script:wakeHit -or (Test-WakeRequested)) {
+        $wh = $script:wakeHit; $script:wakeHit = $null
+        "$(Get-TabNow) WAKE owner $($wh.file)$(if ($wh.force) { ' force' }) $($wh.reason)"
+        $idleStreak = 0; $backoff = 0; $wakeForce = [bool]$wh.force
+    }
     $tickStart = Get-Date
-    if ($gated) {
+    if ($gated -and $wakeForce) {
+        $wakeForce = $false
+        "$(Get-TabNow) GATE skipped: a forced owner wake launches this unit"
+    } elseif ($statusTick -and $wakeForce) {
+        $wakeForce = $false
+        "$(Get-TabNow) GATE skipped: a forced owner wake launches a /stream-status inbox unit"
+    } elseif ($timedGated -and $wakeForce) {
+        $wakeForce = $false
+        Clear-IdleStatus
+        Set-TimedLaunch
+        "$(Get-TabNow) GATE skipped: a forced owner wake launches this unit"
+    } elseif ($gated) {
         $why = Get-WorkGate
         if (-not $why) {
             try { Show-IdleStatus } catch { "$(Get-TabNow) IDLE nothing to take for $Role (report failed: $(("$_" -split "`n")[0]))" }
@@ -1609,7 +1644,10 @@ while ($true) {
         $state.status = "backoff $backoff s after a failed run; next try at $(Get-TabAt $backoff)"; Write-RunnerState $state
         "  failed     : $(if ("$code" -eq 'PRESTAGE') { 'the set-up before Claude (claim, worktree, base, RED check) failed, so no Claude session ran; the reason is on the PRESTAGE-FAILED line above' } else { 'the session ended without a usable result; the log named on the EXIT line has the detail' })"
         "$(Get-TabNow) BACKOFF $backoff s: waiting after a failed run (doubles on each failure in a row, up to 1 h); next try at $(Get-TabAt $backoff)"
-        Start-Sleep -Seconds $backoff; continue
+        # Waited in 15 s steps so a STOP file or an owner wake (Wake-StreamRunner.ps1) cuts the backoff short.
+        $bw = $backoff
+        while ($bw -gt 0 -and -not (Test-StopRequested) -and -not $script:wakeHit) { Start-Sleep -Seconds ([Math]::Min(15, $bw)); $bw -= 15; [void](Test-WakeRequested) }
+        continue
     }
     $backoff = 0
     $state.status = "ran $session"; Write-RunnerState $state
@@ -1631,6 +1669,7 @@ while ($true) {
         $stamp = if (Test-Path -LiteralPath $inboxFile) { (Get-Item -LiteralPath $inboxFile).LastWriteTimeUtc } else { [datetime]::MinValue }
         while ($wait -gt 0) {
             Start-Sleep -Seconds ([Math]::Min(15, $wait)); $wait -= 15
+            if ((Test-StopRequested) -or (Test-WakeRequested)) { break }
             if ($idleStreak -and (Test-Path -LiteralPath $inboxFile) -and (Get-Item -LiteralPath $inboxFile).LastWriteTimeUtc -ne $stamp) {
                 "$(Get-TabNow) WAKE inbox written"; $idleStreak = 0; break
             }

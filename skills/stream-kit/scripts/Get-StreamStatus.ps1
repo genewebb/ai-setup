@@ -166,6 +166,14 @@ $groups = foreach ($g in $doc.groups) {
     # at the builders' rate and moved the date by work no builder can do (kit item IN-20261019192925-bbd8).
     $togo = @($ts | Where-Object { $_.state -notin @('integrated', 'done') -and $_.kind -notin @('gate', 'integration') })
     $heldOpen = @($ts | Where-Object { $_.state -notin @('integrated', 'done') -and $_.kind -in @('gate', 'integration') }).Count
+    # What a group with no builder or author work left still waits on, said in place of a bare 'finished': its
+    # Progress still counts those rows as to go (kit item IN-20261020100753-48cc).
+    $heldLabel = $null
+    if ($heldOpen) {
+        $openGates = @($ts | Where-Object { $_.state -notin @('integrated', 'done') -and $_.kind -eq 'gate' }).Count
+        $runIntegration = @($ts | Where-Object { $_.state -eq 'building' -and $_.kind -eq 'integration' }).Count
+        $heldLabel = if ($runIntegration) { 'build done; Tier 2 run in flight' + $(if ($openGates) { "; $openGates gate(s) open" } else { '' }) } else { "build done; $heldOpen integration/gate left" }
+    }
     $remain = [int](($togo | ForEach-Object { [int]$_.estMinutes } | Measure-Object -Sum).Sum)
     # The floor: no rate can beat the longest chain of unlanded work this group sits on top of.
     $floor = [int](($togo | ForEach-Object { $upChain[$_.id] } | Measure-Object -Maximum).Maximum)
@@ -240,7 +248,7 @@ $groups = foreach ($g in $doc.groups) {
     [ordered]@{ id = $g.id; name = $g.name; state = $g.state; counts = $counts; etaMinutes = [int]$eta; planPage = $g['planPage']
         forecast = [ordered]@{ remainingMinutes = $remain; floorMinutes = $floor; windowHours = $win; landedInWindow = $n
             outageHours = $outage; liveHours = [math]::Round($liveHours, 2)
-            deliveredMinutes = $delivered; ratePerHour = [math]::Round($rate, 2); predictedMinutes = $predicted; ownPredictedMinutes = $predicted
+            deliveredMinutes = $delivered; ratePerHour = [math]::Round($rate, 2); predictedMinutes = $predicted; ownPredictedMinutes = $predicted; heldOpen = $heldOpen; heldLabel = $heldLabel
             tasksPerHour = [math]::Round($tasksPerHour, 3); meanTogoMinutes = [math]::Round($meanTogo, 1)
             landedMedianMinutes = $landedMedian; togoMedianMinutes = $togoMedian; scaleSkew = $skew; scaleSplit = $scaleSplit
             chainRows = $floorPath.Count; chainMedianMinutes = $pathMedian; chainSplitRatio = $pathSpread; softDate = $softDate
@@ -957,7 +965,7 @@ if ($Json) { $model | ConvertTo-Json -Depth 20; exit 0 }
 $all = @($doc.tasks)
 function FinText($f) {
     if ($null -eq $f.predictedMinutes) { return 'fin unknown' }
-    if ($f.predictedMinutes -le 0) { return 'finished' }
+    if ($f.predictedMinutes -le 0) { $hl = if ($f -is [Collections.IDictionary]) { $f['heldLabel'] } else { $($hp = $f.PSObject.Properties['heldLabel']; if ($hp) { $hp.Value }) }; if ($hl) { return [string]$hl }; return 'finished' }
     $m = [int]$f.predictedMinutes
     $in = if ($m -lt 60) { "$m" + 'm' } elseif ($m -lt 1440) { '{0}h{1}m' -f [math]::Floor($m / 60), ($m % 60) } else { '{0}d{1}h' -f [math]::Floor($m / 1440), [math]::Floor(($m % 1440) / 60) }
     'fin ' + (Format-LocalStamp ([datetime]::Parse($f.predictedAt, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)) 'd MMM HH:mm') + " (in $in)"

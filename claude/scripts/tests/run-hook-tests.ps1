@@ -332,7 +332,13 @@ $dpgSilent = @(
     # A quoted nested command is checked token by token: the 2026-10-18 builder hang read the whole
     # "(Start-Process ... 'C:/...' ...).Id" string as one token, stopped its option prefix at the drive colon and
     # took "/Users/..." for a POSIX absolute (kit item IN-20261018050026-e429).
-    "cd $rpM/speedmerchants && rm -f .streams/logs/x.txt; pwsh -NoProfile -Command `"(Start-Process pwsh -WindowStyle Hidden -ArgumentList '-NoProfile','-File','$($rpF)/x/Invoke-Grader.ps1','-Root','$($wtW -replace '\\', '/')/x' -RedirectStandardOutput '$rpF/speedmerchants/.streams/logs/x.out.txt' -PassThru).Id`""
+    "cd $rpM/speedmerchants && rm -f .streams/logs/x.txt; pwsh -NoProfile -Command `"(Start-Process pwsh -WindowStyle Hidden -ArgumentList '-NoProfile','-File','$($rpF)/x/Invoke-Grader.ps1','-Root','$($wtW -replace '\\', '/')/x' -RedirectStandardOutput '$rpF/speedmerchants/.streams/logs/x.out.txt' -PassThru).Id`"",
+    # A URL is not a path: the 2026-10-20 integrator and coordinator stopped on a commit trailer
+    # "Claude-Session: https://claude.ai/code/session_..." beside an in-repo rm (kit item IN-20261020133758-c46f).
+    "rm -f .streams/x.tmp; git commit -m `"x`" -m `"Claude-Session: https://claude.ai/code/session_019JfT1VU7Z1Lmxrpi7ZQwHh`"",
+    'Remove-Item x.tmp; Invoke-RestMethod -Uri https://example.org/a/b',
+    # A bash-escaped backslash (D:\\x\\y) is one separator: Builder 4 stopped on its own repo's src\Cli\bin.
+    "rm -rf $($rpW -replace '\\', '\\')\\speedmerchants\\src\\Cli\\bin"
 )
 # Rows with the delete right (whole working trees, ~\.claude) are trusted too; their cases are built from this
 # machine's rows. The 8.3 form of THIS profile expands to the same root as its long spelling; another account's
@@ -369,12 +375,18 @@ $dpgAsk = @(
     'Remove-Item -LiteralPath C:\devopslocal\repos\x\bin -Recurse',   # retired root: no longer trusted
     'cmd /c echo x; rm -rf /c',
     'cmd /c rd /s /q C:\Users\agenewe\Documents\x',
-    'rm -f x.txt; pwsh -NoProfile -Command "Start-Process pwsh -ArgumentList ''-File'',''C:/Users/agenewe/Documents/x.ps1''"'
+    'rm -f x.txt; pwsh -NoProfile -Command "Start-Process pwsh -ArgumentList ''-File'',''C:/Users/agenewe/Documents/x.ps1''"',
+    'rm -rf C:\\Users\\agenewe\\Documents\\x',          # doubled separators still resolve outside
+    'rm -rf file:///C:/Users/agenewe/Documents/x'       # a file URL is a path, not skipped
 ) + $dpgAskExtra
 foreach ($c in $dpgAsk) {
     Test-Hook -Name "dpg: ask    | $c" -ScriptPath $dpg -Json (New-BashJson $c) `
         -Expect { param($o) $o -match '"permissionDecision":\s*"ask"' }
 }
+
+Test-Hook -Name 'dpg: ask    | the reason names the trusted roots (kit item IN-20261020133758-c46f)' -ScriptPath $dpg `
+    -Json (New-BashJson 'rm -rf C:\Users\agenewe\Documents\stuff') `
+    -Expect { param($o) $o -match 'Trusted roots: [^"]*' + [regex]::Escape(($rpW.ToLowerInvariant() -replace '\\', '\\')) }
 
 Test-Hook -Name 'dpg: malformed stdin is silent' -ScriptPath $dpg -Json 'not json' `
     -Expect { param($o) $o.Trim() -eq '' }

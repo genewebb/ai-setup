@@ -1734,3 +1734,32 @@ function Invoke-Git([string] $Dir, [string[]] $GitArgs) {
     if ($LASTEXITCODE -ne 0) { throw "git $($GitArgs -join ' ') failed in ${Dir}: $($out -join "`n")" }
     $out
 }
+
+# OWNER WAKE FILES (kit item IN-20261020102535-b7f2), beside the STOP files: .streams\runners\WAKE (every runner),
+# WAKE-<role> and WAKE-<runner id>. A wake is never deleted when seen: each runner keeps the newest write time it has
+# acted on ($Seen, ticks), so one touch wakes every runner of the role. A runner starts with $Seen at the newest file
+# already there, so a wake older than the runner wakes nothing. A file whose first line is 'force' also skips the gate
+# once; its second line is the reason. Get-WakeRequest returns @{ file; force; reason; ticks } for the newest wake past
+# $Seen, else $null.
+function Get-WakeFiles($P, [string] $Role, [string] $RunnerId) {
+    $dir = Join-Path $P.Root 'runners'
+    Join-Path $dir 'WAKE'
+    Join-Path $dir "WAKE-$Role"
+    if ($RunnerId) { Join-Path $dir "WAKE-$RunnerId" }
+}
+function Get-WakeRequest($P, [string] $Role, [string] $RunnerId, [long] $Seen) {
+    $best = $null
+    foreach ($f in @(Get-WakeFiles $P $Role $RunnerId)) {
+        if (-not (Test-Path -LiteralPath $f)) { continue }
+        $t = (Get-Item -LiteralPath $f).LastWriteTimeUtc.Ticks
+        if ($t -le $Seen -or ($best -and $t -le $best.ticks)) { continue }
+        $lines = @(try { Get-Content -LiteralPath $f -ErrorAction Stop } catch { @() })
+        $best = @{ file = (Split-Path -Leaf $f); force = ([string]($lines | Select-Object -First 1)).Trim() -eq 'force'; reason = ([string]($lines | Select-Object -Skip 1 -First 1)).Trim(); ticks = $t }
+    }
+    $best
+}
+function Get-WakeSeen($P, [string] $Role, [string] $RunnerId) {
+    $m = 0L
+    foreach ($f in @(Get-WakeFiles $P $Role $RunnerId)) { if (Test-Path -LiteralPath $f) { $t = (Get-Item -LiteralPath $f).LastWriteTimeUtc.Ticks; if ($t -gt $m) { $m = $t } } }
+    $m
+}

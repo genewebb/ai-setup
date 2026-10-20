@@ -58,9 +58,14 @@ $step = {
     $cmd = Expand-SuiteCommand ([string]$s['command']) $vars
     $out = @(& "$PSScriptRoot\Invoke-IntegratorRun.ps1" -Repo $Repo -Session $Session -Log $log -Command $cmd -WorkDir $wd)
     $code = $LASTEXITCODE
-    $legs.Add([ordered]@{ step = $kind; name = $name; kind = [string]$s['kind']; project = [string]$s['project']; exit = $code; log = $log; command = $cmd })
+    # A leg refused for LOCK-LOST never ran: 'lockLost' tells Export-SuiteResults.ps1 to write it 'not-run', never a
+    # failure to attribute (kit item IN-20261020115130-5b6f).
+    $lost = ($out -join ' ') -match 'LOCK-LOST'
+    $legRow = [ordered]@{ step = $kind; name = $name; kind = [string]$s['kind']; project = [string]$s['project']; exit = $code; log = $log; command = $cmd }
+    if ($lost) { $legRow['lockLost'] = $true }
+    $legs.Add($legRow)
     $rec['legs'] = @($legs); Write-JsonFile $recPath $rec
-    if (($out -join ' ') -match 'LOCK-LOST') { return 'lock-lost' }
+    if ($lost) { return 'lock-lost' }
     if ($code -ne 0) { return 'failed' }
     'ok'
 }

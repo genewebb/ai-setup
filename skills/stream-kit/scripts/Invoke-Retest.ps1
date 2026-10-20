@@ -31,6 +31,9 @@
 # A fix retest whose filter or grep matched no test by a failed name (a fix row renamed it) prints NO-MATCH <test>: the
 # test leaves tests for noMatch (outcome 'no-match' when nothing else ran), neither passes nor strikes, and one
 # stream-plan item asks for the new title. A leg that crashed with no results still counts its tests as failed.
+# A fix retest then runs the run definition's "retestSweeps" (whole legs, or a filter of one, gated by whenPaths) on the
+# same snapshot; their results go to <retest>.sweep.results.json, and a test failed there but not in the base run (not
+# exempt, not flaky) is recorded in sweepFailures and printed SWEEP-NEW <test>. Sweeps never change the outcome.
 param(
     [Parameter(Mandatory)] [string] $Repo,
     [Parameter(Mandatory)] [string] $Session,
@@ -69,6 +72,7 @@ $legDef = @{}; foreach ($l in @($def['legs'])) { if ($l) { $legDef[[string]$l['n
 $want = [Collections.Generic.List[object]]::new()
 $checks = [Collections.Generic.List[string]]::new()
 $notLanded = [Collections.Generic.List[string]]::new()
+$fixPaths = [Collections.Generic.List[string]]::new()
 if ($Mode -eq 'flaky') {
     foreach ($t in @($baseRes['tests'] | Where-Object { $_['outcome'] -eq 'failed' -and -not ([string]$_['test']).StartsWith('leg:') })) { $want.Add($t) }
 } else {
@@ -98,6 +102,7 @@ if ($Mode -eq 'flaky') {
     $startedAt = ConvertTo-UtcTime $base['startedAt']
     foreach ($t in @($doc.tasks | Where-Object { $set.Contains([string]$_.id) -and $_.Contains('origin') -and $_['origin'] -eq 'integration' -and $_.kind -eq 'code' -and $_.state -in @('integrated', 'done') })) {
         $ia = @($t.history | Where-Object { $_ -and $_.to -eq 'integrated' } | Select-Object -Last 1)
+        if ($ia.Count -and (ConvertTo-UtcTime ([string]$ia[0].at)) -gt $startedAt) { foreach ($w in @($t.writeSet)) { if ($w) { $fixPaths.Add(([string]$w).Replace('\', '/')) } } }
         if ($ia.Count -and (ConvertTo-UtcTime ([string]$ia[0].at)) -gt $startedAt -and $t.Contains('artifacts') -and $t['artifacts'] -is [Collections.IDictionary] -and $t['artifacts']['check']) { $checks.Add([string]$t.id) }
     }
 }
@@ -248,6 +253,35 @@ foreach ($suite in @($want | Where-Object { -not ([string]$_['test']).StartsWith
     $legs.Add([ordered]@{ step = 'leg'; name = $name; kind = $kind; project = $proj; exit = $LASTEXITCODE; log = $log; command = $cmd })
     $rec['legs'] = @($legs); Write-JsonFile $recPath $rec
 }
+# ---- sweeps: whole legs (or a filter of one) the run definition names in "retestSweeps" = [{ leg, filter?, whenPaths? }],
+# on the same snapshot. A fix row that only edits docs or a test helper can turn a static sweep red, and a retest that
+# re-runs only the failed tests never sees it (kit item IN-20261020141232-7f92). whenPaths runs the sweep only when a
+# fix row integrated since the base run started has a write-set path like one of them. A sweep is a 'sweep' step, read
+# by Export-SuiteResults.ps1 -Step sweep into its own results file, so it never changes this retest's outcome or strikes.
+if ($Mode -eq 'fix' -and $def -and $def.Contains('retestSweeps')) {
+    foreach ($sw in @($def['retestSweeps'] | Where-Object { $_ })) {
+        $ln = [string]$sw['leg']; $ld = $legDef[$ln]
+        if (-not $ld) { "SWEEP-SKIP $ln (no such leg in $([string]$base['group']).run.json)"; continue }
+        $when = @($sw['whenPaths'] | Where-Object { $_ } | ForEach-Object { ([string]$_).Replace('\', '/') -replace '\*\*', '*' })
+        if ($when.Count -and -not @($fixPaths | Where-Object { $fp = $_; @($when | Where-Object { $fp -like $_ }).Count }).Count) {
+            "SWEEP-SKIP $ln (no fix row landed since $Run writes $($when -join ', '))"; continue
+        }
+        $sRoot = Join-Path $runDir 'sweep'; $out = Join-Path $sRoot $ln; New-Item -ItemType Directory -Path $out -Force | Out-Null
+        $proj = [string]$ld['project']
+        # The leg's own command with {runDir} at <runDir>\sweep, so its results never mix with the re-run of that leg's
+        # failed tests in <runDir>\<leg>. A filter goes through the leg's retestCommand ({filter}) when it has one.
+        $vars = @{ repo = $Repo; snapshot = $snap; runDir = $sRoot; leg = $ln; run = $id; group = $Group; filter = [string]$sw['filter'] }
+        $envPre = Expand-SuiteCommand (& $legEnv ([string]$ld['command'])) $vars
+        $cmd = if ($sw['filter'] -and $ld['retestCommand']) { $envPre + (Expand-SuiteCommand ([string]$ld['retestCommand']) $vars) }
+        elseif ($sw['filter']) {
+            "${envPre}dotnet test $(& $sq $proj)$(if ([string]$ld['command'] -match '--no-build') { ' --no-build' }) --filter $(& $sq ([string]$sw['filter'])) --logger trx --results-directory $(& $sq $out)"
+        } else { Expand-SuiteCommand ([string]$ld['command']) $vars }
+        $log = Join-Path $runDir "leg.sweep.$ln.txt"
+        [void](& "$PSScriptRoot\Invoke-IntegratorRun.ps1" -Repo $Repo -Session $Session -Log $log -Command $cmd -WorkDir $snap)
+        $legs.Add([ordered]@{ step = 'sweep'; name = $ln; kind = [string]$ld['kind']; project = $proj; exit = $LASTEXITCODE; log = $log; command = $cmd; outDir = $out; filter = [string]$sw['filter'] })
+        $rec['legs'] = @($legs); Write-JsonFile $recPath $rec
+    }
+}
 foreach ($t in @($want | Where-Object { ([string]$_['test']).StartsWith('grader:') })) {
     $task = ([string]$t['test']).Substring(7)
     [void](& "$PSScriptRoot\Invoke-Grader.ps1" -Repo $Repo -Task $task -Root $snap -Label $id -BeatSession $Session)
@@ -261,7 +295,11 @@ $rec['graders'] = @($gr); Write-JsonFile $recPath $rec
 & $runAfter
 # The record turns 'done' only once its results are read: a throw there must not leave a 'done' retest with no
 # outcome, which the close rule would count as a failed attempt.
-try { [void](& "$PSScriptRoot\Export-SuiteResults.ps1" -Repo $Repo -Run $id) }
+$swept = @($legs | Where-Object { $_['step'] -eq 'sweep' }).Count
+try {
+    [void](& "$PSScriptRoot\Export-SuiteResults.ps1" -Repo $Repo -Run $id)
+    if ($swept) { [void](& "$PSScriptRoot\Export-SuiteResults.ps1" -Repo $Repo -Run $id -Step sweep) }
+}
 catch {
     $rec['status'] = 'error'; $rec['error'] = ("$_" -split "`n")[0]; $rec['endedAt'] = Get-Now; Write-JsonFile $recPath $rec
     Add-Decision $P $Session "RETEST $id error: $($rec['error'])"
@@ -270,6 +308,22 @@ catch {
 $rec['status'] = 'done'; $rec['endedAt'] = Get-Now
 if ($notMeasured.Count) { $rec['tests'] = @(@($rec['tests']) | Where-Object { $notMeasured -notcontains $_ }); $rec['notMeasured'] = @($notMeasured) }
 $res = Read-JsonFile (Join-Path $rd "$id.results.json")
+# A sweep's new failures: failed there, not failed in the base run, not exempt and not a known flaky test. They are
+# kept on the record (sweepFailures) for attribution; they do not count in this retest's outcome.
+$sweepNew = [Collections.Generic.List[string]]::new()
+if ($swept) {
+    $sres = Read-JsonFile (Join-Path $rd "$id.sweep.results.json")
+    $baseFailed = @{}; foreach ($t in @($baseRes['tests'])) { if ($t -and $t['outcome'] -eq 'failed') { $baseFailed[[string]$t['test']] = $true } }
+    $flk = Read-JsonFile (Join-Path $P.Suites 'flaky.json')
+    foreach ($t in @($sres['tests'])) {
+        if (-not $t -or $t['outcome'] -ne 'failed') { continue }
+        $n = [string]$t['test']
+        if ($baseFailed[$n] -or $exempt.ContainsKey($n) -or $sweepNew -contains $n -or ($flk -and $flk['tests'] -and $flk['tests'].Contains($n))) { continue }
+        $sweepNew.Add($n)
+    }
+    $rec['sweeps'] = @($legs | Where-Object { $_['step'] -eq 'sweep' } | ForEach-Object { [string]$_['name'] })
+    $rec['sweepFailures'] = @($sweepNew)
+}
 # A retested test that left no row (filtered out, or its leg crashed) counts as failed.
 $byTest = @{}; foreach ($t in @($res['tests'])) { if ($t) { $byTest[[string]$t['test']] = [string]$t['outcome'] } }
 foreach ($g in $gr) { if ($g['check']) { $byTest["check:$($g['task'])"] = $(if ([int]$g['exit'] -eq 0) { 'passed' } else { 'failed' }) } }
@@ -323,6 +377,10 @@ if ($Mode -eq 'flaky') {
 }
 Add-Decision $P $Session "RETEST $id ($Mode, base $Run): $($rec['outcome']) passed $passed failed $failed"
 "RETEST $id $($rec['outcome']) passed $passed failed $failed"
+foreach ($n in $sweepNew) { "SWEEP-NEW $n (failed in a $id sweep, not in $Run)" }
+# The sweep regressions become fix rows now (Register-SuiteFailures.ps1 -Retest, kit item IN-20261020141623-c8a3): they
+# continue the base run's fix numbering and hold the close through OPEN-FIX; the base run's attribution is untouched.
+if ($sweepNew.Count) { @(& "$PSScriptRoot\Register-SuiteFailures.ps1" -Repo $Repo -Session $Session -Retest $id) | ForEach-Object { "  $_" } }
 if ($Mode -eq 'fix') {
     # The next fix attempt for each retested failure that still fails, up to three failed retests (then the close
     # rule blocks the group and the owner decides).
