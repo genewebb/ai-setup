@@ -1,6 +1,6 @@
 ---
 name: stream-integrate
-description: v0.20. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes, even while a suite run is going, and each cycle first handles the oldest open item in its inbox (.streams\inbox\stream-integrate.md), then applies each built, verified patch to the dirty main tree as soon as it is ready and re-runs that task's grader there. When a whole group is integrated it starts one Tier 2 run (Start-SuiteRun.ps1, in a snapshot of main, so main stays open), the scripts screen flaky tests and attribute failures to fix tasks, a Tier 3 retest runs only the failed tests once the fixes land, and Test-GroupClose.ps1 says when the group may close; then it activates the next group (Activate-Group.ps1). Use for /stream-integrate (run under /loop), /stream-integrate once, /stream-integrate gate <task> pass|fail "<note>", /stream-integrate status.
+description: v0.22. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes, even while a suite run is going, and each cycle first handles the oldest open item in its inbox (.streams\inbox\stream-integrate.md), then applies each built, verified patch to the dirty main tree as soon as it is ready and re-runs that task's grader there. When a whole group is integrated it starts one Tier 2 run (Start-SuiteRun.ps1, in a snapshot of main, so main stays open), the scripts screen flaky tests and attribute failures to fix tasks, a Tier 3 retest runs only the failed tests once the fixes land, and Test-GroupClose.ps1 says when the group may close; then it activates the next group (Activate-Group.ps1). Use for /stream-integrate (run under /loop), /stream-integrate once, /stream-integrate gate <task> pass|fail "<note>", /stream-integrate status.
 ---
 
 # stream-integrate
@@ -189,6 +189,14 @@ lock). `RUN-BUSY` = a run is still going; `LOCK-HELD` = not your lock. A run rec
 killed unit) is marked `abandoned` and printed `ABANDONED <run>`, so it never blocks the next run. A nightly that finds
 your lock live files you an inbox item `Start the nightly Tier 2 run ...`: run the command it names, with `-Reason nightly`.
 
+**One run for several groups (v0.21, kit item IN-20261019130625-ee1d).** The record's `groups` list holds the run's group
+plus every other focus group whose non-fix build rows were all `integrated` or `done` when it started. The run counts as
+that Tier 2 for each of them: `Test-GroupClose.ps1 -Group <g>` and `Invoke-Retest.ps1 -Group <g> -Mode fix` find it for
+any listed group, so N integrated groups close on one full suite, not N in a row. Do not start a second completion run
+for a group already listed in a live or finished run that is still its latest. Attribution then files each fix in the
+EARLIEST covered group at or after the owner's group (attribution field `fixGroup`, fix id `<fixGroup>.R<n>F<k>`), and
+each group's close and Tier 3 count only the fixes filed in it.
+
 While the legs run, keep cycling (inbox, step A: applies go on, the run has its own snapshot). Refresh your lock with
 `Enter-Integrator.ps1` at least every 10 minutes between commands. When the record says `done`, the legs script has
 already, with no tokens:
@@ -204,7 +212,7 @@ already, with no tokens:
      at that group's activation. It does not block this close.
    - no row owns it: one `stream-plan` inbox item; the planner picks the earliest group whose feature the test covers.
 
-Read `runs\<run>.attribution.json` and the run's decisions line; you only act on what the scripts could not decide.
+Read `runs\<run>.attribution.json` and the run's decisions line; you only act on what the scripts could not decide. A record that reads `done` with `screen` `pending` is still in its flaky screen: wait, never run `Register-SuiteFailures.ps1` by hand then (it refuses, `SCREEN-PENDING`, exit 3; kit item IN-20261019153055-2c27). Pending holds only while the run's process lives: once it is dead, attribute by hand.
 Other end states of a run record: `setup-failed` (a setup step failed: fix the environment or the run definition, then a
 `-Reason manual` run), `lock-lost` (another session took your lock mid-run: re-enter and start a new run), `abandoned`
 (its process died: start a new run), and an `attributionError` field (export, flaky screen or attribution threw: the

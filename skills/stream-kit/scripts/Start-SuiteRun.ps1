@@ -37,6 +37,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\lib\Streams.ps1"
 . "$PSScriptRoot\lib\Inbox.ps1"
 . "$PSScriptRoot\lib\Suites.ps1"
+. "$PSScriptRoot\lib\Activation.ps1"
 $Repo = (Resolve-Path $Repo).Path
 $P = Get-StreamPaths $Repo
 $doc = Read-Tasks $P
@@ -78,7 +79,14 @@ if ($LASTEXITCODE) { "SNAPSHOT-FAILED exit $LASTEXITCODE`n$($snapOut -join "`n")
 $snap = [string]($snapOut | Select-Object -Last 1)
 $headLine = @($snapOut | Where-Object { $_ -match '^SNAPSHOT ' }) | Select-Object -First 1
 $head = if ($headLine -match ' HEAD (\S+)') { $Matches[1] } else { '' }
-$rec = [ordered]@{ id = $id; tier = '2'; group = $Group; reason = $Reason; window = $(if ($Reason -eq 'nightly') { $window } else { '' })
+# The other focus groups whose non-fix build rows were all integrated before this run started: the run counts for them
+# too (kit item IN-20261019130625-ee1d), so N integrated groups close on one full suite, not N in a row.
+$covered = @($Group)
+foreach ($g in @((Get-FocusGroups $doc $P).groups | Where-Object { $_ -ne $Group })) {
+    $gw = @(Get-GroupBuildRows $doc $g)
+    if ($gw.Count -and -not @($gw | Where-Object { $_.state -notin @('integrated', 'done') }).Count) { $covered += $g }
+}
+$rec = [ordered]@{ id = $id; tier = '2'; group = $Group; groups = $covered; reason = $Reason; window = $(if ($Reason -eq 'nightly') { $window } else { '' })
     session = $Session; startedAt = Get-Now; endedAt = $null; head = $head; snapshot = $snap; runDir = $runDir; status = 'running'; legs = @() }
 Set-SuiteRunProcess $rec
 Write-JsonFile (Join-Path $rd "$id.json") $rec

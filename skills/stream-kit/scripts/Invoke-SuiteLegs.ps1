@@ -10,6 +10,8 @@
 # A setup step that fails stops the run as 'setup-failed': no leg can be trusted on a tree that did not build.
 # The record carries this process's pid and start time, so a run whose process died (a reboot, a killed unit) is seen as
 # abandoned instead of 'running' for good (lib\Suites.ps1 Test-SuiteRunAlive). Graders beat the integrator lock. A
+# record reads screen = pending from the end of the legs until the flaky screen returns, and Register-SuiteFailures.ps1 refuses
+# to attribute while it does (SCREEN-PENDING; kit item IN-20261019153055-2c27). A
 # throw in the export, flaky screen or attribution is recorded as attributionError on the record (the close rule then
 # reads NOT-ATTRIBUTED and the integrator sees why) instead of killing the process silently. A run started by the
 # nightly task (session suite-nightly) hands the integrator lock back when it ends.
@@ -69,12 +71,13 @@ if ($status -eq 'done') {
 # No grader pass (owner ruling IN-20261005230119-9a3d, 2026-10-05): a Tier 2 run is the test suites only. Graders run at
 # integration time (Integrate-Patch.ps1); at close they cost G3 run 1 7 h 07 m of 10 h, and 67 of its 71 red graders were
 # drift, not regressions. A run definition's "graders" key is ignored.
-$rec['status'] = $status; $rec['endedAt'] = Get-Now; Write-JsonFile $recPath $rec
+$rec['status'] = $status; $rec['endedAt'] = Get-Now; if ($status -eq 'done') { $rec['screen'] = 'pending' }; Write-JsonFile $recPath $rec
 $said
 if ($status -eq 'done') {
     try {
         & "$PSScriptRoot\Export-SuiteResults.ps1" -Repo $Repo -Run $Run | ForEach-Object { $_ }
         & "$PSScriptRoot\Invoke-Retest.ps1" -Repo $Repo -Session $Session -Run $Run -Mode flaky | ForEach-Object { $_ }
+        $rec = Read-JsonFile $recPath; $rec['screen'] = 'done'; Write-JsonFile $recPath $rec
         & "$PSScriptRoot\Register-SuiteFailures.ps1" -Repo $Repo -Session $Session -Run $Run | ForEach-Object { $_ }
     } catch {
         $rec = Read-JsonFile $recPath; $rec['attributionError'] = ("$_" -split "`n")[0]; Write-JsonFile $recPath $rec

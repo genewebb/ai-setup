@@ -6,6 +6,7 @@ param(
 )
 . "$PSScriptRoot\lib\Streams.ps1"
 . "$PSScriptRoot\lib\Inbox.ps1"
+. "$PSScriptRoot\lib\Suites.ps1"
 $Repo = (Resolve-Path $Repo).Path
 $P = Get-StreamPaths $Repo
 $doc = Read-Tasks $P
@@ -160,7 +161,11 @@ $groups = foreach ($g in $doc.groups) {
     $counts = [ordered]@{}; foreach ($s in $StateBuckets) { $counts[$s] = @($ts | Where-Object { (Bucket $_) -eq $s }).Count }
     $eta = ($ts | ForEach-Object { $chain[$_.id] } | Measure-Object -Maximum).Maximum
 
-    $togo = @($ts | Where-Object { $_.state -notin @('integrated', 'done') })
+    # Builder and author work only: an owner gate waits on the owner's time and an integration row on the Tier 2 run,
+    # neither is throughput, and each has its own line in the group's phases (below). Counting them here priced them
+    # at the builders' rate and moved the date by work no builder can do (kit item IN-20261019192925-bbd8).
+    $togo = @($ts | Where-Object { $_.state -notin @('integrated', 'done') -and $_.kind -notin @('gate', 'integration') })
+    $heldOpen = @($ts | Where-Object { $_.state -notin @('integrated', 'done') -and $_.kind -in @('gate', 'integration') }).Count
     $remain = [int](($togo | ForEach-Object { [int]$_.estMinutes } | Measure-Object -Sum).Sum)
     # The floor: no rate can beat the longest chain of unlanded work this group sits on top of.
     $floor = [int](($togo | ForEach-Object { $upChain[$_.id] } | Measure-Object -Maximum).Maximum)
@@ -207,7 +212,7 @@ $groups = foreach ($g in $doc.groups) {
     $scaleSplit = $pathSpread -gt $ScaleSplitRatio
     $predicted = $null; $basis = $null; $softDate = $false
     if ($remain -le 0) {
-        $predicted = 0; $basis = 'all tasks integrated'
+        $predicted = 0; $basis = if ($heldOpen) { "all builder and author work integrated; $heldOpen gate or integration row(s) left, see the phases" } else { 'all tasks integrated' }
     } elseif ($rate -gt 0) {
         $byRate = [int][math]::Round(60 * $remain / $rate)
         $predicted = [math]::Max($byRate, $floor)
@@ -231,7 +236,7 @@ $groups = foreach ($g in $doc.groups) {
     } else {
         $basis = "no task landed in the last $($DeliveryWindowHours[-1]) h"
     }
-    $groupRaw[[string]$g.id] = @{ tasksPerHour = $tasksPerHour; togoCount = $togoCount; meanTogo = $meanTogo; floor = $floor; remain = $remain }
+    $groupRaw[[string]$g.id] = @{ tasksPerHour = $tasksPerHour; togoCount = $togoCount; meanTogo = $meanTogo; floor = $floor; remain = $remain; heldOpen = $heldOpen }
     [ordered]@{ id = $g.id; name = $g.name; state = $g.state; counts = $counts; etaMinutes = [int]$eta; planPage = $g['planPage']
         forecast = [ordered]@{ remainingMinutes = $remain; floorMinutes = $floor; windowHours = $win; landedInWindow = $n
             outageHours = $outage; liveHours = [math]::Round($liveHours, 2)
@@ -244,6 +249,67 @@ $groups = foreach ($g in $doc.groups) {
     }
 }
 
+
+# ---- what the rate cannot price (kit item IN-20261019191314-2d8f) ----
+# The predicted finish divides builder/author work by a measured rate. Three things a group still waits on are not
+# throughput, so each is a named line beside the date instead of minutes folded into it: the Tier 2 run (wall clock,
+# and it starts only when the integrator gets the go), the owner gates (they wait on the owner's time), and the fix
+# round a Tier 2 run files (unknown until that run ends). Read-only: the runs folder is never created here.
+$runsDir = Join-Path $P.Suites 'runs'
+$tier2Runs = @(if (Test-Path -LiteralPath $runsDir) { Get-SuiteRunRecords $P '' '2' })
+$tier2Durations = @($tier2Runs | Where-Object { [string]$_['status'] -eq 'done' -and $_['endedAt'] } |
+        ForEach-Object { [int]((ConvertTo-UtcTime $_['endedAt']) - (ConvertTo-UtcTime $_['startedAt'])).TotalMinutes })
+$tier2Typical = if ($tier2Durations.Count) { [int](Median $tier2Durations) } else { $null }
+# The owner's Tier 2 hold (kit item IN-20261019194753-16ca): the planner relays an owner order such as "no Tier 2 run
+# until the G14 fixes land and the owner stops the builders" in .streams\suites\tier2-hold.json
+# { since, by, reason, item, groups } and deletes the file at the go. Until 2026-10-19 the hold lived only in the
+# words of a stream-integrate item, so the page read "pending" for a run that could not start. An empty or missing
+# groups list holds every group. An unreadable file is reported as a hold with that reason, never dropped.
+$tier2HoldFile = Join-Path $P.Suites 'tier2-hold.json'
+$tier2Hold = $null
+if (Test-Path -LiteralPath $tier2HoldFile) {
+    try {
+        $h = Get-Content -LiteralPath $tier2HoldFile -Raw | ConvertFrom-Json
+        $tier2Hold = [ordered]@{ since = [string]$h.since; by = [string]$h.by; reason = [string]$h.reason; item = [string]$h.item; groups = @($h.groups | Where-Object { $_ } | ForEach-Object { [string]$_ }) }
+    } catch {
+        $tier2Hold = [ordered]@{ since = ''; by = ''; reason = "unreadable tier2-hold.json: $($_.Exception.Message)"; item = ''; groups = @() }
+    }
+}
+foreach ($g in $groups) {
+    $gid = [string]$g.id
+    $gts = @($doc.tasks | Where-Object { $_.group -eq $gid })
+    $openGates = @($gts | Where-Object { $_.kind -eq 'gate' -and $_.state -notin @('integrated', 'done') } | ForEach-Object { [string]$_.id })
+    $openFix = @($gts | Where-Object { [string]$_.id -match '\.(R\d+F\d+|KF\d+)$' -and $_.state -notin @('integrated', 'done') } | ForEach-Object { [string]$_.id })
+    $runs = @($tier2Runs | Where-Object { (Get-SuiteRunGroups $_) -contains $gid })
+    $lastRun = if ($runs.Count) { $runs[-1] } else { $null }
+    $t2 = [ordered]@{ state = 'pending'; run = $null; startedAt = $null; endedAt = $null; typicalMinutes = $tier2Typical; leftMinutes = $null }
+    if ([string]$g.state -eq 'closed') { $t2.state = 'closed' }
+    elseif ($lastRun -and (Test-SuiteRunAlive $lastRun)) {
+        $t2.state = 'running'; $t2.run = [string]$lastRun['id']; $t2.startedAt = [string]$lastRun['startedAt']
+        if ($null -ne $tier2Typical) { $t2.leftMinutes = [math]::Max(0, $tier2Typical - [int]($now - (ConvertTo-UtcTime $lastRun['startedAt'])).TotalMinutes) }
+    } elseif ($lastRun -and [string]$lastRun['status'] -eq 'done') {
+        $t2.state = 'ended'; $t2.run = [string]$lastRun['id']; $t2.startedAt = [string]$lastRun['startedAt']; $t2.endedAt = [string]$lastRun['endedAt']
+    } elseif ($lastRun) {
+        # Not alive and not done: the run died (marked 'abandoned', or a dead 'running' record not yet marked). It
+        # filed no fix round, so the round is unknown because of it, not because a run is still to come
+        # (kit item IN-20261019194343-5cfc).
+        $t2.state = 'abandoned'; $t2.run = [string]$lastRun['id']; $t2.startedAt = [string]$lastRun['startedAt']
+    }
+    $t2['hold'] = $null
+    $lastAbandoned = $t2.state -eq 'abandoned'
+    # A hold matters only while no run is going: a running run is shown running, an ended one ended.
+    if ($tier2Hold -and $t2.state -in @('pending', 'abandoned') -and (-not $tier2Hold.groups.Count -or $tier2Hold.groups -contains $gid)) {
+        $t2.state = 'held'; $t2['hold'] = $tier2Hold
+    }
+    $fixState = if ($t2.state -in @('pending', 'running', 'abandoned', 'held')) { 'unknown' } elseif ($openFix.Count) { 'open' } else { 'none' }
+    $fixReason = if ($lastAbandoned) { 'last run abandoned' } elseif ($fixState -eq 'unknown') { 'until the run ends' } else { '' }
+    $g['phases'] = [ordered]@{
+        tier2 = $t2
+        ownerGates = [ordered]@{ count = $openGates.Count; ids = @($openGates) }
+        fixRound = [ordered]@{ state = $fixState; reason = $fixReason; open = $openFix.Count; ids = @($openFix) }
+        rateCovers = 'builder and author work only'
+    }
+}
 # ---- queued groups: dated in focus order, at the focus group's live capacity ----
 # Only the focus group(s) are worked; every other open group is frozen until the focus moves on, so it is dated as a
 # QUEUE: the first one after the focus starts when the last focus group finishes, each later one when the one before
@@ -290,7 +356,8 @@ foreach ($g in $groups) {
     $f.tasksPerHour = [math]::Round($capacity, 3)
     $f.ratePerHour = [math]::Round($capacity * $r.meanTogo, 2)
     if ($r.remain -le 0) {
-        $f.predictedMinutes = 0; $f.predictedAt = $now.ToString('yyyy-MM-ddTHH:mm:ssZ'); $f.basis = 'all tasks integrated'
+        $f.predictedMinutes = 0; $f.predictedAt = $now.ToString('yyyy-MM-ddTHH:mm:ssZ')
+        $f.basis = if ($r.heldOpen) { "all builder and author work integrated; $($r.heldOpen) gate or integration row(s) left, see the phases" } else { 'all tasks integrated' }
         continue
     }
     if ($null -eq $cursor -or $capacity -le 0) {

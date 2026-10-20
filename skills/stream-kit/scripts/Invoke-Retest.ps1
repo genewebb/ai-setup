@@ -28,6 +28,9 @@
 # .results.json (Export-SuiteResults.ps1). Prints "RETEST <id> <outcome> passed N failed N" or "RETEST-NOTHING <why>".
 # A perf leg waits for a quiet host first; one that never quiets is NOT-MEASURED (outcome 'not-measured' when nothing
 # else ran): its tests leave the record's tests list for notMeasured, so they neither pass nor strike.
+# A fix retest whose filter or grep matched no test by a failed name (a fix row renamed it) prints NO-MATCH <test>: the
+# test leaves tests for noMatch (outcome 'no-match' when nothing else ran), neither passes nor strikes, and one
+# stream-plan item asks for the new title. A leg that crashed with no results still counts its tests as failed.
 param(
     [Parameter(Mandatory)] [string] $Repo,
     [Parameter(Mandatory)] [string] $Session,
@@ -58,7 +61,8 @@ $base = Read-JsonFile (Join-Path $rd "$Run.json")
 $baseRes = Read-JsonFile (Join-Path $rd "$Run.results.json")
 if (-not $base -or -not $baseRes) { "NO-RUN $Run (record or results missing)"; exit 2 }
 if (-not $Group) { $Group = [string]$base['group'] }
-$def = Read-JsonFile (Join-Path $P.Suites "$Group.run.json")
+# The legs are the base run's own (a shared run, record 'groups', ran its 'group''s definition).
+$def = Read-JsonFile (Join-Path $P.Suites "$([string]$base['group']).run.json")
 $legDef = @{}; foreach ($l in @($def['legs'])) { if ($l) { $legDef[[string]$l['name']] = $l } }
 
 # ---- which tests ----
@@ -78,7 +82,7 @@ if ($Mode -eq 'flaky') {
     }
     $baseAt = ConvertTo-UtcTime $base['startedAt']
     $exempt = Get-SuiteExemptions $P $Group
-    foreach ($a in @($attr['failures'] | Where-Object { $_ -and $_['disposition'] -eq 'fix' })) {
+    foreach ($a in @($attr['failures'] | Where-Object { $_ -and $_['disposition'] -eq 'fix' -and (-not $_['fixGroup'] -or [string]$_['fixGroup'] -eq $Group) })) {
         $name = [string]$a['test']
         if ($passedLater[$name] -or $name.StartsWith('leg:') -or $exempt.ContainsKey($name)) { continue }
         # Its current fix must have landed since the last retest that ran it; a retired fix row "lands" when it is
@@ -269,9 +273,35 @@ $res = Read-JsonFile (Join-Path $rd "$id.results.json")
 # A retested test that left no row (filtered out, or its leg crashed) counts as failed.
 $byTest = @{}; foreach ($t in @($res['tests'])) { if ($t) { $byTest[[string]$t['test']] = [string]$t['outcome'] } }
 foreach ($g in $gr) { if ($g['check']) { $byTest["check:$($g['task'])"] = $(if ([int]$g['exit'] -eq 0) { 'passed' } else { 'failed' }) } }
+# A fix retest whose filter or grep matched no test at all is NO-MATCH, never a failure: a fix row that renames the test
+# (G14.R4F63 renamed a backup.spec title) leaves the base run's title matching nothing, and counting that as still
+# failing filed a pointless next attempt (G14.R4F37A2; kit item IN-20261020004435-6e00). The test left no row while its
+# leg did run: the leg reported other tests (no failed 'leg:<suite>' row), or every failing batch of it logged
+# Playwright's 'No tests found'. Like NOT-MEASURED it leaves the record's tests for noMatch, so it neither passes nor
+# strikes; the planner names the new title (one stream-plan item), and a crashed leg still counts as failed.
+$noMatch = [Collections.Generic.List[string]]::new()
+if ($Mode -eq 'fix') {
+    $legRow = @{}; foreach ($t in @($res['tests'])) { if ($t -and ([string]$t['test']).StartsWith('leg:') -and $t['outcome'] -eq 'failed') { $legRow[([string]$t['test']).Substring(4)] = $true } }
+    foreach ($t in @($want | Where-Object { -not ([string]$_['test']).StartsWith('grader:') })) {
+        $w = [string]$t['test']; $sn = [string]$t['suite']
+        if ($byTest.ContainsKey($w) -or $notMeasured -contains $w -or @($rec['tests']) -notcontains $w) { continue }
+        $ran = @($legs | Where-Object { $_['step'] -eq 'leg' -and $_['name'] -eq $sn -and -not $_['notMeasured'] })
+        if (-not $ran.Count) { continue }
+        $none = -not $legRow[$sn]
+        if (-not $none) {
+            $bad = @($ran | Where-Object { [int]$_['exit'] -ne 0 })
+            $none = $bad.Count -and -not @($bad | Where-Object { -not $_['log'] -or -not (Test-Path -LiteralPath $_['log']) -or -not (Select-String -LiteralPath $_['log'] -Pattern 'No tests found' -SimpleMatch -Quiet) }).Count
+        }
+        if ($none) { $noMatch.Add($w) }
+    }
+    if ($noMatch.Count) {
+        $rec['tests'] = @(@($rec['tests']) | Where-Object { $noMatch -notcontains $_ }); $rec['noMatch'] = @($noMatch)
+        foreach ($w in $noMatch) { "NO-MATCH $w (the retest matched no test by this name; renamed? the planner names the new title)" }
+    }
+}
 $passed = 0; $failed = 0
 foreach ($w in @($rec['tests']) + @($checks | ForEach-Object { "check:$_" })) { if ($byTest[$w] -eq 'passed') { $passed++ } else { $failed++ } }
-$rec['outcome'] = $(if ($failed) { 'fail' } elseif (-not $passed -and $notMeasured.Count) { 'not-measured' } else { 'pass' }); $rec['perTest'] = $byTest; Write-JsonFile $recPath $rec
+$rec['outcome'] = $(if ($failed) { 'fail' } elseif (-not $passed -and $noMatch.Count) { 'no-match' } elseif (-not $passed -and $notMeasured.Count) { 'not-measured' } else { 'pass' }); $rec['perTest'] = $byTest; Write-JsonFile $recPath $rec
 
 if ($Mode -eq 'flaky') {
     $tier2 = @(Get-SuiteRunRecords $P '' '2')
@@ -303,6 +333,15 @@ if ($Mode -eq 'fix') {
         if ($strikes -ge 3) { continue }
         $nid = Add-FixAttempt $P $Repo $Session $Run $w $PSScriptRoot
         if ($nid) { "REFIX $w $nid (attempt $($strikes + 1))" }
+    }
+    # One stream-plan item per newly unmatched test: an earlier retest of this base run that already reported it
+    # filed it then.
+    $told = @{}
+    foreach ($r in @(Get-SuiteRunRecords $P $Group '3' | Where-Object { $_['baseRun'] -eq $Run -and [string]$_['id'] -ne $id })) { foreach ($n in @($r['noMatch'])) { if ($n) { $told[[string]$n] = $true } } }
+    $new = @($noMatch | Where-Object { -not $told[$_] })
+    if ($new.Count) {
+        $ask = "NO-MATCH in $id (base $Run): the Tier 3 retest matched no test named $(($new | ForEach-Object { "'$_'" }) -join ', '). A fix row probably renamed it. Name the new title (or exempt it with Test-GroupClose.ps1 -Exempt) so the retest can run it; until then it neither passes nor strikes and the close reads UNRETESTED."
+        [void](& "$PSScriptRoot\Send-InboxItem.ps1" -Repo $Repo -To stream-plan -From $Session -Kind bug -Ask $ask -Evidence $recPath)
     }
 }
 exit 0

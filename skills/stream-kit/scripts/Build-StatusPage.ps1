@@ -418,6 +418,22 @@ foreach ($g in $model.groups) {
   $etaTxt = if ($fd) { '<b>' + (Format-LocalStamp $fd 'ddd dd MMM HH:mm') + '</b> <small>predicted finish &middot; in ' + (Dur $gf.predictedMinutes) + '</small>' }
             else { '<b>no date</b> <small>' + (E ([string]$gf.basis)) + '</small>' }
   W ('<div class="eta">' + $etaTxt + '</div></div>')
+  # Kit item IN-20261019191314-2d8f: the date above is builder/author work by rate; what the rate cannot price is
+  # listed by name, from the model's phases block, never as minutes added to the date.
+  $ph = $g.phases
+  if ($ph -and [string]$g.state -ne 'closed') {
+    $t2 = $ph.tier2
+    $t2Txt = switch ([string]$t2.state) {
+      'running' { 'running ' + (E ([string]$t2.run)) + ' since ' + (Format-LocalStamp ([datetime]::Parse([string]$t2.startedAt, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)) 'HH:mm') + $(if ($null -ne $t2.leftMinutes) { ' &middot; ~' + (Dur $t2.leftMinutes) + ' left' } else { '' }) }
+      'ended' { 'ended (' + (E ([string]$t2.run)) + ')' }
+      'abandoned' { 'last run ' + (E ([string]$t2.run)) + ' abandoned &middot; the next starts on the integrator''s go' }
+      'held' { 'held by the owner' + $(if ([string]$t2.hold.since) { ' since ' + (Format-LocalStamp ([datetime]::Parse([string]$t2.hold.since, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)) 'HH:mm') } else { '' }) + $(if ([string]$t2.hold.reason) { ' (' + (E ([string]$t2.hold.reason)) + ')' } else { '' }) + $(if ($t2.run) { ' &middot; last run ' + (E ([string]$t2.run)) + ' abandoned' } else { '' }) + ' &middot; starts on the planner''s go' }
+      default { 'pending' + $(if ($null -ne $t2.typicalMinutes) { ' &middot; typical run ' + (Dur $t2.typicalMinutes) } else { '' }) + ' &middot; starts on the integrator''s go' }
+    }
+    $fx = $ph.fixRound
+    $fxTxt = switch ([string]$fx.state) { 'unknown' { if ([string]$fx.reason -eq 'last run abandoned') { 'unknown (last run abandoned; ' + [int]$fx.open + ' earlier fix row(s) open)' } else { 'unknown until the run ends' + $(if ([int]$fx.open) { ' (' + [int]$fx.open + ' open from earlier runs)' } else { '' }) } } 'open' { [string][int]$fx.open + ' fix row(s) open' } default { 'none open' } }
+    W ('<div class="muted mono"><small>date covers builder and author work only &middot; Tier 2 run: ' + $t2Txt + ' &middot; waiting on owner: ' + [int]$ph.ownerGates.count + ' gate(s) &middot; fix round: ' + $fxTxt + '</small></div>')
+  }
   W '<div class="bar">'
   foreach ($s in $states) {
     $c = [int]$g.counts.$s

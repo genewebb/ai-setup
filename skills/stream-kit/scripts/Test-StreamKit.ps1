@@ -370,6 +370,9 @@ try {
             estMinutes = $est; state = 'planned'; claim = $null
             history = @(@{ at = $utc.AddHours(-30).ToString('yyyy-MM-ddTHH:mm:ssZ'); by = 'plan-1'; to = 'planned'; note = 'added' }) }
     }
+    function Gated([string] $id, [string] $g, [string] $kind, [int] $est, [string[]] $deps) {
+        $t = Togo $id $g $est $deps; $t.kind = $kind; $t.writeSet = @(); $t
+    }
     $fdoc = @{
         groups = @(
             @{ id = 'F1'; name = 'steady'; state = 'released'; origin = 'plan'; scope = @{ include = @('FEAT-X') } }
@@ -383,6 +386,10 @@ try {
             # against 100 min of work left = 360 min, and the 100 min floor does not bind.
             (Landed 'F1.T1' 'F1' 100 2), (Landed 'F1.T2' 'F1' 100 4), (Landed 'F1.T3' 'F1' 100 6), (Landed 'F1.T4' 'F1' 100 8),
             (Togo 'F1.T5' 'F1' 100 @()),
+            # ...and an owner gate and the integration row behind it. Neither is builder or author work (the gate waits
+            # on the owner, the integration row on the Tier 2 run), so neither reaches F1's work left, its chain floor
+            # or the focus pool: every F1 number below is the same as without them (kit item IN-20261019192925-bbd8).
+            (Gated 'F1.G1' 'F1' 'gate' 500 @('F1.T5')), (Gated 'F1.T900' 'F1' 'integration' 900 @('F1.G1')),
             # F2: nothing has ever landed, so there is no rate and the honest answer is no date at all.
             (Togo 'F2.T1' 'F2' 50 @()), (Togo 'F2.T2' 'F2' 50 @()),
             # F3: 3000 est-min landed in 24 h = 125 min/h, which would take 864 min for the 1800 left, but the three
@@ -437,6 +444,25 @@ try {
     Case 'a focus group with no landing of its own is dated from the focus pool' ($null -eq $f2.ownPredictedMinutes -and [math]::Abs([int]$f2.predictedMinutes - 778) -le 2 -and [string]$f2.basis -match '^focus pool') "F2 own $($f2.ownPredictedMinutes) predicted $($f2.predictedMinutes) basis '$($f2.basis)'"
     Case 'the dependency chain floors the date' ([int]$f3.predictedMinutes -eq 1800 -and [string]$f3.basis -match 'dependency chain') "F3 predicted $($f3.predictedMinutes) basis '$($f3.basis)'"
     Case 'work left counts only unlanded tasks' ([int]$f1.remainingMinutes -eq 100 -and [int]$f3.remainingMinutes -eq 1800) "F1 $($f1.remainingMinutes) F3 $($f3.remainingMinutes)"
+    $f1p = @($fj.groups | Where-Object { $_.id -eq 'F1' })[0].phases
+    Case 'the rate prices builder work only: gate and integration rows are phases, not minutes' ([int]$f1.remainingMinutes -eq 100 -and [int]$f1.floorMinutes -eq 100 -and [int]$f1.ownPredictedMinutes -eq 360 -and [int]$f1p.ownerGates.count -eq 1 -and @($f1p.ownerGates.ids) -contains 'F1.G1' -and [string]$f1p.rateCovers -eq 'builder and author work only' -and [string]$f1p.tier2.state -eq 'pending') "F1 remain $($f1.remainingMinutes) floor $($f1.floorMinutes) own $($f1.ownPredictedMinutes) gates $($f1p.ownerGates.count) tier2 $($f1p.tier2.state)"
+    # A Tier 2 run whose process died is abandoned, not pending: the phases line says so, and the fix round reads
+    # unknown BECAUSE the last run was abandoned (kit item IN-20261019194343-5cfc). The record is removed after.
+    $fcRuns = Join-Path $fr '.streams\suites\runs'; New-Item -ItemType Directory -Force $fcRuns | Out-Null
+    @{ id = 'run-F2-1'; group = 'F2'; tier = '2'; status = 'abandoned'; startedAt = $utc.AddHours(-3).ToString('yyyy-MM-ddTHH:mm:ssZ') } | ConvertTo-Json | Set-Content (Join-Path $fcRuns 'run-F2-1.json') -Encoding utf8
+    $fcAb = @((& "$S\Get-StreamStatus.ps1" -Repo $fr -Json | ConvertFrom-Json).groups | Where-Object { $_.id -eq 'F2' })[0].phases
+    Remove-Item -LiteralPath (Join-Path $fcRuns 'run-F2-1.json') -Force
+    Case 'an abandoned Tier 2 run reads abandoned, and the fix round unknown because of it' ([string]$fcAb.tier2.state -eq 'abandoned' -and [string]$fcAb.tier2.run -eq 'run-F2-1' -and [string]$fcAb.fixRound.state -eq 'unknown' -and [string]$fcAb.fixRound.reason -eq 'last run abandoned') "tier2 $($fcAb.tier2.state) run $($fcAb.tier2.run) fix $($fcAb.fixRound.state) reason '$($fcAb.fixRound.reason)'"
+    # The owner's Tier 2 hold (kit item IN-20261019194753-16ca) is read from suites\tier2-hold.json: a held group
+    # reads 'held' with the hold's reason, a group the hold does not name stays pending, and the page names it.
+    $fcHoldFile = Join-Path $fr '.streams\suites\tier2-hold.json'
+    @{ since = $utc.AddHours(-2).ToString('yyyy-MM-ddTHH:mm:ssZ'); by = 'plan-x'; reason = 'wait for fixes, builders stopped'; item = 'IN-1'; groups = @('F1') } | ConvertTo-Json | Set-Content $fcHoldFile -Encoding utf8
+    $fcHj = & "$S\Get-StreamStatus.ps1" -Repo $fr -Json | ConvertFrom-Json
+    $fcH1 = @($fcHj.groups | Where-Object { $_.id -eq 'F1' })[0].phases; $fcH2 = @($fcHj.groups | Where-Object { $_.id -eq 'F2' })[0].phases
+    $fcHPg = Join-Path $fr 'hold-status.html'; [void](& "$S\Build-StatusPage.ps1" -Repo $fr -Session kit-hold -Out $fcHPg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
+    $fcHPage = Get-Content -LiteralPath $fcHPg -Raw
+    Remove-Item -LiteralPath $fcHoldFile -Force
+    Case 'an owner hold on Tier 2 reads held, only for the groups it names, and the page says so' ([string]$fcH1.tier2.state -eq 'held' -and [string]$fcH1.tier2.hold.reason -eq 'wait for fixes, builders stopped' -and [string]$fcH1.fixRound.state -eq 'unknown' -and [string]$fcH2.tier2.state -eq 'pending' -and $fcHPage -match 'held by the owner since \d\d:\d\d [A-Z]+ \(wait for fixes, builders stopped\)') "F1 $($fcH1.tier2.state) '$($fcH1.tier2.hold.reason)' F2 $($fcH2.tier2.state) page match $($fcHPage -match 'held by the owner')"
     $f4 = @($fj.groups | Where-Object { $_.id -eq 'F4' })[0].forecast
     $f5 = @($fj.groups | Where-Object { $_.id -eq 'F5' })[0].forecast
     # F4's OWN date: the focus pool (778) then caps it, which is the next case.

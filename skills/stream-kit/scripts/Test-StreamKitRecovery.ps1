@@ -535,6 +535,19 @@ try {
     Case 'SUSPECT survives a released worktree' ("$o22" -eq 'SUSPECT G1.W' -and $tw22.state -eq 'planned') "$o22 state=$($tw22.state)"
     Case 'no verdict blames the missing worktree' ($tw22.history[-1].note -notmatch 'worktree gone') $tw22.history[-1].note
 
+    # ---- 22b. a write-set file the patch never touched, on main but not in the worktree (a dependency landed it after
+    # the worktree was cut), is a code difference: REVERSED, never SUSPECT (kit item IN-20261019210040-3dac).
+    $r22b = New-Repo 'r22b' ([ordered]@{ 'G1.W' = $wtOnly22 }); $repos += $r22b
+    $wt22b = Build $r22b 'G1.W' 'W done' 'build-1'
+    $doc22b = Get-Content -Raw (Join-Path $r22b '.streams\tasks.json') | ConvertFrom-Json -AsHashtable -DateKind String -Depth 50
+    ($doc22b.tasks | Where-Object { $_.id -eq 'G1.W' }).writeSet = @('G1.W.txt', 'sweep22b.ts')
+    Set-Content (Join-Path $r22b '.streams\tasks.json') ($doc22b | ConvertTo-Json -Depth 50)
+    Set-Content (Join-Path $r22b 'sweep22b.ts') 'landed by a dependency'
+    git -C $r22b add sweep22b.ts; git -C $r22b commit -q -m dep
+    $o22b = & "$S\Integrate-Patch.ps1" -Repo $r22b -Session integ-22b -Task G1.W
+    $tw22b = T $r22b 'G1.W'
+    Case 'write-set file absent from the worktree: REVERSED, not SUSPECT' ("$o22b" -eq 'REVERSED G1.W' -and $tw22b.state -eq 'ticketed') "$o22b state=$($tw22b.state)"
+    Case 'the reversal names the missing write-set file' ($tw22b.history[-1].note -match 'outside the patch differ.*sweep22b\.ts') $tw22b.history[-1].note
     # ---- 23. the reaper: an integrated worktree goes, a live builder's stays, and a refusal never deletes
     $r23 = New-Repo 'r23' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok'); 'G1.B' = (ContentGrader 'G1.B' 'ok') }); $repos += $r23
     $wtA23 = Build $r23 'G1.A' 'ok' 'build-1'
@@ -3513,8 +3526,65 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     Case '96 the re-run filter holds exactly the failed tests, contains-match' ($rt1.tier -eq 'flaky' -and $fcmd -match 'FullyQualifiedName~NS\.FooTests\.Flaky' -and $fcmd -match 'FullyQualifiedName~NS\.FooTests\.Real' -and $fcmd -match 'FullyQualifiedName~NS\.LaterTests\.L' -and $fcmd -notmatch 'BarTests' -and $fcmd -notmatch 'FullyQualifiedName=') $fcmd
     $terms = & { . "$S\lib\Streams.ps1"; . "$S\lib\Suites.ps1"; ConvertTo-DotnetFilterTerm 'NS.C.M(1, "a")'; ConvertTo-PlaywrightGrepTerm 'adds (x) item' }
     Case '96 a data-row name filters by method, a Playwright title is escaped and end-anchored' ($terms[0] -eq 'FullyQualifiedName~NS.C.M' -and $terms[1] -eq 'adds \(x\) item( @\S+)*$') ($terms -join ' ; ')
-    # Playwright's CLI --grep runs on the title path PLUS the test's tags (_grepTitleWithTags), so a tagged test must match.
+    # One completion run counts for every focus group integrated when it started (kit item IN-20261019130625-ee1d): a
+    # record's 'groups' list makes Get-SuiteRunRecords -Group find it for each, and a plain record stays its own group's.
+    $sg96 = & { . "$S\lib\Streams.ps1"; . "$S\lib\Suites.ps1"
+        $sp = @{ Suites = (Join-Path $Scratch 'sg96') }; New-Item -ItemType Directory -Path (Join-Path $sp.Suites 'runs') -Force | Out-Null
+        @{ id = 'run-G9-1'; tier = '2'; group = 'G9'; groups = @('G9', 'G6', 'G7'); startedAt = '2026-10-19T10:00:00Z'; status = 'done' } | ConvertTo-Json | Set-Content (Join-Path $sp.Suites 'runs\run-G9-1.json') -Encoding utf8
+        @{ id = 'run-G8-1'; tier = '2'; group = 'G8'; startedAt = '2026-10-19T09:00:00Z'; status = 'done' } | ConvertTo-Json | Set-Content (Join-Path $sp.Suites 'runs\run-G8-1.json') -Encoding utf8
+        (@(Get-SuiteRunRecords $sp 'G6' '2') | ForEach-Object { $_['id'] }) -join ','; (@(Get-SuiteRunRecords $sp 'G8' '2') | ForEach-Object { $_['id'] }) -join ','
+        (@(Get-SuiteRunRecords $sp 'G5' '2') | ForEach-Object { $_['id'] }) -join ',' }
+    Case '96 a run record''s groups list counts it for each listed group, and only those' ($sg96[0] -eq 'run-G9-1' -and $sg96[1] -eq 'run-G8-1' -and $sg96[2] -eq '') ($sg96 -join ' ; ')    # Playwright's CLI --grep runs on the title path PLUS the test's tags (_grepTitleWithTags), so a tagged test must match.
     Case '96 the Playwright grep matches a tagged test and still anchors the title' ('cart adds (x) item @a11y @smoke' -match $terms[1] -and 'cart adds (x) item' -match $terms[1] -and 'cart adds (x) item twice' -notmatch $terms[1]) $terms[1]
+    # A shared run end to end: run-S2-1 counts for S2 and the earlier S1. A failure S1 owns is filed in S1 (fixGroup S1),
+    # S2's in S2, a later group's (S3) is a known failure; S2's close counts only its own fix, S1's close sees the run.
+    $sr96 = Join-Path $Scratch 'sharedrun96'; New-Item -ItemType Directory -Path (Join-Path $sr96 'tests') -Force | Out-Null; $repos += $sr96
+    git -C $sr96 init -q -b main; git -C $sr96 config user.email t@t; git -C $sr96 config user.name t; Grant-GitPolicy $sr96
+    Set-Content (Join-Path $sr96 'tests\A.cs') 'a'; git -C $sr96 add -A; git -C $sr96 commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $sr96 | Out-Null
+    @{ groups = @(@{ id = 'S1'; name = 's1'; state = 'integrating'; origin = 'plan' }, @{ id = 'S2'; name = 's2'; state = 'integrating'; origin = 'plan' }, @{ id = 'S3'; name = 's3'; state = 'released'; origin = 'plan' })
+        tasks = @((& $Tt 'S1.A' 'S1' 'integrated' 'tests/A.cs'), (& $Tt 'S1.I' 'S1' 'ticketed' @() 'integration'), (& $Tt 'S2.B' 'S2' 'integrated' 'tests/B.cs'),
+            (& $Tt 'S2.I' 'S2' 'ticketed' @() 'integration'), (& $Tt 'S3.C' 'S3' 'ticketed' 'tests/C.cs')) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $sr96 '.streams\tasks.json') -Encoding utf8
+    $srd96 = Join-Path $sr96 '.streams\suites\runs'; New-Item -ItemType Directory -Path $srd96 -Force | Out-Null
+    @{ id = 'run-S2-1'; tier = '2'; group = 'S2'; groups = @('S2', 'S1'); reason = 'complete'; startedAt = '2026-10-19T10:00:00Z'; status = 'done'; head = 'abc' } | ConvertTo-Json | Set-Content (Join-Path $srd96 'run-S2-1.json') -Encoding utf8
+    $srt96 = { param($n, $f) @{ test = $n; suite = 'Tests.Unit'; outcome = 'failed'; durationMs = 1; file = $f; project = ''; head = 'abc' } }
+    @{ tests = @((& $srt96 'NS.A.T' 'tests/A.cs'), (& $srt96 'NS.B.T' 'tests/B.cs'), (& $srt96 'NS.C.T' 'tests/C.cs')) } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $srd96 'run-S2-1.results.json') -Encoding utf8
+    # A record whose flaky screen is still pending (its process alive) is not attributed yet (kit item IN-20261019153055-2c27).
+    $srp96 = Get-Content -Raw (Join-Path $srd96 'run-S2-1.json')
+    $srq96 = $srp96 | ConvertFrom-Json -AsHashtable; $srq96['screen'] = 'pending'; $srq96['pid'] = $PID; $srq96['pidStart'] = (Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o')
+    $srq96 | ConvertTo-Json | Set-Content (Join-Path $srd96 'run-S2-1.json') -Encoding utf8
+    $srs96 = @(& "$S\Register-SuiteFailures.ps1" -Repo $sr96 -Session integ-t -Run run-S2-1) -join ' | '
+    Case '96 a run whose flaky screen still runs is refused SCREEN-PENDING and nothing is written' ($srs96 -match '^SCREEN-PENDING run-S2-1' -and -not (Test-Path (Join-Path $srd96 'run-S2-1.attribution.json'))) $srs96
+    $srq96['pid'] = 999999; $srq96 | ConvertTo-Json | Set-Content (Join-Path $srd96 'run-S2-1.json') -Encoding utf8
+    $sra96 = @(& "$S\Register-SuiteFailures.ps1" -Repo $sr96 -Session integ-t -Run run-S2-1) -join ' | '
+    $srx96 = Get-Content -Raw (Join-Path $srd96 'run-S2-1.attribution.json') -ErrorAction SilentlyContinue | ConvertFrom-Json
+    $srf96 = @{}; foreach ($x in @($srx96.failures)) { $srf96[$x.test] = "$($x.disposition)/$($x.fixGroup)/$($x.fixTask)" }
+    $srk96 = Get-Content -Raw (Join-Path $sr96 '.streams\suites\known-failures.S3.json') -ErrorAction SilentlyContinue
+    Case '96 a shared run files each fix in the earliest covered group at or after its owner, a later group''s as known' ($srf96['NS.A.T'] -eq 'fix/S1/S1.R1F1' -and $srf96['NS.B.T'] -eq 'fix/S2/S2.R1F1' -and $srf96['NS.C.T'] -like 'later/*' -and (T $sr96 'S1.R1F1').group -eq 'S1' -and $srk96 -match 'NS\.C\.T') "$sra96 :: $($srf96 | ConvertTo-Json -Compress)"
+    $src2 = @(& "$S\Test-GroupClose.ps1" -Repo $sr96 -Group S2 -DryRun) -join ' | '
+    $src1 = @(& "$S\Test-GroupClose.ps1" -Repo $sr96 -Group S1 -DryRun) -join ' | '
+    Case '96 each covered group''s close counts only the fixes filed in it, and sees the shared run' ($src2 -match 'UNRETESTED 1 .*NS\.B\.T' -and $src2 -notmatch 'NS\.A\.T' -and $src2 -match 'OPEN-FIX S2\.R1F1$|OPEN-FIX S2\.R1F1 ' -and $src1 -notmatch 'NO-TIER2' -and $src1 -match 'UNRETESTED 1 .*NS\.A\.T' -and $src1 -notmatch 'NS\.B\.T' -and $src1 -match 'OPEN-FIX S1\.R1F1') "S2: $src2 // S1: $src1"
+    # A group every row of which an earlier group pulls forward has an EMPTY group set; its own rows still decide whether
+    # a run covers it, and Add-SuiteRunGroup.ps1 counts a finished run for it (kit item IN-20261020100610-6c4b, G11).
+    $at96 = Join-Path $Scratch 'attach96'; New-Item -ItemType Directory -Path $at96 -Force | Out-Null; $repos += $at96
+    git -C $at96 init -q -b main; git -C $at96 config user.email t@t; git -C $at96 config user.name t; Grant-GitPolicy $at96
+    Set-Content (Join-Path $at96 'a.txt') 'a'; git -C $at96 add -A; git -C $at96 commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $at96 | Out-Null
+    $atY96 = & $Tt 'A1.Y' 'A1' 'ticketed' 'y.cs'; $atY96.dependsOn = @('A2.X')
+    @{ groups = @(@{ id = 'A1'; name = 'a1'; state = 'integrating'; origin = 'plan' }, @{ id = 'A2'; name = 'a2'; state = 'integrating'; origin = 'plan' }, @{ id = 'A3'; name = 'a3'; state = 'released'; origin = 'plan' })
+        tasks = @($atY96, (& $Tt 'A2.X' 'A2' 'integrated' 'x.cs'), (& $Tt 'A2.I' 'A2' 'ticketed' @() 'integration'), (& $Tt 'A3.Z' 'A3' 'ticketed' 'z.cs')) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $at96 '.streams\tasks.json') -Encoding utf8
+    $atg96 = & { . "$S\lib\Streams.ps1"; . "$S\lib\Inbox.ps1"; . "$S\lib\Suites.ps1"; . "$S\lib\Activation.ps1"
+        $d = Read-Tasks (Get-StreamPaths $at96); "$((Get-GroupSet $d 'A2').Contains('A2.X'))"; (@(Get-GroupBuildRows $d 'A2') | ForEach-Object id) -join ',' }
+    Case '96 a pulled-forward group''s own rows decide its run coverage although its group set is empty' ($atg96[0] -eq 'False' -and $atg96[1] -eq 'A2.X') ($atg96 -join ' ; ')
+    $atd96 = Join-Path $at96 '.streams\suites\runs'; New-Item -ItemType Directory -Path $atd96 -Force | Out-Null
+    @{ id = 'run-A1-1'; tier = '2'; group = 'A1'; groups = @('A1'); reason = 'complete'; startedAt = '2026-10-19T10:00:00Z'; status = 'done'; head = 'abc' } | ConvertTo-Json | Set-Content (Join-Path $atd96 'run-A1-1.json') -Encoding utf8
+    @{ id = 'run-A1-2'; tier = '2'; group = 'A1'; groups = @('A1'); reason = 'manual'; startedAt = '2026-10-19T12:00:00Z'; status = 'running'; head = 'abc' } | ConvertTo-Json | Set-Content (Join-Path $atd96 'run-A1-2.json') -Encoding utf8
+    $ata96 = @(& "$S\Add-SuiteRunGroup.ps1" -Repo $at96 -Session integ-t -Run run-A1-1 -Group A2) -join ' | '
+    $atb96 = @(& "$S\Add-SuiteRunGroup.ps1" -Repo $at96 -Session integ-t -Run run-A1-1 -Group A2) -join ' | '
+    $atc96 = @(& "$S\Add-SuiteRunGroup.ps1" -Repo $at96 -Session integ-t -Run run-A1-1 -Group A3) -join ' | '; $atcx96 = $LASTEXITCODE
+    $atr96 = @(& "$S\Add-SuiteRunGroup.ps1" -Repo $at96 -Session integ-t -Run run-A1-2 -Group A2) -join ' | '; $atrx96 = $LASTEXITCODE
+    $atk96 = & { . "$S\lib\Streams.ps1"; . "$S\lib\Suites.ps1"; (@(Get-SuiteRunRecords (Get-StreamPaths $at96) 'A2' '2') | ForEach-Object { $_['id'] }) -join ',' }
+    Case '96 Add-SuiteRunGroup counts a finished run for a landed group once, refuses an unlanded group and a running run' ($ata96 -eq 'ATTACHED run-A1-1 A2' -and $atb96 -match '^ALREADY' -and $atc96 -match '^NOT-COVERED A3\.Z\(ticketed\)' -and $atcx96 -eq 2 -and $atr96 -match '^RUN-RUNNING' -and $atrx96 -eq 4 -and $atk96 -eq 'run-A1-1') "$ata96 // $atb96 // $atc96 ($atcx96) // $atr96 ($atrx96) // $atk96"
     # The owner of a failing file is the LATEST LANDED row that holds it: code on main was broken by a landed row, and
     # an open later-group row on the same file must not turn this group's regression into a 'later' known failure.
     $own = & { . "$S\lib\Streams.ps1"; . "$S\lib\Suites.ps1"
@@ -3808,6 +3878,51 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     } finally {
         Remove-Item Env:\STREAM_QUIET_PROBE_FILE, Env:\STREAM_QUIET_WINDOW_SECONDS, Env:\STREAM_QUIET_SAMPLE_SECONDS, Env:\STREAM_QUIET_MAX_WAIT_SECONDS -ErrorAction SilentlyContinue
     }
+
+    # ---- 96q. A retest that matches no test is NO-MATCH, never a failure (kit item IN-20261020004435-6e00). G14.R4F63
+    # renamed a backup.spec title; retest-G14-3 grepped the old title, matched nothing, counted it as still failing and
+    # filed G14.R4F37A2. Now the unmatched test leaves the record's tests for noMatch (no strike, no REFIX), one
+    # stream-plan item names it, and a leg that crashed with no results still counts as failed.
+    $nmr = Join-Path $Scratch 'nomatchrepo'; New-Item -ItemType Directory -Path (Join-Path $nmr 'tests') -Force | Out-Null; $repos += $nmr
+    git -C $nmr init -q -b main; git -C $nmr config user.email t@t; git -C $nmr config user.name t; Grant-GitPolicy $nmr
+    Set-Content (Join-Path $nmr 'tests\NmTests.cs') 'namespace NS { public class NmTests { } }'
+    git -C $nmr add -A; git -C $nmr commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $nmr | Out-Null
+    $nmCtl = Join-Path $Scratch 'fake-outcomes-nm.json'
+    $nmSet = { param($t2, $rt) @{ tier2 = $t2; retest = $rt } | ConvertTo-Json | Set-Content $nmCtl -Encoding utf8 }
+    $nmLeg = @{ name = 'Tests.Unit'; kind = 'dotnet'; project = 'tests'
+        command = "& '$fake' -Out '{runDir}\Tests.Unit' -Mode tier2 -Control '$nmCtl'"
+        retestCommand = "& '$fake' -Out '{runDir}\Tests.Unit' -Mode retest -Filter '{filter}' -Control '$nmCtl'" }
+    New-Item -ItemType Directory -Path (Join-Path $nmr '.streams\suites') -Force | Out-Null
+    @{ group = 'Q1'; copyIgnored = @(); setup = @(); legs = @($nmLeg); after = @() } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $nmr '.streams\suites\Q1.run.json') -Encoding utf8
+    @{ groups = @(@{ id = 'Q1'; name = 'nomatch'; state = 'integrating'; origin = 'plan'; scope = @{ include = @('F-Q') } })
+       tasks = @((& $Tt 'Q1.A' 'Q1' 'integrated' 'tests/NmTests.cs'), (& $Tt 'Q1.I' 'Q1' 'ticketed' @() 'integration')) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $nmr '.streams\tasks.json') -Encoding utf8
+    & $nmSet @{ 'NS.NmTests.Kept' = 'Failed'; 'NS.NmTests.Old' = 'Failed' } @{}
+    $nqa = @(& "$S\Start-SuiteRun.ps1" -Repo $nmr -Session integ-q -Group Q1 -Reason manual -Wait); $nqat = $nqa -join ' | '
+    $nqId = if ($nqat -match 'RUN-ENDED (run-Q1-\d+)') { $Matches[1] } else { 'none' }
+    $nqFix = @((J $nmr).tasks | Where-Object { $_.id -like 'Q1.R*' })
+    if ($nqFix.Count) {
+        Start-Sleep -Seconds 1
+        $d = J $nmr; foreach ($tf in @($d.tasks | Where-Object { $_.id -like 'Q1.R*' })) { $tf.state = 'integrated'; $tf.history += @{ at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); by = 'integ-q'; to = 'integrated'; note = 'fix landed' } }
+        $d | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $nmr '.streams\tasks.json') -Encoding utf8; Start-Sleep -Seconds 1
+    }
+    # The fix renamed Old to New: the retest's filter finds Kept (now passing) and nothing named Old.
+    & $nmSet @{ 'NS.NmTests.Kept' = 'Failed'; 'NS.NmTests.Old' = 'Failed' } @{ 'NS.NmTests.Kept' = 'Passed'; 'NS.NmTests.New' = 'Passed' }
+    $nq1 = @(& "$S\Invoke-Retest.ps1" -Repo $nmr -Session integ-q -Group Q1 -Mode fix); $nq1t = $nq1 -join ' | '
+    $nq1id = if ($nq1t -match 'RETEST (retest-Q1-\d+) ') { $Matches[1] } else { 'none' }
+    $nq1rec = Get-Content -Raw (Join-Path $nmr ".streams\suites\runs\$nq1id.json") -ErrorAction SilentlyContinue | ConvertFrom-Json
+    $nqStrk = & { . "$S\lib\Streams.ps1"; . "$S\lib\Suites.ps1"; @(Get-StrikeRetests (Get-StreamPaths $nmr) 'Q1' $nqId 'NS.NmTests.Old' $null).Count }
+    $nqPlan = @(& "$S\Get-InboxItems.ps1" -Repo $nmr -Skill stream-plan -Open) -join ' | '
+    Case '96q a retest that matches no test by the failed name is NO-MATCH: no failure, no strike, no REFIX, one plan item' ($nqFix.Count -eq 1 -and $nq1t -match 'NO-MATCH NS\.NmTests\.Old' -and $nq1t -match "RETEST $nq1id pass passed 1 failed 0" -and $nq1t -notmatch 'REFIX' -and @($nq1rec.noMatch) -contains 'NS.NmTests.Old' -and @($nq1rec.tests) -notcontains 'NS.NmTests.Old' -and $nqStrk -eq 0 -and $nqPlan -match "NO-MATCH in $nq1id") "$nqat / $nq1t strikes=$nqStrk plan=$nqPlan"
+    # A leg that crashes with no results is still a failure, and an already reported name is not filed again.
+    Start-Sleep -Seconds 1
+    $d = J $nmr; foreach ($tf in @($d.tasks | Where-Object { $_.id -like 'Q1.R*' })) { $tf.history += @{ at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); by = 'integ-q'; to = 'integrated'; note = 'fix landed again' } }
+    $d | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $nmr '.streams\tasks.json') -Encoding utf8; Start-Sleep -Seconds 1
+    $nmLeg['retestCommand'] = 'exit 3'
+    @{ group = 'Q1'; copyIgnored = @(); setup = @(); legs = @($nmLeg); after = @() } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $nmr '.streams\suites\Q1.run.json') -Encoding utf8
+    $nq2 = @(& "$S\Invoke-Retest.ps1" -Repo $nmr -Session integ-q -Group Q1 -Mode fix); $nq2t = $nq2 -join ' | '
+    $nqPlan2 = @(@(& "$S\Get-InboxItems.ps1" -Repo $nmr -Skill stream-plan -Open) | Where-Object { $_ -match 'NO-MATCH in' }).Count
+    Case '96q a crashed retest leg still counts as failed (REFIX), and files no second NO-MATCH item' ($nq2t -match 'RETEST retest-Q1-\d+ fail passed 0 failed 1' -and $nq2t -match 'REFIX NS\.NmTests\.Old' -and $nq2t -notmatch 'NO-MATCH' -and $nqPlan2 -eq 1) "$nq2t plan=$nqPlan2"
 
     # ---- 97. Priority.html (3.4), Cost.html extras (3.5), history archive (E2).
     # Priority page on the activated board of block 95: milestones, owner queue, matrix order and highlights, footer.

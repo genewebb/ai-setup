@@ -318,6 +318,15 @@ if ($gcode -eq 0) {
     if ($wt -and (Test-Path $wt) -and -not (Test-SameContent $Repo $wt (Get-PatchPaths $patch))) {
         $why += 'main content differs from the worktree (the worktree moved on after its patch was exported)'
     }
+    # The patch names only the files the builder changed. A write-set file the patch never touched can still differ:
+    # one a dependency landed on main after the worktree was cut is on main and absent from the worktree, so the check
+    # read code on main the worktree never had (G14.R4F68, kit item IN-20261019210040-3dac). Exact write-set paths only.
+    if ($wt -and (Test-Path $wt)) {
+        $patched = @(Get-PatchPaths $patch)
+        $wsOnly = @(@($t.writeSet) | ForEach-Object { "$_" -replace '\\', '/' } | Where-Object { $_ -and $_ -notmatch '[*?]' -and $_ -notmatch '/$' -and $_ -notin $patched })
+        $wsDiff = @($wsOnly | Where-Object { -not (Test-SameContent $Repo $wt @($_)) })
+        if ($wsDiff.Count) { $why += "write-set file(s) outside the patch differ between main and the worktree: $($wsDiff -join ', ')" }
+    }
     # A C# compile error on main is a code defect even when the patched files match the worktree: files outside the
     # patch moved under it (main moved on since the task's base). CS2012 is a file lock, handled as environment below.
     $csHit = @(@(Get-Content $mainLog -ErrorAction SilentlyContinue) + @($g) | Where-Object { "$_" -match 'error CS(?!2012)\d{4}' } | Select-Object -First 1)

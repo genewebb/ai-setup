@@ -22,12 +22,25 @@ function Read-JsonFile([string] $Path) {
 function Write-JsonFile([string] $Path, $Value) { Write-AtomicText $Path (ConvertTo-Json -InputObject $Value -Depth 30) }
 function ConvertTo-UtcTime([string] $s) { [datetime]::Parse($s, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal) }
 
-# Every run record (Tier 2 runs and Tier 3 retests), oldest first by startedAt.
+# The groups a run record counts for: its 'group' plus its 'groups' list (kit item IN-20261019130625-ee1d: one Tier 2
+# completion run counts for every focus group whose rows were all integrated when it started, Start-SuiteRun.ps1).
+function Get-SuiteRunGroups($Rec) {
+    $g = @([string]$Rec['group']); if ($Rec.Contains('groups') -and $Rec['groups']) { $g += @($Rec['groups'] | ForEach-Object { [string]$_ }) }
+    @($g | Where-Object { $_ } | Select-Object -Unique)
+}
+# The non-fix build rows a Tier 2 run must find landed before it counts for a group: the rows whose own 'group' field
+# is that group PLUS its group set (Get-GroupSet, lib\Activation.ps1). The set alone was empty for G11, every row of
+# which an earlier group's dependents pull forward, so no run ever counted for G11 (kit item IN-20261020100610-6c4b).
+function Get-GroupBuildRows($doc, [string] $Group) {
+    $gs = Get-GroupSet $doc $Group
+    @($doc.tasks | Where-Object { ($gs.Contains([string]$_.id) -or [string]$_.group -eq $Group) -and $_.kind -in $script:BuildKinds -and -not ($_.Contains('origin') -and [string]$_['origin'] -eq 'integration') })
+}
+# Every run record (Tier 2 runs and Tier 3 retests), oldest first by startedAt; with -Group, those that count for it.
 function Get-SuiteRunRecords($P, [string] $Group = '', [string] $Tier = '') {
     $d = Get-SuiteRunsDir $P
     @(Get-ChildItem -LiteralPath $d -File -Filter '*.json' | Where-Object { $_.Name -notmatch '\.(results|attribution)\.json$' } |
         ForEach-Object { Read-JsonFile $_.FullName } |
-        Where-Object { $_ -is [Collections.IDictionary] -and $_['id'] -and $_['startedAt'] -and (-not $Group -or $_['group'] -eq $Group) -and (-not $Tier -or [string]$_['tier'] -eq $Tier) } |
+        Where-Object { $_ -is [Collections.IDictionary] -and $_['id'] -and $_['startedAt'] -and (-not $Group -or (Get-SuiteRunGroups $_) -contains $Group) -and (-not $Tier -or [string]$_['tier'] -eq $Tier) } |
         Sort-Object { ConvertTo-UtcTime $_['startedAt'] })
 }
 
@@ -106,18 +119,26 @@ function Set-SuiteRunProcess($rec, [int] $ProcessId = $PID) {
     $rec['pid'] = $ProcessId
     $rec['pidStart'] = try { (Get-Process -Id $ProcessId -ErrorAction Stop).StartTime.ToUniversalTime().ToString('o') } catch { '' }
 }
+# Whether the process the record names (pid + its start time) still runs; a record with no pid has none.
+function Test-SuiteRunProcess($rec) {
+    if (-not ($rec.Contains('pid') -and $rec['pid'])) { return $false }
+    $p = Get-Process -Id ([int]$rec['pid']) -ErrorAction SilentlyContinue
+    if (-not $p) { return $false }
+    if ($rec.Contains('pidStart') -and $rec['pidStart']) {
+        try { return ([math]::Abs(($p.StartTime.ToUniversalTime() - [datetime]::Parse([string]$rec['pidStart'], [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)).TotalSeconds) -lt 2) } catch { return $true }
+    }
+    $true
+}
 function Test-SuiteRunAlive($rec) {
     if ([string]$rec['status'] -ne 'running') { return $false }
-    if ($rec.Contains('pid') -and $rec['pid']) {
-        $p = Get-Process -Id ([int]$rec['pid']) -ErrorAction SilentlyContinue
-        if (-not $p) { return $false }
-        if ($rec.Contains('pidStart') -and $rec['pidStart']) {
-            try { return ([math]::Abs(($p.StartTime.ToUniversalTime() - [datetime]::Parse([string]$rec['pidStart'], [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)).TotalSeconds) -lt 2) } catch { return $true }
-        }
-        return $true
-    }
+    if ($rec.Contains('pid') -and $rec['pid']) { return (Test-SuiteRunProcess $rec) }
     try { ((Get-Date).ToUniversalTime() - (ConvertTo-UtcTime $rec['startedAt'])).TotalHours -lt 6 } catch { $true }
 }
+# A run whose legs ended 'done' still has its flaky screen ahead (Invoke-SuiteLegs.ps1 writes 'screen' = 'pending' with
+# the end state and 'done' once Invoke-Retest.ps1 -Mode flaky returns). Attribution read before then files fix rows for
+# tests the screen turns flaky: run-G14-4 was attributed by hand at 14:40:53Z, its screen passed 6 at 14:44:48Z (kit
+# item IN-20261019153055-2c27). Pending counts only while the run's process lives: a dead one never finishes it.
+function Test-SuiteScreenPending($rec) { [string]$rec['screen'] -eq 'pending' -and (Test-SuiteRunProcess $rec) }
 # The live 'running' records; every dead one is marked 'abandoned' (with a decisions.md line). Outputs one
 # "ABANDONED <id> (<why>)" string per dead record, then the live records: callers split the two by type.
 function Resolve-RunningSuiteRuns($P, [string] $Session) {

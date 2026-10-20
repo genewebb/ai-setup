@@ -18,7 +18,7 @@
 #             Test-GroupClose.ps1 -Exempt). No fix task, no known failure; it blocks nothing.
 # Writes .streams\suites\runs\<run>.attribution.json { run, group, at, failures: [ { test, suite, file, ownerRow,
 # ownerGroup, disposition, fixTask, flakyPromoted } ] } and one decisions.md line. Idempotent: a run that already has
-# its attribution prints ALREADY-ATTRIBUTED. Prints one line per failure, then
+# its attribution prints ALREADY-ATTRIBUTED. SCREEN-PENDING (exit 3, nothing written) while the run's flaky screen still runs. Prints one line per failure, then
 # "ATTRIBUTED <run> fix <n> later <n> unowned <n> flaky <n>". -DryRun prints the lines and writes nothing.
 param(
     [Parameter(Mandatory)] [string] $Repo,
@@ -38,14 +38,20 @@ if (Test-Path -LiteralPath $attrPath) { "ALREADY-ATTRIBUTED $Run ($attrPath)"; e
 $rec = Read-JsonFile (Join-Path $rd "$Run.json")
 $res = Read-JsonFile (Join-Path $rd "$Run.results.json")
 if (-not $rec -or -not $res) { "NO-RUN $Run (record or results missing)"; exit 2 }
+if (Test-SuiteScreenPending $rec) { "SCREEN-PENDING $Run (its flaky screen is still running; Invoke-SuiteLegs.ps1 attributes the run after it)"; exit 3 }
 $group = [string]$rec['group']
 $doc = Read-Tasks $P
 $rank = Get-GroupRankMap $doc
 $byId = @{}; foreach ($t in $doc.tasks) { $byId[[string]$t.id] = $t }
+# A run that counts for several groups (record 'groups', Start-SuiteRun.ps1; kit item IN-20261019130625-ee1d) files each
+# fix in the EARLIEST covered group at or after the owner's group, the first close it would otherwise slip past.
+$covered = @(Get-SuiteRunGroups $rec | Where-Object { $rank.ContainsKey($_) } | Sort-Object { $rank[$_] })
+function Get-FixGroup([string] $og) { @($covered | Where-Object { $rank[$_] -ge $rank[$og] }) | Select-Object -First 1 }
+$exemptBy = @{}; foreach ($cg in $covered) { $exemptBy[$cg] = Get-SuiteExemptions $P $cg }
 $runN = if ($Run -match '-(\d+)$') { $Matches[1] } else { '0' }
 
 $failures = [Collections.Generic.List[object]]::new()
-$fixByFile = [ordered]@{}     # file (or 'grader:<task>') -> @{ writeSet; why; tests }
+$fixByFile = [ordered]@{}     # fix group + file (or 'grader:<task>') -> @{ group; key; writeSet; why; tests }
 $later = @{}                  # later group -> list of known-failure entries
 $unowned = [Collections.Generic.List[string]]::new()
 $flaky = @($res['tests'] | Where-Object { $_ -and $_['outcome'] -eq 'flaky' }).Count
@@ -57,14 +63,15 @@ foreach ($t in @($res['tests'] | Where-Object { $_ -and $_['outcome'] -eq 'faile
     elseif (-not $name.StartsWith('leg:')) { $owner = Find-OwnerRow $doc $file }
     $og = if ($owner) { [string]$owner.group } else { '' }
     $f = [ordered]@{ test = $name; suite = [string]$t['suite']; file = $file; ownerRow = $(if ($owner) { [string]$owner.id } else { '' }); ownerGroup = $og
-        disposition = ''; fixTask = ''; flakyPromoted = [bool]$t['flakyPromoted'] }
-    if ($exempt.ContainsKey($name)) {
+        disposition = ''; fixTask = ''; fixGroup = ''; flakyPromoted = [bool]$t['flakyPromoted'] }
+    $fg = if ($owner -and $rank.ContainsKey($og)) { Get-FixGroup $og } else { $null }
+    if ($exempt.ContainsKey($name) -or ($fg -and $exemptBy[$fg].ContainsKey($name))) {
         $f.disposition = 'exempt'
         "EXEMPT $name ($([string]$exempt[$name]['reason']))"
     } elseif (-not $owner -or -not $rank.ContainsKey($og) -or -not $rank.ContainsKey($group)) {
         $f.disposition = 'unowned'; $unowned.Add($name)
         "UNOWNED $name$(if ($file) { " ($file)" })"
-    } elseif ($rank[$og] -gt $rank[$group]) {
+    } elseif (-not $fg) {
         $f.disposition = 'later'
         if (-not $later.ContainsKey($og)) { $later[$og] = [Collections.Generic.List[object]]::new() }
         $ws = if ($name.StartsWith('grader:')) { @($owner.writeSet) } else { @($file) }
@@ -72,30 +79,32 @@ foreach ($t in @($res['tests'] | Where-Object { $_ -and $_['outcome'] -eq 'faile
             run = $Run; head = [string]$rec['head']; at = Get-Now; fixTask = $null })
         "LATER $name owned by $($owner.id) ($og): known failure, fix task at $og activation"
     } else {
-        $f.disposition = 'fix'
+        $f.disposition = 'fix'; $f.fixGroup = $fg
         $key = if ($name.StartsWith('grader:')) { $name } else { $file }
-        if (-not $fixByFile.Contains($key)) {
+        $slot = "$fg|$key"
+        if (-not $fixByFile.Contains($slot)) {
             $ws = if ($name.StartsWith('grader:')) { @($owner.writeSet) } else { @($file) }
-            $fixByFile[$key] = [ordered]@{ writeSet = $ws; why = @($owner.why); owner = [string]$owner.id; tests = [Collections.Generic.List[string]]::new() }
+            $fixByFile[$slot] = [ordered]@{ group = $fg; key = $key; writeSet = $ws; why = @($owner.why); owner = [string]$owner.id; tests = [Collections.Generic.List[string]]::new() }
         }
-        $fixByFile[$key].tests.Add($name)
+        $fixByFile[$slot].tests.Add($name)
         "FIX $name owned by $($owner.id) ($og)$(if ($f.flakyPromoted) { ' [flaky promoted]' })"
     }
     $failures.Add($f)
 }
 
 $fixTasks = [Collections.Generic.List[object]]::new()
-$k = 1
-foreach ($key in $fixByFile.Keys) {
-    $e = $fixByFile[$key]
-    $id = "$group.R$($runN)F$k"; while ($byId.ContainsKey($id)) { $k++; $id = "$group.R$($runN)F$k" }
-    $k++
+$kBy = @{}                    # fix group -> next F number, so each group's fixes count from F1
+foreach ($slot in $fixByFile.Keys) {
+    $e = $fixByFile[$slot]; $key = $e.key; $fg = $e.group
+    $k = if ($kBy.ContainsKey($fg)) { $kBy[$fg] } else { 1 }
+    $id = "$fg.R$($runN)F$k"; while ($byId.ContainsKey($id)) { $k++; $id = "$fg.R$($runN)F$k" }
+    $kBy[$fg] = $k + 1
     $tests = @($e.tests)
-    $fixTasks.Add([ordered]@{ id = $id; group = $group; title = "Fix Tier 2 failure$(if ($tests.Count -gt 1) { 's' }) in ${key}: $(($tests | Select-Object -First 3) -join '; ')$(if ($tests.Count -gt 3) { " (+$($tests.Count - 3))" })"
+    $fixTasks.Add([ordered]@{ id = $id; group = $fg; title = "Fix Tier 2 failure$(if ($tests.Count -gt 1) { 's' }) in ${key}: $(($tests | Select-Object -First 3) -join '; ')$(if ($tests.Count -gt 3) { " (+$($tests.Count - 3))" })"
         why = $(if (@($e.why).Count) { @($e.why) } else { @('TIER2-FAILURE') }); kind = 'code'; origin = 'integration'; writeSet = @($e.writeSet); dependsOn = @()
         estMinutes = 45; estBasis = 'Tier 2 failure fix, sized as a typical fix task'
         note = "Tier 2 run $Run at $($rec['head']): $($tests -join '; ') (owner row $($e.owner))" })
-    foreach ($f in $failures) { if ($f.disposition -eq 'fix' -and $tests -contains $f.test) { $f.fixTask = $id } }
+    foreach ($f in $failures) { if ($f.disposition -eq 'fix' -and $f.fixGroup -eq $fg -and $tests -contains $f.test) { $f.fixTask = $id } }
 }
 
 $summary = "ATTRIBUTED $Run fix $(@($failures | Where-Object { $_.disposition -eq 'fix' }).Count) later $(@($failures | Where-Object { $_.disposition -eq 'later' }).Count) unowned $($unowned.Count) flaky $flaky$(if ($exempt.Count) { " exempt $(@($failures | Where-Object { $_.disposition -eq 'exempt' }).Count)" })"
@@ -124,7 +133,7 @@ if ($unowned.Count) {
     $ask = "Tier 2 run $Run ($group) has $($unowned.Count) failure(s) no row owns: $(($unowned | Select-Object -First 10) -join '; '). Decide the earliest group whose feature each covers and add the fix task there (stream-integrate B.3)."
     & "$PSScriptRoot\Send-InboxItem.ps1" -Repo $Repo -To stream-plan -From $Session -Kind request -Ask $ask -Evidence $attrPath | Out-Null
 }
-Write-JsonFile $attrPath ([ordered]@{ run = $Run; group = $group; at = Get-Now; failures = @($failures) })
+Write-JsonFile $attrPath ([ordered]@{ run = $Run; group = $group; groups = @($covered); at = Get-Now; failures = @($failures) })
 Add-Decision $P $Session $summary
 $summary
 exit 0

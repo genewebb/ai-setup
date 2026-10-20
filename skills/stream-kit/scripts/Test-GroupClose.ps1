@@ -130,7 +130,8 @@ if ($runStart) {
 $blocked = [Collections.Generic.List[string]]::new()
 if ($attr) {
     $unpassed = [Collections.Generic.List[string]]::new()
-    foreach ($f in @($attr['failures'] | Where-Object { $_ -and $_['disposition'] -eq 'fix' })) {
+    # A shared run (record 'groups') files each fix in one covered group, attribution 'fixGroup'; only this group's count.
+    foreach ($f in @($attr['failures'] | Where-Object { $_ -and $_['disposition'] -eq 'fix' -and (-not $_['fixGroup'] -or [string]$_['fixGroup'] -eq $Group) })) {
         $name = [string]$f['test']
         if ($exempted.ContainsKey($name)) { continue }
         $ran = @($retests | Where-Object { @($_['tests']) -contains $name })
