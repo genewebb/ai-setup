@@ -338,7 +338,14 @@ $dpgSilent = @(
     "rm -f .streams/x.tmp; git commit -m `"x`" -m `"Claude-Session: https://claude.ai/code/session_019JfT1VU7Z1Lmxrpi7ZQwHh`"",
     'Remove-Item x.tmp; Invoke-RestMethod -Uri https://example.org/a/b',
     # A bash-escaped backslash (D:\\x\\y) is one separator: Builder 4 stopped on its own repo's src\Cli\bin.
-    "rm -rf $($rpW -replace '\\', '\\')\\speedmerchants\\src\\Cli\\bin"
+    "rm -rf $($rpW -replace '\\', '\\')\\speedmerchants\\src\\Cli\\bin",
+    # A sed / awk / perl / grep script is data, not a path: on 2026-10-21 three builders' mutation checks sat 2-3 h on
+    # prompts nobody could answer, read as "/s//", "\\u001f" and "/" out of their sed scripts (kit item
+    # IN-20261021063004-304d).
+    "sed -i '0,/<ItemGroup>/s//<ItemGroup>\n    <FrameworkReference Include=`"Microsoft.AspNetCore.App`" \/>/' src/Agent/Agent.csproj && rm src/Agent/ZzMutation.cs",
+    "sed -i 's/Select(copy => copy.Kind + `"\\u001f`" + copy.Hash)/Where(_ => false).Select(copy)/' src/Domain/x.cs; mkdir -p .x; rmdir .x",
+    "sed -i '4645s/profiles.Versions/new Dictionary<string, string>()/' src/x.cs; rmdir .streams-tmp",
+    "perl -pi -e 's/a/b c()\//' src/x.cs; awk '/^x/ { print `$1 }' f.txt; grep -E `"x | /y/`" f.txt; rm -f f.txt"
 )
 # Rows with the delete right (whole working trees, ~\.claude) are trusted too; their cases are built from this
 # machine's rows. The 8.3 form of THIS profile expands to the same root as its long spelling; another account's
@@ -377,7 +384,10 @@ $dpgAsk = @(
     'cmd /c rd /s /q C:\Users\agenewe\Documents\x',
     'rm -f x.txt; pwsh -NoProfile -Command "Start-Process pwsh -ArgumentList ''-File'',''C:/Users/agenewe/Documents/x.ps1''"',
     'rm -rf C:\\Users\\agenewe\\Documents\\x',          # doubled separators still resolve outside
-    'rm -rf file:///C:/Users/agenewe/Documents/x'       # a file URL is a path, not skipped
+    'rm -rf file:///C:/Users/agenewe/Documents/x',      # a file URL is a path, not skipped
+    # Only a sed / awk / perl / grep SCRIPT is data: a quoted file operand after it is still a path.
+    'sed -i ''s/a/b/'' "C:/Users/agenewe/Documents/x.txt"; rm -f y',
+    'rm -rf /etc/x; sed -i ''s/a/b/'' f'
 ) + $dpgAskExtra
 foreach ($c in $dpgAsk) {
     Test-Hook -Name "dpg: ask    | $c" -ScriptPath $dpg -Json (New-BashJson $c) `

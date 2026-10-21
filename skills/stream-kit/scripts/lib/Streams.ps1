@@ -958,7 +958,13 @@ function Get-RunnerUnits($P) {
         if (-not (Test-RunnerProcess $s)) { continue }
         $sess = if ($s['session']) { [string]$s['session'] } elseif ($s['runner']) { [string]$s['runner'] } else { $f.BaseName }
         $r = [string]$s['role']; if ($script:SessionRoleAlias.ContainsKey($r)) { $r = $script:SessionRoleAlias[$r] }
-        $units[$sess] = @{ role = $r; running = ($status -eq "running $sess") }
+        # A unit stopped on an unanswered permission prompt (Start-StreamRunner.ps1 sets 'waiting on owner since <utc>:
+        # ...') still holds its claim and its runner keeps the claim beat fresh, so it read as working: on 2026-10-21
+        # three builders sat 7-8 h on destructive-path-guard prompts under 'build 3 working' (kit item
+        # IN-20261021114057-5e66). ownerWait carries the since time and the prompt, tab the runner's tab name.
+        $u = @{ role = $r; running = ($status -eq "running $sess"); tab = [string]$s['tab'] }
+        if ($status -match '^waiting on owner since (\S+?):?\s+(.*)$') { $u.ownerWait = $Matches[1]; $u.ownerWhat = $Matches[2] }
+        $units[$sess] = $u
     }
     $units
 }

@@ -2942,6 +2942,19 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $ids80 = @($m80.list | ForEach-Object { $_.session }) -join ','
     Case 'board: runner units in flight are working, a sleeping runner''s unit is idle, an ended unit is gone, a silent /loop session is quiet'($m80.live -eq 4 -and $m80.working -eq 2 -and $m80.claimed -eq 1 -and $m80.idle -eq 1 -and $m80.quiet -eq 1 -and $ids80 -eq 'author-80a,author-80b,author-80c,author-80loop') "live=$($m80.live) working=$($m80.working) claimed=$($m80.claimed) idle=$($m80.idle) quiet=$($m80.quiet) ids=$ids80"
 
+    # ---- 80w. a runner unit waiting on an owner permission prompt is flagged OWNER-WAIT (kit item
+    # IN-20261021114057-5e66). Its runner keeps the claim beat fresh, so the board read it as working and raised only an
+    # overrun: on 2026-10-21 three builders sat 7-8 h on unanswered destructive-path-guard prompts. r80 has no such unit.
+    $r80w = New-Repo 'r80w' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok') }); $repos += $r80w
+    $run80w = Join-Path $r80w '.streams\runners'; New-Item -ItemType Directory -Path $run80w -Force | Out-Null
+    $at80w = (Get-Date).ToUniversalTime()
+    Set-Content (Join-Path $run80w 'runner-author-80w.json') ([ordered]@{ role = 'author'; pid = $PID; session = 'author-80w'; tab = 'Author 9'; status = "waiting on owner since $($at80w.AddMinutes(-30).ToString('yyyy-MM-ddTHH:mm:ssZ')): permission prompt (Bash: destructive-path-guard: stub80w)" } | ConvertTo-Json)
+    $doc80w = J $r80w; $t80w = $doc80w.tasks[0]; $t80w.state = 'planned'; $t80w.claim = @{ role = 'author'; session = 'author-80w'; at = $at80w.ToString('yyyy-MM-ddTHH:mm:ssZ'); beat = $at80w.ToString('yyyy-MM-ddTHH:mm:ssZ') }
+    Set-Content -Path (Join-Path $r80w '.streams\tasks.json') -Encoding utf8 -Value ($doc80w | ConvertTo-Json -Depth 50)
+    $f80w = @((& "$S\Get-StreamStatus.ps1" -Repo $r80w -Json | ConvertFrom-Json).flags)
+    $f80n = @((& "$S\Get-StreamStatus.ps1" -Repo $r80 -Json | ConvertFrom-Json).flags)
+    Case 'board: a runner unit waiting on an owner prompt raises OWNER-WAIT with its task, minutes, tab and prompt; none without one' ((@($f80w | Where-Object { $_ -match '^OWNER-WAIT author-80w G1\.A (29|30|31) min \(tab Author 9\): .*stub80w' }).Count -eq 1 -and -not @($f80n | Where-Object { $_ -like 'OWNER-WAIT*' }).Count)) "w=$($f80w -join ' || ') n=$(@($f80n | Where-Object { $_ -like 'OWNER-WAIT*' }) -join ' || ')"
+
     # ---- 81. an escalation is classified by its shape, not its bullet (kit item IN-20261004203020-5f5e). Bulleted
     # applied defaults (4 fields, or 'APPLIED DEFAULT' text) are not owner questions; an ESCALATE token, an 'owner decides'
     # line, and a line that carries no default (fewer than 4 fields), bulleted or not, are.

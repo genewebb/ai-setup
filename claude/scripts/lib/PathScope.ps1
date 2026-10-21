@@ -72,10 +72,37 @@ function Remove-HereDocBodies([string] $cmd) {
     [regex]::Replace($cmd, '(?ms)@([''"])[ \t]*\r?\n.*?^\1@', ' ')
 }
 
+# True when the quoted string at $Index of $cmd is the SCRIPT of a sed / awk / perl / grep command: its first
+# non-option operand, or the value of -e / --expression / --regexp. A script is data ("0,/x/s//y/", "\\u001f",
+# "new Dictionary<string, string>()/"), never a path: on 2026-10-21 three builders' mutation checks sat 2-3 h on
+# guard prompts nobody could answer, read as "/s//", "\\u001f" and "/" (kit item IN-20261021063004-304d). A quoted
+# FILE operand after the script is still a path. $Masked is $cmd with every quoted string replaced by as many Qs, so
+# a separator inside an earlier quoted string does not end the simple command.
+function Test-ScriptOperand([string] $Masked, [int] $Index) {
+    $prefix = $Masked.Substring(0, $Index)
+    $start  = $prefix.LastIndexOfAny([char[]](';&|(' + "`n")) + 1
+    $words  = @(($prefix.Substring($start)) -split '\s+' | Where-Object { $_ })
+    # Skip leading VAR=value assignments and wrappers (timeout takes its duration with it).
+    $i = 0
+    while ($i -lt $words.Count) {
+        if ($words[$i] -match '^[A-Za-z_][A-Za-z0-9_]*=' -or $words[$i] -match '^(sudo|nohup|env|xargs|nice|time|command)$') { $i++ }
+        elseif ($words[$i] -eq 'timeout') { $i += 2 }
+        else { break }
+    }
+    if ($i -ge $words.Count -or $words[$i] -notmatch '^(?:.*[\\/])?(sed|gsed|awk|gawk|mawk|perl|grep|egrep|fgrep|rg)(\.exe)?$') { return $false }
+    $ops = @($words | Select-Object -Skip ($i + 1))
+    if ($ops.Count -and $ops[-1] -match '^(-e|--expression|--regexp)$') { return $true }
+    foreach ($o in $ops) { if ($o -notmatch '^-') { return $false } }
+    $true
+}
+
 # Candidate path tokens of a shell command: quoted strings first, then bare tokens split on shell separators.
 function Get-CommandPathTokens([string] $cmd) {
     $tokens = New-Object System.Collections.Generic.List[string]
-    foreach ($m in [regex]::Matches($cmd, '"([^"]*)"|''([^'']*)''')) {
+    $quoted = [regex]::Matches($cmd, '"([^"]*)"|''([^'']*)''')
+    $masked = [regex]::Replace($cmd, '"[^"]*"|''[^'']*''', { param($q) 'Q' * $q.Length })
+    foreach ($m in $quoted) {
+        if (Test-ScriptOperand $masked $m.Index) { continue }
         $v = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
         if ($v) { $tokens.Add($v) }
         # A quoted string with whitespace may be a nested command (pwsh -Command "...", bash -c '...'): its own tokens

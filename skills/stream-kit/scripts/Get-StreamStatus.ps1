@@ -521,6 +521,15 @@ foreach ($t in $tasks) {
     elseif ($t.overrun) { $flags.Add("$($t.id) $($t.bucket) $($t.elapsed) min, estimate $($t.est)") }
 }
 foreach ($g in $groups) { if ($g.state -eq 'blocked') { $flags.Add("group $($g.id) blocked") } }
+# A runner unit waiting on an owner permission prompt holds its claim with a fresh beat but does no work, so the
+# overrun flag alone read as a slow build (kit item IN-20261021114057-5e66). Named first so the owner sees it.
+if ($activity.units) {
+    foreach ($us in @($activity.units.Keys | Sort-Object)) {
+        $uw = $activity.units[$us]; if (-not $uw['ownerWait']) { continue }
+        $utask = if ($sessClaim.ContainsKey($us)) { [string]$sessClaim[$us] } else { '-' }
+        $flags.Insert(0, "OWNER-WAIT $us $utask $(Age $uw.ownerWait) min$(if ($uw['tab']) { " (tab $($uw['tab']))" }): runner unit waits on an owner permission prompt - answer or restart that tab: $(([string]$uw.ownerWhat).Substring(0, [Math]::Min(140, ([string]$uw.ownerWhat).Length)))")
+    }
+}
 # A row an author already holds is not waiting for one, so ticketing rows come out of the author demand. Without that
 # the board could read "4 tasks waiting for author" while all four were being written at that moment.
 # Demand counts the FOCUS set only, the rows Claim-Task.ps1 and Integrate-Patch.ps1 will offer: a row outside it waits
