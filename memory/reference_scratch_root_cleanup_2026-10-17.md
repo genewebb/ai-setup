@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 3754e77a-a9e8-42e9-b3f4-cd17c62e480c
-  modified: 2026-10-18T17:32:37.299Z
+  modified: 2026-10-21T15:11:36.748Z
 ---
 
 **Problem (found 2026-10-17):** Claude's shells get TEMP/TMP = `{ScratchRoot}\temp` and CLAUDE_CODE_TMPDIR = `{ScratchRoot}`, so every .NET `Path.GetTempPath()` user (tests, dotnet workload installs, MSBuild) drops folders at the scratch root and nothing removed them. SMVMTR1 `D:\tmp`: 89,249 top-level entries (28,840 `Microsoft.NET.Workload_*.log`, ~55k 8.3 random-name folders, ~1,800 `speedy-*` test folders). Claude's own `cleanupPeriodDays` is unset and covers transcripts only.
@@ -17,6 +17,6 @@ metadata:
 - Tests: `setup\tests\ScratchClean.Tests.ps1` (16 cases, DryRun registration only), `Install.Tests.ps1` asserts the row + `would register`, `MachineConfig.Tests.ps1` sweep cases, `Test-StreamKitRecovery.ps1` block 32b.
 - One-off full wipe for a host that already piled up: `C:\scratch\stream-move\20261017\Clear-Smvmtr1Tmp.ps1` (run ON SMVMTR1, robocopy /MIR from an empty folder, refuses any root but D:\tmp, `-WhatIf` counts). SMB delete of 89k entries from the laptop would take hours; run it on the box.
 
-**10/18 FALSE ALARM:** on SMVMTR1 a non-elevated genewe `install.ps1` prints `Register-ScheduledTask ... Access is denied` for BOTH the S4U and the Interactive attempt, then `WARNING: the cleanup task was not registered`. The task is fine: it was registered from an ELEVATED shell on 10/17 (owner genewe, `-Root "D:\tmp"`, LastTaskResult 0, hourly), and a non-elevated shell of the same user may not `-Force`-replace it. Gene (10/18): leave the warning as is; do not re-diagnose. Would-be fix: `-Register` detects a healthy same-user same-root task and prints KEPT instead.
+**10/18 FALSE ALARM:** on SMVMTR1 a non-elevated genewe `install.ps1` prints `Register-ScheduledTask ... Access is denied` for BOTH the S4U and the Interactive attempt, then `WARNING: the cleanup task was not registered`. The task is fine: it was registered from an ELEVATED shell on 10/17 (owner genewe, `-Root "D:\tmp"`, LastTaskResult 0, hourly), and a non-elevated shell of the same user may not `-Force`-replace it. Gene (10/18): leave the warning as is; do not re-diagnose. Would-be fix: `-Register` detects a healthy same-user same-root task and prints KEPT instead. 10/21 recurred (prof streams get -NoCode); I re-diagnosed anyway (wasted a round): Gene ran elevated `Clear-AIScratch.ps1 -Register -Root D:\tmp -KeepDays 7` = REGISTERED S4U as CORP\genewe. Next time: point at this note, give that one elevated command, move on.
 
 **Also 10/17:** `install.ps1` lists every profile path, git-policy repo and install target up front and asks `Install to these locations? [y/N]` (`-Yes` skips; `-WhatIf`/`-Check` list without asking; redirected input refuses without `-Yes`); refuses clone ≠ AIWorkRoot and ClaudeHome ≠ what Claude reads. `publish.ps1` main-only, refuses unfinished rebase, shows files + confirms, conflict vs unreachable remote, one push retry. Bug found by the new `Publish.Tests.ps1`: a helper function named `Git` shadowed git.exe (call depth overflow) — never name a PowerShell function after the executable it wraps.
