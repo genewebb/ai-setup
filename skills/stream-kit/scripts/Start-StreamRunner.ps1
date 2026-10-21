@@ -3,18 +3,19 @@
 # "everytime an author or a builder takes a new ticket they get a clean context", extended the same night to the
 # coordinator, integrator, planner, status and kit roles).
 #
-#   Start-StreamRunner.ps1 -Repo <repo> -Role author|build|integrate|plan|status|kit|coordinator [-Live | -Stream]
+#   Start-StreamRunner.ps1 -Repo <repo> -Role author|build|integrate|plan|status|kit|coordinator [-Live [-Remote] | -Stream]
 #                          [-IntervalSeconds N] [-UnitTimeoutSeconds N] [-Model <alias>] [-MaxRuns N] [-Tab <name>] [-DryRun]
 #
 # Three launch modes (the EnhanceStream design, options A2, G and E):
 #   (default)  A: `claude -p` per unit, headless; the JSON result is logged when the session ends.
 #   -Stream    A2: the same `-p` session with --output-format stream-json; the runner prints one short line per message
 #              and tool call as it happens, so the runner's tab shows the unit live as text.
-#   -Live      G: a normal INTERACTIVE session per unit in the runner's own terminal, with Remote Control on (named after
-#              the session id, so claude.ai/code and the mobile app list it), the stream-unit mod loaded from
+#   -Live      G: a normal INTERACTIVE session per unit in the runner's own terminal, the stream-unit mod loaded from
 #              ..\mods\stream-unit, and the command as its starting prompt. The skill ends its cycle by calling the mod's
 #              unit_done tool, which writes the unit's result file and exits the session; the runner then logs it and
 #              starts the next unit in a new process. Needs a subscription login, and a repo folder Claude already trusts.
+#   -Remote    with -Live only: also turn Remote Control on, named after the session id, so claude.ai/code and the
+#              mobile app list the unit. Off unless asked (owner 2026-10-20).
 #
 # WORK roles (author, build) are gated: before each launch the runner checks, with the kit's own rules and no model
 # call, whether the role has anything to take (an actionable inbox item, or a claimable row). Nothing to take = WATCH
@@ -88,6 +89,7 @@ param(
     [Parameter(Mandatory)] [string] $Repo,
     [Parameter(Mandatory)] [ValidateSet('author', 'build', 'integrate', 'plan', 'status', 'kit', 'coordinator')] [string] $Role,
     [switch] $Live,
+    [switch] $Remote,
     [switch] $Stream,
     [int] $IntervalSeconds = 0,
     [int] $UnitTimeoutSeconds = 0,
@@ -102,6 +104,7 @@ param(
 . "$PSScriptRoot\lib\Streams.ps1"
 . "$PSScriptRoot\lib\Inbox.ps1"
 if ($Live -and $Stream) { 'REFUSED -Live and -Stream are separate modes; pick one'; exit 2 }
+if ($Remote -and -not $Live) { 'REFUSED -Remote turns Remote Control on for a -Live unit; add -Live'; exit 2 }
 $Repo = (Resolve-Path $Repo).Path
 $P = Get-StreamPaths $Repo
 $mode = if ($Live) { 'live' } elseif ($Stream) { 'stream' } else { 'print' }
@@ -149,7 +152,7 @@ $unitsDir = Join-Path $P.Root 'units'
 function Get-RunnerRules([string] $Session, $Packet = $null, $Cfg = $null) {
     $addLesson = "Add a lesson only for something a later unit of this role needs and cannot read from .streams\: pwsh -NoProfile -File `"$PSScriptRoot\Add-Lesson.ps1`" -Repo `"$Repo`" -Role $Role -Session $Session -Task <task id> -Text `"<one line>`". Never put ticket detail or a secret in it."
     $rules = @(
-        "STREAM RUNNER UNIT. This is a fresh, unattended session started by Start-StreamRunner.ps1$(if ($Live) { '; the owner may be watching it live or through Remote Control, but nobody will answer a question' } else { '; nobody is watching it' })."
+        "STREAM RUNNER UNIT. This is a fresh, unattended session started by Start-StreamRunner.ps1$(if ($Live) { '; the owner may be watching it live' + $(if ($Remote) { ' or through Remote Control' }) + ', but nobody will answer a question' } else { '; nobody is watching it' })."
         "Your session id is $Session. Use exactly this id wherever the skill asks for one; do not mint another."
     )
     if ($Packet) {
@@ -1008,7 +1011,8 @@ function Write-RunnerState([hashtable] $State) {
 # to watch for a usage-limit rejection (Watch-UnitQuota).
 function Get-CliArgs([string] $Session, [string] $RulesFile, [string] $Cmd = $command, $Cfg = $null, [string] $ClaudeSession = '') {
     if ($Live) {
-        $a = @('--remote-control', $Session, '--permission-mode', 'bypassPermissions', '-n', $Session,
+        # Remote Control only on -Remote (owner 2026-10-20); it used to be on for every unit.
+        $a = @(if ($Remote) { '--remote-control', $Session }) + @('--permission-mode', 'bypassPermissions', '-n', $Session,
             '--plugin-dir', $modDir, '--append-system-prompt-file', $RulesFile)
         if ($ClaudeSession) { $a += @('--session-id', $ClaudeSession) }
     } else {

@@ -5,7 +5,8 @@
 # <G>). A group may close when ALL of these hold:
 #   1. every non-fix (origin not integration) code/docs/mockup row of the set is integrated or done;
 #   2. the latest finished Tier 2 run of <G> started AFTER the last of those rows integrated, and is attributed
-#      (Register-SuiteFailures.ps1 wrote its attribution);
+#      (Register-SuiteFailures.ps1 wrote its attribution). A group with no build row and no fix row (gates and its
+#      integration row only) needs no Tier 2 run: with none it skips rules 2-4 and prints CLOSE-OK <G> tier2 none;
 #   3. every row of the set integrated after that run started is a fix row (origin integration) and a Tier 3 retest of
 #      that run started after it integrated and passed;
 #   4. every failure of that run attributed 'fix' (owned by <G> or an earlier group) passed in a Tier 3 retest of it,
@@ -118,7 +119,11 @@ foreach ($t in $work) { $at = Get-IntegratedAt $t; if ($at -and $at -gt $lastPat
 # 2. a Tier 2 run after the last non-fix patch
 $run = @(Get-SuiteRunRecords $P $Group '2' | Where-Object { $_['status'] -eq 'done' }) | Select-Object -Last 1
 $runStart = $null; $attr = $null; $retests = @()
-if (-not $run) { $refused.Add("NO-TIER2 no finished Tier 2 run for $Group") }
+# A group with no build row and no fix row (owner review gates plus its integration row, G15; kit item
+# IN-20261020234526-74b6) has nothing a suite could cover: Start-SuiteRun.ps1 and Add-SuiteRunGroup.ps1 never count a
+# run for it, so rules 2-4 do not apply and it closes on its gates (CLOSE-OK <G> tier2 none).
+$noBuild = -not $work.Count -and -not @($rows | Where-Object { & $isFix $_ }).Count
+if (-not $run) { if (-not $noBuild) { $refused.Add("NO-TIER2 no finished Tier 2 run for $Group") } }
 else {
     $runStart = ConvertTo-UtcTime $run['startedAt']
     if ($runStart -le $lastPatch) { $refused.Add("TIER2-STALE $($run['id']) started $($run['startedAt']), before the last non-fix patch at $($lastPatch.ToString('yyyy-MM-ddTHH:mm:ssZ'))") }
@@ -187,5 +192,5 @@ if ($blocked.Count) {
     exit 3
 }
 if ($refused.Count) { foreach ($r in $refused) { "CLOSE-REFUSED $r" }; exit 1 }
-"CLOSE-OK $Group tier2 $($run['id']) retests $($retests.Count)$(if ($exempted.Count) { " exempt $($exempted.Count)" })"
+"CLOSE-OK $Group tier2 $(if ($run) { $run['id'] } else { 'none' }) retests $($retests.Count)$(if ($exempted.Count) { " exempt $($exempted.Count)" })"
 exit 0

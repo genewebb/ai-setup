@@ -32,7 +32,7 @@ next. Each runner session gets its session id and the headless rules in its syst
 The `/loop` form above still works. Session id (2026-10-05, priority-focus-design 3.5): the `session: <id>` in your start prompt (`<role>-<8 hex>`, chosen by the tab launcher so the cost ledger can find your transcript). Use it on every script call. Without one in the prompt, make one as before.
 
 **Watch it live (owner ruling 2026-10-04).** Add `-Live` to the runner line to run each unit as an interactive session in the
-runner's own terminal, with Remote Control on (claude.ai/code and the Claude app list it under its session id), or
+runner's own terminal, with Remote Control only when the runner line adds -Remote (claude.ai/code and the Claude app then list it under its session id), or
 `-Stream` for a live text feed of a `-p` session. Under `-Live` the cycle ends with one call to
 `mcp__stream-unit__unit_done` (outcome `built`, `ticketed`, `planned`, `integrated`, `done`, `idle`, `blocked` or
 `failed`, and a one-line note), made only after every result of the cycle is written under `.streams\`; the session

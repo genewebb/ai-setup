@@ -2689,7 +2689,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $o74 = @(); $e74 = ''
     $d74 = @(& "$S\Start-StreamRunner.ps1" -Repo $r74 -Role kit -Live -DryRun)
     if (($d74 -join "`n") -match '(?m)^MODE live') {
-        try { $o74 = @(& "$S\Start-StreamRunner.ps1" -Repo $r74 -Role kit -Live -IntervalSeconds 1 -MaxRuns 1) } catch { $e74 = ("$_" -split "`n")[0] }
+        try { $o74 = @(& "$S\Start-StreamRunner.ps1" -Repo $r74 -Role kit -Live -Remote -IntervalSeconds 1 -MaxRuns 1) } catch { $e74 = ("$_" -split "`n")[0] }
     } else { $e74 = 'skipped: this runner has no -Live mode' }
     $a74 = @(if (Test-Path $args74) { Get-Content -Raw $args74 | ConvertFrom-Json })
     $v74 = if (Test-Path $env74) { (Get-Content -Raw $env74).Trim() } else { '' }
@@ -2698,7 +2698,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $rules74 = @(Get-ChildItem (Join-Path $r74 '.streams\logs\runner') -Recurse -Filter '*.rules.txt' -ErrorAction SilentlyContinue | Select-Object -First 1)
     $rt74 = if ($rules74.Count) { Get-Content -Raw $rules74[0].FullName } else { '' }
     $sess74 = if ($s74) { [string]$s74.session } else { '?' }
-    Case 'runner -Live: interactive launch with Remote Control named after the session, the mod and the starting command' ((-not $e74) -and $a74.Count -gt 0 -and $a74 -notcontains '-p' -and $a74[0] -eq '--remote-control' -and $a74[1] -eq $sess74 -and ($a74 -join ' ') -match '--plugin-dir \S*mods\\stream-unit' -and $a74[-1] -match '^/stream-kit inbox repo: ') "err='$e74' session=$sess74 args=$($a74 -join ' ')"
+    Case 'runner -Live -Remote: interactive launch with Remote Control named after the session, the mod and the starting command' ((-not $e74) -and $a74.Count -gt 0 -and $a74 -notcontains '-p' -and $a74[0] -eq '--remote-control' -and $a74[1] -eq $sess74 -and ($a74 -join ' ') -match '--plugin-dir \S*mods\\stream-unit' -and $a74[-1] -match '^/stream-kit inbox repo: ') "err='$e74' session=$sess74 args=$($a74 -join ' ')"
     Case 'runner -Live: the session gets its id and role, and the rules tell it to end with unit_done' ($v74 -eq "$sess74|kit" -and $rt74 -match 'mcp__stream-unit__unit_done exactly once' -and $rt74 -match 'lessons') "env='$v74' rules=$($rt74.Length) chars"
     Case 'runner -Live: the mod''s result file is the unit result' ($s74 -and $s74.lastResult -eq 'stub74 idle' -and $s74.mode -eq 'live' -and (($o74 -join "`n") -match ' EXIT 0 outcome idle turns 1 cost 0\.02 ok -> ')) "state=$($s74 | ConvertTo-Json -Compress) out=$($o74 -join ' | ')"
     $env:STUB74_SKIP_RESULT = '1'
@@ -2712,6 +2712,12 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
         $o74b = @(Receive-Job $job74 -Keep); Stop-Job $job74 -ErrorAction SilentlyContinue; Remove-Job $job74 -Force -ErrorAction SilentlyContinue
     }
     Remove-Item Env:\STUB74_SKIP_RESULT, Env:\STREAM_RUNNER_AI, Env:\STREAM_RUNNER_CLAUDE -ErrorAction SilentlyContinue
+    # 74b runs the same stub WITHOUT -Remote (owner 2026-10-20: Remote Control only when asked), so its args file
+    # holds that launch's arguments.
+    $a74b = @(if (Test-Path $args74) { Get-Content -Raw $args74 | ConvertFrom-Json })
+    Case 'runner -Live without -Remote: no Remote Control, the rest of the launch unchanged' ((-not $e74) -and $a74b.Count -gt 0 -and $a74b -notcontains '--remote-control' -and $a74b[0] -eq '--permission-mode' -and ($a74b -join ' ') -match '--plugin-dir \S*mods\\stream-unit' -and $a74b[-1] -match '^/stream-kit inbox repo: ') "args=$($a74b -join ' ')"
+    $x74 = @(& "$S\Start-StreamRunner.ps1" -Repo $r74b -Role kit -Remote -DryRun)
+    Case 'runner: -Remote without -Live is refused' ((($x74 -join "`n") -match 'REFUSED -Remote') -and $LASTEXITCODE -eq 2) "out=$($x74 -join ' | ')"
     $f74b = @(Get-ChildItem (Join-Path $r74b '.streams\logs\runner') -Recurse -Filter '*-kit-*.json' -ErrorAction SilentlyContinue | Where-Object Name -notlike '*.rules.txt')
     $ft74b = if ($f74b.Count) { Get-Content -Raw $f74b[0].FullName } else { '' }
     Case 'runner -Live: a session that exits without unit_done is a failed run (NO-RESULT, backoff)' ((($o74b -join "`n") -match ' EXIT 0 +FAILED -> ') -and (($o74b -join "`n") -match 'BACKOFF 900 s') -and $ft74b -match '^NO-RESULT ') "out=$($o74b -join ' | ') file='$ft74b'"
@@ -2793,7 +2799,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $hu75q = if ($h75q) { [datetime]::Parse([string]$h75q.until, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal) } else { [datetime]::MinValue }
     $rs75q = [DateTimeOffset]::FromUnixTimeSeconds($reset75q).UtcDateTime
     $ot75q = $o75q -join "`n"
-    Case 'usage limit: the -Live unit is named by --session-id and ended at once on the rejection, with its children' ($si75q -ge 2 -and $a75q[$si75q + 1] -match '^[0-9a-f-]{36}$' -and $a75q[0] -eq '--remote-control' -and $ot75q -match 'EXIT USAGE-LIMIT five_hour' -and $t75q.TotalSeconds -lt 45 -and $child75q -and -not $alive75q) "seconds=$([int]$t75q.TotalSeconds) child=$child75q alive=$([bool]$alive75q) args=$($a75q -join ' ') out=$($o75q -join ' | ')"
+    Case 'usage limit: the -Live unit is named by --session-id and ended at once on the rejection, with its children' ($si75q -ge 2 -and $a75q[$si75q + 1] -match '^[0-9a-f-]{36}$' -and $a75q -notcontains '--remote-control' -and $ot75q -match 'EXIT USAGE-LIMIT five_hour' -and $t75q.TotalSeconds -lt 45 -and $child75q -and -not $alive75q) "seconds=$([int]$t75q.TotalSeconds) child=$child75q alive=$([bool]$alive75q) args=$($a75q -join ' ') out=$($o75q -join ' | ')"
     Case 'usage limit: no failed-run backoff; a repo-wide hold runs to the stated reset plus jitter' ($ot75q -notmatch 'BACKOFF' -and $ot75q -notmatch 'FAILED' -and $h75q -and $h75q.type -eq 'five_hour' -and $hu75q -ge $rs75q.AddSeconds(29) -and $hu75q -le $rs75q.AddSeconds(152)) "hold=$($h75q | ConvertTo-Json -Compress) reset=$($rs75q.ToString('o')) out=$($o75q -join ' | ')"
 
     # A second runner of the repo sees the hold and launches nothing (no claude call) until it lifts.
@@ -3693,6 +3699,21 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $cl = @(& "$S\Test-GroupClose.ps1" -Repo $tr -Group T1 -DryRun); $clx = $LASTEXITCODE
     [IO.File]::WriteAllText($resPath1, $resKeep1)
     Case '96 a leg that crashed in the latest Tier 2 run refuses the close' ($clx -eq 1 -and ($cl -join ' ') -match 'LEG-CRASHED run-T1-1 .*leg:Playwright') ($cl -join ' | ')
+    # A gates-only group (review gates plus its integration row, G15; kit item IN-20261020234526-74b6) has no build row a
+    # suite could cover, so it closes on its gates with no Tier 2 run; a group that has a build row still needs one.
+    $tasksKeep9 = [IO.File]::ReadAllText((Join-Path $tr '.streams\tasks.json'))
+    $d = J $tr | ConvertTo-Json -Depth 20 | ConvertFrom-Json -AsHashtable
+    $d.groups += @{ id = 'T9'; name = 'gates only'; state = 'released' }
+    $d.tasks += @{ id = 'T9.G01'; group = 'T9'; kind = 'gate'; state = 'ticketed'; title = 'owner review'; writeSet = @(); dependsOn = @(); history = @() }
+    $d.tasks += @{ id = 'T9.I'; group = 'T9'; kind = 'integration'; state = 'planned'; title = 'close T9'; writeSet = @(); dependsOn = @('T9.G01'); history = @() }
+    $d | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $tr '.streams\tasks.json') -Encoding utf8
+    $g9a = @(& "$S\Test-GroupClose.ps1" -Repo $tr -Group T9 -DryRun); $g9ax = $LASTEXITCODE
+    $d = J $tr; ($d.tasks | Where-Object { $_.id -eq 'T9.G01' }).state = 'done'; $d | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $tr '.streams\tasks.json') -Encoding utf8
+    $g9b = @(& "$S\Test-GroupClose.ps1" -Repo $tr -Group T9 -DryRun); $g9bx = $LASTEXITCODE
+    $d = J $tr; ($d.tasks | Where-Object { $_.id -eq 'T9.G01' }).kind = 'code'; $d | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $tr '.streams\tasks.json') -Encoding utf8
+    $g9c = @(& "$S\Test-GroupClose.ps1" -Repo $tr -Group T9 -DryRun); $g9cx = $LASTEXITCODE
+    [IO.File]::WriteAllText((Join-Path $tr '.streams\tasks.json'), $tasksKeep9)
+    Case '96 a gates-only group needs no Tier 2: only its open gate refuses, then CLOSE-OK tier2 none; a build row still needs one' ($g9ax -eq 1 -and ($g9a -join ' ') -match 'GATES-OPEN T9\.G01' -and ($g9a -join ' ') -notmatch 'NO-TIER2' -and $g9bx -eq 0 -and ($g9b -join ' ') -match '^CLOSE-OK T9 tier2 none retests 0' -and $g9cx -eq 1 -and ($g9c -join ' ') -match 'NO-TIER2') "$($g9a -join ' | ') // $($g9b -join ' | ') // $($g9c -join ' | ')"
 
     # Flaky promotion: the flaky test fails in two of the next five Tier 2 runs, and the second makes it a failure.
     & $setCtl @{ 'NS.FooTests.Flaky' = 'Failed'; 'NS.FooTests.Real' = 'Passed'; 'NS.LaterTests.L' = 'Failed'; 'NS.BarTests.Ok' = 'Passed' } @{ 'NS.FooTests.Flaky' = 'Passed'; 'NS.FooTests.Real' = 'Passed'; 'NS.LaterTests.L' = 'Failed'; 'NS.BarTests.Ok' = 'Passed' }
