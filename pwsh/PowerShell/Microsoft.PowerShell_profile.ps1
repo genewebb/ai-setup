@@ -3813,19 +3813,28 @@ function Test-GeneWt {
 # Opens one tab in the Windows Terminal window this command runs in (wt -w 0: the current window), titled and colored by
 # its type (the title's first word). The tab's script first drops the env of the terminal it was launched from (Wave,
 # WezTerm; the runner would retitle THAT terminal otherwise), stops Claude Code retitling the tab, and sets the title;
-# then it runs -Script, if any. -NoExit keeps the shell afterwards.
+# then it runs -Script, if any. -NoExit keeps the shell afterwards. -Window names another WT window instead (wt -w
+# <name>: the window with that name, created on first use), so runner roles get a window of their own.
 function New-GeneWtTab {
-    param([Parameter(Mandatory)][string]$Directory, [Parameter(Mandatory)][string]$Title, [string]$Script)
+    param([Parameter(Mandatory)][string]$Directory, [Parameter(Mandatory)][string]$Title, [string]$Script, [string]$Window = '0')
     $prefix = "Get-ChildItem Env: | Where-Object { `$_.Name -like 'WAVETERM*' -or `$_.Name -eq 'WEZTERM_PANE' } | " +
         "ForEach-Object { Remove-Item -LiteralPath `"Env:`$(`$_.Name)`" }; " +
         "`$env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE = '1'; Set-GeneStreamTabTitle '$Title'; "
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($prefix + $Script))
-    $wtArgs = @('-w', '0', 'new-tab', '--title', $Title)
+    $wtArgs = @('-w', $Window, 'new-tab', '--title', $Title)
     $color = $global:GeneStreamTabColors[($Title -split ' ')[0]]
     if ($color) { $wtArgs += @('--tabColor', $color) }
     $wtArgs += @('-d', $Directory, (Join-Path $PSHOME 'pwsh.exe'), '-NoExit', '-EncodedCommand', $encoded)
     & (Get-GeneWtPath) @wtArgs
     if ($LASTEXITCODE) { throw "wt.exe new-tab '$Title' failed (exit $LASTEXITCODE)" }
+}
+
+# The named Windows Terminal window that Author or Builder runner tabs of a repo open in, e.g. 'speedmerchants-Authors'.
+# Not digits only (wt reads that as a window id) and no spaces.
+function Get-GeneStreamRunnerWindow {
+    param([Parameter(Mandatory)][string]$Repo, [Parameter(Mandatory)][ValidateSet('Author', 'Builder')][string]$Type)
+    $leaf = (Split-Path -Leaf $Repo) -replace '[^A-Za-z0-9_.-]', '-'
+    return "$leaf-${Type}s"
 }
 
 # Retitles this shell's own terminal tab (Windows Terminal follows the console title).
@@ -4305,7 +4314,7 @@ function addStreams {
             $created.Add($title)
             Write-Host "  $title -> plain PowerShell" -ForegroundColor DarkCyan
         }
-        Write-Host "Streams ready in this window, $full. Add more authors or builders with addStreamTab." -ForegroundColor Green
+        Write-Host "Streams ready in this window, $full; authors and builders are in their own windows. Add more with addStreamTab." -ForegroundColor Green
     }
     catch {
         foreach ($t in $created) { Request-GeneStreamTabClose -Repo $full -Tab $t -By 'addStreams (failed)' }
@@ -4341,7 +4350,8 @@ function addStreamTab {
             '  -Role Planner | Adhoc                                              one long interactive session, once per repo',
             '  -Role Integrator | Kit | Coordinator | Status                      one gated runner tab, once per repo',
             '                                                                    (refused while that tab''s session or runner runs; -Force opens anyway)',
-            '  -Role Author | Builder (same as -Author | -Builder)                runner tabs, -Count of them',
+            '  -Role Author | Builder (same as -Author | -Builder)                runner tabs, -Count of them, in their own window',
+            '                                                                    (<repo>-Authors / <repo>-Builders; never this one)',
             'Adhoc is never opened by addStreams: it carries one request you type in its tab from requirement to commit.'
         )
         foreach ($title in @($global:GeneStreamRoles.Keys) + @($global:GeneStreamOnDemandRoles.Keys)) {
@@ -4437,23 +4447,25 @@ function addStreamTab {
     for ($n = 1; $numbers.Count -lt $Count; $n++) { if ($used -notcontains $n) { $numbers.Add($n) } }
 
     if ($DryRun) {
-        Write-Host "DryRun: $($live.Count) $role runner(s) live; would open: $(($numbers | ForEach-Object { "$type $_" }) -join ', ')" -ForegroundColor Cyan
+        Write-Host "DryRun: $($live.Count) $role runner(s) live; would open in the Windows Terminal window '$(Get-GeneStreamRunnerWindow -Repo $full -Type $type)': $(($numbers | ForEach-Object { "$type $_" }) -join ', ')" -ForegroundColor Cyan
         foreach ($n in $numbers) { Format-GeneStreamScriptHelp -Tab "$type $n" -Script (Get-GeneStreamRunnerScript -Repo $full -Role $role -Tab "$type $n" -Remote:$Remote) | ForEach-Object { Write-Host $_ } }
         return
     }
 
     $runners = Join-Path $full '.streams\runners'
+    # Authors and builders never share a terminal (owner 2026-10-21): each type has its own named WT window per repo.
+    $window = Get-GeneStreamRunnerWindow -Repo $full -Type $type
     $created = [System.Collections.Generic.List[string]]::new()
     try {
         foreach ($n in $numbers) {
             $tab = "$type $n"
             # A leftover stop file for this tab would stop the new runner at once.
             Remove-Item -LiteralPath (Join-Path $runners "STOP-tab-$(Get-GeneStreamTabToken $tab)") -ErrorAction SilentlyContinue
-            New-GeneWtTab -Directory $full -Title $tab -Script (Get-GeneStreamRunnerScript -Repo $full -Role $role -Tab $tab -Remote:$Remote)
+            New-GeneWtTab -Directory $full -Title $tab -Script (Get-GeneStreamRunnerScript -Repo $full -Role $role -Tab $tab -Remote:$Remote) -Window $window
             $created.Add($tab)
             Write-Host "  $tab -> runner -Role $role -Live$(if ($Remote) { ' -Remote' })" -ForegroundColor DarkCyan
         }
-        Write-Host "Opened $($created.Count) $type tab(s) in $full." -ForegroundColor Green
+        Write-Host "Opened $($created.Count) $type tab(s) in $full, in the Windows Terminal window '$window'." -ForegroundColor Green
     }
     catch {
         foreach ($t in $created) { Set-Content -LiteralPath (Join-Path $runners "STOP-tab-$(Get-GeneStreamTabToken $t)") -Value 'addStreamTab (failed)' }
