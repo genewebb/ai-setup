@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 3cbf42a2-10bf-4c57-99a5-a810b87f7f83
-  modified: 2026-10-10T16:11:00.209Z
+  modified: 2026-10-19T14:13:44.664Z
 ---
 
 Verified 2026-10-10 on prod ScenarioMgt (Azure SQL pc-speedmr-prd-db). Staging was enabled 10/8 16:35 for the 12 run-graph entities, so these exist for each of them: `stg.t<Entity>_Delete (ID, Code)`, view `stg.v<Entity>_Delete` (LEFT JOIN on Code), and proc `stg.p<Entity>_Delete @UserID INT = NULL`.
@@ -23,5 +23,9 @@ Speed: Gene's purge of WE 10842 and 10983 deleted 1,032,876 UnifiedMatchingApiEx
 The Profisee REST API has NO staging route (Swagger has only `Records/bulk/{entity}`, which wipes the whole entity), so a staging delete needs a direct SQL connection. TestAuto had only HangfireDB/MonitorDB plus ProfiseeDB/ConnectDB/DataDB. On SMVMTR2, ConnectDB and DataDB point at CORPSQL03/Profisee300M, the instance under test and NOT the ScenarioMgt store. The secret display truncates at 4000 chars, so the ProfiseeDB value is unseen.
 
 Gene's decisions 10/10: a per-entity "use staging" checkbox in the Run Purge wizard, chosen against the row count shown (NOT a Workload Y/N column); connection = the ProfiseeDB connection string from the secrets file.
+
+**WorkloadExecution children (10/19):** tRecordApiExecution, tRecordInteractiveApiExecution, tUnifiedMatchingApiExecution, tUnifiedMatchingApiExecutionTimings and tUnifiedMatchingApiExecutionMatchGroupResults (these two have BOTH WorkloadExecution and UnifiedMatchingScenarioWorkloadExecution), tWorkloadExecutionResourceSummary, tTestAutoWorkflowExecutionDetail, tTestAutoUtilityExecution, tTestAutoExecutionHistory, tConnectApiExecution. All have stg _Delete tables and procs (ID is an identity column, so insert Code only). Child FK columns hold the WE **ID**: filter by joining to tWorkloadExecution for its Code. Delete children first, tWorkloadExecution last.
+
+**Gene's cleanup rules (10/19):** a restart keeps the SAME WorkloadExecution, so separate WEs for the same setup are separate runs. Delete everything not Complete (no jobs running). A failed run with no metrics = WE row only; a failed run with metrics = delete its metrics first. Keep the latest good run per setup. Check for a complete replacement before deleting a failed run that holds the only data for its version.
 
 Related: [[project_testauto_metric_run_purge_2026-10-07]], [[reference-restclient-bulkdelete-broken]]

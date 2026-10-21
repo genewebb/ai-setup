@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: f72b1fa1-4f0b-4455-a732-6236fcf25583
-  modified: 2026-10-18T15:41:22.528Z
+  modified: 2026-10-18T17:19:33.818Z
 ---
 
 Review of how the stream kit handles `dependsOn` (2026-10-18, Gene asked for an objective critical review, then "make your suggested improvements"). Source of truth is `C:\devops\repos\ai-setup\skills\stream-kit\scripts` (installed copies under `~\.claude\skills` are copies).
@@ -30,7 +30,11 @@ Review of how the stream kit handles `dependsOn` (2026-10-18, Gene asked for an 
 
 **10/18 11:40 second merge aca808b:** `prof setup push` failed again because publish.ps1 ran `git pull --rebase` with origin unchanged, which replayed 28f1de6 alone and FLATTENED the hand-made merge (fixed in 5833609: fetch, rebase --rebase-merges only when behind; Publish.Tests 9/9). SMVMTR1's planner had meanwhile built its own `dependsWhy` edit in Revise-Task.ps1 (77143de, kit item IN-20261018144201-44e6, acting on my inbox item before my version reached it): kept ITS semantics (`-DependsWhy`, `DEPWHY-NO-EDGE`/`DEPWHY-BAD`, 200 chars, empty clears, removeDependsOn keeps the reason, reason-only edit never releases) + my defaults refill; `Set-DependsWhyDefaults` keeps a stated reason for a removed edge. Suites: unit 231, recovery 712, fails=0. LESSON: filing a planner item about a feature before the kit carrying it is installed on the host makes the host build it twice.
 
-**Open:** SMVMTR1 needs the rollout (`prof setup reload` / `prof setup push -Machine SMVMTR1 -AllowSecrets` / `prof streams update -RestartSessions`) before DEP-REVIEW / FOCUS-PULL / BASE-STALE appear on its status page and the freshness tick runs there.
+**10/18 13:15 third merge ebad1a7 PUSHED to GitHub.** SMVMTR1's kit had also built DEP-REVIEW a second time in Get-StreamStatus.ps1 (root-based, model field `depReview`, kit item c28b) and made Find-ArtificialBlockers / Find-TestBlockers treat any stored dependsWhy entry as stated (fdff). UNIFIED MODEL: stored `dependsWhy` = PLANNER TEXT ONLY; `Set-DependsWhyDefaults` strips the derived classes; `Get-DependsWhy $Row $Dep $Tasks` derives `group order` / `mockup first` / `shared file` / `unstated`; ONE DEP-REVIEW emitter (theirs) with env thresholds + derived-reason exclusions; flag text `DEP-REVIEW: <n> root(s) ... <root> (<k>: a->b, ...)`. Suites: unit 235, recovery 712, fails=0. prof setup push kept failing because each round harvested a NEW SMVMTR1 commit that conflicted (whole-file SKILL.md conflicts: SMVMTR1 clone autocrlf=false); by-hand finish = stop runners there, fetch + merge --ff-only origin/main, prof setup reload, prof streams add.
+
+**10/18 13:17 SMVMTR1 ROLLED OUT:** ff to ebad1a7, `prof setup reload` applied revision 614CCC7531CA, `prof streams update -RestartSessions` stopping 12 runners (3 authors, 5 builders, integrator, kit, coordinator, status) and restarting them on the new kit. Planner long session must be ended by hand (Esc, /exit) or `-CloseSessions`. Install warning there: scratch cleanup Register-ScheduledTask "Access is denied" under non-elevated genewe (needs one elevated install.ps1 run); 3 MCP entries without template skipped (pre-existing).
+
+**Open (was):** SMVMTR1 needs the rollout (`prof setup reload` / `prof setup push -Machine SMVMTR1 -AllowSecrets` / `prof streams update -RestartSessions`) before DEP-REVIEW / FOCUS-PULL / BASE-STALE appear on its status page and the freshness tick runs there.
 
 **Why:** 85% of ticketed rows wait on dependencies, and nothing on the board could say whether an edge was real or whether a landed base matched what the verifier graded.
 **How to apply:** when a dependency question comes up, read `FOCUS-PULL` / `DEP-REVIEW` / `DEP-MOVED` / `BASE-STALE` on the status page first; adjust edges only through `Revise-Task.ps1`. See [[reference_stream_kit_mtime_grader_clause_breaks_on_integrate]], [[feedback_stream_mechanical_work_outside_claude]], [[project_smvmtr1_stream_host_genewe_2026-10-17]].
