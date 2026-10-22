@@ -17,12 +17,12 @@ $script:ProfBuildDetails = @{
     run     = @(
         'Same as typing the dp* command alone (dpspeed, dpcrewchief, dpdatagen, dpmutate, dpv2): for most products',
         'build + publish + start the app here; for speedy (dpv2) rebuild the local containers.',
-        'Extra dp* switches may follow (prof build run speed -CleanBuild).'
+        'Extra dp* switches may follow (prof build run testauto -CleanBuild).'
     )
     publish = @(
         'Builds the product''s install package and puts it on the team share, as dp* -Package does.',
         '-Bump Patch|Minor|Major raises the version first (7.0.39 -> 7.0.40 | 7.1.0 | 8.0.0); without it the current',
-        'version is packaged again. "all" packages all four products (dpall -Package): add -Products speed,crewchief',
+        'version is packaged again. "all" packages all four products (dpall -Package): add -Products testauto,crewchief',
         'to pick some, -Parallel to run them at once. speedy also takes -AllowDirty.'
     )
     containers = @(
@@ -31,7 +31,7 @@ $script:ProfBuildDetails = @{
     )
     more    = @(
         'For the switches that are not build/run/publish: prof build more speedy -Test, prof build more crewchief -Cli,',
-        'prof build more speed -UpdateClientId -Run. With no switches it shows the dp* command''s own help.'
+        'prof build more testauto -UpdateClientId -Run. With no switches it shows the dp* command''s own help.'
     )
 }
 $script:ProfBuildUsage = @{
@@ -45,7 +45,7 @@ $script:ProfBuildUsage = @{
 # The products. Repo = key in this machine's profile; Build = solution or project under it (compile);
 # VersionFile = where <Version> lives (publish shows it). 'all' is the four speed-merchants products together.
 $script:ProfBuildProducts = [ordered]@{
-    speed     = [pscustomobject]@{ Name = 'TestAuto'; Command = 'dpspeed'; Repo = 'SpeedMerchantsRepo'; Build = @('speed-merchants.sln'); VersionFile = 'TestAuto.Web\TestAuto.Web.csproj'; Run = $true; Publish = $true }
+    testauto  = [pscustomobject]@{ Name = 'TestAuto'; Command = 'dpspeed'; Repo = 'SpeedMerchantsRepo'; Build = @('speed-merchants.sln'); VersionFile = 'TestAuto.Web\TestAuto.Web.csproj'; Run = $true; Publish = $true }
     crewchief = [pscustomobject]@{ Name = 'CrewChief'; Command = 'dpcrewchief'; Repo = 'SpeedMerchantsRepo'; Build = @('CrewChief\CrewChief.sln'); VersionFile = 'CrewChief\Directory.Build.props'; Run = $true; Publish = $true }
     datagen   = [pscustomobject]@{ Name = 'DataGen'; Command = 'dpdatagen'; Repo = 'SpeedMerchantsRepo'; Build = @('TestData.Generation\TestData.Generation.sln'); VersionFile = 'TestData.Generation\Directory.Build.props'; Run = $true; Publish = $true }
     mutate    = [pscustomobject]@{ Name = 'Mutate (DataGen + Mutation)'; Command = 'dpmutate'; Repo = 'SpeedMerchantsRepo'; Build = @('TestData.Mutation\TestData.Mutation.sln'); VersionFile = 'TestData.Mutation\Directory.Build.props'; Run = $true; Publish = $true }
@@ -65,8 +65,14 @@ $script:ProfGroups['build'] = [pscustomobject]@{
     TopicNames  = { @($script:ProfBuildProducts.Keys) }
 }
 
+# Old product names still accepted on the command line. dpall -Products keeps its own names (speed for TestAuto):
+# prof build publish all -Products testauto,... is translated to them.
+$script:ProfBuildAliases = @{ speed = 'testauto' }
+$script:ProfBuildDpAllNames = [ordered]@{ testauto = 'speed'; crewchief = 'crewchief'; datagen = 'datagen'; mutate = 'mutate' }
+
 function Get-GeneBuildProduct([string]$Product) {
-    if (-not $Product) { throw "Which product? One of: $($script:ProfBuildProducts.Keys -join ', ') (e.g. prof build publish speed)" }
+    if (-not $Product) { throw "Which product? One of: $($script:ProfBuildProducts.Keys -join ', ') (e.g. prof build publish testauto)" }
+    if ($script:ProfBuildAliases.Contains($Product.ToLowerInvariant())) { $Product = $script:ProfBuildAliases[$Product.ToLowerInvariant()] }
     $k = @($script:ProfBuildProducts.Keys | Where-Object { $_ -ieq $Product }) | Select-Object -First 1
     if (-not $k) { throw "No product called '$Product'. One of: $($script:ProfBuildProducts.Keys -join ', ')" }
     return $script:ProfBuildProducts[$k]
@@ -193,6 +199,9 @@ function Invoke-GeneProfBuildPublish {
     $splat = ConvertTo-GeneCommandArgs -Command $info.Command -Extra $Extra
     foreach ($k in 'Bump', 'BumpMinor', 'BumpMajor', 'Package') { if ($splat.Contains($k)) { throw "Use prof's -Bump Patch|Minor|Major instead of -$k." } }
     $splat.Package = $true
+    if ([object]::ReferenceEquals($info, $script:ProfBuildProducts['all']) -and $splat.Contains('Products')) {
+        $splat.Products = @(@($splat.Products) | ForEach-Object { "$_" -split ',' } | Where-Object { $_ } | ForEach-Object { $n = $_.Trim().ToLowerInvariant(); if ($script:ProfBuildDpAllNames.Contains($n)) { $script:ProfBuildDpAllNames[$n] } else { $n } })
+    }
     switch ($Bump) { 'Patch' { $splat.Bump = $true } 'Minor' { $splat.BumpMinor = $true } 'Major' { $splat.BumpMajor = $true } }
     if ($Configuration) { $splat.Configuration = $Configuration }
     [void](Enter-GeneBuildRepo $info)
@@ -265,7 +274,7 @@ function Read-GeneBuildMenu {
             if (-not $b) { return $null }
             if ($b.Name -ne 'None') { $p.Bump = $b.Name }
             if ($pick.Key -eq 'all') {
-                $prods = Select-GeneMenu -Title 'Which products? (Enter = all four)' -Items @('speed', 'crewchief', 'datagen', 'mutate') -Multi -Default 0 -Reader $Reader -AllowEmpty
+                $prods = Select-GeneMenu -Title 'Which products? (Enter = all four)' -Items @($script:ProfBuildDpAllNames.Keys) -Multi -Default 0 -Reader $Reader -AllowEmpty
                 if ($null -eq $prods) { return $null }
                 if (@($prods).Count -and @($prods).Count -lt 4) { $extra += '-Products'; $extra += , @($prods) }
                 if (& $yn 'Package them at the same time (-Parallel)? Faster, but pegs the machine') { $extra += '-Parallel' }

@@ -83,7 +83,7 @@ $script:ProfUsage = @{
 $script:ProfOldNames = [ordered]@{
     sp = 'prof setup show'; ep = 'prof setup edit'; rp = 'prof setup reload (rp itself only reloads the profile in this window)'; machinecfg = 'prof setup config'
     gpush = 'prof git push'
-    'dpspeed, dpcrewchief, dpdatagen, dpmutate, dpv2' = 'prof build run speed | crewchief | datagen | mutate | speedy'
+    'dpspeed, dpcrewchief, dpdatagen, dpmutate, dpv2' = 'prof build run testauto | crewchief | datagen | mutate | speedy'
     'dp* -Package -Bump...' = 'prof build publish <product> -Bump Patch|Minor|Major'
     'dpall -Package' = 'prof build publish all'
 }

@@ -327,7 +327,7 @@ try {
         param([switch]$Test, [ValidateSet('A', 'B')][string]$Run, [string[]]$Products, [switch]$Package, [switch]$Bump, [switch]$BumpMinor, [switch]$BumpMajor, [Alias('h')][switch]$ShowHelp)
         $script:dpGot = [ordered]@{} + $PSBoundParameters
     }
-    $realSpeed = $script:ProfBuildProducts['speed'].Command
+    $realSpeed = $script:ProfBuildProducts['testauto'].Command
     try {
         Test-Case 'build: dp* switches after prof become a splat; unknown ones are refused' {
             $h = ConvertTo-GeneCommandArgs -Command dpfake -Extra @('-Test', '-Run', 'B', '-Products', @('x', 'y'))
@@ -340,15 +340,15 @@ try {
         Test-Case 'build: version bumps' {
             Assert-Equal '1.2.4' (Get-GeneBumpedVersion '1.2.3' 'Patch'); Assert-Equal '1.3.0' (Get-GeneBumpedVersion '1.2.3' 'Minor')
             Assert-Equal '2.0.0' (Get-GeneBumpedVersion '1.2.3' 'Major'); Assert-Equal '1.2.3' (Get-GeneBumpedVersion '1.2.3' 'None')
-            Assert-Equal '1.2.3' (Get-GeneProductVersion $script:ProfBuildProducts['speed'])
+            Assert-Equal '1.2.3' (Get-GeneProductVersion $script:ProfBuildProducts['testauto'])
         }
         Test-Case 'build: command line shows product, bump and the dp* switches' {
-            Assert-Equal 'prof build publish speed -Bump Minor -Products a,b -WhatIf' (Format-GeneProfCommand -Group build -Verb publish -Params ([ordered]@{ Product = 'speed'; Bump = 'Minor'; Extra = @('-Products', @('a', 'b')); WhatIf = $true }))
+            Assert-Equal 'prof build publish testauto -Bump Minor -Products a,b -WhatIf' (Format-GeneProfCommand -Group build -Verb publish -Params ([ordered]@{ Product = 'testauto'; Bump = 'Minor'; Extra = @('-Products', @('a', 'b')); WhatIf = $true }))
         }
-        $script:ProfBuildProducts['speed'].Command = 'dpfake'
+        $script:ProfBuildProducts['testauto'].Command = 'dpfake'
         Test-Case 'build: publish -Bump Major runs dp* -Package -BumpMajor in the repo folder, with the extra switches' {
             $script:dpGot = $null
-            Invoke-GeneProf build publish speed -Bump Major -Products a, b 6>&1 | Out-Null
+            Invoke-GeneProf build publish testauto -Bump Major -Products a, b 6>&1 | Out-Null
             Assert-True $script:dpGot.Package; Assert-True $script:dpGot.BumpMajor; Assert-Equal @('a', 'b') $script:dpGot.Products
             Assert-Equal $sm (Get-Location).ProviderPath
         }
@@ -359,20 +359,41 @@ try {
             $err = try { Invoke-GeneProf build publish speed -BumpMinor 6>&1 | Out-Null; '' } catch { "$_" }
             Assert-Match $err "Use prof's -Bump"
         }
+        Test-Case 'build: the old name speed still means TestAuto' {
+            Assert-Equal 'TestAuto' (Get-GeneBuildProduct 'speed').Name
+            Assert-Equal 'TestAuto' (Get-GeneBuildProduct 'TestAuto').Name
+        }
+        Test-Case 'build: publish all -Products testauto reaches dpall as speed' {
+            $realAll = $script:ProfBuildProducts['all'].Command
+            $script:ProfBuildProducts['all'].Command = 'dpfake'
+            try {
+                $script:dpGot = $null
+                Invoke-GeneProf build publish all -Products testauto, crewchief 6>&1 | Out-Null
+                Assert-Equal @('speed', 'crewchief') $script:dpGot.Products
+                $script:dpGot = $null
+                Invoke-GeneProf build publish all -Products 'speed,mutate' 6>&1 | Out-Null
+                Assert-Equal @('speed', 'mutate') $script:dpGot.Products
+            }
+            finally { $script:ProfBuildProducts['all'].Command = $realAll }
+        }
+        Test-Case 'build menu: TestAuto is listed by name, first' {
+            $o = Invoke-GeneProfMenu -Group build -Reader (New-Queue @('q')) 6>&1 | Out-String
+            Assert-Match $o '1\) testauto\s+TestAuto'
+        }
         Test-Case 'build menu: product, Publish, bump shows versions, n at Run it? runs nothing' {
             $script:dpGot = $null
             $o = Invoke-GeneProfMenu -Group build -Reader (New-Queue @('1', '3', '3', 'n', 'n')) 6>&1 | Out-String
             Assert-Match $o '1\.2\.3 -> 1\.3\.0'
-            Assert-Match $o '> prof build publish speed -Bump Minor'
+            Assert-Match $o '> prof build publish testauto -Bump Minor'
             Assert-True ($null -eq $script:dpGot) 'ran although the answer was n'
         }
         Test-Case 'build menu: More options ticks switches and asks a choice switch value' {
             $o = Invoke-GeneProfMenu -Group build -Reader (New-Queue @('1', '4', '1,2', '2', 'n', 'n')) 6>&1 | Out-String
-            Assert-Match $o '> prof build more speed -Test -Run B'
+            Assert-Match $o '> prof build more testauto -Test -Run B'
         }
         Test-Case 'build menu: Build only asks the configuration' {
             $o = Invoke-GeneProfMenu -Group build -Reader (New-Queue @('1', '1', '2', 'n', 'n')) 6>&1 | Out-String
-            Assert-Match $o '> prof build compile speed -Configuration Release'
+            Assert-Match $o '> prof build compile testauto -Configuration Release'
         }
 
         # git: a local bare repo stands in for GitHub
@@ -478,7 +499,7 @@ try {
         }
     }
     finally {
-        $script:ProfBuildProducts['speed'].Command = $realSpeed
+        $script:ProfBuildProducts['testauto'].Command = $realSpeed
         $global:GeneMachine = $savedMachine; $global:GeneMachineAI = $savedAI; Set-Location $savedLoc
     }
 }
