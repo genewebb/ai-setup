@@ -1092,8 +1092,10 @@ function Publish-GeneSharedBits {
         through its admin share (SharedBitsStaging is a path on the host), and a remote session there copies
         and prunes. The storage key is read ON the host from SharedBitsKeyScript (the `$AccountKey = "..."` line
         of MapDrive.ps1), used for a connection that lives only in that session, and never sent back: the
-        session returns status lines only. Best-effort like the team share: every failure is a warning and
-        the packages stay in the bits folder.
+        session returns status lines only. The session uses this logon's Kerberos ticket; when there is none
+        (a cached logon from before the domain was reachable) it asks for this account's password once and
+        connects with that. Best-effort like the team share: every failure is a warning and the packages stay
+        in the bits folder.
     #>
     param([Parameter(Mandatory)][object[]]$Plan, [Parameter(Mandatory)][string]$BitsDir)
 
@@ -1130,8 +1132,7 @@ function Publish-GeneSharedBits {
     $items = @($Plan | ForEach-Object {
         [pscustomobject]@{ Name = $_.Built.Name; Length = $_.Built.Length; Filter = $_.Filter; Version = [string]$_.Version }
     })
-    try {
-        $lines = Invoke-Command -ComputerName $relayHost -ErrorAction Stop -ArgumentList $share, $keyScript, $staging, $items -ScriptBlock {
+    $remote = {
             param($Share, $KeyScript, $Staging, $Items)
             $out = [System.Collections.Generic.List[object]]::new()
             function Say([string]$Level, [string]$Text) { $out.Add([pscustomobject]@{ Level = $Level; Text = $Text }) }
@@ -1175,11 +1176,32 @@ function Publish-GeneSharedBits {
                 if ($root) { $null = & net.exe use $root /delete /y 2>&1 }
                 $out
             }
-        }
     }
+    $remoteArgs = @($share, $keyScript, $staging, $items)
+    try { $lines = Invoke-Command -ComputerName $relayHost -ErrorAction Stop -ArgumentList $remoteArgs -ScriptBlock $remote }
     catch {
-        Write-Warning "Shared bits: the remote session on $relayHost failed ($($_.Exception.Message)) - package(s) left in $BitsDir."
-        return
+        # A logon made while the domain was out of reach (cached logon, VPN up later) holds no Kerberos ticket, and
+        # WinRM without -Credential does not get one or fall back; the SMB staging above still works. With the
+        # password WinRM gets its own ticket, so ask once (this run only, never stored) and try again.
+        $why = $_.Exception.Message
+        if ($why -notmatch '0x80090311|0x8009030e|0x8009030c|Kerberos|Access is denied' -or [Console]::IsInputRedirected) {
+            Write-Warning "Shared bits: the remote session on $relayHost failed ($why) - package(s) left in $BitsDir."
+            return
+        }
+        $caller = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+        Write-Host "This logon has no Kerberos ticket for $relayHost; sign in as $caller to finish the shared bits copy." -ForegroundColor Yellow
+        $cred = $null
+        try { $cred = Get-Credential -UserName $caller -Message "Shared bits: password for $caller on $relayHost (this run only, never stored)" } catch { }
+        if (-not $cred) {
+            Write-Warning "Shared bits skipped: no password given - package(s) left in $BitsDir."
+            return
+        }
+        try { $lines = Invoke-Command -ComputerName $relayHost -Credential $cred -ErrorAction Stop -ArgumentList $remoteArgs -ScriptBlock $remote }
+        catch {
+            Write-Warning "Shared bits: the remote session on $relayHost failed with the password too ($($_.Exception.Message)) - package(s) left in $BitsDir."
+            return
+        }
+        finally { $cred = $null }
     }
     foreach ($l in @($lines)) {
         switch ($l.Level) {
