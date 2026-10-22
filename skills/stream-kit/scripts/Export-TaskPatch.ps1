@@ -35,6 +35,17 @@ if ($untracked.Count) {
         [void](Invoke-Git $Worktree @('add', '-N', "--pathspec-from-file=$list"))
     } finally { Remove-Item -LiteralPath $list -ErrorAction SilentlyContinue }
 }
+# A new write-set file under a gitignored path (docs/audit/) is skipped by --exclude-standard, so the export read EMPTY
+# (kit item IN-20261021161037-c006). Intent-add it with -f, but only for an EXACT write-set entry (no wildcard, no
+# directory): a directory entry would sweep in ignored build output (bin, obj).
+foreach ($w in @($t.writeSet)) {
+    $w = ([string]$w).Replace('\', '/')
+    if (-not $w -or $w -match '[*?\[]' -or $w.EndsWith('/')) { continue }
+    if (-not (Test-Path -LiteralPath (Join-Path $Worktree $w) -PathType Leaf)) { continue }
+    $ign = @(& git -C $Worktree ls-files --others --ignored --exclude-standard -- $w)
+    if ($LASTEXITCODE -ne 0) { throw "git ls-files --ignored failed in $Worktree" }
+    if ($ign.Count) { [void](Invoke-Git $Worktree @('add', '-N', '-f', '--', $w)) }
+}
 # stdout only: git's stderr warnings (CRLF conversion and the like) are not file names
 $changed = @(& git -C $Worktree -c core.safecrlf=false diff --name-only | Where-Object { $_ })
 if ($LASTEXITCODE -ne 0) { throw "git diff --name-only failed in $Worktree" }

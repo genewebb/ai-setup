@@ -85,3 +85,19 @@ function Update-ActivationMilestones($P, $doc, [string] $Group) {
     Write-AtomicText (Get-ActivationPath $P $Group) ($a | ConvertTo-Json -Depth 8)
     $a
 }
+
+# APPEND-ONLY ALLOCATOR FILES (kit item IN-20261022023731-e458). A serial id allocator such as
+# docs/requirements/ids.yaml only ever gains lines at its end, and the rows that write it are already ordered on it by
+# dependsOn; the builder's base carries the new lines in. Staling every ticket that holds it on each append re-ticketed
+# 12 and then 14 rows on 2026-10-21 with no clause change. A change to a file matching $script:AppendOnlyFileRx
+# (STREAM_APPEND_ONLY_FILES overrides the regex) is no staleness when the file at HEAD starts with every line it had at
+# <since>; an edit, a removal or a new file still stales.
+$script:AppendOnlyFileRx = if ($env:STREAM_APPEND_ONLY_FILES) { $env:STREAM_APPEND_ONLY_FILES } else { '(^|/)ids\.yaml$' }
+function Test-AppendOnlyChange([string] $Repo, [string] $Since, [string] $Head, [string] $File) {
+    if ($File -notmatch $script:AppendOnlyFileRx) { return $false }
+    $old = @(& git -C $Repo -c core.quotePath=false show "${Since}:$File" 2>$null); if ($LASTEXITCODE -ne 0) { return $false }
+    $new = @(& git -C $Repo -c core.quotePath=false show "${Head}:$File" 2>$null); if ($LASTEXITCODE -ne 0) { return $false }
+    if ($new.Count -lt $old.Count) { return $false }
+    for ($i = 0; $i -lt $old.Count; $i++) { if ([string]$new[$i] -cne [string]$old[$i]) { return $false } }
+    $true
+}

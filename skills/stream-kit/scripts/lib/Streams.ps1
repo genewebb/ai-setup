@@ -221,6 +221,29 @@ function Add-MainBase([string] $Repo, [string] $Wt, [string] $BaseSha, [string] 
     # No leading comma: callers wrap the result in @(), which does not unwrap a comma-wrapped array.
     $gone.ToArray()
 }
+# An EXISTING write-set file of the task under a gitignored path (docs/audit/, .gitignore:98) is not untracked in
+# ls-files' sense, so Get-MainUntracked never lists it and the builder's tree lacked it (G18.T001, kit item
+# IN-20261021163758-c162). Each exact write-set file that exists on main, is absent from the tree and is ignored there is
+# copied in and staged with `git add -f`, so it is part of the base: unstaged, Export-TaskPatch's intent-add would show
+# the whole file as new. Wildcard and directory entries are skipped. Returns the paths copied.
+function Add-IgnoredWriteSetBase([string] $Repo, [string] $Wt, [string[]] $WriteSet) {
+    $copied = [Collections.Generic.List[string]]::new()
+    foreach ($w in @($WriteSet)) {
+        if (-not $w -or $w -match '[*?]' -or $w -match '[\\/]$') { continue }
+        $rel = $w -replace '\\', '/'
+        $src = Join-Path $Repo $rel
+        $dst = Join-Path $Wt $rel
+        if (-not (Test-Path -LiteralPath $src -PathType Leaf) -or (Test-Path -LiteralPath $dst)) { continue }
+        & git -C $Repo check-ignore -q -- $rel 2>$null
+        if ($LASTEXITCODE -ne 0) { continue }
+        $dir = Split-Path $dst
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        [IO.File]::Copy($src, $dst, $true)
+        [void](Invoke-Git $Wt @('add', '-f', '--', $rel))
+        $copied.Add($rel)
+    }
+    $copied.ToArray()
+}
 
 # SUITE SNAPSHOTS (New-SuiteSnapshot.ps1). One record per snapshot in .streams\suites\<name>.json. The watchdog keeps
 # the NEWEST ready snapshot while its session holds a live integrator lock and reaps every other one.

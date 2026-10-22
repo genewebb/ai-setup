@@ -70,6 +70,14 @@ function Get-OutageHours([double] $w) {
     }
     [math]::Round($idle, 2)
 }
+# THE TRAILING STOP (kit item IN-20261021163957-beeb). The silence from the last activity to now is never taken off
+# (see above), so while a long stop is still running every window divides by its hours as if work were possible in
+# them. The forecast basis says so, once the silence is past $OutageGapMinutes, so a diluted rate is not read as slow work.
+$TrailingStopNote = $null
+if ($activitySorted.Count) {
+    $quietMin = ($now - $activitySorted[-1]).TotalMinutes
+    if ($quietMin -gt $OutageGapMinutes) { $TrailingStopNote = "the board has been silent for $([math]::Round($quietMin / 60, 1)) h; a stop still running is not taken out as outage, so the rate is diluted by it and the date leans late" }
+}
 
 # ---- ticketing: the one piece of work in flight that no STATE records ----
 # A task an author is writing the ticket for stays `planned` until the ticket and grader are released, so on the board
@@ -155,6 +163,26 @@ function Get-UpChainPath([string] $id) {
     $out.ToArray()
 }
 
+# ---- a group's release start (kit item IN-20261021171626-78c7) ----
+# A group's delivery window is clamped to the hours since it was released: hours before the release are hours its rows
+# could not land in, and dividing by them priced a freshly released group as if it had been idle for a week.
+# groups[].releasedAt is null on most live groups (16 of 27 on 2026-10-21), so the start falls back to the activation
+# record's `at`, then to the earliest history entry of the group's rows. $null when none of them is known.
+function Get-GroupReleaseStart($g, $ts) {
+    foreach ($cand in @([string]$g['releasedAt'])) { if ($cand) { try { return ConvertTo-UtcTime $cand } catch { } } }
+    $ap = Join-Path $P.Plans "$($g.id).activation.json"
+    if (Test-Path -LiteralPath $ap) {
+        try { $a = Get-Content -LiteralPath $ap -Raw | ConvertFrom-Json -AsHashtable -DateKind String; if ($a['at']) { return ConvertTo-UtcTime ([string]$a['at']) } } catch { }
+    }
+    $first = $null
+    foreach ($t in $ts) { foreach ($h in @($t.history)) {
+            if (-not $h -or -not $h.at) { continue }
+            try { $d = ConvertTo-UtcTime ([string]$h.at) } catch { continue }
+            if ($null -eq $first -or $d -lt $first) { $first = $d }
+        } }
+    $first
+}
+
 $groupRaw = @{}
 $groups = foreach ($g in $doc.groups) {
     $ts = @($doc.tasks | Where-Object { $_.group -eq $g.id })
@@ -206,8 +234,14 @@ $groups = foreach ($g in $doc.groups) {
     $meanTogo = if ($togoCount -gt 0) { $remain / $togoCount } else { 0 }
     # Divided by the window's LIVE hours, not its wall-clock hours (see Get-OutageHours). A window that was all outage
     # still divides by at least one hour, so a burst of landings right after a restart cannot read as infinite.
-    $outage = if ($win -gt 0) { Get-OutageHours $win } else { 0 }
-    $liveHours = [math]::Max(1.0, [double]$win - $outage)          # 1.0: Max(int, double) binds the int overload and truncates
+    # Clamped to the hours since the group's release (Get-GroupReleaseStart above): the window never divides by time
+    # the group did not exist in.
+    $relStart = Get-GroupReleaseStart $g $ts
+    $winSpan = [double]$win
+    if ($null -ne $relStart -and $win -gt 0) { $winSpan = [math]::Min([double]$win, [math]::Max(1.0, ($now - $relStart).TotalHours)) }
+    $clamped = $winSpan -lt $win
+    $outage = if ($winSpan -gt 0) { Get-OutageHours $winSpan } else { 0 }
+    $liveHours = [math]::Max(1.0, $winSpan - $outage)          # 1.0: Max(int, double) binds the int overload and truncates
     $tasksPerHour = if ($win -gt 0) { $n / $liveHours } else { 0 }
     $rate = [math]::Round($tasksPerHour * $meanTogo, 4)          # estimated minutes of to-go work landed per wall-clock hour
     # The two populations' medians are still REPORTED, because a board whose landed rows are priced many times its
@@ -238,13 +272,16 @@ $groups = foreach ($g in $doc.groups) {
             $basis = "dependency chain ($floor min) is longer than the measured rate would take ($byRate min)"
         } else {
             $basis = "$remain min of work left at $([math]::Round($rate, 1)) min/h - $n task(s) landed in the last $win h ($([math]::Round($tasksPerHour, 2)) task/h) priced at the $([math]::Round($meanTogo, 1)) min mean of the $togoCount row(s) to go"
+            if ($clamped) { $basis += "; the window is clamped to the $([math]::Round($winSpan, 1)) h since the group was released" }
             if ($outage -gt 0) { $basis += "; $outage h of outage (no session alive) taken out of the $win h window, so the date assumes sessions keep running" }
+            if ($TrailingStopNote) { $basis += "; $TrailingStopNote" }
             if ($scaleSplit) { $basis += "; the chain's own rows fall in two clusters ${pathSpread}x apart, which the counted rate ignores" }
         }
     } else {
         $basis = "no task landed in the last $($DeliveryWindowHours[-1]) h"
     }
-    $groupRaw[[string]$g.id] = @{ tasksPerHour = $tasksPerHour; togoCount = $togoCount; meanTogo = $meanTogo; floor = $floor; remain = $remain; heldOpen = $heldOpen }
+    $ownLandedWidest = @($landed | Where-Object { $_.hours -le $DeliveryWindowHours[-1] }).Count
+    $groupRaw[[string]$g.id] = @{ tasksPerHour = $tasksPerHour; togoCount = $togoCount; meanTogo = $meanTogo; floor = $floor; remain = $remain; heldOpen = $heldOpen; landedWidest = $ownLandedWidest }
     [ordered]@{ id = $g.id; name = $g.name; state = $g.state; counts = $counts; etaMinutes = [int]$eta; planPage = $g['planPage']
         forecast = [ordered]@{ remainingMinutes = $remain; floorMinutes = $floor; windowHours = $win; landedInWindow = $n
             outageHours = $outage; liveHours = [math]::Round($liveHours, 2)
@@ -329,7 +366,25 @@ foreach ($g in $groups) {
 $focusIds = @((Get-FocusGroups $doc $P).groups)
 $focusGroups = @(foreach ($fid in $focusIds) { $groups | Where-Object { $_.id -eq $fid } })
 $capacity = 0.0; $poolRows = 0
-foreach ($fg in $focusGroups) { $capacity += [double]$groupRaw[[string]$fg.id].tasksPerHour; $poolRows += [int]$groupRaw[[string]$fg.id].togoCount }
+$focusLanded = 0
+foreach ($fg in $focusGroups) { $capacity += [double]$groupRaw[[string]$fg.id].tasksPerHour; $poolRows += [int]$groupRaw[[string]$fg.id].togoCount; $focusLanded += [int]$groupRaw[[string]$fg.id].landedWidest }
+# BOARD CAPACITY (kit item IN-20261021171626-78c7). A focus that landed fewer than $MinDeliveries rows in the widest
+# window - a group just released, its rows only now being ticketed - has no capacity of its own to price at, yet the
+# streams that will work it are the same ones that just landed everything else. So capacity is then measured
+# board-wide: every row's first landing, the same window ladder, outage hours out. Still counted in tasks, so the
+# estimates' scale cancels as it does above.
+$capacityBasis = "their combined $([math]::Round($capacity, 2)) task/h"
+if ($focusGroups.Count -and $focusLanded -lt $MinDeliveries) {
+    $boardLanded = @(foreach ($t in @($doc.tasks)) { $a = First-Landed $t; if ($a) { ($now - (ConvertTo-UtcTime ([string]$a))).TotalHours } })
+    $bWin = 0; $bN = 0
+    foreach ($w in $DeliveryWindowHours) { $bWin = $w; $bN = @($boardLanded | Where-Object { $_ -le $w }).Count; if ($bN -ge $MinDeliveries) { break } }
+    if ($bN -gt 0) {
+        $bLive = [math]::Max(1.0, [double]$bWin - (Get-OutageHours $bWin))
+        $capacity = $bN / $bLive
+        $capacityBasis = "board capacity $([math]::Round($capacity, 2)) task/h ($bN row(s) landed board-wide in the last $bWin h; the focus has $focusLanded own landing(s), under $MinDeliveries)"
+    }
+}
+if ($TrailingStopNote) { $capacityBasis += "; $TrailingStopNote" }
 # THE FOCUS POOL. The focus groups share one capacity, so the last of them cannot finish later than every focus row to
 # go divided by the focus capacity. A group newly ADDED to the focus has the same defect as a frozen one - its own
 # window is mostly the time it was frozen (G5 joined G4 on 2026-10-08 at 23:22Z with 3 landings in 168 h and dated
@@ -344,7 +399,7 @@ foreach ($fg in $focusGroups) {
     $pred = [math]::Max($poolMinutes, [int]$r.floor)
     $f.predictedMinutes = $pred; $f.softDate = $false
     $f.predictedAt = $now.AddMinutes($pred).ToString('yyyy-MM-ddTHH:mm:ssZ')
-    $f.basis = "focus pool: the $poolRows row(s) to go across focus group(s) $($focusIds -join '+') at their combined $([math]::Round($capacity, 2)) task/h take $poolMinutes min; $own, which measures the time before it was in focus"
+    $f.basis = "focus pool: the $poolRows row(s) to go across focus group(s) $($focusIds -join '+') at $capacityBasis take $poolMinutes min; $own, which measures the time before it was in focus"
     if ([int]$r.floor -gt $poolMinutes) { $f.basis += "; held to the $($r.floor) min dependency chain, which is longer" }
 }
 $focusUndated = @($focusGroups | Where-Object { $null -eq $_.forecast.predictedMinutes })

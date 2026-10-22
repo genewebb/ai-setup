@@ -96,6 +96,38 @@ function Test-ScriptOperand([string] $Masked, [int] $Index) {
     $true
 }
 
+# True when the quoted string at $Index of $cmd is a script some launcher runs: the value of -Command / -c / -lc /
+# /c / /k / -ArgumentList / -Args / -ScriptBlock, the operand of iex / Invoke-Expression / eval, or a later element
+# of a comma list ('-NoProfile','-Command','...'). $Masked is as in Test-ScriptOperand.
+function Test-NestedCommandOperand([string] $Masked, [int] $Index) {
+    $words = @(($Masked.Substring(0, $Index)) -split '\s+' | Where-Object { $_ })
+    if (-not $words.Count) { return $false }
+    $last = $words[-1]
+    if ($last -match ',$') { return $true }
+    $last -match '(?i)^(-[a-z]{0,3}c|-com(m(a(n(d)?)?)?)?|/[ck]|-ArgumentList|-Args|-ScriptBlock|iex|Invoke-Expression|eval)$'
+}
+
+# True when the quoted string at $Index of $cmd is an argument of a function or method call: its nearest unclosed
+# '(' follows a name (x('/c'), $g.Replace(...), [regex]::Replace(...)), not a keyword (if, foreach), '@', '$' or a
+# space. Such a string is data handed to code; on 2026-10-21 two authors stalled on "/c" out of x('/c') and on a
+# comma-list recursion into .Replace(..., 'at <c>b</c>') (kit item IN-20261021201746-bedf). $Masked is as in
+# Test-ScriptOperand.
+function Test-CallArgument([string] $Masked, [int] $Index) {
+    $depth = 0
+    for ($p = $Index - 1; $p -ge 0; $p--) {
+        $ch = $Masked[$p]
+        if ($ch -eq ')') { $depth++ }
+        elseif ($ch -eq '(') {
+            if ($depth -gt 0) { $depth--; continue }
+            $before = $Masked.Substring(0, $p)
+            if ($before -notmatch '[A-Za-z0-9_\]]$') { return $false }
+            return $before -notmatch '(?i)(?:^|[^A-Za-z0-9_-])(if|elseif|foreach|for|while|until|switch|catch|function|param)$'
+        }
+        elseif ($depth -eq 0 -and ($ch -eq ';' -or $ch -eq "`n")) { return $false }
+    }
+    $false
+}
+
 # Candidate path tokens of a shell command: quoted strings first, then bare tokens split on shell separators.
 function Get-CommandPathTokens([string] $cmd) {
     $tokens = New-Object System.Collections.Generic.List[string]
@@ -104,10 +136,18 @@ function Get-CommandPathTokens([string] $cmd) {
     foreach ($m in $quoted) {
         if (Test-ScriptOperand $masked $m.Index) { continue }
         $v = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
+        # A call's argument is data: never a nested command, and a POSIX-form value ('/c', '/>') is no path; a drive,
+        # UNC or home value is still checked ([IO.Path]::Combine('C:\x', ...)).
+        if (Test-CallArgument $masked $m.Index) {
+            if ($v -and $v -notmatch '^/') { $tokens.Add($v) }
+            continue
+        }
         if ($v) { $tokens.Add($v) }
         # A quoted string with whitespace may be a nested command (pwsh -Command "...", bash -c '...'): its own tokens
         # are checked too, since the whole string reads as no path and would hide an outside one (IN-20261018050026-e429).
-        if ($v -match '\s') { foreach ($i in (Get-CommandPathTokens $v)) { $tokens.Add($i) } }
+        # Only a launcher's script recurses: quoted prose ("-Value 'see bin/<config>/<tfm>'") split on <> into a bare
+        # "/" and stalled an author on a prompt nobody could answer (kit item IN-20261021183719-aa28).
+        if ($v -match '\s' -and (Test-NestedCommandOperand $masked $m.Index)) { foreach ($i in (Get-CommandPathTokens $v)) { $tokens.Add($i) } }
     }
     $stripped = [regex]::Replace($cmd, '"[^"]*"|''[^'']*''', ' ')
     # cmd.exe-family tools take /x switches (cmd /c, mklink /J, robocopy /MIR, icacls /grant). Without

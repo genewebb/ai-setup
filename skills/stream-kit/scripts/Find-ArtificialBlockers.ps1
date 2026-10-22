@@ -1,8 +1,8 @@
 # Read-only critical view of the dependsOn waits of every open focus-set row (kit item IN-20261018044413-259b, owner
 # request 2026-10-18: builders and authors sat idle with 0 claimable of 180 ticketed behind waits nobody needed).
 # Each unmet edge X -> d is classed:
-#   logical     d is a named prerequisite hub (-Hubs), X's title names d, or X and d share no write-set file: a feature
-#               prerequisite, kept.
+#   logical     d is a named prerequisite hub (-Hubs), X's title names d, X and d share no write-set file, or an earlier
+#               -Apply wrote the edge ('applied order', so the pair is never flipped back): kept.
 #   landing     d is building or claimed: the wait is real and ends when d lands; never jumped, directly or as an ancestor.
 #   gate        d is a gate or integration row: kept.
 #   file-order  X and d share a write-set file and d is still ticketed or planned with no live claim. 'composition'
@@ -26,6 +26,11 @@ if ($Apply -and -not $Session) { 'REFUSED -Apply needs -Session'; exit 2 }
 $landed = @('built', 'integrated', 'done')
 $compRx = '(^|/)src/Composition/|(^|/)Program\.cs$|Module\.cs$|ServiceCollectionExtensions\.cs$|(^|/)Routes\.razor$'
 $fileOrderWhyRx = '^\s*(file[- ]order\b|shared[- ]file\b|orders?\s+(the\s+)?(edits?|writes?)\s+(to|of|on|in)\b|both\s+(rows?\s+)?(write|edit|touch)\b)'
+function Test-AppliedEdge($x, [string] $d) {
+    $aRx = "Find-ArtificialBlockers -Apply: $([regex]::Escape($d)) ahead of ([^\s(]+)"
+    foreach ($h in @($x.history)) { $m = [regex]::Match([string]$h.note, $aRx); if ($m.Success -and @($m.Groups[1].Value -split ',') -contains [string]$x.id) { return $true } }
+    $false
+}
 function Get-EdgeKind($x, [string] $d) {
     $dt = $by[$d]
     if (-not $dt) { return @{ kind = 'logical'; reason = 'unknown row'; files = @() } }
@@ -39,6 +44,10 @@ function Get-EdgeKind($x, [string] $d) {
     if ([string]$dt.state -eq 'building' -or (Test-ClaimLive $dt)) { return @{ kind = 'landing'; reason = [string]$dt.state; files = @() } }
     # A title that names d states the order itself (G13.T012 'extends G13.T011 ...'): kit item IN-20261018071721-f123.
     if ([string]$x.title -match "(?<![\w.])$([regex]::Escape($d))(?![\w])") { return @{ kind = 'logical'; reason = 'named in title'; files = @() } }
+    # An edge an earlier -Apply wrote (x after d, its history note 'Find-ArtificialBlockers -Apply: d ahead of ...x...')
+    # is an order already chosen: offering x ahead of d again would flip the pair back on every run (kit item
+    # IN-20261021154436-6273).
+    if (Test-AppliedEdge $x $d) { return @{ kind = 'logical'; reason = 'applied order'; files = @() } }
     $sh = @(@($dt.writeSet) | Where-Object { @($x.writeSet) -contains $_ })
     if (-not $sh.Count) { return @{ kind = 'logical'; reason = 'no shared file'; files = @() } }
     if ([string]$dt.state -notin @('ticketed', 'planned')) { return @{ kind = 'logical'; reason = [string]$dt.state; files = $sh } }
@@ -65,6 +74,9 @@ function Get-Scan {
             $d = $q.Dequeue(); $e = Get-EdgeKind $x $d
             if ($e.kind -ne 'file-order') { $bad = "$d $($e.kind) ($($e.reason))"; break }
             $flip += $d; $files += $e.files
+            # An order an earlier -Apply chose inside the chain (d after a) is kept: jumping it undoes that choice.
+            foreach ($a in @($by[$d].dependsOn)) { if ($a -and ([string]$by[$a].state) -notin $landed -and (Test-AppliedEdge $by[$d] $a)) { $bad = "$d after $a logical (applied order)"; break } }
+            if ($bad) { break }
             foreach ($a in @($by[$d].dependsOn)) { if ($a -and ([string]$by[$a].state) -notin $landed -and $seen.Add($a)) { $q.Enqueue($a) } }
         }
         $files = @($files | Select-Object -Unique)

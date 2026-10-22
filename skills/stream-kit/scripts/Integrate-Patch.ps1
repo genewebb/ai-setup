@@ -257,9 +257,12 @@ if ($gcode -eq 0) {
         "COMMIT SKIPPED $($t.id) (git policy: $($gitPolicy.Why))"; exit 0
     }
     # Commit exactly the paths the patch touched (both sides of a rename); other dirty or staged files stay out.
+    # -f: an exact write-set file under a gitignored path (docs/audit/, .gitignore:98) is part of the patch, and a plain
+    # add refused it, so the patch applied but never committed (kit item IN-20261021161717-670f). Only the patch's own
+    # exact file paths are named, so nothing else ignored is ever added.
     $paths = @(Get-Content -LiteralPath $patch | ForEach-Object { if ($_ -match '^diff --git a/(.+) b/(.+)$') { $Matches[1]; $Matches[2] } } | Sort-Object -Unique)
     try {
-        [void](Invoke-Git $Repo (@('add', '-A', '--') + $paths))
+        [void](Invoke-Git $Repo (@('add', '-A', '-f', '--') + $paths))
         $msg = "$($t.id): $($t.title)"
         [void](Invoke-Git $Repo (@('commit', '-q', '-m', $msg, '-m', "Integrated by stream-integrate ($Session); grader PASS on main.", '-m', 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>', '--') + $paths))
         $sha = (Invoke-Git $Repo @('rev-parse', '--short', 'HEAD')) | Select-Object -First 1

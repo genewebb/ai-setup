@@ -345,7 +345,16 @@ $dpgSilent = @(
     "sed -i '0,/<ItemGroup>/s//<ItemGroup>\n    <FrameworkReference Include=`"Microsoft.AspNetCore.App`" \/>/' src/Agent/Agent.csproj && rm src/Agent/ZzMutation.cs",
     "sed -i 's/Select(copy => copy.Kind + `"\\u001f`" + copy.Hash)/Where(_ => false).Select(copy)/' src/Domain/x.cs; mkdir -p .x; rmdir .x",
     "sed -i '4645s/profiles.Versions/new Dictionary<string, string>()/' src/x.cs; rmdir .streams-tmp",
-    "perl -pi -e 's/a/b c()\//' src/x.cs; awk '/^x/ { print `$1 }' f.txt; grep -E `"x | /y/`" f.txt; rm -f f.txt"
+    "perl -pi -e 's/a/b c()\//' src/x.cs; awk '/^x/ { print `$1 }' f.txt; grep -E `"x | /y/`" f.txt; rm -f f.txt",
+    # Quoted prose is not a nested command: on 2026-10-21 an author stalled on "<config>/<tfm>" in an Add-Content
+    # value, re-tokenized and split on <> into a bare "/" (kit item IN-20261021183719-aa28).
+    "Add-Content -LiteralPath a.md -Value 'find src/Cli/bin/<config>/<tfm> as well'; Remove-Item -Recurse -Force $wtW\x\Cli",
+    # A call's quoted argument is data: on 2026-10-21 two authors stalled on "/c" out of x('/c'), and on a comma-list
+    # recursion into .Replace(..., 'at <c>b</c>') / '<see cref="X"/>' (kit item IN-20261021201746-bedf).
+    "x('/c')`nRemove-Item -Recurse -Force $scW\x",
+    "`$g = `$g.Replace('at <c>a</c>','at <c>b</c>')`nRemove-Item -Recurse -Force $scW\x",
+    "`$g = [regex]::Replace(`$g,'x','a <c>b</c>'); Remove-Item -Recurse -Force $scW\x",
+    "`$b = [regex]::Replace(`$g,'<see cref=`"TheCanvasBlock`"/>','the test'); Remove-Item -Recurse -Force $scW\x"
 )
 # Rows with the delete right (whole working trees, ~\.claude) are trusted too; their cases are built from this
 # machine's rows. The 8.3 form of THIS profile expands to the same root as its long spelling; another account's
@@ -387,7 +396,13 @@ $dpgAsk = @(
     'rm -rf file:///C:/Users/agenewe/Documents/x',      # a file URL is a path, not skipped
     # Only a sed / awk / perl / grep SCRIPT is data: a quoted file operand after it is still a path.
     'sed -i ''s/a/b/'' "C:/Users/agenewe/Documents/x.txt"; rm -f y',
-    'rm -rf /etc/x; sed -i ''s/a/b/'' f'
+    'rm -rf /etc/x; sed -i ''s/a/b/'' f',
+    # A launcher's quoted script is still checked token by token (IN-20261021183719-aa28 keeps IN-20261018050026-e429).
+    'rm -f x; bash -c "rm -rf /etc/x"',
+    'rm -f x; Start-Process pwsh -ArgumentList ''-NoProfile'',''-Command'',''Remove-Item -Recurse C:/Users/agenewe/Documents/x''',
+    # A call's drive, UNC or home argument is still a path (IN-20261021201746-bedf skips only a POSIX-form one).
+    '$s = [IO.Path]::Combine(''C:\Users\agenewe\Documents'',''x''); Remove-Item -Recurse $s',
+    'rm -rf (Join-Path ''/c'' x)'
 ) + $dpgAskExtra
 foreach ($c in $dpgAsk) {
     Test-Hook -Name "dpg: ask    | $c" -ScriptPath $dpg -Json (New-BashJson $c) `

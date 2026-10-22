@@ -62,6 +62,8 @@ try {
 $notes = [Collections.Generic.List[string]]::new()
 $mainDiff = Join-Path $P.Logs "$name.base-main.patch"
 $gone = @(Add-MainBase $Repo $wt $baseSha $mainDiff $untracked)
+$ignBase = @(Add-IgnoredWriteSetBase $Repo $wt @($t.writeSet))
+if ($ignBase.Count) { $notes.Add("BASE ignored main-tree write-set file(s) copied and staged: $($ignBase -join ', ')") }
 $mainLock.Dispose()
 if ($gone.Count) {
     $untracked = @($untracked | Where-Object { $gone -notcontains $_ })

@@ -78,6 +78,8 @@ foreach ($t in @($doc.tasks | Where-Object { $_.state -eq 'ticketed' -and $set.C
             }
         }
     }
+    # An allocator file that only gained lines at its end is no staleness (lib\Activation.ps1 Test-AppendOnlyChange).
+    foreach ($hf in @($hitFiles)) { if (Test-AppendOnlyChange $Repo $since $head $hf) { [void]$hitFiles.Remove($hf) } }
     if (-not $hitFiles.Count) { continue }
     if (Test-ClaimLive $t) { "SKIP-CLAIMED $id stale ($($hitFiles -join ', ')) but held by $($t.claim.session)"; $skipped.Add([ordered]@{ id = $id; why = "claimed by $($t.claim.session)"; files = @($hitFiles) }); continue }
     $sha = $since.Substring(0, [Math]::Min(10, $since.Length))

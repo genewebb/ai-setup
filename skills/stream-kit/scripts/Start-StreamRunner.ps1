@@ -1489,7 +1489,12 @@ while ($true) {
         $state.status = "quota hold until $($hold.until.ToString('yyyy-MM-ddTHH:mm:ssZ')) ($($hold.type), set by $($hold.by))"; Write-RunnerState $state
         "$(Get-TabNow) QUOTA-HOLD until $(Format-Local $hold.until) ($holdWait s): $($hold.type) limit seen by $($hold.by)"
         "  waiting    : the Claude usage limit was reached; no runner launches before $(Format-Local $hold.until)"
-        while ($holdWait -gt 0 -and -not (Test-StopRequested)) { Start-Sleep -Seconds ([Math]::Min(15, $holdWait)); $holdWait -= 15 }
+        # Re-read the hold every step: a hold the owner cleared (a re-login to another account, the file moved aside)
+        # or one already past its time ends the wait at once, and an owner wake ends it too (the gate then re-checks).
+        while ($holdWait -gt 0 -and -not (Test-StopRequested) -and -not $script:wakeHit) {
+            Start-Sleep -Seconds ([Math]::Min(15, $holdWait)); $holdWait -= 15; [void](Test-WakeRequested)
+            if (-not (Get-QuotaHold $P)) { "$(Get-TabNow) QUOTA-HOLD lifted: the hold file is gone or past its time"; break }
+        }
         continue
     }
     $check = Sync-LaunchEnvironment

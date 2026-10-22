@@ -3482,6 +3482,27 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case '95 freshness tick is idempotent' (($fr2 -join ' ') -match 'FRESHNESS A1 stale 0' -and (T $ar 'A1.F').state -eq 'ticketed') ($fr2 -join ' | ')
     $fr3 = @(& "$S\Activate-Group.ps1" -Repo $ar -Session integ-a -Group A1 -Force)
     Case '95 a forced full activation still stales a row through its dependency''s file' ((T $ar 'A1.F').state -eq 'planned' -and (((T $ar 'A1.F').history | Select-Object -Last 1).note -match 'STALE: d\.txt .*by A1\.Z')) ($fr3 -join ' | ')
+    # APPEND-ONLY ALLOCATOR (kit item IN-20261022023731-e458): A1.Y (ids.yaml) ticketed after ids.yaml existed stays
+    # ticketed when lines are only appended, and goes to planned when an existing line is edited.
+    Set-Content (Join-Path $ar 'ids.yaml') "- id: Q-1"
+    $env:GIT_COMMITTER_DATE = '2026-12-01T00:00:00Z'; $env:GIT_AUTHOR_DATE = '2026-12-01T00:00:00Z'
+    git -C $ar add -A; git -C $ar commit -q -m 'ids base'
+    $ydoc = J $ar
+    $yrow = & $A 'A1.Y' 'A1' 'ticketed' 'ids.yaml' @(); $yrow.history = @(@{ at = '2026-12-02T00:00:00Z'; by = 'author-1'; to = 'ticketed'; note = 'ticket' })
+    $ydoc.tasks += $yrow
+    $ydoc | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $ar '.streams\tasks.json') -Encoding utf8
+    Add-Content (Join-Path $ar 'ids.yaml') "- id: Q-2"
+    $env:GIT_COMMITTER_DATE = '2026-12-03T00:00:00Z'; $env:GIT_AUTHOR_DATE = '2026-12-03T00:00:00Z'
+    git -C $ar add -A; git -C $ar commit -q -m 'ids append'
+    $fy1 = @(& "$S\Activate-Group.ps1" -Repo $ar -Session status-a -Group A1 -FreshnessOnly)
+    Case '95 freshness tick: an append-only change to an allocator file (ids.yaml) keeps the row ticketed' ((T $ar 'A1.Y').state -eq 'ticketed') ($fy1 -join ' | ')
+    Set-Content (Join-Path $ar 'ids.yaml') "- id: Q-1x`n- id: Q-2"
+    $env:GIT_COMMITTER_DATE = '2026-12-04T00:00:00Z'; $env:GIT_AUTHOR_DATE = '2026-12-04T00:00:00Z'
+    git -C $ar add -A; git -C $ar commit -q -m 'ids edit'
+    [Environment]::SetEnvironmentVariable('GIT_COMMITTER_DATE', $null); [Environment]::SetEnvironmentVariable('GIT_AUTHOR_DATE', $null)
+    $fy2 = @(& "$S\Activate-Group.ps1" -Repo $ar -Session status-a -Group A1 -FreshnessOnly)
+    $ay = T $ar 'A1.Y'
+    Case '95 freshness tick: an edited line in an allocator file still stales the row' ($ay.state -eq 'planned' -and (($ay.history | Select-Object -Last 1).note -match 'STALE: ids\.yaml')) (($fy2 -join ' | ') + ' :: ' + (($ay.history | Select-Object -Last 1) | ConvertTo-Json -Compress))
 
     # ---- 96. tiered testing (3.3): a Tier 2 run, the flaky screen, attribution, Tier 3 retest, the close rule, nightly.
     # The dotnet leg is a fake runner that writes a trx from a control file, so the cases exercise the kit's scripts,

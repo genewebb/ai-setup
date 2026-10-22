@@ -125,6 +125,32 @@ try {
     $x = & "$S\Export-TaskPatch.ps1" -Repo $repo -Task G1.T1 -Worktree $wt1
     Case 'export refuses write-set leak' ($LASTEXITCODE -eq 2 -and ($x -join ' ') -match 'OUTSIDE b.txt')
     git -C $wt1 checkout -q -- b.txt
+    # a new write-set file under a gitignored path is exported, not EMPTY (kit item IN-20261021161037-c006)
+    $exIgn = Join-Path (git -C $repo rev-parse --git-common-dir) 'info\exclude'
+    if (-not [IO.Path]::IsPathRooted($exIgn)) { $exIgn = Join-Path $repo $exIgn }
+    $exIgnOld = if (Test-Path $exIgn) { Get-Content -Raw $exIgn } else { '' }
+    New-Item -ItemType Directory -Force (Split-Path $exIgn) | Out-Null
+    Add-Content $exIgn "`nign-dir/"
+    New-Item -ItemType Directory -Force (Join-Path $wt1 'ign-dir') | Out-Null
+    Set-Content (Join-Path $wt1 'ign-dir\note.md') 'ignored note'
+    & "$S\Update-Task.ps1" -Repo $repo -Task G1.T1 -Role build -Session build-1 -AddWriteSet 'ign-dir/note.md' | Out-Null
+    $ignPatch = Join-Path $repo '.streams\ign-test.patch'
+    $x = & "$S\Export-TaskPatch.ps1" -Repo $repo -Task G1.T1 -Worktree $wt1 -OutFile $ignPatch
+    Case 'export carries ignored write-set file' ($LASTEXITCODE -eq 0 -and ($x -join ' ') -match 'IN ign-dir/note.md' -and (Get-Content -Raw $ignPatch) -match 'ignored note') ($x -join ' ')
+    git -C $wt1 rm -q --cached -- ign-dir/note.md
+    Remove-Item -Recurse -Force (Join-Path $wt1 'ign-dir'), $ignPatch
+    # an EXISTING write-set file under a gitignored path on main is laid into the base and staged (kit item IN-20261021163758-c162)
+    Add-Content $exIgn "`nign-base/"
+    New-Item -ItemType Directory -Force (Join-Path $repo 'ign-base') | Out-Null
+    Set-Content (Join-Path $repo 'ign-base\keep.md') 'main ignored'
+    $ibWt = Join-Path $wtRoot 'ign-base-wt'
+    git -C $repo worktree add -q --detach $ibWt HEAD
+    $ibOut = @(pwsh -NoProfile -Command ". '$S\lib\Streams.ps1'; Add-IgnoredWriteSetBase '$repo' '$ibWt' @('ign-base/keep.md', 'a.txt', 'ign-base/*.md', 'ign-base/')")
+    $ibStaged = @(git -C $ibWt diff --cached --name-only)
+    Case 'base carries ignored write-set file, staged' (($ibOut -join ',') -eq 'ign-base/keep.md' -and (Test-Path (Join-Path $ibWt 'ign-base\keep.md')) -and ($ibStaged -contains 'ign-base/keep.md')) "out=$($ibOut -join ',') staged=$($ibStaged -join ',')"
+    git -C $repo worktree remove --force $ibWt
+    Remove-Item -Recurse -Force (Join-Path $repo 'ign-base')
+    [IO.File]::WriteAllText($exIgn, $exIgnOld)
     # auto-accepted widening: refused onto an unordered open task's file (T3; T2 depends on T1, so b.txt would be
     # allowed), refused to a foreign session, else added and logged
     $x = & "$S\Update-Task.ps1" -Repo $repo -Task G1.T1 -Role build -Session build-1 -AddWriteSet 'c.txt'
@@ -159,8 +185,17 @@ try {
     Case 'main tree has T1 and kept dirty work' ((Get-Content (Join-Path $repo 'a.txt') -Raw) -match 'a0 dirty DONE-G1.T1')
     $c1 = @(git -C $repo show --name-only --format='%s' HEAD) | Where-Object { $_ }
     Case 'T1 commit holds only its patch paths' ($c1[0] -like 'G1.T1:*' -and ((@($c1 | Select-Object -Skip 1)) -join ',') -eq 'a.txt') ($c1 -join ',')
+    # a patch file under a gitignored path is committed with the rest, not refused by git add (kit item IN-20261021161717-670f)
+    $exIgn2 = Join-Path (git -C $repo rev-parse --git-common-dir) 'info\exclude'
+    if (-not [IO.Path]::IsPathRooted($exIgn2)) { $exIgn2 = Join-Path $repo $exIgn2 }
+    $exIgn2Old = if (Test-Path $exIgn2) { Get-Content -Raw $exIgn2 } else { '' }
+    Add-Content $exIgn2 "`nign2/"
+    $t2Patch = Join-Path $repo '.streams\patches\G1.T2.patch'
+    [IO.File]::AppendAllText($t2Patch, "diff --git a/ign2/n.md b/ign2/n.md`nnew file mode 100644`n--- /dev/null`n+++ b/ign2/n.md`n@@ -0,0 +1 @@`n+ignored audit note`n")
     $i2 = & "$S\Integrate-Patch.ps1" -Repo $repo -Session integ-1
     Case 'integrates T2 next' ($i2[0] -eq 'INTEGRATED G1.T2' -and $i2[1] -like 'COMMITTED G1.T2 *') ($i2 -join ' | ')
+    Case 'T2 commit holds its gitignored patch file' (@(git -C $repo show --name-only --format= HEAD) -contains 'ign2/n.md') (@(git -C $repo show --name-only --format= HEAD) -join ',')
+    [IO.File]::WriteAllText($exIgn2, $exIgn2Old)
 
     # rebase bounce: T3 built against old c.txt, then the owner edits c.txt in the main tree
     $wt3 = & "$S\New-TaskWorktree.ps1" -Repo $repo -Task G1.T3 -Session build-2 -WorktreeRoot $wtRoot | Select-Object -Last 1
@@ -444,6 +479,53 @@ try {
     Case 'a focus group with no landing of its own is dated from the focus pool' ($null -eq $f2.ownPredictedMinutes -and [math]::Abs([int]$f2.predictedMinutes - 778) -le 2 -and [string]$f2.basis -match '^focus pool') "F2 own $($f2.ownPredictedMinutes) predicted $($f2.predictedMinutes) basis '$($f2.basis)'"
     Case 'the dependency chain floors the date' ([int]$f3.predictedMinutes -eq 1800 -and [string]$f3.basis -match 'dependency chain') "F3 predicted $($f3.predictedMinutes) basis '$($f3.basis)'"
     Case 'work left counts only unlanded tasks' ([int]$f1.remainingMinutes -eq 100 -and [int]$f3.remainingMinutes -eq 1800) "F1 $($f1.remainingMinutes) F3 $($f3.remainingMinutes)"
+    # A freshly released focus group with no landing of its own, on a board that landed 60 rows in two days, is dated
+    # from BOARD capacity; and a group released 10 h ago divides its 24 h window's landings by 10 h, not 24
+    # (kit item IN-20261021171626-78c7).
+    $bcr = Join-Path $Scratch 'bcrepo'
+    New-Item -ItemType Directory -Path $bcr -Force | Out-Null
+    git -C $bcr init -q -b main; git -C $bcr config user.email t@t; git -C $bcr config user.name t; Grant-GitPolicy $bcr
+    Set-Content (Join-Path $bcr 'x.txt') 'x'; git -C $bcr add -A; git -C $bcr commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $bcr | Out-Null
+    $bcTasks = [System.Collections.Generic.List[object]]::new()
+    foreach ($k in 1..60) { $bcTasks.Add((Landed "B1.T$k" 'B1' 30 (0.8 * $k))) }
+    foreach ($k in 1..5) { $t = Togo "B2.T$k" 'B2' 60 @(); $t.history[0].at = $utc.AddHours(-1).ToString('yyyy-MM-ddTHH:mm:ssZ'); $bcTasks.Add($t) }
+    foreach ($k in 1..3) { $bcTasks.Add((Landed "B3.T$k" 'B3' 30 (2 * $k))) }
+    $bcTasks.Add((Togo 'B3.T4' 'B3' 30 @()))
+    @{ groups = @(
+            @{ id = 'B1'; name = 'busy'; state = 'closed'; origin = 'plan'; scope = @{ include = @('FEAT-B1') } }
+            @{ id = 'B2'; name = 'fresh'; state = 'released'; origin = 'plan'; releasedAt = $utc.AddHours(-1).ToString('yyyy-MM-ddTHH:mm:ssZ'); scope = @{ include = @('FEAT-B2') } }
+            @{ id = 'B3'; name = 'young'; state = 'released'; origin = 'plan'; releasedAt = $utc.AddHours(-10).ToString('yyyy-MM-ddTHH:mm:ssZ'); scope = @{ include = @('FEAT-B3') } })
+        tasks = @($bcTasks) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $bcr '.streams\tasks.json') -Encoding utf8
+    @{ focus = @{ groups = @('B2') } } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $bcr '.streams\config.json') -Encoding utf8
+    $bc2 = @((& "$S\Get-StreamStatus.ps1" -Repo $bcr -Json | ConvertFrom-Json).groups | Where-Object { $_.id -eq 'B2' })[0].forecast
+    Case 'a fresh focus group with no own landing is dated from board capacity' ($null -ne $bc2.predictedMinutes -and [int]$bc2.predictedMinutes -gt 0 -and [int]$bc2.predictedMinutes -le 4320 -and [string]$bc2.basis -match 'board capacity') "B2 predicted $($bc2.predictedMinutes) basis '$($bc2.basis)'"
+    @{ focus = @{ groups = @('B3') } } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $bcr '.streams\config.json') -Encoding utf8
+    $bc3 = @((& "$S\Get-StreamStatus.ps1" -Repo $bcr -Json | ConvertFrom-Json).groups | Where-Object { $_.id -eq 'B3' })[0].forecast
+    Case 'a group delivery window is clamped to the hours since its release' ([math]::Abs([double]$bc3.tasksPerHour - 0.3) -le 0.01 -and [string]$bc3.basis -match 'clamped') "B3 task/h $($bc3.tasksPerHour) basis '$($bc3.basis)'"
+    # The same board stopped 4 h ago and still stopped: the trailing silence is not taken out as outage, so the basis
+    # says the rate is diluted by it; a board that is working says nothing (kit item IN-20261021163957-beeb).
+    $bcKeep = Get-Content -Raw (Join-Path $bcr '.streams\tasks.json')
+    $bcStop = $bcKeep | ConvertFrom-Json -AsHashtable
+    foreach ($t in $bcStop.tasks) { foreach ($h in $t.history) { $h.at = ([datetime]::Parse($h.at, $null, [Globalization.DateTimeStyles]::AdjustToUniversal)).AddHours(-4).ToString('yyyy-MM-ddTHH:mm:ssZ') } }
+    $bcStop | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $bcr '.streams\tasks.json') -Encoding utf8
+    @{ focus = @{ groups = @('B2') } } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $bcr '.streams\config.json') -Encoding utf8
+    $bcS = @((& "$S\Get-StreamStatus.ps1" -Repo $bcr -Json | ConvertFrom-Json).groups | Where-Object { $_.id -eq 'B2' })[0].forecast
+    Set-Content (Join-Path $bcr '.streams\tasks.json') $bcKeep -Encoding utf8 -NoNewline
+    Case 'a stop still running is named in the forecast basis' ([string]$bcS.basis -match 'silent for 4(\.\d)? h' -and [string]$bcS.basis -match 'diluted' -and [string]$bc2.basis -notmatch 'silent for') "stopped basis '$($bcS.basis)' working basis '$($bc2.basis)'"
+    # The same board with every landing older than the widest window: no capacity anywhere, so the focus is undated and
+    # the group queued behind it is undated and named.
+    $bcOld = Get-Content -Raw (Join-Path $bcr '.streams\tasks.json') | ConvertFrom-Json -AsHashtable
+    foreach ($t in $bcOld.tasks) { if ($t.state -eq 'integrated') { $t.history[0].at = $utc.AddHours(-300).ToString('yyyy-MM-ddTHH:mm:ssZ') } }
+    $bcOld | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $bcr '.streams\tasks.json') -Encoding utf8
+    @{ focus = @{ groups = @('B2') } } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $bcr '.streams\config.json') -Encoding utf8
+    $uj = & "$S\Get-StreamStatus.ps1" -Repo $bcr -Json | ConvertFrom-Json
+    $u2 = @($uj.groups | Where-Object { $_.id -eq 'B2' })[0].forecast; $u3 = @($uj.groups | Where-Object { $_.id -eq 'B3' })[0].forecast
+    Case 'a focus on a board that delivered nothing in the widest window gets no date' ($null -eq $u2.predictedMinutes -and [string]$u2.basis -match '168') "B2 basis '$($u2.basis)'"
+    Case 'groups queued behind an undated focus are undated and named' ($null -eq $u3.predictedMinutes -and [string]$u3.basis -match 'B2 has no date' -and @($uj.forecast.groupsWithoutDate) -contains 'B2' -and @($uj.forecast.groupsWithoutDate) -contains 'B3') "B3 basis '$($u3.basis)' undated $(@($uj.forecast.groupsWithoutDate) -join ',')"
+    $bcpg = Join-Path $Scratch 'status-forecast-undated.html'
+    [void](& "$S\Build-StatusPage.ps1" -Repo $bcr -Session status-fc -Out $bcpg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
+    Case 'the page shows the undated group as undated' ((Get-Content -Raw $bcpg) -match 'no date') 'undated group not shown as undated'
     $f1p = @($fj.groups | Where-Object { $_.id -eq 'F1' })[0].phases
     Case 'the rate prices builder work only: gate and integration rows are phases, not minutes' ([int]$f1.remainingMinutes -eq 100 -and [int]$f1.floorMinutes -eq 100 -and [int]$f1.ownPredictedMinutes -eq 360 -and [int]$f1p.ownerGates.count -eq 1 -and @($f1p.ownerGates.ids) -contains 'F1.G1' -and [string]$f1p.rateCovers -eq 'builder and author work only' -and [string]$f1p.tier2.state -eq 'pending') "F1 remain $($f1.remainingMinutes) floor $($f1.floorMinutes) own $($f1.ownPredictedMinutes) gates $($f1p.ownerGates.count) tier2 $($f1p.tier2.state)"
     # A Tier 2 run whose process died is abandoned, not pending: the phases line says so, and the fix round reads
@@ -518,8 +600,9 @@ try {
     Set-FcFocus @('F2')
     $uj = & "$S\Get-StreamStatus.ps1" -Repo $fr -Json | ConvertFrom-Json
     $u2 = @($uj.groups | Where-Object { $_.id -eq 'F2' })[0].forecast; $u3 = @($uj.groups | Where-Object { $_.id -eq 'F3' })[0].forecast
-    Case 'a focus that has never delivered gets no date' ($null -eq $u2.predictedMinutes -and [string]$u2.basis -match '168') "F2 basis '$($u2.basis)'"
-    Case 'groups queued behind an undated focus are undated and named' ($null -eq $u3.predictedMinutes -and [string]$u3.basis -match 'F2 has no date' -and @($uj.forecast.groupsWithoutDate) -contains 'F2' -and @($uj.forecast.groupsWithoutDate) -contains 'F6') "F3 basis '$($u3.basis)' undated $(@($uj.forecast.groupsWithoutDate) -join ',')"
+    # Since kit item IN-20261021171626-78c7 a focus with no landing of its own is priced at BOARD capacity while the
+    # board landed anything in the widest window; the undated cases moved to the bcrepo board below, which has none.
+    Case 'a focus that has never delivered is dated from board capacity' ($null -ne $u2.predictedMinutes -and [string]$u2.basis -match 'board capacity') "F2 basis '$($u2.basis)'"
     # The no-session demand counts the focus set only (kit item IN-20261009040231-3d7c): 20 rows are planned on this
     # board but only F2's 2 can be taken, so "20 tasks waiting for author" was a false alarm about frozen groups.
     $wa = @($uj.flags | Where-Object { "$_" -match 'tasks waiting for author' })
@@ -562,7 +645,6 @@ try {
     $lhtml = Get-Content -Raw $lpg
     Set-FcFocus @('F2')
     Case 'LOCAL-TIME: predicted finish cells name the local zone' (($lhtml -match '<b>\w{3} \d\d \w{3} \d\d:\d\d [A-Za-z]{2,6}</b>') -and ($lhtml -notmatch '<b>\w{3} \d\d \w{3} \d\d:\d\d</b>')) ('a finish date lacks the local zone: ' + ((([regex]::Matches($lhtml, '<b>[^<]{8,30}</b>')) | ForEach-Object Value) -join ' ; '))
-    Case 'the page shows the undated group as undated' ($fhtml -match 'no date') 'undated group not shown as undated'
     Case 'the page says how the prediction is made' ($fhtml -match 'How the predicted finish is worked out') 'method panel missing'
     Case 'the page says the categories are dated in focus order' ($fhtml -match 'In focus order' -and $fhtml -match 'last queued category') 'focus-order notes missing'
     Remove-Item $fcfg
@@ -1302,7 +1384,14 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $aDoc = Get-Content -Raw (Join-Path $ar '.streams\tasks.json') | ConvertFrom-Json
     $aDep = @{}; foreach ($t in $aDoc.tasks) { $aDep[$t.id] = (@($t.dependsOn) | Sort-Object) -join ',' }
     $adec2 = Get-Content -Raw (Join-Path $ar '.streams\decisions.md')
-    Case 'Find-ArtificialBlockers -Apply flips a candidate, keeps every order through it explicit, and never jumps a row moved this run' (($aa -match '^APPLIED A1\.T2 ahead of A1\.T1$').Count -eq 1 -and ($aa -match '^SKIPPED A1\.T4 ').Count -eq 1 -and $aa[-1] -match '^APPLY applied 1 skipped 2 claimable before \d+ after \d+$' -and $aDep['A1.T2'] -eq '' -and $aDep['A1.T1'] -eq 'A1.T2' -and $aDep['A1.T5'] -eq 'A1.T1,A1.T2' -and $aDep['A1.T4'] -eq 'A1.T1' -and $adec2 -match '\[kit-test\] Find-ArtificialBlockers: APPLY applied 1 ' -and @(& "$S\Find-ArtificialBlockers.ps1" -Repo $ar -Apply)[0] -eq 'REFUSED -Apply needs -Session') "out: $($aa -join ' / ') deps: $(@($aDep.GetEnumerator() | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' ')"
+    # Since kit item IN-20261021154436-6273 A1.T1 (after A1.T2 by the apply) and A1.T4 (whose chain runs through that
+    # applied edge) are no longer candidates in the same run, so nothing is skipped.
+    Case 'Find-ArtificialBlockers -Apply flips a candidate, keeps every order through it explicit, and never jumps a row moved this run' (($aa -match '^APPLIED A1\.T2 ahead of A1\.T1$').Count -eq 1 -and ($aa -match '^(APPLIED|SKIPPED) A1\.T[14] ').Count -eq 0 -and $aa[-1] -match '^APPLY applied 1 skipped 0 claimable before \d+ after \d+$' -and $aDep['A1.T2'] -eq '' -and $aDep['A1.T1'] -eq 'A1.T2' -and $aDep['A1.T5'] -eq 'A1.T1,A1.T2' -and $aDep['A1.T4'] -eq 'A1.T1' -and $adec2 -match '\[kit-test\] Find-ArtificialBlockers: APPLY applied 1 ' -and @(& "$S\Find-ArtificialBlockers.ps1" -Repo $ar -Apply)[0] -eq 'REFUSED -Apply needs -Session') "out: $($aa -join ' / ') deps: $(@($aDep.GetEnumerator() | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' ')"
+    # Kit item IN-20261021154436-6273: the edge -Apply wrote (A1.T1 after A1.T2) is kept on the next scan, so a second
+    # -Apply never flips the pair back.
+    $ar2 = @(& "$S\Find-ArtificialBlockers.ps1" -Repo $ar)
+    $aj2 = @((& "$S\Find-ArtificialBlockers.ps1" -Repo $ar -Json | ConvertFrom-Json).rows | Where-Object id -eq 'A1.T1')
+    Case 'Find-ArtificialBlockers: an edge an earlier -Apply wrote is never offered back (no oscillation)' (($ar2 -match '^CANDIDATE').Count -eq 0 -and $ar2[-1] -match '^SUMMARY waiting \d+ candidates 0 ' -and $aj2.Count -eq 1 -and $aj2[0].keptBecause -match '^A1\.T2 logical \(applied order\)$') "out: $($ar2 -join ' / ') T1: $($aj2 | ConvertTo-Json -Compress -Depth 4)"
     # Kit item IN-20261018071721-f123: a row whose title names the row it would jump states a logical order (kept), and
     # a building row is never jumped, directly or as an ancestor.
     $tT1 = CTask 'A1.T1' 'A1' 'ticketed' 5 @() ''; $tT1.writeSet = @('src/Composition/Reg.cs')
