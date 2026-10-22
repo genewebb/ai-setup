@@ -242,9 +242,9 @@ guard, commit with `-Message`, default "Update latest", push with upstream); `pu
 stops rather than merging; `status` fetches, then shows `git status -sb` and ahead/behind in words. The menu offers
 `(this folder)` first, then the known repos.
 
-`prof build compile|run|publish|more <product>` drives the dp* commands in the profile, for products speed
-(dpspeed), crewchief, datagen, mutate, speedy (dpv2) and all (dpall; publish and compile only). prof
-moves the window into the product's repo and leaves it there.
+`prof build compile|run|publish|more <product>` drives the dp* commands in the profile, for products testauto
+(dpspeed; the old name `speed` is still accepted), crewchief, datagen, mutate, speedy (dpv2) and all (dpall; publish
+and compile only). prof moves the window into the product's repo and leaves it there.
 
 | Command | Does |
 |---|---|
@@ -253,8 +253,9 @@ moves the window into the product's repo and leaves it there.
 | `publish` | dp* `-Package`; `-Bump None|Patch|Minor|Major` maps to `-Bump`/`-BumpMinor`/`-BumpMajor`. The menu shows current -> new version. |
 | `more` | The dp* command with any of its own switches; the menu lists them (from the function's parameters and help lines). |
 
-Words prof does not know after the product are passed to the dp* command (`prof build run speed -CleanBuild`,
-`prof build publish all -Products speed,crewchief -Parallel`); a switch the dp* command does not have is refused.
+Words prof does not know after the product are passed to the dp* command (`prof build run testauto -CleanBuild`,
+`prof build publish all -Products testauto,crewchief -Parallel`; prof turns `testauto` into dpall's own name `speed`);
+a switch the dp* command does not have is refused.
 The menu runs product first, then action (Build only / Build + run / Publish / More options...), then the action's
 questions. The dp* commands themselves are unchanged and still work.
 

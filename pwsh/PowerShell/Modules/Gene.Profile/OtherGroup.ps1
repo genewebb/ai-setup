@@ -31,7 +31,7 @@ $script:ProfOtherCatalog = [ordered]@{
     build    = [pscustomobject]@{
         Title    = 'Build, run and package the products (prof build drives these)'
         Commands = @(
-            New-GeneOtherEntry 'dpspeed' 'TestAuto: build + publish + run here; -Package makes the install package' @('dpspeed [-Run] [-Update] [-CleanBuild] [-Configuration Debug|Release] [-Package [-Bump|-BumpMinor|-BumpMajor]] [-ClearSecrets] [-UpdateClientId] [-WhatIf]') 'prof build run|publish speed'
+            New-GeneOtherEntry 'dpspeed' 'TestAuto: build + publish + run here; -Package makes the install package' @('dpspeed [-Run] [-Update] [-CleanBuild] [-Configuration Debug|Release] [-Package [-Bump|-BumpMinor|-BumpMajor]] [-ClearSecrets] [-UpdateClientId] [-WhatIf]') 'prof build run|publish testauto'
             New-GeneOtherEntry 'dpcrewchief' 'CrewChief: build + publish + run here (-Cli for the CLI); -Package makes the install package' @('dpcrewchief [-Cli] [-Run] [-Update] [-CleanBuild] [-Package [-Bump...]] [-SealSecret] [-Unlock] [-WhatIf] [-- <cli args>]') 'prof build run|publish crewchief'
             New-GeneOtherEntry 'dpdatagen' 'DataGen: build + publish + run here; -Package makes the install package' @('dpdatagen [-Cli] [-Run] [-Update] [-CleanBuild] [-Package [-Bump...]] [-WhatIf] [-- <cli args>]') 'prof build run|publish datagen'
             New-GeneOtherEntry 'dpmutate' 'DataGen + Mutation: build + publish + run here; -Package makes the install package' @('dpmutate [-Cli] [-Run] [-Update] [-CleanBuild] [-Package [-Bump...]] [-WhatIf] [-- <cli args>]') 'prof build run|publish mutate'
