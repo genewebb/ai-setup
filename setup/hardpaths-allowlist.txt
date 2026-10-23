@@ -14,3 +14,4 @@ memory\*                              # auto-memory: records machine facts, path
 stream-host\*                         # per-host operator scripts, placed by install.ps1 into the profile's StreamHostDir
 pwsh\*                                # PowerShell profiles: machine paths resolved there by design
 tools\Promote-ToWork.ps1              # help example names a clone path
+docs\superpowers\plans\*              # implementation plans: name the clone, vault and memory paths each step ran against

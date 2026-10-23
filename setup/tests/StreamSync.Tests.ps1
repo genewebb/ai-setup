@@ -6,13 +6,21 @@
 param([string]$ProfilePath = (Join-Path $PSScriptRoot '..\..\pwsh\PowerShell\Microsoft.PowerShell_profile.ps1'))
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
-# Load only the profile's machine-config and stream regions (the rest needs an interactive console).
+# Load only what the stream commands need (the rest of the core profile needs an interactive console): the core's
+# machine-config region and its two Windows Terminal helpers, then the board category file (definitions only).
 $text = Get-Content -LiteralPath $ProfilePath -Raw
-foreach ($region in '(?s)#region Machine config.*?#endregion', '(?s)#region Stream sessions.*?#endregion Stream sessions') {
-    $m = [regex]::Match($text, $region)
-    if (-not $m.Success) { throw "profile region not found: $region" }
-    . ([scriptblock]::Create($m.Value))
+$m = [regex]::Match($text, '(?s)#region Machine config.*?#endregion')
+if (-not $m.Success) { throw 'profile region not found: #region Machine config' }
+. ([scriptblock]::Create($m.Value))
+$coreAst = [System.Management.Automation.Language.Parser]::ParseFile($ProfilePath, [ref]$null, [ref]$null)
+foreach ($name in 'Get-GeneWtPath', 'Test-GeneWt') {
+    $fn = $coreAst.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $false) | Select-Object -First 1
+    if (-not $fn) { throw "core profile does not define $name" }
+    . ([scriptblock]::Create($fn.Extent.Text))
 }
+$boardFile = Join-Path (Split-Path $ProfilePath) 'profile.d\board.ps1'
+if (-not (Test-Path -LiteralPath $boardFile)) { throw "board category file not found: $boardFile" }
+. $boardFile
 
 function Invoke-Git { param([string]$Dir, [Parameter(ValueFromRemainingArguments)][string[]]$GitArgs) $o = & git -C $Dir @GitArgs 2>&1; if ($LASTEXITCODE) { throw "git $GitArgs : $o" }; $o }
 function New-Clone { param([string]$Origin, [string]$Dir) & git clone -q $Origin $Dir 2>&1 | Out-Null; Invoke-Git $Dir config user.email t@t; Invoke-Git $Dir config user.name t }

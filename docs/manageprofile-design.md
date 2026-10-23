@@ -70,8 +70,15 @@ long alias: manageProfile
 **prof is the general-purpose hub (Gene, 10/17).** Commands live in groups; the main menu lists the groups. The
 groups, in menu order: `streams` (the stream board, section 6.1), `setup` (the twelve commands below; it was named
 `streams` until Gene renamed it 10/17 so `streams` could mean the board), `git`, `build`, `ai`, `other`. Other profile commands join as further groups
-(section 6). A group is one entry in `$script:ProfGroups` (`Verbs.ps1`): its commands with one-line and long
-descriptions, usage lines, the function prefix, which commands need `-Machine`, and the menu's question flow.
+(section 6). A group is one entry in `$script:ProfGroups`: its commands with one-line and long descriptions, usage
+lines, the function prefix, which commands need `-Machine`, and the menu's question flow. `Verbs.ps1` holds only the
+empty table, the dispatcher, the menu and help; each `*Group.ps1` file registers its own group (`setup` in
+`SetupGroup.ps1`), and `Gene.Profile.psm1` loads the group files that exist, so a copy of the hub without a group file
+simply has no such group. The hub also lists only what is defined: a group appears when at least one of its command
+functions exists (`Get-GeneProfGroupNames`), and `prof other` shows only catalog commands `Get-Command` can find
+(`Get-GeneOtherEntries`), checked when it is read because the module is imported before the profile's category files
+(`profile.d\<category>.ps1`, one per `prof other` category: navigate, tabs, build, git, board, profile, claude, tools).
+This is what lets `prof setup share` ship a trimmed profile and hub whose menus still match what is there.
 
 Groups and commands are tab-completed. Every verb accepts `-h` (the existing `Write-Usage` style) and `-WhatIf` (reports,
 writes nothing anywhere). Every verb that runs prints the **composed command line** it is about to run before it
@@ -91,7 +98,7 @@ The `setup` group (`prof setup <command>`):
 | `config` | Show the machine profile table: this machine, or `-Machine X`. Replaces `machinecfg`. | admin share for remote |
 | `edit` | Open the **repo copy** of the profile (`{AIWorkRoot}\pwsh\PowerShell\...`) in the editor. Replaces `ep`, which opens the installed copy that the next install overwrites. | - |
 | `reload` | `install.ps1 -NoPull -Yes` here, then `. $PROFILE`. Replaces `rp`. | - |
-| `show` | Print the installed profile path and the repo copy path with their hashes (in sync or not). Replaces `sp`. | - |
+| `show` | Print the installed profile path and the repo copy path with their hashes (in sync or not), then whether the `profile.d` category files and the own modules match the repo (`Compare-GeneProfileTrees`). Replaces `sp`. | - |
 | `export` | Pack the profile for someone who is not on the ai-setup repo (Gene, 10/23): the `pwsh\` tree, a blank-value `ProfileMachineConfig.md`, `Install-Profile.ps1` and a README, zipped under `{ScratchRoot}\prof` or `-Out`. The secret scan refuses; every mention of the owner's accounts, machines and personal paths (`share.yaml` blockedPatterns) is listed and confirmed first. Code: `Export.ps1`. | - |
 
 `prof help` (top level, not in a group) lists every group and command, `prof help <group>` one group,
