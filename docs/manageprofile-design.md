@@ -98,7 +98,7 @@ The `setup` group (`prof setup <command>`):
 | `config` | Show the machine profile table: this machine, or `-Machine X`. Replaces `machinecfg`. | admin share for remote |
 | `edit` | Open the **repo copy** of the profile (`{AIWorkRoot}\pwsh\PowerShell\...`) in the editor. Replaces `ep`, which opens the installed copy that the next install overwrites. | - |
 | `reload` | `install.ps1 -NoPull -Yes` here, then `. $PROFILE`. Replaces `rp`. | - |
-| `show` | Print the installed profile path and the repo copy path with their hashes (in sync or not), then whether the `profile.d` category files and the own modules match the repo (`Compare-GeneProfileTrees`). Replaces `sp`. | - |
+| `show` | Print the installed profile path and the repo copy path with their hashes (in sync or not), then whether the `profile.d` category files and the own modules match the repo, and which installed files the repo no longer has (the install never deletes; a stale `profile.d` file still loads) (`Compare-GeneProfileTrees`). Replaces `sp`. | - |
 | `export` | Pack the profile for someone who is not on the ai-setup repo (Gene, 10/23): the `pwsh\` tree, a blank-value `ProfileMachineConfig.md`, `Install-Profile.ps1` and a README, zipped under `{ScratchRoot}\prof` or `-Out`. The secret scan refuses; every mention of the owner's accounts, machines and personal paths (`share.yaml` blockedPatterns) is listed and confirmed first. Code: `Export.ps1`. | - |
 
 `prof help` (top level, not in a group) lists every group and command, `prof help <group>` one group,

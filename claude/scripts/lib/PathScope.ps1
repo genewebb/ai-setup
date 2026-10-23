@@ -14,7 +14,7 @@ function ConvertTo-ScopePath([string] $p) {
     $p = $p.Trim().Trim('"', "'", '`')
     if ($p -match '^/([a-zA-Z])(/|$)') { $p = "$($Matches[1]):" + $p.Substring(2) }   # example-path: /c/x -> c:/x
     $p = $p -replace '/', '\'
-    # A bash-escaped backslash (D:\\x\\y, kit item IN-20261020133758-c46f) and a doubled separator are one separator;
+    # example-path: a bash-escaped backslash (D:\\x\\y, kit item IN-20261020133758-c46f) and a doubled separator are one separator;
     # a leading \\ (UNC) is kept.
     $p = $p.Substring(0, [Math]::Min(2, $p.Length)) + ($p.Substring([Math]::Min(2, $p.Length)) -replace '\\{2,}', '\')
     $p = $p.ToLowerInvariant()
@@ -221,7 +221,7 @@ function Find-OutsideScopeToken($Tokens, $Roots) {
         if ($p -cmatch '^PATH=') { continue }
         # example-path: the optional prefix is lazy (??) so "C:/x" is read as a drive path first, not as prefix "C:" + POSIX "/x".
         # The prefix holds no whitespace, quote or comma: an option name is one word, and a nested command's
-        # "... 'C:/x' ..." must not read as prefix "... 'C:" + POSIX "/x" (its own tokens are checked instead).
+        # example-path: "... 'C:/x' ..." must not read as prefix "... 'C:" + POSIX "/x" (its own tokens are checked instead).
         if ($p -match '^(?:[^=:\s''",]*[=:])??(?<path>(?:[A-Za-z]:[\\/]|\\\\|/[A-Za-z]/|/|~|\$env:USERPROFILE|\$HOME|%USERPROFILE%|%HOMEPATH%).*)$') { $p = $Matches['path'] }
         else { continue }
 

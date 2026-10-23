@@ -1,7 +1,9 @@
 #requires -Version 7
 # Profile split (design: vault 99_Frequent\Profile\Share Design.md, section 4): the core profile plus profile.d\<category>.ps1
-# define exactly what the one-file profile defined, category files hold only definitions and never call across files, and a
-# fresh pwsh loads the result. -WriteBaseline regenerates the census fixture from the CURRENT files (done once, before the split).
+# define every name the one-file profile defined (fixtures\profile-names.baseline.txt), category files hold only definitions
+# and never call across files, and a fresh pwsh loads the result. New names are fine; a baseline name that disappears fails
+# the census. When a command is retired on purpose, rerun with -WriteBaseline in the same commit (it rewrites the fixture
+# from the current files).
 param([switch]$WriteBaseline)
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 . (Join-Path $PSScriptRoot 'ProfileAst.ps1')
@@ -25,8 +27,10 @@ if ($WriteBaseline) {
     exit 0
 }
 
-Test-Case 'census: the split defines exactly the names the one-file profile defined' {
-    Assert-Equal @(Get-Content -LiteralPath $baseline | Sort-Object -Unique) @(Get-CensusNames)
+Test-Case 'census: every name the one-file profile defined is still defined (new names are allowed)' {
+    $now = @(Get-CensusNames)
+    $lost = @(Get-Content -LiteralPath $baseline | Sort-Object -Unique | Where-Object { $_ -notin $now })
+    Assert-Equal @() $lost 'baseline names no longer defined (retired on purpose? rerun with -WriteBaseline in the same commit)'
 }
 
 Test-Case 'structure: profile.d exists with the eight category files' {
@@ -55,6 +59,12 @@ Test-Case 'load: a fresh pwsh loads the split profile and defines every baseline
     $nested = @(Get-ProfileFiles | ForEach-Object { (Get-GeneProfileDefinitions -Path $_).Nested } | ForEach-Object { "function $_" })
     $missing = @(Get-Content -LiteralPath $baseline | Where-Object { $_ -notlike 'global *' -and $_ -notin $nested } | Where-Object { $out -notcontains $_ })
     Assert-Equal @() $missing 'missing after a fresh load'
+}
+
+Test-Case 'load: sp and rp are the profile functions, not the built-in aliases (Set-ItemProperty, Remove-ItemProperty)' {
+    $out = @(pwsh -NoProfile -Command ". '$core'; foreach (`$n in 'sp', 'rp') { `$n + '=' + (Get-Command `$n).CommandType }")
+    Assert-True ($out -contains 'sp=Function') "sp resolves to: $($out -join ' | ')"
+    Assert-True ($out -contains 'rp=Function') "rp resolves to: $($out -join ' | ')"
 }
 
 Test-Case 'load: script-scope state survives dot-sourcing (Get-GeneAiGitPaths)' {

@@ -345,6 +345,39 @@ try {
         $c = Compare-GeneProfileTrees -Repo $r -Installed $i
         Assert-Equal 'missing' $c.Profile; Assert-Equal 1 $c.Modules
     }
+    Test-Case 'show: an installed profile.d or module file the repo no longer has is counted as extra' {
+        $r = New-TestRoot 'showx'; $i = New-TestRoot 'instx'
+        foreach ($d in $r, $i) {
+            New-Item "$d\profile.d", "$d\Modules\M" -ItemType Directory -Force | Out-Null
+            Set-Content "$d\Microsoft.PowerShell_profile.ps1" 'a'; Set-Content "$d\profile.d\git.ps1" 'b'; Set-Content "$d\Modules\M\M.psm1" 'c'
+        }
+        Assert-Equal 0 (Compare-GeneProfileTrees -Repo $r -Installed $i).Extra
+        Set-Content "$i\profile.d\old.ps1" 'stale'; Set-Content "$i\Modules\M\Gone.ps1" 'stale'
+        $c = Compare-GeneProfileTrees -Repo $r -Installed $i
+        Assert-Equal 2 $c.Extra
+        Assert-Equal @('Modules\M\Gone.ps1', 'profile.d\old.ps1') @($c.ExtraFiles | Sort-Object)
+        Assert-Equal 0 $c.Categories; Assert-Equal 0 $c.Modules
+    }
+    Test-Case 'trimmed copy: core + tabs + navigate and a hub without setup/streams/git/build/ai lists only those categories (profile = machinecfg, from the core)' {
+        $t = New-TestRoot 'trim'; $m2 = Join-Path $t 'Modules\Gene.Profile'
+        New-Item -ItemType Directory -Path "$t\profile.d", $m2 -Force | Out-Null
+        $src = Join-Path $repoRoot 'pwsh\PowerShell'
+        Copy-Item -LiteralPath "$src\Microsoft.PowerShell_profile.ps1" -Destination $t
+        foreach ($c in 'tabs', 'navigate') { Copy-Item -LiteralPath "$src\profile.d\$c.ps1" -Destination "$t\profile.d" -ErrorAction Stop }
+        Copy-Item -Path "$mod\*" -Destination $m2 -Recurse
+        foreach ($f in 'SetupGroup', 'Target', 'Sync', 'Export', 'StreamsGroup', 'GitGroup', 'BuildGroup', 'AiGroup') { Remove-Item -LiteralPath "$m2\$f.ps1" -ErrorAction Stop }
+        $o = @(pwsh -NoProfile -Command "`$ErrorActionPreference = 'Stop'; . '$t\Microsoft.PowerShell_profile.ps1'; Import-Module '$m2\Gene.Profile.psd1' -DisableNameChecking -Force; prof help 6>&1 | Out-String; '--OTHER--'; prof help other 6>&1 | Out-String; '--PROFILE--'; prof other profile 6>&1 | Out-String; 'EXIT-OK'" 2>&1) -join "`n"
+        Assert-Match $o 'EXIT-OK'
+        foreach ($g in 'streams', 'setup', 'git', 'build', 'ai') { Assert-NoMatch $o "(?m)^$g  " }
+        Assert-Match $o '(?m)^other  '
+        # profile stays: machinecfg is an alias to Show-GeneMachineConfig, which the core defines, so every copy has it.
+        $other = (($o -split '--OTHER--')[1] -split '--PROFILE--')[0]
+        $cats = @([regex]::Matches($other, '(?m)^  (\w+)\s') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+        Assert-Equal @('navigate', 'profile', 'tabs') $cats "other lists: $($cats -join ',')"
+        $prof = ($o -split '--PROFILE--')[1]
+        Assert-Match $prof '(?m)^  machinecfg '
+        foreach ($n in 'sp', 'ep', 'rp') { Assert-NoMatch $prof "(?m)^  $n " }
+    }
     Test-Case 'groups: main menu order is streams, setup, git, build, ai, other' { Assert-Equal @('streams', 'setup', 'git', 'build', 'ai', 'other') @($script:ProfGroups.Keys) }
     Test-Case 'groups: setup holds the twelve commands, help is not one of them' {
         Assert-True ($script:ProfGroups.Contains('setup'))
