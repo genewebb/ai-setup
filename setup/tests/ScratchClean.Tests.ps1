@@ -124,7 +124,9 @@ try {
     Test-Case 'a real -Register refuses while the installed copy is missing: the task would run nothing' {
         Assert-Equal 2 $d1.Code $d1.Out
         Assert-Match $d1.Out 'REFUSED .*is not installed yet'
-        Assert-True (-not (Get-ScheduledTask -TaskName 'AI scratch cleanup' -ErrorAction SilentlyContinue)) 'a task was registered'
+        # The real task may exist on this machine (install.ps1 step 6); only a task pointing at the test home would be ours.
+        $task = Get-ScheduledTask -TaskName 'AI scratch cleanup' -ErrorAction SilentlyContinue
+        Assert-True (-not ($task -and (($task.Actions.Arguments -join ' ') -like "*$home1*"))) 'a task was registered for the test home'
     }
     Copy-Item $script (Join-Path $home1 'bin\Clear-AIScratch.ps1')
     $d2 = Run @('-Register', '-Root', $scratch, '-KeepDays', '3', '-DryRun')
