@@ -259,7 +259,11 @@ try {
     }
 
     # ---------------------------------------------------------------- groups and the dispatcher
-    foreach ($f in 'Verbs.ps1', 'Export.ps1', 'StreamsGroup.ps1', 'GitGroup.ps1', 'BuildGroup.ps1', 'AiGroup.ps1', 'OtherGroup.ps1') { . (Join-Path $mod $f) }
+    foreach ($f in 'Verbs.ps1', 'SetupGroup.ps1', 'Export.ps1', 'StreamsGroup.ps1', 'GitGroup.ps1', 'BuildGroup.ps1', 'AiGroup.ps1', 'OtherGroup.ps1') { . (Join-Path $mod $f) }
+    Test-Case 'hub: setup group is registered by SetupGroup.ps1, not Verbs.ps1' {
+        Assert-NoMatch (Get-Content -LiteralPath "$mod\Verbs.ps1" -Raw) "ProfGroups\['setup'\]|ProfGroups = \[ordered\]@\{\s*setup"
+        Assert-Match (Get-Content -LiteralPath "$mod\SetupGroup.ps1" -Raw -ErrorAction Stop) "ProfGroups\['setup'\]"
+    }
     Test-Case 'groups: main menu order is streams, setup, git, build, ai, other' { Assert-Equal @('streams', 'setup', 'git', 'build', 'ai', 'other') @($script:ProfGroups.Keys) }
     Test-Case 'groups: setup holds the twelve commands, help is not one of them' {
         Assert-True ($script:ProfGroups.Contains('setup'))
