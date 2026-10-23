@@ -88,6 +88,51 @@ try {
         $p = Read-GeneShareSkillPicks -Offer $offer -State $have -Reader (New-Queue @('', 'n', '2 3'))
         Assert-Equal @('testauto-b', 'testauto-c') @($p['testauto'])
     }
+
+    # ---------------------------------------------------------------- checks and the rewrite
+    $all = @($offer.Skills.Name)
+    $catOf = @{}; foreach ($o in $offer) { foreach ($s in $o.Skills) { $catOf[$s.Name] = $o.Category } }
+    $keys = Get-GeneShareMachineKeys -Hub $hub
+    Test-Case 'keys: the hub core yields the profile defaults and the AI keys' {
+        Assert-Equal @('AIWorkRoot', 'BitsDir', 'ReposRoot', 'ShareRepo') @($keys | Sort-Object)
+    }
+    Test-Case 'checks: {Key} tokens stop; a reference to an unpicked hub skill stops; /plugin, /loop and /testauto-ab never do' {
+        $t = Get-Content -LiteralPath "$hub\skills\leaky\SKILL.md" -Raw
+        $r = @(Test-GeneShareSkillText -Text $t -Skill 'leaky' -AllSkills $all -Picked @('leaky') -Keys $keys)
+        Assert-Equal 2 $r.Count ($r -join ' | '); Assert-Match ($r -join "`n") '\{ReposRoot\}'; Assert-Match ($r -join "`n") '\{ShareRepo\}'
+        $t = Get-Content -LiteralPath "$hub\skills\linker\SKILL.md" -Raw
+        $r = @(Test-GeneShareSkillText -Text $t -Skill 'linker' -AllSkills $all -Picked @('linker') -Keys $keys)
+        Assert-Equal 1 $r.Count ($r -join ' | '); Assert-Match $r[0] '\[\[solo\]\]'
+        Assert-Equal 0 @(Test-GeneShareSkillText -Text $t -Skill 'linker' -AllSkills $all -Picked @('linker', 'solo') -Keys $keys).Count
+        $t = Get-Content -LiteralPath "$hub\skills\testauto-a\SKILL.md" -Raw
+        $r = @(Test-GeneShareSkillText -Text $t -Skill 'testauto-a' -AllSkills $all -Picked @('testauto-a') -Keys $keys)
+        Assert-Equal 3 $r.Count ($r -join ' | ')
+        Assert-Equal 0 @(Test-GeneShareSkillText -Text $t -Skill 'testauto-a' -AllSkills $all -Picked @('testauto-a', 'testauto-b', 'testauto-c') -Keys $keys).Count
+    }
+    Test-Case 'rewrite: [[p]], [[p|alias]], [[p#h]], `p` and /p become category:p; [[memory-note]] loses its brackets; counts reported' {
+        $picked = @('testauto-a', 'testauto-b', 'testauto-c')
+        $r = Convert-GeneShareSkillText -Text (Get-Content -LiteralPath "$hub\skills\testauto-a\SKILL.md" -Raw) -Picked $picked -Category $catOf -AllSkills $all
+        Assert-Match $r.Text 'See testauto:testauto-b and `testauto:testauto-c`; run /testauto:testauto-b\. Memory: project_notes_2026\. Not a skill: /plugin, /loop\.'
+        Assert-Equal 3 $r.Rewrites; Assert-Equal 1 $r.Unlinked
+        $r = Convert-GeneShareSkillText -Text (Get-Content -LiteralPath "$hub\skills\testauto-c\SKILL.md" -Raw) -Picked $picked -Category $catOf -AllSkills $all
+        Assert-Match $r.Text 'uses testauto:testauto-a and testauto:testauto-b'
+        Assert-Equal 2 $r.Rewrites; Assert-Equal 0 $r.Unlinked
+        Assert-NoMatch $r.Text 'the first one|#Heading'
+    }
+    Test-Case 'rewrite: a general skill is general:name; the front matter name: line is left alone' {
+        $r = Convert-GeneShareSkillText -Text "---`nname: linker`n---`nsee [[solo]]" -Picked @('linker', 'solo') -Category $catOf -AllSkills $all
+        Assert-Match $r.Text 'name: linker'; Assert-Match $r.Text 'see general:solo'
+    }
+    Test-Case 'copy: SKILL.md rewritten, a script and a .png copied byte-for-byte' {
+        $dest = Join-Path $root 'copy-out\testauto-b'
+        $r = Copy-GeneShareSkill -Source "$hub\skills\testauto-b" -Dest $dest -Skill 'testauto-b' -Picked @('testauto-a', 'testauto-b') -Category $catOf -AllSkills $all -Keys $keys
+        Assert-Equal @('pic.png', 'scripts\run.ps1', 'SKILL.md') @($r.Files)
+        Assert-Equal (Get-FileHash "$hub\skills\testauto-b\pic.png").Hash (Get-FileHash "$dest\pic.png").Hash
+        Assert-Equal (Get-FileHash "$hub\skills\testauto-b\scripts\run.ps1").Hash (Get-FileHash "$dest\scripts\run.ps1").Hash
+        Assert-Match (Get-Content "$dest\SKILL.md" -Raw) 'name: testauto-b'
+        Assert-Throws { Copy-GeneShareSkill -Source "$hub\skills\leaky" -Dest (Join-Path $root 'copy-out\leaky') -Skill 'leaky' -Picked @('leaky') -Category $catOf -AllSkills $all -Keys $keys } '*{ReposRoot}*'
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $root 'copy-out\leaky'))) 'a refused skill left files behind'
+    }
 }
 finally {
     $env:GENE_PROF_HUB = $null

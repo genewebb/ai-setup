@@ -323,7 +323,7 @@ try {
     }
     Test-Case 'trimmed hub: without SetupGroup/Target/Sync/Share the module imports and prof help has no setup group' {
         $t = New-TestRoot 'hub'; Copy-Item -Path "$mod\*" -Destination $t -Recurse
-        Remove-Item -LiteralPath "$t\SetupGroup.ps1", "$t\Target.ps1", "$t\Sync.ps1", "$t\Share.ps1"
+        Remove-Item -LiteralPath "$t\SetupGroup.ps1", "$t\Target.ps1", "$t\Sync.ps1", "$t\Share.ps1", "$t\ShareSkills.ps1"
         $core = Join-Path $repoRoot 'pwsh\PowerShell\Microsoft.PowerShell_profile.ps1'
         $o = @(pwsh -NoProfile -Command "`$ErrorActionPreference = 'Stop'; . '$core'; Import-Module '$t\Gene.Profile.psd1' -DisableNameChecking -Force; prof help 6>&1 | Out-String; 'EXIT-OK'" 2>&1) -join "`n"
         Assert-Match $o 'EXIT-OK'

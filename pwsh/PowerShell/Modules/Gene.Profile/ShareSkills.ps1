@@ -116,3 +116,110 @@ function Read-GeneShareSkillPicks {
     }
     return $result
 }
+
+# ------------------------------------------------------------------------------------------------ checks and the rewrite
+# How skills refer to each other today: [[name]] (also [[name|alias]], [[name#heading]]), `name` and /name.
+$script:ShareWikiRx = [regex]'\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]'
+$script:ShareTickRx = [regex]'`([a-z0-9]+(?:-[a-z0-9]+)*)`'
+$script:ShareSlashRx = [regex]'(?<![\w/:])/([a-z0-9]+(?:-[a-z0-9]+)*)(?![\w-])'
+
+function Get-GeneShareMachineKeys {
+    <#
+    The machine-profile key names, read from the hub core by AST (never dot-sourced): the $global:GeneMachineDefaults
+    keys plus $global:GeneMachineAIKeys. A {Key} token in a shared skill names one of these.
+    #>
+    param([string]$Hub = (Get-GeneHubRoot))
+    $core = Join-Path $Hub 'pwsh\PowerShell\Microsoft.PowerShell_profile.ps1'
+    if (-not (Test-Path -LiteralPath $core)) { throw "No core profile in the hub ($core): the machine keys cannot be read." }
+    $ast = Get-GeneShareAst -Path $core
+    $keys = [System.Collections.Generic.List[string]]::new()
+    foreach ($a in $ast.FindAll({ param($n) $n -is [AssignmentStatementAst] -and $n.Left -is [VariableExpressionAst] -and $n.Left.VariablePath.UserPath -in 'global:GeneMachineDefaults', 'global:GeneMachineAIKeys' }, $false)) {
+        if ($a.Left.VariablePath.UserPath -eq 'global:GeneMachineDefaults') {
+            foreach ($t in $a.Right.FindAll({ param($n) $n -is [HashtableAst] }, $true)) { foreach ($p in $t.KeyValuePairs) { if ($p.Item1 -is [StringConstantExpressionAst]) { $keys.Add($p.Item1.Value) } } }
+        }
+        else { foreach ($s in $a.Right.FindAll({ param($n) $n -is [StringConstantExpressionAst] }, $true)) { $keys.Add($s.Value) } }
+    }
+    return @($keys | Where-Object { $_ } | Sort-Object -Unique)
+}
+
+function Get-GeneShareSkillRefs {
+    <# Every reference in a text: @({ Kind = wiki|tick|slash; Name; Match; Line }). Only names are returned; the caller decides. #>
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+    $refs = [System.Collections.Generic.List[object]]::new()
+    $lineOf = { param($i) ([regex]::Matches($Text.Substring(0, $i), "`n")).Count + 1 }
+    foreach ($m in $script:ShareWikiRx.Matches($Text)) { $refs.Add([pscustomobject]@{ Kind = 'wiki'; Name = $m.Groups[1].Value.Trim(); Match = $m.Value; Line = (& $lineOf $m.Index) }) }
+    foreach ($m in $script:ShareTickRx.Matches($Text)) { $refs.Add([pscustomobject]@{ Kind = 'tick'; Name = $m.Groups[1].Value; Match = $m.Value; Line = (& $lineOf $m.Index) }) }
+    foreach ($m in $script:ShareSlashRx.Matches($Text)) { $refs.Add([pscustomobject]@{ Kind = 'slash'; Name = $m.Groups[1].Value; Match = $m.Value; Line = (& $lineOf $m.Index) }) }
+    return @($refs)
+}
+
+function Test-GeneShareSkillText {
+    <#
+    The hard stops for one text of a picked skill: {Key} machine-profile tokens (the coworker has no such key) and
+    references to hub skills that are not picked (the coworker would be sent to something he does not have).
+    Returns the problems as strings; empty = fine. A name that is no hub skill (/plugin, /loop, a memory note) is never one.
+    #>
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text, [Parameter(Mandatory)][string]$Skill, [AllowEmptyCollection()][string[]]$AllSkills = @(), [AllowEmptyCollection()][string[]]$Picked = @(), [AllowEmptyCollection()][string[]]$Keys = @())
+    $problems = [System.Collections.Generic.List[string]]::new()
+    if ($Keys.Count) {
+        $keyRx = [regex]('\{(' + (($Keys | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')\}')
+        foreach ($m in $keyRx.Matches($Text)) {
+            $line = ([regex]::Matches($Text.Substring(0, $m.Index), "`n")).Count + 1
+            $problems.Add("line $line`: $($m.Value) is a machine-profile token; the coworker has no $($m.Groups[1].Value). Edit the source skill or do not pick it.")
+        }
+    }
+    foreach ($r in Get-GeneShareSkillRefs -Text $Text) {
+        if ($r.Name -in $AllSkills -and $r.Name -notin $Picked) { $problems.Add("line $($r.Line): $($r.Match) refers to the hub skill '$($r.Name)', which is not picked. Pick it too, or edit the source skill.") }
+    }
+    return @($problems)
+}
+
+function Convert-GeneShareSkillText {
+    <#
+    The rewrite, in the copy only: [[p]], [[p|alias]], [[p#heading]], `p` and /p where p is a picked skill become
+    <category>:<p> (`<category>:<p>`, /<category>:<p>); a [[name]] that is no hub skill (a memory note) loses its brackets
+    and keeps its text. Returns { Text; Rewrites; Unlinked }.
+    #>
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text, [AllowEmptyCollection()][string[]]$Picked = @(), [Parameter(Mandatory)][hashtable]$Category, [AllowEmptyCollection()][string[]]$AllSkills = @())
+    $count = @{ rw = 0; ul = 0 }
+    $qual = { param($n) "$($Category[$n]):$n" }
+    $t = $script:ShareWikiRx.Replace($Text, {
+            param($m)
+            $n = $m.Groups[1].Value.Trim()
+            if ($n -in $Picked) { $count.rw++; return (& $qual $n) }
+            if ($n -in $AllSkills) { return $m.Value }
+            $count.ul++; return $m.Value.Substring(2, $m.Value.Length - 4)
+        })
+    $t = $script:ShareTickRx.Replace($t, { param($m) $n = $m.Groups[1].Value; if ($n -in $Picked) { $count.rw++; return ('`' + (& $qual $n) + '`') }; return $m.Value })
+    $t = $script:ShareSlashRx.Replace($t, { param($m) $n = $m.Groups[1].Value; if ($n -in $Picked) { $count.rw++; return ('/' + (& $qual $n)) }; return $m.Value })
+    return [pscustomobject]@{ Text = $t; Rewrites = $count.rw; Unlinked = $count.ul }
+}
+
+function Copy-GeneShareSkill {
+    <#
+    One skill folder into the stage: every .md checked (a problem throws before anything is written) and rewritten; every
+    other file copied byte for byte. Returns { Files (relative, sorted); Rewrites; Unlinked }.
+    #>
+    param([Parameter(Mandatory)][string]$Source, [Parameter(Mandatory)][string]$Dest, [Parameter(Mandatory)][string]$Skill, [AllowEmptyCollection()][string[]]$Picked = @(), [Parameter(Mandatory)][hashtable]$Category, [AllowEmptyCollection()][string[]]$AllSkills = @(), [AllowEmptyCollection()][string[]]$Keys = @())
+    $files = @(Get-ChildItem -LiteralPath $Source -Recurse -File | Sort-Object { [IO.Path]::GetRelativePath($Source, $_.FullName) })
+    $texts = [ordered]@{}; $problems = [System.Collections.Generic.List[string]]::new()
+    foreach ($f in $files | Where-Object Extension -eq '.md') {
+        $rel = [IO.Path]::GetRelativePath($Source, $f.FullName)
+        $texts[$rel] = [IO.File]::ReadAllText($f.FullName)
+        foreach ($p in Test-GeneShareSkillText -Text $texts[$rel] -Skill $Skill -AllSkills $AllSkills -Picked $Picked -Keys $Keys) { $problems.Add("$Skill\$rel $p") }
+    }
+    if ($problems.Count) { throw "skill $Skill cannot be shared ($($problems.Count) problem(s)):`n  $($problems -join "`n  ")" }
+    $rewrites = 0; $unlinked = 0; $written = [System.Collections.Generic.List[string]]::new()
+    foreach ($f in $files) {
+        $rel = [IO.Path]::GetRelativePath($Source, $f.FullName)
+        $to = Join-Path $Dest $rel
+        New-Item -ItemType Directory -Force -Path (Split-Path $to) | Out-Null
+        if ($texts.Contains($rel)) {
+            $r = Convert-GeneShareSkillText -Text $texts[$rel] -Picked $Picked -Category $Category -AllSkills $AllSkills
+            [IO.File]::WriteAllText($to, $r.Text, [Text.UTF8Encoding]::new($false)); $rewrites += $r.Rewrites; $unlinked += $r.Unlinked
+        }
+        else { Copy-Item -LiteralPath $f.FullName -Destination $to -Force }
+        $written.Add($rel)
+    }
+    return [pscustomobject]@{ Files = @($written | Sort-Object); Rewrites = $rewrites; Unlinked = $unlinked }
+}
