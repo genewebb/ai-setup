@@ -1,19 +1,43 @@
-# prof: the groups, the setup commands, the dispatcher and the menu.
+# prof: the groups, the dispatcher and the menu. Each *Group.ps1 file adds its own group.
 # Design: docs\manageprofile-design.md in the ai-setup clone.
 
-$script:ProfOldNames = [ordered]@{
-    sp = 'prof setup show'; ep = 'prof setup edit'; rp = 'prof setup reload (rp itself only reloads the profile in this window)'; machinecfg = 'prof setup config'
-    gpush = 'prof git push'
-    'dpspeed, dpcrewchief, dpdatagen, dpmutate, dpv2' = 'prof build run testauto | crewchief | datagen | mutate | speedy'
-    'dp* -Package -Bump...' = 'prof build publish <product> -Bump Patch|Minor|Major'
-    'dpall -Package' = 'prof build publish all'
-}
+# Old command -> the prof command that replaced it. A row is shown only when Needs (the prof-side function) is
+# defined, so a trimmed copy (prof setup share) does not advertise a prof command it does not have.
+$script:ProfOldNames = @(
+    [pscustomobject]@{ Old = 'sp'; New = 'prof setup show'; Needs = 'Invoke-GeneProfShow' }
+    [pscustomobject]@{ Old = 'ep'; New = 'prof setup edit'; Needs = 'Invoke-GeneProfEdit' }
+    [pscustomobject]@{ Old = 'rp'; New = 'prof setup reload (rp itself only reloads the profile in this window)'; Needs = 'Invoke-GeneProfReload' }
+    [pscustomobject]@{ Old = 'machinecfg'; New = 'prof setup config'; Needs = 'Invoke-GeneProfConfig' }
+    [pscustomobject]@{ Old = 'gpush'; New = 'prof git push'; Needs = 'Invoke-GeneProfGitPush' }
+    [pscustomobject]@{ Old = 'dpspeed, dpcrewchief, dpdatagen, dpmutate, dpv2'; New = 'prof build run testauto | crewchief | datagen | mutate | speedy'; Needs = 'Invoke-GeneProfBuildRun' }
+    [pscustomobject]@{ Old = 'dp* -Package -Bump...'; New = 'prof build publish <product> -Bump Patch|Minor|Major'; Needs = 'Invoke-GeneProfBuildPublish' }
+    [pscustomobject]@{ Old = 'dpall -Package'; New = 'prof build publish all'; Needs = 'Invoke-GeneProfBuildPublish' }
+)
 
 # The groups: prof <group> <command>. The main menu lists them; each is one area of work. A group's commands are
 # the functions <Prefix><Command> (TitleCase). Ask (optional) is the menu's question flow for a command: it returns
-# the parameters as an ordered dictionary, or $null when the user cancels. Each *Group.ps1 file adds its own group;
-# Gene.Profile.psm1 loads the group files that exist, so a copy without a group file simply has no such group.
+# the parameters as an ordered dictionary, or $null when the user cancels. Refresh (optional) is run before the
+# group is listed, for a group whose commands depend on what the profile defines (other). Each *Group.ps1 file adds
+# its own group; Gene.Profile.psm1 loads the group files that exist, so a copy without a group file simply has no
+# such group, and a group none of whose command functions exist is not listed (Get-GeneProfGroupNames).
 $script:ProfGroups = [ordered]@{}
+
+function Get-GeneProfVerbFunction {
+    <# The function a group's command runs: <Prefix><Word><Word> (status-rebuild -> StatusRebuild). #>
+    param([Parameter(Mandatory)]$Group, [Parameter(Mandatory)][string]$Verb)
+    return $Group.Prefix + (($Verb -split '-' | ForEach-Object { (Get-Culture).TextInfo.ToTitleCase($_) }) -join '')
+}
+
+function Get-GeneProfGroupNames {
+    <# The groups prof lists: the ones with at least one command whose function is defined, in menu order. #>
+    foreach ($gn in @($script:ProfGroups.Keys)) {
+        $g = $script:ProfGroups[$gn]
+        if ($g.Refresh) { & $g.Refresh }
+        foreach ($v in @($g.Verbs.Keys)) {
+            if (Get-Command (Get-GeneProfVerbFunction -Group $g -Verb $v) -ErrorAction SilentlyContinue) { $gn; break }
+        }
+    }
+}
 
 
 # ------------------------------------------------------------------------------------------------ small helpers
@@ -56,8 +80,9 @@ function Resolve-GeneProfCommand {
     $r = [pscustomobject]@{ Group = ''; Verb = ''; Topic = ''; Help = $false; Words = @(); Ambiguous = @() }
     if (-not $f) { return $r }
     if ($f -eq 'help') { $r.Help = $true; $r.Words = @(@($Second, $Third) | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() }); return $r }
-    if ($script:ProfGroups.Contains($f)) { $r.Group = $f; $r.Verb = $s; $r.Topic = "$Third"; return $r }
-    $owners = @($script:ProfGroups.Keys | Where-Object { $script:ProfGroups[$_].Verbs.Contains($f) })
+    $names = @(Get-GeneProfGroupNames)
+    if ($names -contains $f) { $r.Group = $f; $r.Verb = $s; $r.Topic = "$Third"; return $r }
+    $owners = @($names | Where-Object { $script:ProfGroups[$_].Verbs.Contains($f) })
     if ($owners.Count -eq 1) { $r.Group = $owners[0]; $r.Verb = $f; $r.Topic = "$Second"; return $r }
     $r.Verb = $f; $r.Ambiguous = $owners
     return $r
@@ -68,9 +93,10 @@ function Show-GeneProfHelp {
     param([string[]]$Words)
     $w = @($Words | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() })
     $group = $null; $verb = $null
-    if ($w.Count -and $script:ProfGroups.Contains($w[0])) { $group = $w[0]; if ($w.Count -gt 1) { $verb = $w[1] } }
+    $names = @(Get-GeneProfGroupNames)
+    if ($w.Count -and $names -contains $w[0]) { $group = $w[0]; if ($w.Count -gt 1) { $verb = $w[1] } }
     elseif ($w.Count) {
-        $owners = @($script:ProfGroups.Keys | Where-Object { $script:ProfGroups[$_].Verbs.Contains($w[0]) })
+        $owners = @($names | Where-Object { $script:ProfGroups[$_].Verbs.Contains($w[0]) })
         if ($owners.Count -eq 1) { $group = $owners[0]; $verb = $w[0] }
         else { Write-Host "No group or command called '$($w[0])'." -ForegroundColor Red }
     }
@@ -94,7 +120,7 @@ function Show-GeneProfHelp {
     }
     Write-Host 'prof <group> <command> [options] [-WhatIf] [-h]     (long name: manageProfile)' -ForegroundColor Cyan
     Write-Host 'prof alone opens a menu: pick a group, then a command, answer its questions, and it shows the full command before running it.'
-    foreach ($gn in $script:ProfGroups.Keys) {
+    foreach ($gn in $names) {
         $g = $script:ProfGroups[$gn]
         Write-Host ''
         Write-Host ("{0}  {1}" -f $gn, $g.Description) -ForegroundColor Cyan
@@ -103,23 +129,29 @@ function Show-GeneProfHelp {
     Write-Host ''
     Write-Host 'help       This list. prof help <group> lists one group; prof help <group> <command> explains one command.'
     Write-Host 'A command only one group has also works without the group: prof publish = prof build publish.'
-    Write-Host ''
-    Write-Host 'Old commands still work:' -ForegroundColor Cyan
-    foreach ($k in $script:ProfOldNames.Keys) { Write-Host ("  {0} -> {1}" -f $k.PadRight(10), $script:ProfOldNames[$k]) }
-    Write-Host ''
-    Write-Host "Machines prof knows are listed in $(Get-GeneMachinesPath). Each machine's folders come from its own settings file (prof setup config)."
+    $old = @($script:ProfOldNames | Where-Object { Get-Command $_.Needs -ErrorAction SilentlyContinue })
+    if ($old.Count) {
+        Write-Host ''
+        Write-Host 'Old commands still work:' -ForegroundColor Cyan
+        foreach ($o in $old) { Write-Host ("  {0} -> {1}" -f $o.Old.PadRight(10), $o.New) }
+    }
+    if (Get-Command Get-GeneMachinesPath -ErrorAction SilentlyContinue) {
+        Write-Host ''
+        Write-Host "Machines prof knows are listed in $(Get-GeneMachinesPath). Each machine's folders come from its own settings file (prof setup config)."
+    }
 }
 
 function Invoke-GeneProfMenu {
     <# Main menu (groups + help), then the group's menu, then the command's questions; shows the command, asks, runs. #>
     param([string]$Group, [scriptblock]$Reader)
     if (-not $Group) {
-        $items = @($script:ProfGroups.Keys | ForEach-Object { [pscustomobject]@{ Name = $_; Description = $script:ProfGroups[$_].Description } }) +
+        $names = @(Get-GeneProfGroupNames)
+        $items = @($names | ForEach-Object { [pscustomobject]@{ Name = $_; Description = $script:ProfGroups[$_].Description } }) +
         [pscustomobject]@{ Name = 'help'; Description = 'Explain the groups and their commands' }
         $pick = Select-GeneMenu -Title 'prof: what do you want to do?' -Items $items -Reader $Reader
         if (-not $pick) { return }
         if ($pick.Name -eq 'help') {
-            $t = Select-GeneMenu -Title 'Help on?' -Items (@('(everything)') + @($script:ProfGroups.Keys)) -Default 1 -Reader $Reader
+            $t = Select-GeneMenu -Title 'Help on?' -Items (@('(everything)') + $names) -Default 1 -Reader $Reader
             if ($t) { Show-GeneProfHelp -Words @($t | Where-Object { $_ -ne '(everything)' }) }
             return
         }
@@ -166,13 +198,14 @@ function Invoke-GeneProf {
     [CmdletBinding()]
     param(
         [Parameter(Position = 0)]
-        [ArgumentCompleter({ param($c, $p, $w) @($script:ProfGroups.Keys) + 'help' | Where-Object { $_ -like "$w*" } })]
+        [ArgumentCompleter({ param($c, $p, $w) @(Get-GeneProfGroupNames) + 'help' | Where-Object { $_ -like "$w*" } })]
         [string]$Group,
         [Parameter(Position = 1)]
         [ArgumentCompleter({
                 param($c, $p, $w, $a, $fb)
                 $g = "$($fb['Group'])".ToLowerInvariant()
-                $list = if ($g -eq 'help') { @($script:ProfGroups.Keys) } elseif ($script:ProfGroups.Contains($g)) { @($script:ProfGroups[$g].Verbs.Keys) + 'help' } else { @() }
+                $names = @(Get-GeneProfGroupNames)
+                $list = if ($g -eq 'help') { $names } elseif ($names -contains $g) { @($script:ProfGroups[$g].Verbs.Keys) + 'help' } else { @() }
                 $list | Where-Object { $_ -like "$w*" }
             })]
         [string]$Verb,
@@ -180,10 +213,10 @@ function Invoke-GeneProf {
         [ArgumentCompleter({
                 param($c, $p, $w, $a, $fb)
                 $g = "$($fb['Group'])".ToLowerInvariant()
-                if ($script:ProfGroups.Contains($g) -and $script:ProfGroups[$g].TopicNames) { & $script:ProfGroups[$g].TopicNames | Where-Object { $_ -like "$w*" } }
+                if ((Get-GeneProfGroupNames) -contains $g -and $script:ProfGroups[$g].TopicNames) { & $script:ProfGroups[$g].TopicNames | Where-Object { $_ -like "$w*" } }
             })]
         [string]$Topic,
-        [ArgumentCompleter({ param($c, $p, $w) (Get-GeneMachines).Keys | Where-Object { $_ -like "$w*" } })]
+        [ArgumentCompleter({ param($c, $p, $w) if (Get-Command Get-GeneMachines -ErrorAction SilentlyContinue) { (Get-GeneMachines).Keys | Where-Object { $_ -like "$w*" } } })]
         [string]$Machine,
         [string]$User,
         [string]$WorkDrive,
@@ -223,8 +256,7 @@ function Invoke-GeneProf {
     elseif ($r.Topic) { throw "prof $($r.Group) $($r.Verb): did not expect '$($r.Topic)'. $($g.Usage[$r.Verb])" }
     foreach ($k in $PSBoundParameters.Keys) { if ($k -notin 'Group', 'Verb', 'Topic', 'ShowHelp') { $bound[$k] = $PSBoundParameters[$k] } }
     Write-Host "> $(Format-GeneProfCommand -Group $r.Group -Verb $r.Verb -Params $bound)" -ForegroundColor DarkCyan
-    # status-rebuild -> StatusRebuild: a command's function is <Prefix><Word><Word>.
-    $fn = $g.Prefix + (($r.Verb -split '-' | ForEach-Object { (Get-Culture).TextInfo.ToTitleCase($_) }) -join '')
+    $fn = Get-GeneProfVerbFunction -Group $g -Verb $r.Verb
     $accepts = (Get-Command $fn).Parameters.Keys
     $call = @{}
     foreach ($k in $bound.Keys) {

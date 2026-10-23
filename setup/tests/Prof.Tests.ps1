@@ -260,9 +260,45 @@ try {
 
     # ---------------------------------------------------------------- groups and the dispatcher
     foreach ($f in 'Verbs.ps1', 'SetupGroup.ps1', 'Export.ps1', 'StreamsGroup.ps1', 'GitGroup.ps1', 'BuildGroup.ps1', 'AiGroup.ps1', 'OtherGroup.ps1') { . (Join-Path $mod $f) }
+    # The profile is not loaded here, and prof other lists only commands that are defined: stand in for every catalog command.
+    foreach ($n in @($script:ProfOtherCatalog.Values | ForEach-Object { $_.Commands.Name })) { if (-not (Get-Command $n -ErrorAction SilentlyContinue)) { Set-Item -Path "function:\global:$n" -Value { } } }
+    Update-GeneOtherGroup
     Test-Case 'hub: setup group is registered by SetupGroup.ps1, not Verbs.ps1' {
         Assert-NoMatch (Get-Content -LiteralPath "$mod\Verbs.ps1" -Raw) "ProfGroups\['setup'\]|ProfGroups = \[ordered\]@\{\s*setup"
         Assert-Match (Get-Content -LiteralPath "$mod\SetupGroup.ps1" -Raw -ErrorAction Stop) "ProfGroups\['setup'\]"
+    }
+    Test-Case 'filter: prof other hides a command whose function is not defined' {
+        function global:zzprobe { }
+        $script:ProfOtherCatalog['tools'].Commands += New-GeneOtherEntry 'zzprobe' 'probe' @('zzprobe')
+        try {
+            Assert-True ((Get-GeneOtherEntries -Category tools).Name -contains 'zzprobe') 'defined probe must be listed'
+            Remove-Item function:\zzprobe
+            Assert-True ((Get-GeneOtherEntries -Category tools).Name -notcontains 'zzprobe') 'undefined probe must be hidden'
+        }
+        finally { $script:ProfOtherCatalog['tools'].Commands = @($script:ProfOtherCatalog['tools'].Commands | Where-Object { $_.Name -ne 'zzprobe' }); Remove-Item function:\zzprobe -ErrorAction SilentlyContinue }
+    }
+    Test-Case 'filter: a group with no defined verb function is not listed' {
+        $script:ProfGroups['zz'] = [pscustomobject]@{ Description = 'x'; Verbs = [ordered]@{ go = 'go' }; Details = @{}; Usage = @{}; Prefix = 'Invoke-GeneProfZz'; NeedMachine = @() }
+        try {
+            Assert-True ((Get-GeneProfGroupNames) -notcontains 'zz') 'group without a function must be hidden'
+            function global:Invoke-GeneProfZzGo { }
+            Assert-True ((Get-GeneProfGroupNames) -contains 'zz') 'group with a function must be listed'
+        }
+        finally { Remove-Item function:\Invoke-GeneProfZzGo -ErrorAction SilentlyContinue; $script:ProfGroups.Remove('zz') }
+    }
+    Test-Case 'filter: old-name rows need the prof command they point at' {
+        Assert-Equal 'Invoke-GeneProfGitPush' ([string]@($script:ProfOldNames | Where-Object { $_.Old -eq 'gpush' }).Needs)
+        Assert-Equal 'Invoke-GeneProfConfig' ([string]@($script:ProfOldNames | Where-Object { $_.Old -eq 'machinecfg' }).Needs)
+        foreach ($row in $script:ProfOldNames) { Assert-True ([bool](Get-Command $row.Needs -ErrorAction SilentlyContinue)) "$($row.Old) needs $($row.Needs), not defined" }
+    }
+    Test-Case 'trimmed hub: without SetupGroup/Target/Sync/Export the module imports and prof help has no setup group' {
+        $t = New-TestRoot 'hub'; Copy-Item -Path "$mod\*" -Destination $t -Recurse
+        Remove-Item -LiteralPath "$t\SetupGroup.ps1", "$t\Target.ps1", "$t\Sync.ps1", "$t\Export.ps1"
+        $core = Join-Path $repoRoot 'pwsh\PowerShell\Microsoft.PowerShell_profile.ps1'
+        $o = @(pwsh -NoProfile -Command "`$ErrorActionPreference = 'Stop'; . '$core'; Import-Module '$t\Gene.Profile.psd1' -DisableNameChecking -Force; prof help 6>&1 | Out-String; 'EXIT-OK'" 2>&1) -join "`n"
+        Assert-Match $o 'EXIT-OK'
+        Assert-NoMatch $o '(?m)^setup  '
+        Assert-Match $o '(?m)^other  '
     }
     Test-Case 'groups: main menu order is streams, setup, git, build, ai, other' { Assert-Equal @('streams', 'setup', 'git', 'build', 'ai', 'other') @($script:ProfGroups.Keys) }
     Test-Case 'groups: setup holds the twelve commands, help is not one of them' {

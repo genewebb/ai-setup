@@ -1,13 +1,4 @@
-
-$script:ProfGroups['setup'] = [pscustomobject]@{
-    Description = 'Move my profile and AI setup between machines (push, pull, status, first-time setup, secrets)'
-    Verbs       = $script:ProfVerbs
-    Details     = $script:ProfDetails
-    Usage       = $script:ProfUsage
-    Prefix      = 'Invoke-GeneProf'
-    NeedMachine = @('push', 'pull', 'check', 'bootstrap', 'terminal', 'secrets')
-    Ask         = 'Read-GeneSetupMenuParams'
-}
+# prof setup: the profile and AI setup between machines. The group is registered at the end of this file.
 
 # The setup group (profile + AI setup between machines): one line each for the menu and 'prof help'.
 $script:ProfVerbs = [ordered]@{
