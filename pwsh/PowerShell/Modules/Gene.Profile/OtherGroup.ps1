@@ -94,6 +94,41 @@ $script:ProfOtherCatalog = [ordered]@{
     }
 }
 
+# The catalog is filtered when it is read, not when this file loads: the module may be imported before profile.d, and
+# a trimmed copy (prof setup share) has only some of the commands. A command is present when it is a function, or an
+# alias to a function (a built-in alias such as sp = Set-ItemProperty is not the profile's sp). The lookups go through
+# the function: and alias: providers, not Get-Command, which walks PSModulePath for every name it does not find.
+function Test-GeneOtherDefined {
+    param([Parameter(Mandatory)][string]$Name)
+    if (Test-Path -LiteralPath "function:\$Name") { return $true }
+    $a = Get-Item -LiteralPath "alias:\$Name" -ErrorAction SilentlyContinue
+    return [bool]($a -and $a.ResolvedCommand -and $a.ResolvedCommand.CommandType -eq 'Function')
+}
+
+function Get-GeneOtherEntries {
+    <# The catalog entries of one category whose command is defined in this session. #>
+    param([Parameter(Mandatory)][string]$Category)
+    return @($script:ProfOtherCatalog[$Category].Commands | Where-Object { Test-GeneOtherDefined -Name $_.Name })
+}
+
+function Get-GeneOtherCategories {
+    <# The catalog categories with at least one defined command, in catalog order. #>
+    return @($script:ProfOtherCatalog.Keys | Where-Object { (Get-GeneOtherEntries -Category $_).Count })
+}
+
+function Update-GeneOtherGroup {
+    <# Rebuilds the other group's commands from the categories present now (the group's Refresh hook): one pass. #>
+    $g = $script:ProfGroups['other']
+    $g.Verbs.Clear(); $g.Details.Clear(); $g.Usage.Clear()
+    foreach ($k in $script:ProfOtherCatalog.Keys) {
+        $entries = Get-GeneOtherEntries -Category $k
+        if (-not $entries.Count) { continue }
+        $g.Verbs[$k] = $script:ProfOtherCatalog[$k].Title
+        $g.Details[$k] = @("Commands: $($entries.Name -join ', '). prof other $k <command> shows one.")
+        $g.Usage[$k] = "prof other $k [<command>]"
+    }
+}
+
 $script:ProfGroups['other'] = [pscustomobject]@{
     Description = "Every other profile command, by category: what it does and how to call it (runs nothing)"
     Verbs       = [ordered]@{}
@@ -102,15 +137,11 @@ $script:ProfGroups['other'] = [pscustomobject]@{
     Prefix      = 'Invoke-GeneProfOther'
     NeedMachine = @()
     Menu        = 'Read-GeneOtherMenu'
+    Refresh     = 'Update-GeneOtherGroup'
     TopicParam  = 'Name'
-    TopicNames  = { @($script:ProfOtherCatalog.Values | ForEach-Object { $_.Commands.Name }) }
+    TopicNames  = { @(Get-GeneOtherCategories | ForEach-Object { (Get-GeneOtherEntries -Category $_).Name }) }
 }
-foreach ($k in $script:ProfOtherCatalog.Keys) {
-    $c = $script:ProfOtherCatalog[$k]
-    $script:ProfGroups['other'].Verbs[$k] = $c.Title
-    $script:ProfGroups['other'].Details[$k] = @("Commands: $(($c.Commands.Name) -join ', '). prof other $k <command> shows one.")
-    $script:ProfGroups['other'].Usage[$k] = "prof other $k [<command>]"
-}
+Update-GeneOtherGroup
 
 function Show-GeneOtherEntry($Entry) {
     Write-Host ''
@@ -129,15 +160,16 @@ function Show-GeneOtherEntry($Entry) {
 function Show-GeneOtherCategory {
     param([Parameter(Mandatory)][string]$Category, [string]$Name)
     $c = $script:ProfOtherCatalog[$Category]
+    $entries = Get-GeneOtherEntries -Category $Category
     if ($Name) {
-        $e = @($c.Commands | Where-Object { $_.Name -ieq $Name }) | Select-Object -First 1
-        if (-not $e) { throw "No command '$Name' under $Category. There: $(($c.Commands.Name) -join ', ')" }
+        $e = @($entries | Where-Object { $_.Name -ieq $Name }) | Select-Object -First 1
+        if (-not $e) { throw "No command '$Name' under $Category. There: $($entries.Name -join ', ')" }
         Show-GeneOtherEntry $e
         return
     }
     Write-Host $c.Title -ForegroundColor Cyan
-    $w = ($c.Commands.Name | Measure-Object -Property Length -Maximum).Maximum
-    foreach ($e in $c.Commands) {
+    $w = ($entries.Name | Measure-Object -Property Length -Maximum).Maximum
+    foreach ($e in $entries) {
         Write-Host ("  {0}  {1}" -f $e.Name.PadRight($w), $e.What)
         Write-Host ("  {0}  {1}" -f ''.PadRight($w), $e.Usage[0]) -ForegroundColor DarkGray
     }
@@ -155,12 +187,12 @@ function Invoke-GeneProfOtherTools([string]$Name) { Show-GeneOtherCategory tools
 function Read-GeneOtherMenu {
     <# Browse: category, then command, then its description; back to the command list until cancelled. Runs nothing. #>
     param([scriptblock]$Reader)
-    $cats = @($script:ProfOtherCatalog.Keys | ForEach-Object { [pscustomobject]@{ Name = $_; Description = $script:ProfOtherCatalog[$_].Title } })
+    $cats = @(Get-GeneOtherCategories | ForEach-Object { [pscustomobject]@{ Name = $_; Description = $script:ProfOtherCatalog[$_].Title } })
     $cat = Select-GeneMenu -Title 'prof other: which kind of command?' -Items $cats -Reader $Reader
     if (-not $cat) { return $null }
-    $c = $script:ProfOtherCatalog[$cat.Name]
+    $entries = Get-GeneOtherEntries -Category $cat.Name
     while ($true) {
-        $items = @($c.Commands | ForEach-Object { [pscustomobject]@{ Name = $_.Name; Description = $_.What; Entry = $_ } })
+        $items = @($entries | ForEach-Object { [pscustomobject]@{ Name = $_.Name; Description = $_.What; Entry = $_ } })
         $pick = Select-GeneMenu -Title "$($cat.Name): which command?" -Items $items -Reader $Reader
         if (-not $pick) { return $null }
         Show-GeneOtherEntry $pick.Entry

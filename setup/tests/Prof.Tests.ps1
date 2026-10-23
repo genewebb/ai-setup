@@ -259,7 +259,92 @@ try {
     }
 
     # ---------------------------------------------------------------- groups and the dispatcher
-    foreach ($f in 'Verbs.ps1', 'Export.ps1', 'StreamsGroup.ps1', 'GitGroup.ps1', 'BuildGroup.ps1', 'AiGroup.ps1', 'OtherGroup.ps1') { . (Join-Path $mod $f) }
+    foreach ($f in 'Verbs.ps1', 'SetupGroup.ps1', 'Export.ps1', 'StreamsGroup.ps1', 'GitGroup.ps1', 'BuildGroup.ps1', 'AiGroup.ps1', 'OtherGroup.ps1') { . (Join-Path $mod $f) }
+    # The profile is not loaded here, and prof other lists only commands that are defined: stand in for every catalog command.
+    foreach ($n in @($script:ProfOtherCatalog.Values | ForEach-Object { $_.Commands.Name })) { if (-not (Test-GeneOtherDefined -Name $n)) { Set-Item -Path "function:\global:$n" -Value { } } }
+    Update-GeneOtherGroup
+    Test-Case 'hub: setup group is registered by SetupGroup.ps1, not Verbs.ps1' {
+        Assert-NoMatch (Get-Content -LiteralPath "$mod\Verbs.ps1" -Raw) "ProfGroups\['setup'\]|ProfGroups = \[ordered\]@\{\s*setup"
+        Assert-Match (Get-Content -LiteralPath "$mod\SetupGroup.ps1" -Raw -ErrorAction Stop) "ProfGroups\['setup'\]"
+    }
+    Test-Case 'filter: prof other hides a command whose function is not defined' {
+        function global:zzprobe { }
+        $script:ProfOtherCatalog['tools'].Commands += New-GeneOtherEntry 'zzprobe' 'probe' @('zzprobe')
+        try {
+            Assert-True ((Get-GeneOtherEntries -Category tools).Name -contains 'zzprobe') 'defined probe must be listed'
+            Remove-Item function:\zzprobe
+            Assert-True ((Get-GeneOtherEntries -Category tools).Name -notcontains 'zzprobe') 'undefined probe must be hidden'
+        }
+        finally { $script:ProfOtherCatalog['tools'].Commands = @($script:ProfOtherCatalog['tools'].Commands | Where-Object { $_.Name -ne 'zzprobe' }); Remove-Item function:\zzprobe -ErrorAction SilentlyContinue }
+    }
+    Test-Case 'filter: a built-in alias does not make a catalog command defined; an alias to a function does' {
+        $script:ProfOtherCatalog['tools'].Commands += New-GeneOtherEntry 'zzalias' 'probe' @('zzalias')
+        try {
+            Set-Alias -Name zzalias -Value Set-ItemProperty -Scope Global
+            Assert-True ((Get-GeneOtherEntries -Category tools).Name -notcontains 'zzalias') 'alias to a cmdlet must be hidden'
+            function global:zzaliasTarget { }
+            Set-Alias -Name zzalias -Value zzaliasTarget -Scope Global
+            Assert-True ((Get-GeneOtherEntries -Category tools).Name -contains 'zzalias') 'alias to a function must be listed'
+            # sp is a built-in alias (Set-ItemProperty); without the profile's function sp it is not a profile command.
+            $hadSp = Test-Path function:\sp; if ($hadSp) { $spDef = (Get-Item function:\sp).ScriptBlock; Remove-Item function:\sp }
+            try { Assert-True ((Get-GeneOtherEntries -Category profile).Name -notcontains 'sp') 'sp must be hidden when function sp is absent' }
+            finally { if ($hadSp) { Set-Item -Path function:\global:sp -Value $spDef } }
+        }
+        finally {
+            $script:ProfOtherCatalog['tools'].Commands = @($script:ProfOtherCatalog['tools'].Commands | Where-Object { $_.Name -ne 'zzalias' })
+            Remove-Item alias:\zzalias -ErrorAction SilentlyContinue; Remove-Item function:\zzaliasTarget -ErrorAction SilentlyContinue
+        }
+    }
+    Test-Case 'filter: listing the groups and refreshing the catalog is fast (no module discovery per name)' {
+        function global:zzSlowProbe { }
+        $script:ProfOtherCatalog['tools'].Commands += New-GeneOtherEntry 'zzNotDefinedAnywhere' 'probe' @('x')
+        try {
+            [void](Get-GeneProfGroupNames)
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            for ($i = 0; $i -lt 5; $i++) { [void](Get-GeneProfGroupNames); [void](& $script:ProfGroups['other'].TopicNames) }
+            $ms = $sw.ElapsedMilliseconds / 5
+            Assert-True ($ms -lt 100) "one group listing + topic names took $ms ms (limit 100)"
+        }
+        finally { $script:ProfOtherCatalog['tools'].Commands = @($script:ProfOtherCatalog['tools'].Commands | Where-Object { $_.Name -ne 'zzNotDefinedAnywhere' }); Remove-Item function:\zzSlowProbe -ErrorAction SilentlyContinue }
+    }
+    Test-Case 'filter: a group with no defined verb function is not listed' {
+        $script:ProfGroups['zz'] = [pscustomobject]@{ Description = 'x'; Verbs = [ordered]@{ go = 'go' }; Details = @{}; Usage = @{}; Prefix = 'Invoke-GeneProfZz'; NeedMachine = @() }
+        try {
+            Assert-True ((Get-GeneProfGroupNames) -notcontains 'zz') 'group without a function must be hidden'
+            function global:Invoke-GeneProfZzGo { }
+            Assert-True ((Get-GeneProfGroupNames) -contains 'zz') 'group with a function must be listed'
+        }
+        finally { Remove-Item function:\Invoke-GeneProfZzGo -ErrorAction SilentlyContinue; $script:ProfGroups.Remove('zz') }
+    }
+    Test-Case 'filter: old-name rows need the prof command they point at' {
+        Assert-Equal 'Invoke-GeneProfGitPush' ([string]@($script:ProfOldNames | Where-Object { $_.Old -eq 'gpush' }).Needs)
+        Assert-Equal 'Invoke-GeneProfConfig' ([string]@($script:ProfOldNames | Where-Object { $_.Old -eq 'machinecfg' }).Needs)
+        foreach ($row in $script:ProfOldNames) { Assert-True ([bool](Get-Command $row.Needs -ErrorAction SilentlyContinue)) "$($row.Old) needs $($row.Needs), not defined" }
+    }
+    Test-Case 'trimmed hub: without SetupGroup/Target/Sync/Export the module imports and prof help has no setup group' {
+        $t = New-TestRoot 'hub'; Copy-Item -Path "$mod\*" -Destination $t -Recurse
+        Remove-Item -LiteralPath "$t\SetupGroup.ps1", "$t\Target.ps1", "$t\Sync.ps1", "$t\Export.ps1"
+        $core = Join-Path $repoRoot 'pwsh\PowerShell\Microsoft.PowerShell_profile.ps1'
+        $o = @(pwsh -NoProfile -Command "`$ErrorActionPreference = 'Stop'; . '$core'; Import-Module '$t\Gene.Profile.psd1' -DisableNameChecking -Force; prof help 6>&1 | Out-String; 'EXIT-OK'" 2>&1) -join "`n"
+        Assert-Match $o 'EXIT-OK'
+        Assert-NoMatch $o '(?m)^setup  '
+        Assert-Match $o '(?m)^other  '
+    }
+    Test-Case 'show: a changed profile.d file counts as a difference' {
+        $r = New-TestRoot 'show'; $i = New-TestRoot 'inst'
+        foreach ($d in $r, $i) {
+            New-Item "$d\profile.d", "$d\Modules\M" -ItemType Directory -Force | Out-Null
+            Set-Content "$d\Microsoft.PowerShell_profile.ps1" 'a'; Set-Content "$d\profile.d\git.ps1" 'b'; Set-Content "$d\Modules\M\M.psm1" 'c'
+        }
+        Assert-Equal 0 (Compare-GeneProfileTrees -Repo $r -Installed $i).Categories
+        Set-Content "$i\profile.d\git.ps1" 'changed'
+        Assert-Equal 1 (Compare-GeneProfileTrees -Repo $r -Installed $i).Categories
+        Assert-Equal 'in sync' (Compare-GeneProfileTrees -Repo $r -Installed $i).Profile
+        Assert-Equal 0 (Compare-GeneProfileTrees -Repo $r -Installed $i).Modules
+        Remove-Item "$i\Modules\M\M.psm1"; Remove-Item "$i\Microsoft.PowerShell_profile.ps1"
+        $c = Compare-GeneProfileTrees -Repo $r -Installed $i
+        Assert-Equal 'missing' $c.Profile; Assert-Equal 1 $c.Modules
+    }
     Test-Case 'groups: main menu order is streams, setup, git, build, ai, other' { Assert-Equal @('streams', 'setup', 'git', 'build', 'ai', 'other') @($script:ProfGroups.Keys) }
     Test-Case 'groups: setup holds the twelve commands, help is not one of them' {
         Assert-True ($script:ProfGroups.Contains('setup'))
