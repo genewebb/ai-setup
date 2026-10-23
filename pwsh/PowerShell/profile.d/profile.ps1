@@ -3,6 +3,9 @@
 # -----------------------------
 # Profile utilities
 # -----------------------------
+# sp and rp are built-in aliases (Set-ItemProperty, Remove-ItemProperty); an alias wins over a function of the same name.
+Remove-Alias -Name sp -Force -ErrorAction SilentlyContinue
+
 function sp {
     [CmdletBinding()]
     param(

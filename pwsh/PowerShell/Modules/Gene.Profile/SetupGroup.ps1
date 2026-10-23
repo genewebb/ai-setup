@@ -253,6 +253,8 @@ function Compare-GeneProfileTrees {
     <#
     The repo's pwsh\PowerShell tree against the installed one (the folder $PROFILE is in), by file hash: the profile
     file, the profile.d category files and the module files. A file the installed side lacks counts as differing.
+    Extra / ExtraFiles: installed profile.d and module files the repo no longer has (install.ps1 never deletes, and the
+    core loads every installed profile.d file, so a stale file keeps its old functions alive until it is removed).
     #>
     param([Parameter(Mandatory)][string]$Repo, [Parameter(Mandatory)][string]$Installed)
     $count = {
@@ -266,12 +268,20 @@ function Compare-GeneProfileTrees {
         }
         return $n
     }
+    $extra = foreach ($sub in 'profile.d', 'Modules') {
+        $inst = Join-Path $Installed $sub
+        if (-not (Test-Path -LiteralPath $inst)) { continue }
+        foreach ($f in Get-ChildItem -LiteralPath $inst -Recurse -File) {
+            $rel = [IO.Path]::GetRelativePath($inst, $f.FullName)
+            if (-not (Test-Path -LiteralPath (Join-Path (Join-Path $Repo $sub) $rel))) { Join-Path $sub $rel }
+        }
+    }
     $repoFile = Join-Path $Repo 'Microsoft.PowerShell_profile.ps1'
     $instFile = Join-Path $Installed 'Microsoft.PowerShell_profile.ps1'
     $profile = if (-not (Test-Path -LiteralPath $instFile)) { 'missing' }
     elseif ((Get-FileHash -LiteralPath $instFile).Hash -eq (Get-FileHash -LiteralPath $repoFile).Hash) { 'in sync' }
     else { 'differs' }
-    return [pscustomobject]@{ Profile = $profile; Categories = (& $count 'profile.d'); Modules = (& $count 'Modules') }
+    return [pscustomobject]@{ Profile = $profile; Categories = (& $count 'profile.d'); Modules = (& $count 'Modules'); Extra = @($extra).Count; ExtraFiles = @($extra) }
 }
 
 function Invoke-GeneProfShow {
@@ -286,6 +296,10 @@ function Invoke-GeneProfShow {
     Write-ProfNote $(if ($c.Profile -eq 'in sync') { 'Profile: in sync.' } else { 'Profile: DIFFERS. prof setup reload installs the repo copy.' })
     Write-ProfNote $(if ($c.Categories) { "Categories (profile.d): $($c.Categories) file(s) differ from the repo. prof setup reload installs them." } else { 'Categories (profile.d): in sync.' })
     Write-ProfNote $(if ($c.Modules) { "Own modules: $($c.Modules) file(s) differ from the repo. prof setup reload installs them." } else { 'Own modules: in sync.' })
+    if ($c.Extra) {
+        Write-ProfWarn "Installed but no longer in the repo ($($c.Extra) file(s); the install never deletes, and a stale profile.d file still loads). Remove them by hand under $(Split-Path $PROFILE):"
+        foreach ($f in $c.ExtraFiles) { Write-ProfNote "  $f" }
+    }
 }
 
 # ------------------------------------------------------------------------------------------------ pull
