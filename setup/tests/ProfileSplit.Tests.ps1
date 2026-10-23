@@ -61,4 +61,17 @@ Test-Case 'load: script-scope state survives dot-sourcing (Get-GeneAiGitPaths)' 
     Assert-Equal '6' ([string](pwsh -NoProfile -Command ". '$core'; (Get-GeneAiGitPaths).Count" | Select-Object -Last 1))
 }
 
+Test-Case 'load: core + tabs alone defines addtab, and New-GeneTab / addtab resolve every command they call' {
+    $tmp = New-TestRoot 'split'; Copy-Item -LiteralPath $core -Destination $tmp
+    New-Item -ItemType Directory -Path (Join-Path $tmp 'profile.d') | Out-Null
+    Copy-Item -LiteralPath (Join-Path $pwshDir 'profile.d\tabs.ps1') -Destination (Join-Path $tmp 'profile.d') -ErrorAction Stop
+    $script = ". '$astHelper'; . '$tmp\Microsoft.PowerShell_profile.ps1'; " +
+        "`$calls = @(Get-GeneProfileCalls -Ast (Get-Command New-GeneTab).ScriptBlock.Ast) + @(Get-GeneProfileCalls -Ast (Get-Command addtab).ScriptBlock.Ast); " +
+        "'MISSING:' + ((`$calls | Sort-Object -Unique | Where-Object { -not (Get-Command `$_ -ErrorAction SilentlyContinue) }) -join ',')"
+    $out = @(pwsh -NoProfile -Command $script)
+    $line = [string]($out | Where-Object { $_ -like 'MISSING:*' } | Select-Object -Last 1)
+    Assert-True ($line -ne '') "child pwsh gave no MISSING line: $($out -join ' | ')"
+    Assert-Equal 'MISSING:' $line
+}
+
 Complete-Tests
