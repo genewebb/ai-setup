@@ -249,21 +249,43 @@ function Invoke-GeneProfReload {
     }
 }
 
+function Compare-GeneProfileTrees {
+    <#
+    The repo's pwsh\PowerShell tree against the installed one (the folder $PROFILE is in), by file hash: the profile
+    file, the profile.d category files and the module files. A file the installed side lacks counts as differing.
+    #>
+    param([Parameter(Mandatory)][string]$Repo, [Parameter(Mandatory)][string]$Installed)
+    $count = {
+        param([string]$Sub)
+        $src = Join-Path $Repo $Sub
+        if (-not (Test-Path -LiteralPath $src)) { return 0 }
+        $n = 0
+        foreach ($f in Get-ChildItem -LiteralPath $src -Recurse -File) {
+            $dest = Join-Path (Join-Path $Installed $Sub) ([IO.Path]::GetRelativePath($src, $f.FullName))
+            if (-not (Test-Path -LiteralPath $dest) -or (Get-FileHash -LiteralPath $dest).Hash -ne (Get-FileHash -LiteralPath $f.FullName).Hash) { $n++ }
+        }
+        return $n
+    }
+    $repoFile = Join-Path $Repo 'Microsoft.PowerShell_profile.ps1'
+    $instFile = Join-Path $Installed 'Microsoft.PowerShell_profile.ps1'
+    $profile = if (-not (Test-Path -LiteralPath $instFile)) { 'missing' }
+    elseif ((Get-FileHash -LiteralPath $instFile).Hash -eq (Get-FileHash -LiteralPath $repoFile).Hash) { 'in sync' }
+    else { 'differs' }
+    return [pscustomobject]@{ Profile = $profile; Categories = (& $count 'profile.d'); Modules = (& $count 'Modules') }
+}
+
 function Invoke-GeneProfShow {
     $hub = Get-GeneHubRoot
-    $repoFile = Join-Path $hub 'pwsh\PowerShell\Microsoft.PowerShell_profile.ps1'
+    $repoDir = Join-Path $hub 'pwsh\PowerShell'
+    $repoFile = Join-Path $repoDir 'Microsoft.PowerShell_profile.ps1'
     $rh = (Get-FileHash -LiteralPath $repoFile).Hash
     $ih = if (Test-Path -LiteralPath $PROFILE) { (Get-FileHash -LiteralPath $PROFILE).Hash } else { '' }
-    $mods = 0
-    $repoMods = Join-Path $hub 'pwsh\PowerShell\Modules'
-    foreach ($f in Get-ChildItem -LiteralPath $repoMods -Recurse -File) {
-        $dest = Join-Path (Join-Path (Split-Path $PROFILE) 'Modules') ([IO.Path]::GetRelativePath($repoMods, $f.FullName))
-        if (-not (Test-Path -LiteralPath $dest) -or (Get-FileHash -LiteralPath $dest).Hash -ne (Get-FileHash -LiteralPath $f.FullName).Hash) { $mods++ }
-    }
+    $c = Compare-GeneProfileTrees -Repo $repoDir -Installed (Split-Path $PROFILE)
     [pscustomobject]@{ Copy = 'installed (what loads)'; Path = $PROFILE; Hash = $(if ($ih) { $ih.Substring(0, 12) } else { 'missing' }) },
     [pscustomobject]@{ Copy = 'repo (what you edit)'; Path = $repoFile; Hash = $rh.Substring(0, 12) } | Format-Table -AutoSize | Out-String -Width 220 | Write-Host
-    Write-ProfNote $(if ($ih -eq $rh) { 'Profile: in sync.' } else { 'Profile: DIFFERS. prof setup reload installs the repo copy.' })
-    Write-ProfNote $(if ($mods) { "Own modules: $mods file(s) differ from the repo. prof setup reload installs them." } else { 'Own modules: in sync.' })
+    Write-ProfNote $(if ($c.Profile -eq 'in sync') { 'Profile: in sync.' } else { 'Profile: DIFFERS. prof setup reload installs the repo copy.' })
+    Write-ProfNote $(if ($c.Categories) { "Categories (profile.d): $($c.Categories) file(s) differ from the repo. prof setup reload installs them." } else { 'Categories (profile.d): in sync.' })
+    Write-ProfNote $(if ($c.Modules) { "Own modules: $($c.Modules) file(s) differ from the repo. prof setup reload installs them." } else { 'Own modules: in sync.' })
 }
 
 # ------------------------------------------------------------------------------------------------ pull

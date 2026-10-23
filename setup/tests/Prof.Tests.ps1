@@ -300,6 +300,21 @@ try {
         Assert-NoMatch $o '(?m)^setup  '
         Assert-Match $o '(?m)^other  '
     }
+    Test-Case 'show: a changed profile.d file counts as a difference' {
+        $r = New-TestRoot 'show'; $i = New-TestRoot 'inst'
+        foreach ($d in $r, $i) {
+            New-Item "$d\profile.d", "$d\Modules\M" -ItemType Directory -Force | Out-Null
+            Set-Content "$d\Microsoft.PowerShell_profile.ps1" 'a'; Set-Content "$d\profile.d\git.ps1" 'b'; Set-Content "$d\Modules\M\M.psm1" 'c'
+        }
+        Assert-Equal 0 (Compare-GeneProfileTrees -Repo $r -Installed $i).Categories
+        Set-Content "$i\profile.d\git.ps1" 'changed'
+        Assert-Equal 1 (Compare-GeneProfileTrees -Repo $r -Installed $i).Categories
+        Assert-Equal 'in sync' (Compare-GeneProfileTrees -Repo $r -Installed $i).Profile
+        Assert-Equal 0 (Compare-GeneProfileTrees -Repo $r -Installed $i).Modules
+        Remove-Item "$i\Modules\M\M.psm1"; Remove-Item "$i\Microsoft.PowerShell_profile.ps1"
+        $c = Compare-GeneProfileTrees -Repo $r -Installed $i
+        Assert-Equal 'missing' $c.Profile; Assert-Equal 1 $c.Modules
+    }
     Test-Case 'groups: main menu order is streams, setup, git, build, ai, other' { Assert-Equal @('streams', 'setup', 'git', 'build', 'ai', 'other') @($script:ProfGroups.Keys) }
     Test-Case 'groups: setup holds the twelve commands, help is not one of them' {
         Assert-True ($script:ProfGroups.Contains('setup'))
