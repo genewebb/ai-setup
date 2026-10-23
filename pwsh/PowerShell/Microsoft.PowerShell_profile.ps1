@@ -762,7 +762,7 @@ function sp {
     }
 
     Write-Host '(sp = prof setup show)' -ForegroundColor DarkGray
-    Invoke-GeneProf streams show
+    Invoke-GeneProf setup show
 }
 
 function ep {
@@ -780,7 +780,7 @@ function ep {
     }
 
     Write-Host '(ep = prof setup edit)' -ForegroundColor DarkGray
-    Invoke-GeneProf streams edit
+    Invoke-GeneProf setup edit
 }
 
 Remove-Alias -Name rp -Force -ErrorAction SilentlyContinue

@@ -68,7 +68,7 @@ long alias: manageProfile
 ```
 
 **prof is the general-purpose hub (Gene, 10/17).** Commands live in groups; the main menu lists the groups. The
-groups, in menu order: `streams` (the stream board, section 6.1), `setup` (the eleven commands below; it was named
+groups, in menu order: `streams` (the stream board, section 6.1), `setup` (the twelve commands below; it was named
 `streams` until Gene renamed it 10/17 so `streams` could mean the board), `git`, `build`, `ai`, `other`. Other profile commands join as further groups
 (section 6). A group is one entry in `$script:ProfGroups` (`Verbs.ps1`): its commands with one-line and long
 descriptions, usage lines, the function prefix, which commands need `-Machine`, and the menu's question flow.
@@ -92,11 +92,12 @@ The `setup` group (`prof setup <command>`):
 | `edit` | Open the **repo copy** of the profile (`{AIWorkRoot}\pwsh\PowerShell\...`) in the editor. Replaces `ep`, which opens the installed copy that the next install overwrites. | - |
 | `reload` | `install.ps1 -NoPull -Yes` here, then `. $PROFILE`. Replaces `rp`. | - |
 | `show` | Print the installed profile path and the repo copy path with their hashes (in sync or not). Replaces `sp`. | - |
+| `export` | Pack the profile for someone who is not on the ai-setup repo (Gene, 10/23): the `pwsh\` tree, a blank-value `ProfileMachineConfig.md`, `Install-Profile.ps1` and a README, zipped under `{ScratchRoot}\prof` or `-Out`. The secret scan refuses; every mention of the owner's accounts, machines and personal paths (`share.yaml` blockedPatterns) is listed and confirmed first. Code: `Export.ps1`. | - |
 
 `prof help` (top level, not in a group) lists every group and command, `prof help <group>` one group,
 `prof help <group> <command>` (or `<command> -h`) one command in full, plus old name -> new command.
 
-`-Machine` omitted = this machine (`config`, `edit`, `reload`, `show`, `status`); `push`, `pull`, `check`,
+`-Machine` omitted = this machine (`config`, `edit`, `reload`, `show`, `export`, `status`); `push`, `pull`, `check`,
 `bootstrap`, `terminal`, `secrets` require it. `-Machine` equal to this machine is refused for push/pull.
 
 ### 4.1 Menu

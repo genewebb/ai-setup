@@ -14,6 +14,7 @@ $script:ProfVerbs = [ordered]@{
     edit      = 'Open my PowerShell profile for editing (the copy that every install uses)'
     reload    = 'Install my profile and AI setup on this machine again, after I edited them'
     show      = 'Is the profile this machine runs the same as the one I edit?'
+    export    = 'Pack my profile for a coworker: one zip with the profile, modules, a blank machine config and an installer'
 }
 
 # The longer explanation 'prof help setup <command>' and '-h' print under the usage line.
@@ -66,6 +67,13 @@ $script:ProfDetails = @{
         'Compares the profile this machine loads with the one in the repo, plus your own modules.'
         'If they differ, prof setup reload makes them the same.'
     )
+    export    = @(
+        'For someone who is not on my ai-setup repo. Copies the pwsh folder of the repo (profile, Gene.* modules,'
+        'AddOrUpdateMyTerminal.ps1, modules.txt, Install-Profile.ps1), writes a ProfileMachineConfig.md with every'
+        'value blank for them to fill in, a README, then zips it under ScratchRoot\prof (or -Out). Nothing from the AI'
+        'setup and no secrets: the secret scan refuses, and every mention of my accounts, machines or personal paths'
+        'is listed first so I can say no. They run Install-Profile.ps1 from the unzipped folder.'
+    )
 }
 $script:ProfUsage = @{
     push      = 'prof setup push -Machine <name> [-User <DOMAIN\name>] [-NoPublish] [-AllowSecrets] [-Message <text>] [-WhatIf]'
@@ -79,6 +87,7 @@ $script:ProfUsage = @{
     edit      = 'prof setup edit'
     reload    = 'prof setup reload [-WhatIf]'
     show      = 'prof setup show'
+    export    = 'prof setup export [-Out <folder or file.zip>] [-WhatIf]'
 }
 $script:ProfOldNames = [ordered]@{
     sp = 'prof setup show'; ep = 'prof setup edit'; rp = 'prof setup reload (rp itself only reloads the profile in this window)'; machinecfg = 'prof setup config'
@@ -112,7 +121,7 @@ function Format-GeneProfCommand {
     <# The command line a run is equivalent to, so a menu session teaches the syntax. #>
     param([string]$Group, [Parameter(Mandatory)][string]$Verb, [System.Collections.IDictionary]$Params = @{})
     $topic = if ($Group -and $script:ProfGroups.Contains($Group)) { $script:ProfGroups[$Group].TopicParam }
-    $order = @('Topic') + @($topic | Where-Object { $_ }) + @('Machine', 'User', 'WorkDrive', 'Retire', 'Message', 'Bump', 'Configuration', 'FixProfile', 'WithTerminal', 'WithSecrets', 'NoPublish', 'AllowSecrets', 'AIOnly', 'Extra', 'WhatIf')
+    $order = @('Topic') + @($topic | Where-Object { $_ }) + @('Machine', 'User', 'WorkDrive', 'Retire', 'Message', 'Bump', 'Configuration', 'Out', 'FixProfile', 'WithTerminal', 'WithSecrets', 'NoPublish', 'AllowSecrets', 'AIOnly', 'Extra', 'WhatIf')
     $parts = @('prof') + @($Group | Where-Object { $_ }) + @($Verb)
     foreach ($k in $order + @($Params.Keys | Where-Object { $_ -notin $order })) {
         if (-not $Params.Contains($k)) { continue }
@@ -892,6 +901,10 @@ function Read-GeneSetupMenuParams {
             if (& $yn 'Also Claude secrets (-WithSecrets)?') { $p.WithSecrets = $true }
         }
         { $_ -in 'terminal', 'secrets', 'reload' } { if (& $yn 'Dry run only (-WhatIf)?') { $p.WhatIf = $true } }
+        'export' {
+            if (& $yn 'Dry run only (-WhatIf: list, write nothing)?') { $p.WhatIf = $true }
+            $o = ([string](Read-GeneText -Reader $Reader -Prompt 'Where to write the zip (folder or file.zip; Enter = ScratchRoot\prof)')).Trim(); if ($o) { $p.Out = $o }
+        }
     }
     return $p
 }
@@ -985,6 +998,7 @@ function Invoke-GeneProf {
         [switch]$AIOnly,
         [ValidateSet('None', 'Patch', 'Minor', 'Major')][string]$Bump,
         [ValidateSet('Debug', 'Release')][string]$Configuration,
+        [string]$Out,
         [switch]$WhatIf,
         [Alias('h')][switch]$ShowHelp,
         # Anything prof does not know (build: the dp* command's own switches, e.g. -Test, -Run Web).
