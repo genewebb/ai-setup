@@ -7,7 +7,6 @@
 
 $script:SharePluginsRel = 'ai\plugins'
 $script:ShareMarketplaceRel = '.claude-plugin\marketplace.json'
-$script:ShareMarketplaceName = 'speed-merchants-dba'
 # A skill's first hyphen token is its category when at least this many hub skills share it; else 'general'.
 $script:ShareCategoryMin = 3
 $script:ShareGeneralCategory = 'general'
@@ -222,4 +221,145 @@ function Copy-GeneShareSkill {
         $written.Add($rel)
     }
     return [pscustomobject]@{ Files = @($written | Sort-Object); Rewrites = $rewrites; Unlinked = $unlinked }
+}
+
+# ------------------------------------------------------------------------------------------------ manifests and the marketplace
+function Get-GeneSharePluginHash {
+    <# SHA256 over "<relative path>\n<file sha256>\n" of every file under <plugin>\skills, sorted: the plugin's content. #>
+    param([Parameter(Mandatory)][string]$Dir)
+    $skills = Join-Path $Dir 'skills'
+    $lines = foreach ($f in Get-ChildItem -LiteralPath $skills -Recurse -File -ErrorAction SilentlyContinue | Sort-Object { [IO.Path]::GetRelativePath($skills, $_.FullName) }) {
+        "$([IO.Path]::GetRelativePath($skills, $f.FullName).Replace('\', '/'))`n$((Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant())`n"
+    }
+    $bytes = [Text.Encoding]::UTF8.GetBytes((-join $lines))
+    return ([BitConverter]::ToString([Security.Cryptography.SHA256]::HashData($bytes)) -replace '-').ToLowerInvariant()
+}
+
+function New-GeneSharePluginManifest {
+    <#
+    .claude-plugin\plugin.json for one category plugin: name = category, a description naming the skills, a version that
+    stays while the content hash stays and bumps its patch when it changes (Claude Code re-installs on a version
+    change), the hash under metadata. skills\ is auto-discovered, so it is not listed.
+    #>
+    param([Parameter(Mandatory)][string]$Category, [AllowEmptyCollection()][string[]]$Skills = @(), [Parameter(Mandatory)][string]$Hash, $Previous, [string]$Author)
+    $version = '1.0.0'
+    if ($Previous) {
+        $pv = [string]$(if ($Previous -is [System.Collections.IDictionary]) { $Previous['version'] } else { $Previous.version })
+        $meta = if ($Previous -is [System.Collections.IDictionary]) { $Previous['metadata'] } else { $Previous.metadata }
+        $ph = [string]$(if ($meta -is [System.Collections.IDictionary]) { $meta['contentHash'] } elseif ($meta) { $meta.contentHash })
+        if ($pv -and $ph -eq $Hash) { $version = $pv }
+        elseif ($pv -match '^(\d+)\.(\d+)\.(\d+)$') { $version = "$($Matches[1]).$($Matches[2]).$([int]$Matches[3] + 1)" }
+    }
+    return ([ordered]@{
+            name        = $Category
+            description = "$($Skills.Count) shared skill(s): $($Skills -join ', ')"
+            version     = $version
+            author      = [ordered]@{ name = $(if ($Author) { $Author } else { Get-GeneCaller }) }
+            metadata    = [ordered]@{ contentHash = $Hash }
+        } | ConvertTo-Json -Depth 4)
+}
+
+function New-GeneShareMarketplace {
+    <# .claude-plugin\marketplace.json at the repo root: one entry per category plugin, source = ./ai/plugins/<category>. #>
+    param([Parameter(Mandatory)][string]$Owner, [Parameter(Mandatory)][System.Collections.IDictionary]$Plugins)
+    $entries = @(foreach ($c in $Plugins.Keys) {
+            [ordered]@{ name = $c; source = "./ai/plugins/$c"; description = "$(@($Plugins[$c]).Count) skill(s): $(@($Plugins[$c]) -join ', ')" }
+        })
+    return ([ordered]@{
+            name        = $script:ShareMarketplaceName
+            owner       = [ordered]@{ name = $Owner }
+            description = 'Claude Code skills shared with prof setup share: one plugin per category under ai/plugins'
+            plugins     = $entries
+        } | ConvertTo-Json -Depth 5)
+}
+
+# ------------------------------------------------------------------------------------------------ write
+function Show-GeneShareSkillPlan {
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Picks, [Parameter(Mandatory)][string]$Repo)
+    Write-ProfStep "skills share -> $(Join-Path $Repo $script:SharePluginsRel) (one plugin per category) + $script:ShareMarketplaceRel"
+    foreach ($c in $Picks.Keys) { Write-ProfNote ("{0,-12} {1}" -f $c, (@($Picks[$c]) -join ', ')) }
+}
+
+function Write-GeneShareSkills {
+    <#
+    Steps 3-6 of the skills flow: stage every picked skill (checked and rewritten), a plugin.json per category; scan
+    (secrets stop, mentions ask); replace <repo>\ai\plugins with the stage, write marketplace.json, regenerate
+    ai\README.md; print the git commands. -WhatIf: stage and scan, list the files, write nothing.
+    #>
+    param([Parameter(Mandatory)]$Plan, [switch]$WhatIf, [scriptblock]$Reader)
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $owner = Get-GeneShareOwner -Repo $Plan.Repo
+    $stage = Join-Path (Get-GeneShareStageRoot) "share-skills-$stamp"
+    try {
+        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+        New-Item -ItemType Directory -Force -Path $stage | Out-Null
+        $catOf = @{}; foreach ($o in $Plan.Offer) { foreach ($s in $o.Skills) { $catOf[$s.Name] = $o.Category } }
+        $all = @($Plan.Offer.Skills.Name)
+        $pickedAll = @($Plan.Picks.Values | ForEach-Object { $_ })
+        $files = [System.Collections.Generic.List[string]]::new(); $rewrites = 0; $unlinked = 0
+        foreach ($cat in $Plan.Picks.Keys) {
+            $o = $Plan.Offer | Where-Object Category -eq $cat
+            foreach ($name in $Plan.Picks[$cat]) {
+                $src = @($o.Skills | Where-Object Name -eq $name) | Select-Object -First 1
+                if (-not $src) { throw "'$name' is not a skill share offers under $cat." }
+                $r = Copy-GeneShareSkill -Source $src.Path -Dest (Join-Path $stage "$cat\skills\$name") -Skill $name -Picked $pickedAll -Category $catOf -AllSkills $all -Keys $Plan.Keys
+                foreach ($f in $r.Files) { $files.Add("$cat\skills\$name\$f") }
+                $rewrites += $r.Rewrites; $unlinked += $r.Unlinked
+                Write-ProfNote ("  {0}:{1}  {2} file(s), {3} reference(s) rewritten{4}" -f $cat, $name, $r.Files.Count, $r.Rewrites, $(if ($r.Unlinked) { ", $($r.Unlinked) note link(s) unlinked" } else { '' }))
+            }
+            $prevPath = Join-Path $Plan.Repo "$script:SharePluginsRel\$cat\.claude-plugin\plugin.json"
+            $prev = if (Test-Path -LiteralPath $prevPath) { try { Get-Content -LiteralPath $prevPath -Raw | ConvertFrom-Json -AsHashtable } catch { $null } } else { $null }
+            $manifest = New-GeneSharePluginManifest -Category $cat -Skills @($Plan.Picks[$cat]) -Hash (Get-GeneSharePluginHash -Dir (Join-Path $stage $cat)) -Previous $prev -Author $owner
+            $mp = Join-Path $stage "$cat\.claude-plugin\plugin.json"
+            New-Item -ItemType Directory -Force -Path (Split-Path $mp) | Out-Null
+            [IO.File]::WriteAllText($mp, $manifest, [Text.UTF8Encoding]::new($false)); $files.Add("$cat\.claude-plugin\plugin.json")
+        }
+
+        $mentions = Test-GeneShareScans -Hub $Plan.Hub -Root $stage -Ask:(-not $WhatIf) -Reader $Reader
+        if ($null -eq $mentions) { Write-ProfNote 'Share cancelled; nothing written.'; return $null }
+
+        $dest = Join-Path $Plan.Repo $script:SharePluginsRel
+        $result = [pscustomobject]@{ Repo = $Plan.Repo; Files = @($files | Sort-Object); Rewrites = $rewrites; Unlinked = $unlinked; Mentions = $mentions; Stamp = $stamp; Written = $false }
+        if ($WhatIf) {
+            Write-ProfStep "-WhatIf: would replace $dest with $($files.Count) file(s) and write $script:ShareMarketplaceRel`:"
+            foreach ($f in $files | Sort-Object) { Write-ProfNote "  $f" }
+            Write-ProfNote '(nothing written)'
+            return $result
+        }
+        if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+        New-Item -ItemType Directory -Force -Path $dest | Out-Null
+        foreach ($f in $files) { Copy-GeneShareFile -Source (Join-Path $stage $f) -Dest (Join-Path $dest $f) }
+        $market = Join-Path $Plan.Repo $script:ShareMarketplaceRel
+        New-Item -ItemType Directory -Force -Path (Split-Path $market) | Out-Null
+        [IO.File]::WriteAllText($market, (New-GeneShareMarketplace -Owner $owner -Plugins $Plan.Picks), [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText((Join-Path $Plan.Repo 'ai\README.md'), (Get-GeneShareReadmeText -Repo $Plan.Repo -Owner $owner), [Text.UTF8Encoding]::new($false))
+        $pointer = Add-GeneShareRootPointer -Repo $Plan.Repo
+        $changed = @(& git -C $Plan.Repo status --porcelain --untracked-files=all 2>$null | ForEach-Object { $_.Substring(3).Trim('"') })
+        $outside = @($changed | Where-Object { $_ -notmatch '^(ai/|README\.md$|\.claude-plugin/)' })
+        if ($outside.Count) { throw "The share changed files it must not touch: $($outside -join ', '). Inspect the repo before committing." }
+        Write-ProfStep "written: $dest ($($files.Count) file(s)), $script:ShareMarketplaceRel and ai\README.md$(if ($pointer) { ', one pointer line in README.md' })"
+        Show-GeneShareGitCommands -Repo $Plan.Repo -Message "share: skills $stamp"
+        $result.Written = $true
+        return $result
+    }
+    finally { if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue } }
+}
+
+# ------------------------------------------------------------------------------------------------ entry
+function Invoke-GeneShareAiSetup {
+    <# The skills flow (section 5.4). -WhatIf: pick, plan, stage and scan; nothing written. #>
+    param([string]$Repo, [switch]$WhatIf, [scriptblock]$Reader)
+    $hub = Get-GeneHubRoot
+    $Repo = Get-GeneShareRepo -Repo $Repo
+    Assert-GeneShareRepo -Repo $Repo
+    $offer = Get-GeneShareSkillOffer -Hub $hub
+    if (-not $offer.Count) { throw "Nothing to share: no skills\<name>\SKILL.md under $hub." }
+    $state = Get-GeneShareSkillState -Repo $Repo
+    $picks = Read-GeneShareSkillPicks -Offer $offer -State $state -Reader $Reader
+    if ($null -eq $picks) { Write-ProfNote 'Cancelled; nothing written.'; return $null }
+    if (-not $picks.Count) { throw 'Nothing picked; nothing written. (Removing every shared skill is done by hand: delete ai\plugins and .claude-plugin in the repo and commit.)' }
+    $keys = Get-GeneShareMachineKeys -Hub $hub
+    Show-GeneShareSkillPlan -Picks $picks -Repo $Repo
+    $plan = [pscustomobject]@{ Repo = $Repo; Hub = $hub; Offer = $offer; Picks = $picks; Keys = $keys; State = $state }
+    return Write-GeneShareSkills -Plan $plan -WhatIf:$WhatIf -Reader $Reader
 }

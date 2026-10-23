@@ -12,6 +12,9 @@ $script:ShareNeverCommands = @('sp', 'ep')
 # Where the profile half lives inside the shared repo, and its manifest.
 $script:ShareProfileRel = 'ai\profile'
 $script:ShareManifestName = 'prof-share.json'
+# The plugin marketplace's name (its .claude-plugin\marketplace.json at the repo root): the coworker installs
+# <category>@<this name>. ShareSkills.ps1 writes it; the README here names it.
+$script:ShareMarketplaceName = 'speed-merchants-dba'
 # Hub group files that ship with a category (section 4.1: BuildGroup = build; GitGroup + AiGroup = git).
 $script:ShareGroupFiles = @{ build = @('BuildGroup.ps1'); git = @('GitGroup.ps1', 'AiGroup.ps1') }
 # Own modules a picked command may call into (section 5.1: shipped only when called). Gene.Completions always ships.
@@ -612,7 +615,7 @@ function Get-GeneShareReadmeText {
         $o.Add('')
         foreach ($p in $plugins) {
             $skills = @(Get-ChildItem -LiteralPath (Join-Path $p.FullName 'skills') -Directory -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object Name)
-            $o.Add("- ``/plugin install $($p.Name)@speed-merchants-dba``: $($skills -join ', ')")
+            $o.Add("- ``/plugin install $($p.Name)@$script:ShareMarketplaceName``: $($skills -join ', ')")
         }
         $o.Add('')
         $o.Add('Update: `git pull`, then `/plugin update` in Claude Code.')
