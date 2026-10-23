@@ -365,7 +365,7 @@ try {
         Copy-Item -LiteralPath "$src\Microsoft.PowerShell_profile.ps1" -Destination $t
         foreach ($c in 'tabs', 'navigate') { Copy-Item -LiteralPath "$src\profile.d\$c.ps1" -Destination "$t\profile.d" -ErrorAction Stop }
         Copy-Item -Path "$mod\*" -Destination $m2 -Recurse
-        foreach ($f in 'SetupGroup', 'Target', 'Sync', 'Share', 'StreamsGroup', 'GitGroup', 'BuildGroup', 'AiGroup') { Remove-Item -LiteralPath "$m2\$f.ps1" -ErrorAction Stop }
+        foreach ($f in 'SetupGroup', 'Target', 'Sync', 'Share', 'ShareSkills', 'StreamsGroup', 'GitGroup', 'BuildGroup', 'AiGroup') { Remove-Item -LiteralPath "$m2\$f.ps1" -ErrorAction Stop }
         $o = @(pwsh -NoProfile -Command "`$ErrorActionPreference = 'Stop'; . '$t\Microsoft.PowerShell_profile.ps1'; Import-Module '$m2\Gene.Profile.psd1' -DisableNameChecking -Force; prof help 6>&1 | Out-String; '--OTHER--'; prof help other 6>&1 | Out-String; '--PROFILE--'; prof other profile 6>&1 | Out-String; 'EXIT-OK'" 2>&1) -join "`n"
         Assert-Match $o 'EXIT-OK'
         foreach ($g in 'streams', 'setup', 'git', 'build', 'ai') { Assert-NoMatch $o "(?m)^$g  " }
