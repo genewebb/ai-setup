@@ -13,7 +13,7 @@ $script:ProfVerbs = [ordered]@{
     edit      = 'Open my PowerShell profile for editing (the copy that every install uses)'
     reload    = 'Install my profile and AI setup on this machine again, after I edited them'
     show      = 'Is the profile this machine runs the same as the one I edit?'
-    export    = 'Pack my profile for a coworker: one zip with the profile, modules, a blank machine config and an installer'
+    share     = 'Hand picked commands and Claude skills to a coworker through the shared git repo (ai\ in speed-merchants-dba)'
 }
 
 # The longer explanation 'prof help setup <command>' and '-h' print under the usage line.
@@ -66,12 +66,13 @@ $script:ProfDetails = @{
         'Compares the profile this machine loads with the one in the repo, plus your own modules.'
         'If they differ, prof setup reload makes them the same.'
     )
-    export    = @(
-        'For someone who is not on my ai-setup repo. Copies the pwsh folder of the repo (profile, Gene.* modules,'
-        'AddOrUpdateMyTerminal.ps1, modules.txt, Install-Profile.ps1), writes a ProfileMachineConfig.md with every'
-        'value blank for them to fill in, a README, then zips it under ScratchRoot\prof (or -Out). Nothing from the AI'
-        'setup and no secrets: the secret scan refuses, and every mention of my accounts, machines or personal paths'
-        'is listed first so I can say no. They run Install-Profile.ps1 from the unzipped folder.'
+    share     = @(
+        'For a coworker who is not on my ai-setup repo. profile: pick categories and commands of the profile; the trimmed'
+        'profile, its modules, an installer and a settings template land in <repo>\ai\profile. ai-setup: pick Claude skills;'
+        'they land in <repo>\ai\plugins as one plugin per category with a marketplace at the repo root. The repo is the'
+        'ShareRepo row of this machine (-Repo overrides) and holds the state: what it has is preselected, unpicking removes'
+        'it. Secrets refuse; mentions of my accounts, machines and paths are listed first. share writes the working tree'
+        'and prints the git commands; it never commits. help: the two flows and the coworker steps. -WhatIf writes nothing.'
     )
 }
 
@@ -87,7 +88,7 @@ $script:ProfUsage = @{
     edit      = 'prof setup edit'
     reload    = 'prof setup reload [-WhatIf]'
     show      = 'prof setup show'
-    export    = 'prof setup export [-Out <folder or file.zip>] [-WhatIf]'
+    share     = 'prof setup share [profile | ai-setup | help] [-Repo <clone>] [-WhatIf]'
 }
 
 function Get-GeneHubProfile { Read-GeneTargetProfile -Path (Get-GeneTargetProfilePath -Machine $env:COMPUTERNAME) }
@@ -821,9 +822,9 @@ function Read-GeneSetupMenuParams {
             if (& $yn 'Also Claude secrets (-WithSecrets)?') { $p.WithSecrets = $true }
         }
         { $_ -in 'terminal', 'secrets', 'reload' } { if (& $yn 'Dry run only (-WhatIf)?') { $p.WhatIf = $true } }
-        'export' {
-            if (& $yn 'Dry run only (-WhatIf: list, write nothing)?') { $p.WhatIf = $true }
-            $o = ([string](Read-GeneText -Reader $Reader -Prompt 'Where to write the zip (folder or file.zip; Enter = ScratchRoot\prof)')).Trim(); if ($o) { $p.Out = $o }
+        'share' {
+            if (& $yn 'Dry run only (-WhatIf: pick, plan, write nothing)?') { $p.WhatIf = $true }
+            $o = ([string](Read-GeneText -Reader $Reader -Prompt 'Repo clone (Enter = the ShareRepo row of this machine)')).Trim(); if ($o) { $p.Repo = $o }
         }
     }
     return $p
@@ -837,4 +838,7 @@ $script:ProfGroups['setup'] = [pscustomobject]@{
     Prefix      = 'Invoke-GeneProf'
     NeedMachine = @('push', 'pull', 'check', 'bootstrap', 'terminal', 'secrets')
     Ask         = 'Read-GeneSetupMenuParams'
+    # The word after a setup command: only share takes one (profile | ai-setup | help); the others warn and ignore it.
+    TopicParam  = 'What'
+    TopicNames  = { @('profile', 'ai-setup', 'help') }
 }

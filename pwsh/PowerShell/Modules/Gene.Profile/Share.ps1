@@ -50,6 +50,18 @@ function Assert-GeneShareRepo {
 
 function Get-GeneShareProfileDir { param([Parameter(Mandatory)][string]$Repo) Join-Path $Repo $script:ShareProfileRel }
 
+function Get-GeneShareOwner {
+    <#
+    Who the share says it is from: the repo's git user.name (the display name the commits carry), else the account.
+    The template's Status column and the README carry it, and both are scanned for the owner's account names, so the
+    account name would flag every share.
+    #>
+    param([Parameter(Mandatory)][string]$Repo)
+    $n = (& git -C $Repo config user.name 2>$null | Select-Object -First 1)
+    if ($n -and "$n".Trim()) { return "$n".Trim() }
+    return Get-GeneCaller
+}
+
 # ------------------------------------------------------------------------------------------------ AST helpers
 function Get-GeneShareAst {
     param([Parameter(Mandatory)][string]$Path)
@@ -704,7 +716,7 @@ function Write-GeneShareProfile {
     #>
     param([Parameter(Mandatory)]$Plan, [switch]$WhatIf, [scriptblock]$Reader)
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $owner = Get-GeneCaller
+    $owner = Get-GeneShareOwner -Repo $Plan.Repo
     $stage = Join-Path (Get-GeneShareStageRoot) "share-profile-$stamp"
     try {
         $files = [System.Collections.Generic.List[string]]::new()

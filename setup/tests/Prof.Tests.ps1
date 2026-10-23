@@ -259,7 +259,7 @@ try {
     }
 
     # ---------------------------------------------------------------- groups and the dispatcher
-    foreach ($f in 'Verbs.ps1', 'SetupGroup.ps1', 'Export.ps1', 'StreamsGroup.ps1', 'GitGroup.ps1', 'BuildGroup.ps1', 'AiGroup.ps1', 'OtherGroup.ps1') { . (Join-Path $mod $f) }
+    foreach ($f in 'Verbs.ps1', 'SetupGroup.ps1', 'Share.ps1', 'StreamsGroup.ps1', 'GitGroup.ps1', 'BuildGroup.ps1', 'AiGroup.ps1', 'OtherGroup.ps1') { . (Join-Path $mod $f) }
     # The profile is not loaded here, and prof other lists only commands that are defined: stand in for every catalog command.
     foreach ($n in @($script:ProfOtherCatalog.Values | ForEach-Object { $_.Commands.Name })) { if (-not (Test-GeneOtherDefined -Name $n)) { Set-Item -Path "function:\global:$n" -Value { } } }
     Update-GeneOtherGroup
@@ -321,9 +321,9 @@ try {
         Assert-Equal 'Invoke-GeneProfConfig' ([string]@($script:ProfOldNames | Where-Object { $_.Old -eq 'machinecfg' }).Needs)
         foreach ($row in $script:ProfOldNames) { Assert-True ([bool](Get-Command $row.Needs -ErrorAction SilentlyContinue)) "$($row.Old) needs $($row.Needs), not defined" }
     }
-    Test-Case 'trimmed hub: without SetupGroup/Target/Sync/Export the module imports and prof help has no setup group' {
+    Test-Case 'trimmed hub: without SetupGroup/Target/Sync/Share the module imports and prof help has no setup group' {
         $t = New-TestRoot 'hub'; Copy-Item -Path "$mod\*" -Destination $t -Recurse
-        Remove-Item -LiteralPath "$t\SetupGroup.ps1", "$t\Target.ps1", "$t\Sync.ps1", "$t\Export.ps1"
+        Remove-Item -LiteralPath "$t\SetupGroup.ps1", "$t\Target.ps1", "$t\Sync.ps1", "$t\Share.ps1"
         $core = Join-Path $repoRoot 'pwsh\PowerShell\Microsoft.PowerShell_profile.ps1'
         $o = @(pwsh -NoProfile -Command "`$ErrorActionPreference = 'Stop'; . '$core'; Import-Module '$t\Gene.Profile.psd1' -DisableNameChecking -Force; prof help 6>&1 | Out-String; 'EXIT-OK'" 2>&1) -join "`n"
         Assert-Match $o 'EXIT-OK'
@@ -365,7 +365,7 @@ try {
         Copy-Item -LiteralPath "$src\Microsoft.PowerShell_profile.ps1" -Destination $t
         foreach ($c in 'tabs', 'navigate') { Copy-Item -LiteralPath "$src\profile.d\$c.ps1" -Destination "$t\profile.d" -ErrorAction Stop }
         Copy-Item -Path "$mod\*" -Destination $m2 -Recurse
-        foreach ($f in 'SetupGroup', 'Target', 'Sync', 'Export', 'StreamsGroup', 'GitGroup', 'BuildGroup', 'AiGroup') { Remove-Item -LiteralPath "$m2\$f.ps1" -ErrorAction Stop }
+        foreach ($f in 'SetupGroup', 'Target', 'Sync', 'Share', 'StreamsGroup', 'GitGroup', 'BuildGroup', 'AiGroup') { Remove-Item -LiteralPath "$m2\$f.ps1" -ErrorAction Stop }
         $o = @(pwsh -NoProfile -Command "`$ErrorActionPreference = 'Stop'; . '$t\Microsoft.PowerShell_profile.ps1'; Import-Module '$m2\Gene.Profile.psd1' -DisableNameChecking -Force; prof help 6>&1 | Out-String; '--OTHER--'; prof help other 6>&1 | Out-String; '--PROFILE--'; prof other profile 6>&1 | Out-String; 'EXIT-OK'" 2>&1) -join "`n"
         Assert-Match $o 'EXIT-OK'
         foreach ($g in 'streams', 'setup', 'git', 'build', 'ai') { Assert-NoMatch $o "(?m)^$g  " }
@@ -381,7 +381,7 @@ try {
     Test-Case 'groups: main menu order is streams, setup, git, build, ai, other' { Assert-Equal @('streams', 'setup', 'git', 'build', 'ai', 'other') @($script:ProfGroups.Keys) }
     Test-Case 'groups: setup holds the twelve commands, help is not one of them' {
         Assert-True ($script:ProfGroups.Contains('setup'))
-        Assert-Equal @('push', 'pull', 'status', 'check', 'bootstrap', 'terminal', 'secrets', 'config', 'edit', 'reload', 'show', 'export') @($script:ProfGroups['setup'].Verbs.Keys)
+        Assert-Equal @('push', 'pull', 'status', 'check', 'bootstrap', 'terminal', 'secrets', 'config', 'edit', 'reload', 'show', 'share') @($script:ProfGroups['setup'].Verbs.Keys)
     }
     Test-Case 'setup: every command has a usage line, a long description and a function' {
         foreach ($v in $script:ProfGroups['setup'].Verbs.Keys) {
@@ -414,55 +414,22 @@ try {
         Assert-True ($o -notmatch '> prof')
     }
 
-    # ---------------------------------------------------------------- export (profile for someone else)
-    $xh = Join-Path $root 'export-hub'
-    foreach ($d in 'pwsh\PowerShell\Modules\Gene.X', 'pwsh\WindowsPowerShell', 'tools') { New-Item -ItemType Directory -Force -Path (Join-Path $xh $d) | Out-Null }
-    Set-Content -LiteralPath (Join-Path $xh 'pwsh\PowerShell\Microsoft.PowerShell_profile.ps1') -Value '# profile; pushes to github.com/owner1/scripts'
-    Set-Content -LiteralPath (Join-Path $xh 'pwsh\PowerShell\Modules\Gene.X\Gene.X.psm1') -Value 'function x {}'
-    Set-Content -LiteralPath (Join-Path $xh 'pwsh\WindowsPowerShell\Microsoft.PowerShell_profile.ps1') -Value '# old'
-    Set-Content -LiteralPath (Join-Path $xh 'pwsh\modules.txt') -Value 'PowerShell posh-git'
-    Set-Content -LiteralPath (Join-Path $xh 'pwsh\AddOrUpdateMyTerminal.ps1') -Value '# terminal'
-    Set-Content -LiteralPath (Join-Path $xh 'pwsh\Install-Profile.ps1') -Value '# installer'
-    Set-Content -LiteralPath (Join-Path $xh 'pwsh\old.ps1.bak-1') -Value 'never packed'
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'tools\Find-Secrets.ps1') -Destination (Join-Path $xh 'tools\Find-Secrets.ps1')
-    Set-Content -LiteralPath (Join-Path $xh 'share.yaml') -Value @('blockedPatterns:', "  - 'owner1'", "  - 'BOX7'")
-    $xp = Join-Path $root 'export-profile.md'
-    New-TestProfile -Path $xp -Keys ([ordered]@{ ReposRoot = 'D:\devops\repos'; MarkitdownVenv = '%USERPROFILE%\.venvs\markitdown'; ScratchRoot = (Join-Path $root 'export-scratch'); AIWorkRoot = $xh }) -Sections ([ordered]@{ 'Git policy' = "| Repo | Commit | Push |`n|---|---|---|`n| D:\devops\x | yes | no |" })
-    $savedHub = $env:GENE_PROF_HUB; $savedCfg = $env:AI_MACHINE_CONFIG
-    $env:GENE_PROF_HUB = $xh; $env:AI_MACHINE_CONFIG = $xp
-    try {
-        Test-Case 'export: zip + folder with the pwsh tree, a blank-value template, a README; .bak files and later tables left out' {
-            $r = Invoke-GeneProfExport -Out (Join-Path $root 'export-out') -Reader (New-Queue @('y')) 6>$null
-            Assert-True (Test-Path -LiteralPath $r.Zip) 'no zip'
-            Assert-Match $r.Zip 'export-out\\profile-export-\d{8}-\d{6}\.zip$'
-            $names = @(Get-ChildItem -LiteralPath $r.Folder -Recurse -File | ForEach-Object { [IO.Path]::GetRelativePath($r.Folder, $_.FullName) } | Sort-Object)
-            Assert-Equal @('AddOrUpdateMyTerminal.ps1', 'Install-Profile.ps1', 'modules.txt', 'PowerShell\Microsoft.PowerShell_profile.ps1', 'PowerShell\Modules\Gene.X\Gene.X.psm1', 'ProfileMachineConfig.md', 'README.md', 'WindowsPowerShell\Microsoft.PowerShell_profile.ps1') $names
-            $t = Get-Content -LiteralPath (Join-Path $r.Folder 'ProfileMachineConfig.md') -Raw
-            Assert-Match $t '\| ReposRoot \|  \| test \| fill in \|'
-            Assert-Match $t '\| MarkitdownVenv \| %USERPROFILE%\\\.venvs\\markitdown \| test \| fill in \|'
-            Assert-NoMatch $t 'Git policy'; Assert-NoMatch $t 'D:\\devops'
-            Assert-Match (Get-Content -LiteralPath (Join-Path $r.Folder 'README.md') -Raw) 'Install-Profile\.ps1 -WhatIf'
-            Assert-Equal 1 $r.Mentions
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
-            $z = [IO.Compression.ZipFile]::OpenRead($r.Zip); try { Assert-True (($z.Entries.FullName -contains 'README.md') -and ($z.Entries.FullName -notcontains 'old.ps1.bak-1')) 'zip content' } finally { $z.Dispose() }
-        }
-        Test-Case 'export: n to the mentions question packs nothing' {
-            Assert-Throws { Invoke-GeneProfExport -Out (Join-Path $root 'export-no.zip') -Reader (New-Queue @('n')) 6>$null } '*cancelled*'
-            Assert-True (-not (Test-Path -LiteralPath (Join-Path $root 'export-no.zip')))
-            Assert-True (-not (Test-Path -LiteralPath (Join-Path $root 'export-no')))
-        }
-        Test-Case 'export: a secret in the profile refuses the export' {
-            Add-Content -LiteralPath (Join-Path $xh 'pwsh\PowerShell\Microsoft.PowerShell_profile.ps1') -Value ('$t = "ghp_' + ('a1B2c3D4e5' * 4) + '"')
-            Assert-Throws { Invoke-GeneProfExport -Out (Join-Path $root 'export-leak.zip') -Reader (New-Queue @('y')) 6>$null } '*Possible secrets*'
-            Assert-True (-not (Test-Path -LiteralPath (Join-Path $root 'export-leak.zip')))
-        }
-        Test-Case 'export: -WhatIf lists and writes nothing' {
-            $o = Invoke-GeneProfExport -Out (Join-Path $root 'export-dry') -WhatIf 6>&1 | Out-String
-            Assert-Match $o 'nothing written'; Assert-Match $o 'ReposRoot'
-            Assert-True (-not (Test-Path -LiteralPath (Join-Path $root 'export-dry')))
-        }
+    # ---------------------------------------------------------------- share (replaces export)
+    Test-Case 'setup verbs: share replaces export' {
+        $v = @($script:ProfGroups['setup'].Verbs.Keys)
+        Assert-True ($v -contains 'share') 'share missing'
+        Assert-True ($v -notcontains 'export') 'export still listed'
+        Assert-Match $script:ProfUsage['share'] 'prof setup share \[profile \| ai-setup \| help\] \[-Repo <clone>\] \[-WhatIf\]'
     }
-    finally { $env:GENE_PROF_HUB = $savedHub; $env:AI_MACHINE_CONFIG = $savedCfg }
+    Test-Case 'setup menu: share asks dry-run and repo' {
+        $p = Read-GeneSetupMenuParams -Verb 'share' -Reader (New-Queue @('y', 'C:\x\dba'))
+        Assert-Equal $true $p.WhatIf; Assert-Equal 'C:\x\dba' $p.Repo
+    }
+    Test-Case 'prof setup share help prints the help and returns nothing' {
+        $out = Invoke-GeneProf setup share help 6>&1 | Out-String
+        Assert-Match $out 'prof setup share profile'
+        Assert-Match $out 'Never shared'
+    }
 
     # ---------------------------------------------------------------- other (catalog)
     Test-Case 'other: every command the profile defines is in the catalog (census)' {

@@ -437,6 +437,16 @@ prof help | Out-Null; 'help=ok'
         $r = Invoke-GeneProfShare -What profile -Repo $r6 -Reader (New-Queue @('1', '1', ''))
         Assert-True $r.Written; Assert-True (-not (Test-Path "$r6\README.md")); Assert-True (Test-Path "$r6\ai\README.md")
     }
+    Test-Case 'owner: git user.name of the repo, never the account name; the template and README carry it' {
+        $r7 = New-ShareRepo 'repo-owner'
+        git -C $r7 config user.name 'Test Owner'
+        Assert-Equal 'Test Owner' (Get-GeneShareOwner -Repo $r7)
+        $r = Invoke-GeneProfShare -What profile -Repo $r7 -Reader (New-Queue @('1', '1', '2')) 6>$null
+        Assert-True $r.Written
+        Assert-Match ((Get-Content "$r7\ai\profile\ProfileMachineConfig.md") -join "`n") 'set by Test Owner'
+        Assert-Match ((Get-Content "$r7\ai\README.md") -join "`n") 'Shared by Test Owner'
+        Assert-NoMatch ((Get-Content "$r7\ai\README.md") -join "`n") ([regex]::Escape((Get-GeneCaller)))
+    }
 }
 finally {
     $env:GENE_PROF_HUB = $null
