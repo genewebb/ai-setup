@@ -94,12 +94,21 @@ $script:ProfOtherCatalog = [ordered]@{
     }
 }
 
-# The catalog is filtered when it is read, not when this file loads: the module is imported before profile.d, and a
-# trimmed copy (prof setup share) has only some of the commands. A command is present when Get-Command finds it.
+# The catalog is filtered when it is read, not when this file loads: the module may be imported before profile.d, and
+# a trimmed copy (prof setup share) has only some of the commands. A command is present when it is a function, or an
+# alias to a function (a built-in alias such as sp = Set-ItemProperty is not the profile's sp). The lookups go through
+# the function: and alias: providers, not Get-Command, which walks PSModulePath for every name it does not find.
+function Test-GeneOtherDefined {
+    param([Parameter(Mandatory)][string]$Name)
+    if (Test-Path -LiteralPath "function:\$Name") { return $true }
+    $a = Get-Item -LiteralPath "alias:\$Name" -ErrorAction SilentlyContinue
+    return [bool]($a -and $a.ResolvedCommand -and $a.ResolvedCommand.CommandType -eq 'Function')
+}
+
 function Get-GeneOtherEntries {
-    <# The catalog entries of one category whose command is defined in this session (function or alias). #>
+    <# The catalog entries of one category whose command is defined in this session. #>
     param([Parameter(Mandatory)][string]$Category)
-    return @($script:ProfOtherCatalog[$Category].Commands | Where-Object { Get-Command $_.Name -ErrorAction SilentlyContinue })
+    return @($script:ProfOtherCatalog[$Category].Commands | Where-Object { Test-GeneOtherDefined -Name $_.Name })
 }
 
 function Get-GeneOtherCategories {
@@ -108,12 +117,14 @@ function Get-GeneOtherCategories {
 }
 
 function Update-GeneOtherGroup {
-    <# Rebuilds the other group's commands from the categories present now (the group's Refresh hook). #>
+    <# Rebuilds the other group's commands from the categories present now (the group's Refresh hook): one pass. #>
     $g = $script:ProfGroups['other']
     $g.Verbs.Clear(); $g.Details.Clear(); $g.Usage.Clear()
-    foreach ($k in Get-GeneOtherCategories) {
+    foreach ($k in $script:ProfOtherCatalog.Keys) {
+        $entries = Get-GeneOtherEntries -Category $k
+        if (-not $entries.Count) { continue }
         $g.Verbs[$k] = $script:ProfOtherCatalog[$k].Title
-        $g.Details[$k] = @("Commands: $((Get-GeneOtherEntries -Category $k).Name -join ', '). prof other $k <command> shows one.")
+        $g.Details[$k] = @("Commands: $($entries.Name -join ', '). prof other $k <command> shows one.")
         $g.Usage[$k] = "prof other $k [<command>]"
     }
 }

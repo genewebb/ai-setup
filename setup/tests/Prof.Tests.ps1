@@ -261,7 +261,7 @@ try {
     # ---------------------------------------------------------------- groups and the dispatcher
     foreach ($f in 'Verbs.ps1', 'SetupGroup.ps1', 'Export.ps1', 'StreamsGroup.ps1', 'GitGroup.ps1', 'BuildGroup.ps1', 'AiGroup.ps1', 'OtherGroup.ps1') { . (Join-Path $mod $f) }
     # The profile is not loaded here, and prof other lists only commands that are defined: stand in for every catalog command.
-    foreach ($n in @($script:ProfOtherCatalog.Values | ForEach-Object { $_.Commands.Name })) { if (-not (Get-Command $n -ErrorAction SilentlyContinue)) { Set-Item -Path "function:\global:$n" -Value { } } }
+    foreach ($n in @($script:ProfOtherCatalog.Values | ForEach-Object { $_.Commands.Name })) { if (-not (Test-GeneOtherDefined -Name $n)) { Set-Item -Path "function:\global:$n" -Value { } } }
     Update-GeneOtherGroup
     Test-Case 'hub: setup group is registered by SetupGroup.ps1, not Verbs.ps1' {
         Assert-NoMatch (Get-Content -LiteralPath "$mod\Verbs.ps1" -Raw) "ProfGroups\['setup'\]|ProfGroups = \[ordered\]@\{\s*setup"
@@ -276,6 +276,36 @@ try {
             Assert-True ((Get-GeneOtherEntries -Category tools).Name -notcontains 'zzprobe') 'undefined probe must be hidden'
         }
         finally { $script:ProfOtherCatalog['tools'].Commands = @($script:ProfOtherCatalog['tools'].Commands | Where-Object { $_.Name -ne 'zzprobe' }); Remove-Item function:\zzprobe -ErrorAction SilentlyContinue }
+    }
+    Test-Case 'filter: a built-in alias does not make a catalog command defined; an alias to a function does' {
+        $script:ProfOtherCatalog['tools'].Commands += New-GeneOtherEntry 'zzalias' 'probe' @('zzalias')
+        try {
+            Set-Alias -Name zzalias -Value Set-ItemProperty -Scope Global
+            Assert-True ((Get-GeneOtherEntries -Category tools).Name -notcontains 'zzalias') 'alias to a cmdlet must be hidden'
+            function global:zzaliasTarget { }
+            Set-Alias -Name zzalias -Value zzaliasTarget -Scope Global
+            Assert-True ((Get-GeneOtherEntries -Category tools).Name -contains 'zzalias') 'alias to a function must be listed'
+            # sp is a built-in alias (Set-ItemProperty); without the profile's function sp it is not a profile command.
+            $hadSp = Test-Path function:\sp; if ($hadSp) { $spDef = (Get-Item function:\sp).ScriptBlock; Remove-Item function:\sp }
+            try { Assert-True ((Get-GeneOtherEntries -Category profile).Name -notcontains 'sp') 'sp must be hidden when function sp is absent' }
+            finally { if ($hadSp) { Set-Item -Path function:\global:sp -Value $spDef } }
+        }
+        finally {
+            $script:ProfOtherCatalog['tools'].Commands = @($script:ProfOtherCatalog['tools'].Commands | Where-Object { $_.Name -ne 'zzalias' })
+            Remove-Item alias:\zzalias -ErrorAction SilentlyContinue; Remove-Item function:\zzaliasTarget -ErrorAction SilentlyContinue
+        }
+    }
+    Test-Case 'filter: listing the groups and refreshing the catalog is fast (no module discovery per name)' {
+        function global:zzSlowProbe { }
+        $script:ProfOtherCatalog['tools'].Commands += New-GeneOtherEntry 'zzNotDefinedAnywhere' 'probe' @('x')
+        try {
+            [void](Get-GeneProfGroupNames)
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            for ($i = 0; $i -lt 5; $i++) { [void](Get-GeneProfGroupNames); [void](& $script:ProfGroups['other'].TopicNames) }
+            $ms = $sw.ElapsedMilliseconds / 5
+            Assert-True ($ms -lt 100) "one group listing + topic names took $ms ms (limit 100)"
+        }
+        finally { $script:ProfOtherCatalog['tools'].Commands = @($script:ProfOtherCatalog['tools'].Commands | Where-Object { $_.Name -ne 'zzNotDefinedAnywhere' }); Remove-Item function:\zzSlowProbe -ErrorAction SilentlyContinue }
     }
     Test-Case 'filter: a group with no defined verb function is not listed' {
         $script:ProfGroups['zz'] = [pscustomobject]@{ Description = 'x'; Verbs = [ordered]@{ go = 'go' }; Details = @{}; Usage = @{}; Prefix = 'Invoke-GeneProfZz'; NeedMachine = @() }

@@ -28,13 +28,19 @@ function Get-GeneProfVerbFunction {
     return $Group.Prefix + (($Verb -split '-' | ForEach-Object { (Get-Culture).TextInfo.ToTitleCase($_) }) -join '')
 }
 
+function Test-GeneProfFunction {
+    <# Is this function defined here? Through the function: provider: Get-Command on a missing name walks PSModulePath. #>
+    param([Parameter(Mandatory)][string]$Name)
+    return (Test-Path -LiteralPath "function:\$Name")
+}
+
 function Get-GeneProfGroupNames {
     <# The groups prof lists: the ones with at least one command whose function is defined, in menu order. #>
     foreach ($gn in @($script:ProfGroups.Keys)) {
         $g = $script:ProfGroups[$gn]
         if ($g.Refresh) { & $g.Refresh }
         foreach ($v in @($g.Verbs.Keys)) {
-            if (Get-Command (Get-GeneProfVerbFunction -Group $g -Verb $v) -ErrorAction SilentlyContinue) { $gn; break }
+            if (Test-GeneProfFunction -Name (Get-GeneProfVerbFunction -Group $g -Verb $v)) { $gn; break }
         }
     }
 }
@@ -129,13 +135,13 @@ function Show-GeneProfHelp {
     Write-Host ''
     Write-Host 'help       This list. prof help <group> lists one group; prof help <group> <command> explains one command.'
     Write-Host 'A command only one group has also works without the group: prof publish = prof build publish.'
-    $old = @($script:ProfOldNames | Where-Object { Get-Command $_.Needs -ErrorAction SilentlyContinue })
+    $old = @($script:ProfOldNames | Where-Object { Test-GeneProfFunction -Name $_.Needs })
     if ($old.Count) {
         Write-Host ''
         Write-Host 'Old commands still work:' -ForegroundColor Cyan
         foreach ($o in $old) { Write-Host ("  {0} -> {1}" -f $o.Old.PadRight(10), $o.New) }
     }
-    if (Get-Command Get-GeneMachinesPath -ErrorAction SilentlyContinue) {
+    if (Test-GeneProfFunction -Name Get-GeneMachinesPath) {
         Write-Host ''
         Write-Host "Machines prof knows are listed in $(Get-GeneMachinesPath). Each machine's folders come from its own settings file (prof setup config)."
     }
@@ -216,7 +222,7 @@ function Invoke-GeneProf {
                 if ((Get-GeneProfGroupNames) -contains $g -and $script:ProfGroups[$g].TopicNames) { & $script:ProfGroups[$g].TopicNames | Where-Object { $_ -like "$w*" } }
             })]
         [string]$Topic,
-        [ArgumentCompleter({ param($c, $p, $w) if (Get-Command Get-GeneMachines -ErrorAction SilentlyContinue) { (Get-GeneMachines).Keys | Where-Object { $_ -like "$w*" } } })]
+        [ArgumentCompleter({ param($c, $p, $w) if (Test-GeneProfFunction -Name Get-GeneMachines) { (Get-GeneMachines).Keys | Where-Object { $_ -like "$w*" } } })]
         [string]$Machine,
         [string]$User,
         [string]$WorkDrive,
