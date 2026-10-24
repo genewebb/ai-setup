@@ -316,6 +316,7 @@ Import-Module Gene.Profile -DisableNameChecking
 'nav=' + ((& `$m { (Get-GeneOtherEntries -Category navigate).Name }) -join ',')
 'build=' + ((& `$m { (Get-GeneOtherEntries -Category build).Name }) -join ',')
 'groups=' + ((& `$m { Get-GeneProfGroupNames }) -join ',')
+'products=' + ((& `$m { @((Get-GeneBuildProducts).Keys) }) -join ',')
 'defaults=' + ((`$global:GeneMachineDefaults.Values | Where-Object { `$_ }) -join ',')
 'missing=' + ((@('dpcrewchief', 'dpall', 'cspeed', 'sp', 'addStreams') | Where-Object { -not (Test-Path "function:\`$_") }) -join ',')
 prof help | Out-Null; 'help=ok'
@@ -325,6 +326,7 @@ prof help | Out-Null; 'help=ok'
             Assert-True ($out -contains 'nav=cdevops,csm') "got: $($out -join ' / ')"
             Assert-True ($out -contains 'build=dpspeed,Publish-SpeedMerchantsPackage') "got: $($out -join ' / ')"
             Assert-True ($out -contains 'groups=build,other') "got: $($out -join ' / ')"
+            Assert-True ($out -contains 'products=testauto') "prof build offers only the product whose dp* command shipped; got: $($out -join ' / ')"
             Assert-True ($out -contains 'defaults=') "got: $($out -join ' / ')"
             Assert-True ($out -contains 'missing=dpcrewchief,dpall,cspeed,sp,addStreams') "got: $($out -join ' / ')"
             Assert-True ($out -contains 'help=ok') "got: $($out -join ' / ')"
@@ -434,8 +436,21 @@ prof help | Out-Null; 'help=ok'
     Test-Case 'write: a repo without a README gets no pointer and no README' {
         $r6 = New-ShareRepo 'repo-noreadme'
         Remove-Item -LiteralPath "$r6\README.md"; git -C $r6 add -A; git -C $r6 commit -q -m 'no readme'
-        $r = Invoke-GeneProfShare -What profile -Repo $r6 -Reader (New-Queue @('1', '1', ''))
+        $out = Invoke-GeneProfShare -What profile -Repo $r6 -Reader (New-Queue @('1', '1', '')) 6>&1
+        $r = $out | Where-Object { $_ -is [pscustomobject] } | Select-Object -Last 1
+        $text = ($out | ForEach-Object { "$_" }) -join "`n"
         Assert-True $r.Written; Assert-True (-not (Test-Path "$r6\README.md")); Assert-True (Test-Path "$r6\ai\README.md")
+        Assert-Match $text '(?m)git -C .* add -- ai$' 'the printed git add names only paths that exist'
+        Assert-NoMatch $text 'add -- ai README'
+    }
+    Test-Case 'write: a dirty unrelated file in the clone does not stop the share and is left alone' {
+        $r8 = New-ShareRepo 'repo-dirty'
+        Write-File "$r8\HCQ\query.sql" 'select 1'; git -C $r8 add -A; git -C $r8 commit -q -m hcq
+        Write-File "$r8\HCQ\query.sql" 'select 2'
+        $r = Invoke-GeneProfShare -What profile -Repo $r8 -Reader (New-Queue @('1', '1', '2')) 6>$null
+        Assert-True $r.Written
+        Assert-Equal 'select 2' (Get-Content -LiteralPath "$r8\HCQ\query.sql" -Raw).Trim()
+        Assert-True ((Get-RepoChanges $r8) -contains 'HCQ/query.sql') 'the dirty file is still dirty'
     }
     Test-Case 'owner: git user.name of the repo, never the account name; the template and README carry it' {
         $r7 = New-ShareRepo 'repo-owner'

@@ -16,6 +16,7 @@ $share = Join-Path $root 'ai\profile'
 Write-File "$share\PowerShell\x.ps1" '# x'
 Write-File "$share\PowerShell\profile.d\navigate.ps1" 'function cdevops { }'
 Write-File "$share\modules.txt" "# modules`nWindowsPowerShell posh-git"
+Write-File "$share\prof-share.json" '{ "version": 1, "files": { "PowerShell/x.ps1": "h1", "PowerShell/profile.d/navigate.ps1": "h2" } }'
 $templateLines = @(
     '# PowerShell profile machine config - <MACHINE>'
     ''
@@ -116,6 +117,26 @@ try {
         Assert-Match $r7.Out 'would'
         Assert-True (-not (Test-Path -LiteralPath $t7.Pd)) 'profile folder was created'
         Assert-True (-not (Test-Path -LiteralPath $t7.Cfg)) 'config was written'
+    }
+
+    $t8 = New-Target
+    Write-File "$($t8.Pd)\profile.d\build.ps1" 'function dpspeed { }'
+    Write-File "$($t8.Pd)\Modules\Gene.Profile\GitGroup.ps1" '# old group'
+    Write-File "$($t8.Pd)\mine.ps1" '# the coworker''s own file'
+    $r8 = Run $t8 @('-NonInteractive')
+    Test-Case 'stale shared files (an unpicked profile.d or Gene.* module file) are removed to the backup folder; the coworker''s own files stay' {
+        Assert-Equal 0 $r8.Code $r8.Out
+        Assert-True (-not (Test-Path -LiteralPath "$($t8.Pd)\profile.d\build.ps1")) 'build.ps1 still installed'
+        Assert-True (-not (Test-Path -LiteralPath "$($t8.Pd)\Modules\Gene.Profile\GitGroup.ps1")) 'GitGroup.ps1 still installed'
+        Assert-True (Test-Path -LiteralPath "$($t8.Pd)\mine.ps1") 'the coworker''s own file was removed'
+        Assert-Match $r8.Out 'removed 2 file\(s\) the share no longer has'
+    }
+    $t9 = New-Target
+    Write-File "$($t9.Pd)\profile.d\build.ps1" 'function dpspeed { }'
+    $r9 = Run $t9 @('-WhatIf')
+    Test-Case '-WhatIf lists a stale file and keeps it' {
+        Assert-Match $r9.Out 'would remove .*profile\.d\\build\.ps1'
+        Assert-True (Test-Path -LiteralPath "$($t9.Pd)\profile.d\build.ps1") 'removed under -WhatIf'
     }
 
     Test-Case 'never mentions WindowsPowerShell' {

@@ -207,6 +207,12 @@ function Copy-GeneShareSkill {
         $texts[$rel] = [IO.File]::ReadAllText($f.FullName)
         foreach ($p in Test-GeneShareSkillText -Text $texts[$rel] -Skill $Skill -AllSkills $AllSkills -Picked $Picked -Keys $Keys) { $problems.Add("$Skill\$rel $p") }
     }
+    # Every other text file (scripts, data) is copied as is, so a {Key} token in it would reach the coworker unresolved:
+    # the key check applies there too; the reference check does not (a script is not prose that sends him elsewhere).
+    foreach ($f in $files | Where-Object { $_.Extension -ne '.md' -and $_.Extension -notin $script:ShareBinaryExt }) {
+        $rel = [IO.Path]::GetRelativePath($Source, $f.FullName)
+        foreach ($p in Test-GeneShareSkillText -Text ([IO.File]::ReadAllText($f.FullName)) -Skill $Skill -AllSkills @() -Picked @() -Keys $Keys) { $problems.Add("$Skill\$rel $p") }
+    }
     if ($problems.Count) { throw "skill $Skill cannot be shared ($($problems.Count) problem(s)):`n  $($problems -join "`n  ")" }
     $rewrites = 0; $unlinked = 0; $written = [System.Collections.Generic.List[string]]::new()
     foreach ($f in $files) {
@@ -315,6 +321,13 @@ function Write-GeneShareSkills {
             [IO.File]::WriteAllText($mp, $manifest, [Text.UTF8Encoding]::new($false)); $files.Add("$cat\.claude-plugin\plugin.json")
         }
 
+        # marketplace.json and ai\README.md are generated into the stage (the skills half from the stage, the profile
+        # half from the repo) so the scans read them before they reach the repo. Neither is in $files.
+        $marketStage = Join-Path $stage $script:ShareMarketplaceStageName
+        [IO.File]::WriteAllText($marketStage, (New-GeneShareMarketplace -Owner $owner -Plugins $Plan.Picks), [Text.UTF8Encoding]::new($false))
+        $readmeStage = Join-Path $stage $script:ShareReadmeStageName
+        [IO.File]::WriteAllText($readmeStage, (Get-GeneShareReadmeText -Repo $Plan.Repo -Owner $owner -PluginsDir $stage), [Text.UTF8Encoding]::new($false))
+
         $mentions = Test-GeneShareScans -Hub $Plan.Hub -Root $stage -Ask:(-not $WhatIf) -Reader $Reader
         if ($null -eq $mentions) { Write-ProfNote 'Share cancelled; nothing written.'; return $null }
 
@@ -326,17 +339,14 @@ function Write-GeneShareSkills {
             Write-ProfNote '(nothing written)'
             return $result
         }
+        $before = Get-GeneShareRepoChanges -Repo $Plan.Repo
         if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
         New-Item -ItemType Directory -Force -Path $dest | Out-Null
         foreach ($f in $files) { Copy-GeneShareFile -Source (Join-Path $stage $f) -Dest (Join-Path $dest $f) }
-        $market = Join-Path $Plan.Repo $script:ShareMarketplaceRel
-        New-Item -ItemType Directory -Force -Path (Split-Path $market) | Out-Null
-        [IO.File]::WriteAllText($market, (New-GeneShareMarketplace -Owner $owner -Plugins $Plan.Picks), [Text.UTF8Encoding]::new($false))
-        [IO.File]::WriteAllText((Join-Path $Plan.Repo 'ai\README.md'), (Get-GeneShareReadmeText -Repo $Plan.Repo -Owner $owner), [Text.UTF8Encoding]::new($false))
+        Copy-GeneShareFile -Source $marketStage -Dest (Join-Path $Plan.Repo $script:ShareMarketplaceRel)
+        Copy-GeneShareFile -Source $readmeStage -Dest (Join-Path $Plan.Repo 'ai\README.md')
         $pointer = Add-GeneShareRootPointer -Repo $Plan.Repo
-        $changed = @(& git -C $Plan.Repo status --porcelain --untracked-files=all 2>$null | ForEach-Object { $_.Substring(3).Trim('"') })
-        $outside = @($changed | Where-Object { $_ -notmatch '^(ai/|README\.md$|\.claude-plugin/)' })
-        if ($outside.Count) { throw "The share changed files it must not touch: $($outside -join ', '). Inspect the repo before committing." }
+        Assert-GeneShareOnlyOwnFiles -Repo $Plan.Repo -Before $before
         Write-ProfStep "written: $dest ($($files.Count) file(s)), $script:ShareMarketplaceRel and ai\README.md$(if ($pointer) { ', one pointer line in README.md' })"
         Show-GeneShareGitCommands -Repo $Plan.Repo -Message "share: skills $stamp"
         $result.Written = $true

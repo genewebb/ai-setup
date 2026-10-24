@@ -53,6 +53,15 @@ $script:ProfBuildProducts = [ordered]@{
     all       = [pscustomobject]@{ Name = 'All four (TestAuto, CrewChief, DataGen, Mutate)'; Command = 'dpall'; Repo = 'SpeedMerchantsRepo'; Build = @('speed-merchants.sln', 'CrewChief\CrewChief.sln', 'TestData.Generation\TestData.Generation.sln', 'TestData.Mutation\TestData.Mutation.sln'); VersionFile = ''; Run = $false; Publish = $true }
 }
 
+# The products whose dp* command exists in this session. A trimmed copy (prof setup share) ships only the picked dp*
+# commands; the menu, the topic names and the product lookup must not offer the others. Checked through the function:
+# provider at call time (the profile defines the dp* functions after this module may have loaded).
+function Get-GeneBuildProducts {
+    $r = [ordered]@{}
+    foreach ($k in $script:ProfBuildProducts.Keys) { if (Test-GeneProfFunction -Name $script:ProfBuildProducts[$k].Command) { $r[$k] = $script:ProfBuildProducts[$k] } }
+    return $r
+}
+
 $script:ProfGroups['build'] = [pscustomobject]@{
     Description = 'Build, run or publish a product (TestAuto, CrewChief, DataGen, Mutate, Speedy, all)'
     Verbs       = $script:ProfBuildVerbs
@@ -62,7 +71,7 @@ $script:ProfGroups['build'] = [pscustomobject]@{
     NeedMachine = @()
     Menu        = 'Read-GeneBuildMenu'
     TopicParam  = 'Product'
-    TopicNames  = { @($script:ProfBuildProducts.Keys) }
+    TopicNames  = { @((Get-GeneBuildProducts).Keys) }
 }
 
 # Old product names still accepted on the command line. dpall -Products keeps its own names (speed for TestAuto):
@@ -71,11 +80,12 @@ $script:ProfBuildAliases = @{ speed = 'testauto' }
 $script:ProfBuildDpAllNames = [ordered]@{ testauto = 'speed'; crewchief = 'crewchief'; datagen = 'datagen'; mutate = 'mutate' }
 
 function Get-GeneBuildProduct([string]$Product) {
-    if (-not $Product) { throw "Which product? One of: $($script:ProfBuildProducts.Keys -join ', ') (e.g. prof build publish testauto)" }
+    $products = Get-GeneBuildProducts
+    if (-not $Product) { throw "Which product? One of: $($products.Keys -join ', ') (e.g. prof build publish testauto)" }
     if ($script:ProfBuildAliases.Contains($Product.ToLowerInvariant())) { $Product = $script:ProfBuildAliases[$Product.ToLowerInvariant()] }
-    $k = @($script:ProfBuildProducts.Keys | Where-Object { $_ -ieq $Product }) | Select-Object -First 1
-    if (-not $k) { throw "No product called '$Product'. One of: $($script:ProfBuildProducts.Keys -join ', ')" }
-    return $script:ProfBuildProducts[$k]
+    $k = @($products.Keys | Where-Object { $_ -ieq $Product }) | Select-Object -First 1
+    if (-not $k) { throw "No product called '$Product' here. One of: $($products.Keys -join ', ')" }
+    return $products[$k]
 }
 
 function Get-GeneProductVersion($Info) {
@@ -235,15 +245,16 @@ function Read-GeneBuildMenu {
     Returns @{ Verb; Params } for the dispatcher, 'help' for the group's help, or $null when the user cancels.
     #>
     param([scriptblock]$Reader)
-    $items = @($script:ProfBuildProducts.Keys | ForEach-Object {
-            $i = $script:ProfBuildProducts[$_]
+    $products = Get-GeneBuildProducts
+    $items = @($products.Keys | ForEach-Object {
+            $i = $products[$_]
             $v = try { Get-GeneProductVersion $i } catch { '' }
             [pscustomobject]@{ Name = $_; Description = "$($i.Name)  ($($i.Command)$(if ($v) { ", version $v" }))"; Key = $_ }
         }) + [pscustomobject]@{ Name = 'help'; Description = 'Explain the build commands'; Key = 'help' }
     $pick = Select-GeneMenu -Title 'prof build: which product?' -Items $items -Reader $Reader
     if (-not $pick) { return $null }
     if ($pick.Key -eq 'help') { return 'help' }
-    $info = $script:ProfBuildProducts[$pick.Key]
+    $info = $products[$pick.Key]
     $acts = @([pscustomobject]@{ Name = 'Build only'; Description = 'compile, nothing published or started'; Verb = 'compile' })
     if ($info.Run) { $acts += [pscustomobject]@{ Name = 'Build + run'; Description = "$($info.Command) with no switches"; Verb = 'run' } }
     if ($info.Publish) { $acts += [pscustomobject]@{ Name = 'Publish'; Description = "install package ($($info.Command) -Package), optional version bump"; Verb = 'publish' } }

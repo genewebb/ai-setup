@@ -70,6 +70,31 @@ else {
         Write-Host "  updated $dest"
     }
     $summary.Add("PowerShell profile: $updated file(s) $(if ($dry) { 'would be updated' } else { 'updated' }) in $pwshDir$(if ($updated -and -not $dry) { "; old copies in $backupDir" })")
+
+    # Files an earlier share installed that this share no longer has (an unpicked category, a module no picked command
+    # calls). The profile dot-sources every profile.d\*.ps1 and imports every Gene.* module, so a stale file would still
+    # load. Only those two places are swept, and only files the manifest (prof-share.json) does not list; anything else
+    # in the profile folder is the coworker's own. Removed files go to the backup folder first.
+    $manifestFile = Join-Path $here 'prof-share.json'
+    if (Test-Path -LiteralPath $manifestFile) {
+        $shipped = @(((Get-Content -LiteralPath $manifestFile -Raw | ConvertFrom-Json -AsHashtable).files).Keys | ForEach-Object { $_ -replace '^PowerShell/', '' -replace '/', '\' })
+        $swept = @(foreach ($area in 'profile.d', 'Modules') {
+                $dir = Join-Path $pwshDir $area
+                if (-not (Test-Path -LiteralPath $dir)) { continue }
+                Get-ChildItem -LiteralPath $dir -Recurse -File | Where-Object {
+                    $rel = [IO.Path]::GetRelativePath($pwshDir, $_.FullName)
+                    ($area -eq 'profile.d' -or $rel -like 'Modules\Gene.*') -and $rel -notin $shipped
+                }
+            })
+        foreach ($f in $swept) {
+            $rel = [IO.Path]::GetRelativePath($pwshDir, $f.FullName)
+            if ($dry) { Write-Host "  would remove $($f.FullName) (the share no longer has it)"; continue }
+            Backup $f.FullName "PowerShell\$rel"
+            Remove-Item -LiteralPath $f.FullName -Force
+            Write-Host "  removed $($f.FullName) (the share no longer has it; copy in $backupDir)"
+        }
+        if ($swept.Count) { $summary.Add("$(if ($dry) { 'would remove' } else { 'removed' }) $($swept.Count) file(s) the share no longer has$(if (-not $dry) { " (copies in $backupDir)" })") }
+    }
 }
 
 # 2. PSGallery modules listed in modules.txt (PowerShell edition rows only): install the missing ones. A failure (no

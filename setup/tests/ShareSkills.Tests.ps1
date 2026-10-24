@@ -25,6 +25,8 @@ New-Skill 'solo' 'alone: general'
 New-Skill 'odd-one' 'front matter says tools' "category: tools`n"
 New-Skill 'leaky' 'reads {ReposRoot} and {ShareRepo}'
 New-Skill 'linker' 'points at [[solo]] which may be unpicked, and at /testauto-ab which is no skill'
+New-Skill 'zz-script-key' 'clean text; the leak is in a script'
+Write-File "$hub\skills\zz-script-key\scripts\go.ps1" 'Set-Location {ReposRoot}'
 Write-File "$hub\skills\testauto-b\scripts\run.ps1" 'Write-Host "[[testauto-a]] stays in a script"'
 [IO.File]::WriteAllBytes("$hub\skills\testauto-b\pic.png", [byte[]](0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A))
 Write-File "$hub\pwsh\PowerShell\Microsoft.PowerShell_profile.ps1" @'
@@ -62,7 +64,7 @@ try {
     $offer = Get-GeneShareSkillOffer -Hub $hub
     Test-Case 'offer: categories in name order, skills in name order, descriptions from the front matter' {
         Assert-Equal @('general', 'testauto', 'tools') @($offer.Category)
-        Assert-Equal @('crewchief-x', 'crewchief-y', 'leaky', 'linker', 'solo') @(($offer | Where-Object Category -eq 'general').Skills.Name)
+        Assert-Equal @('crewchief-x', 'crewchief-y', 'leaky', 'linker', 'solo', 'zz-script-key') @(($offer | Where-Object Category -eq 'general').Skills.Name)
         Assert-Equal @('testauto-a', 'testauto-b', 'testauto-c') @(($offer | Where-Object Category -eq 'testauto').Skills.Name)
         Assert-Equal @('odd-one') @(($offer | Where-Object Category -eq 'tools').Skills.Name)
         Assert-Equal 'What testauto-a does.' (($offer | Where-Object Category -eq 'testauto').Skills | Where-Object Name -eq 'testauto-a').Description
@@ -167,7 +169,7 @@ try {
         Assert-Equal @() @(Get-ChildItem -LiteralPath $env:GENE_SHARE_STAGE -ErrorAction SilentlyContinue)
     }
     Test-Case 'write: plugins, plugin.json per category, marketplace.json at the root, README lists the install lines; nothing else changed; git commands printed' {
-        git -C $repo remote add origin https://example.test/Products/_git/share
+        git -C $repo remote add origin https://owner1:s3cr3t@example.test/Products/_git/share
         $out = Invoke-GeneShareAiSetup -Repo $repo -Reader (New-Queue @('1 2', '5', '1 2 3')) 6>&1
         $r = $out | Where-Object { $_ -is [pscustomobject] } | Select-Object -Last 1
         $text = ($out | ForEach-Object { "$_" }) -join "`n"
@@ -182,8 +184,10 @@ try {
         Assert-Match $readme 'testauto-a, testauto-b, testauto-c'
         Assert-Match $readme 'No profile shared yet'
         Assert-Match $readme 'git clone https://example\.test/Products/_git/share'
+        Assert-NoMatch $readme 's3cr3t|owner1'
         Assert-Match $readme '/plugin marketplace add <the folder you cloned this repo into>'
         Assert-NoMatch $readme ([regex]::Escape($repo))
+        Assert-Equal 0 $r.Mentions 'the stripped origin is no mention'
         Assert-Match (Get-Content -LiteralPath "$repo\README.md" -Raw) 'ai/README\.md'
         Assert-Match $text 'git -C .* add -- ai README\.md \.claude-plugin'
         Assert-Match $text 'share: skills \d{8}-\d{6}'
@@ -220,15 +224,29 @@ try {
         Assert-True (-not (Test-Path -LiteralPath "$r3\ai")) 'ai written after a refused skill'
         Assert-Equal @() @(Get-ChildItem -LiteralPath $env:GENE_SHARE_STAGE -ErrorAction SilentlyContinue)
     }
-    Test-Case 'scan: a mention of the owner is listed; n cancels and writes nothing' {
+    Test-Case 'scan: a {Key} token in a script of a picked skill stops too (every text file, not only .md)' {
+        $r3b = New-ShareRepo 'repo-leaky-script'
+        Assert-Throws { Invoke-GeneShareAiSetup -Repo $r3b -Reader (New-Queue @('1', '6')) 6>$null } '*go.ps1 line 1: {ReposRoot}*'
+        Assert-True (-not (Test-Path -LiteralPath "$r3b\ai")) 'ai written after a refused skill'
+    }
+    Test-Case 'scan: the generated README and marketplace are scanned too (an owner name that is a blocked pattern counts)' {
+        $r4b = New-ShareRepo 'repo-owner-mention'
+        git -C $r4b config user.name 'owner1 person'
+        $plan = Invoke-GeneShareAiSetup -Repo $r4b -WhatIf -Reader (New-Queue @('1', '5')) 6>$null
+        Assert-True ($plan.Mentions -ge 1) "mentions=$($plan.Mentions)"
+    }
+    Test-Case 'scan: a mention of the owner is listed in every text file (.sh too); n cancels and writes nothing' {
         $r4 = New-ShareRepo 'repo-mention'
-        New-Skill 'mentions-owner1' 'owner1 wrote this on BOX7'
+        New-Skill 'mentions-boss' 'owner1 wrote this on BOX7'
+        Write-File "$hub\skills\mentions-boss\scripts\x.sh" 'echo BOX7'
         try {
+            $plan = Invoke-GeneShareAiSetup -Repo $r4 -WhatIf -Reader (New-Queue @('1', '5')) 6>$null
+            Assert-Equal 2 $plan.Mentions 'SKILL.md line + x.sh line'
             $r = Invoke-GeneShareAiSetup -Repo $r4 -Reader (New-Queue @('1', '5', 'n')) 6>$null
             Assert-True ($null -eq $r) 'n did not cancel'
             Assert-True (-not (Test-Path -LiteralPath "$r4\ai")) 'ai written after n'
         }
-        finally { Remove-Item -LiteralPath "$hub\skills\mentions-owner1" -Recurse -Force }
+        finally { Remove-Item -LiteralPath "$hub\skills\mentions-boss" -Recurse -Force }
     }
     Test-Case 'menu: Invoke-GeneProfShare -What ai-setup -WhatIf reaches the skills flow' {
         $plan = Invoke-GeneProfShare -What ai-setup -Repo $repo -WhatIf -Reader (New-Queue @('', '')) 6>$null
