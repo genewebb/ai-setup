@@ -40,8 +40,8 @@ function Select-GeneMenu {
     .PARAMETER Default
         1-based item. Numbered menu: taken on Enter (0 = Enter asks again). Arrow-key menu: listed first.
     .PARAMETER Multi
-        Several picks: arrow-key menu = Space to tick, Enter when done; numbered = numbers separated by commas or spaces.
-        Returns an array.
+        Several picks: arrow-key menu = Space to tick, Enter when done, the "all of them" header line ticks or clears
+        every item at once; numbered = numbers separated by commas or spaces, or a / all. Returns an array.
     .PARAMETER AllowEmpty
         With -Multi: picking nothing returns an empty array instead of asking again ($null still means cancelled).
     .PARAMETER Reader
@@ -65,8 +65,10 @@ function Select-GeneMenu {
                 "$(ConvertTo-GeneMarkupText $names[$i].PadRight($width))$desc"
             })
         Write-Host ''
-        $picked = Read-SpectreMultiSelection -Message "[cyan]$(ConvertTo-GeneMarkupText $Title)[/]" -Choices $labels -AllowEmpty:$AllowEmpty `
-            -PageSize ([Math]::Max(3, [Math]::Min(20, $labels.Count))) -Color Cyan
+        # One Spectre choice group: Space on its header line ticks or clears every item (Spectre returns the items, never the header).
+        $group = @{ Name = "[grey]all of them (Space here ticks or clears every line)[/]"; Choices = $labels }
+        $picked = Read-SpectreMultiSelectionGrouped -Message "[cyan]$(ConvertTo-GeneMarkupText $Title)[/]" -Choices @($group) -AllowEmpty:$AllowEmpty `
+            -PageSize ([Math]::Max(3, [Math]::Min(20, $labels.Count + 1))) -Color Cyan
         if ($null -eq $picked -and -not $AllowEmpty) { return $null }
         return , @(@($picked) | Where-Object { $_ } | ForEach-Object { $Items[[array]::IndexOf($labels, [string]$_)] })
     }
@@ -93,10 +95,11 @@ function Select-GeneMenu {
         $mark = if ($Default -eq $i + 1) { '*' } else { ' ' }
         Write-Host ("  {0}{1,2}) {2}{3}" -f $mark, ($i + 1), $names[$i].PadRight($width), $desc)
     }
-    $hint = "Pick $(if ($Multi) { 'one or more, e.g. 1,3' } else { "1-$($Items.Count)" })$(if ($Default) { ", Enter = $Default" } elseif ($Multi -and $AllowEmpty) { ', Enter = none' }), q = cancel"
+    $hint = "Pick $(if ($Multi) { 'one or more, e.g. 1,3, a = all' } else { "1-$($Items.Count)" })$(if ($Default) { ", Enter = $Default" } elseif ($Multi -and $AllowEmpty) { ', Enter = none' }), q = cancel"
     while ($true) {
         $answer = ([string](& $Reader $hint)).Trim()
         if ($answer -ieq 'q') { return $null }
+        if ($Multi -and $answer -in 'a', 'all') { return , @($Items) }
         if (-not $answer) {
             if ($Multi -and $AllowEmpty -and -not $Default) { return , @() }
             if ($Default -ge 1 -and $Default -le $Items.Count) { return $(if ($Multi) { , @($Items[$Default - 1]) } else { $Items[$Default - 1] }) }
