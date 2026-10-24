@@ -551,6 +551,15 @@ function Get-GeneShareReadmeText {
     $o.Add("Shared by $Owner with ``prof setup share``. This folder (``ai\``) and ``.claude-plugin\marketplace.json`` at the repo root are the only")
     $o.Add('things the share writes; everything else in the repo is untouched. Every later share is a commit: `git pull` brings it.')
     $o.Add('')
+    $origin = try { (git -C $Repo remote get-url origin 2>$null | Select-Object -First 1) } catch { $null }
+    if ($origin) {
+        $o.Add('Clone it once, into a folder of your choice:')
+        $o.Add('')
+        $o.Add('```powershell')
+        $o.Add("git clone $origin")
+        $o.Add('```')
+        $o.Add('')
+    }
     $o.Add('## PowerShell profile')
     $o.Add('')
     if (-not $m) { $o.Add('No profile shared yet.'); $o.Add('') }
@@ -605,13 +614,13 @@ function Get-GeneShareReadmeText {
     $plugins = @(Get-ChildItem -LiteralPath (Join-Path $Repo 'ai\plugins') -Directory -ErrorAction SilentlyContinue | Sort-Object Name)
     if (-not $plugins.Count) { $o.Add('No skills shared yet.'); $o.Add('') }
     else {
-        $o.Add('One Claude Code plugin per category. In Claude Code, once:')
+        $o.Add('One Claude Code plugin per category. In Claude Code, once, with the full path of your clone:')
         $o.Add('')
         $o.Add('```text')
-        $o.Add("/plugin marketplace add $Repo")
+        $o.Add('/plugin marketplace add <the folder you cloned this repo into>')
         $o.Add('```')
         $o.Add('')
-        $o.Add('(the clone path; the repo URL works too when Claude can reach it). Then, per plugin:')
+        $o.Add('(The clone folder is the verified form. The repo URL also works once Claude Code can clone it with your credential.) Then, per plugin:')
         $o.Add('')
         foreach ($p in $plugins) {
             $skills = @(Get-ChildItem -LiteralPath (Join-Path $p.FullName 'skills') -Directory -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object Name)

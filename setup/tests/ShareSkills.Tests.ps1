@@ -167,6 +167,7 @@ try {
         Assert-Equal @() @(Get-ChildItem -LiteralPath $env:GENE_SHARE_STAGE -ErrorAction SilentlyContinue)
     }
     Test-Case 'write: plugins, plugin.json per category, marketplace.json at the root, README lists the install lines; nothing else changed; git commands printed' {
+        git -C $repo remote add origin https://example.test/Products/_git/share
         $out = Invoke-GeneShareAiSetup -Repo $repo -Reader (New-Queue @('1 2', '5', '1 2 3')) 6>&1
         $r = $out | Where-Object { $_ -is [pscustomobject] } | Select-Object -Last 1
         $text = ($out | ForEach-Object { "$_" }) -join "`n"
@@ -180,6 +181,9 @@ try {
         Assert-Match $readme '/plugin install testauto@speed-merchants-dba'
         Assert-Match $readme 'testauto-a, testauto-b, testauto-c'
         Assert-Match $readme 'No profile shared yet'
+        Assert-Match $readme 'git clone https://example\.test/Products/_git/share'
+        Assert-Match $readme '/plugin marketplace add <the folder you cloned this repo into>'
+        Assert-NoMatch $readme ([regex]::Escape($repo))
         Assert-Match (Get-Content -LiteralPath "$repo\README.md" -Raw) 'ai/README\.md'
         Assert-Match $text 'git -C .* add -- ai README\.md \.claude-plugin'
         Assert-Match $text 'share: skills \d{8}-\d{6}'
