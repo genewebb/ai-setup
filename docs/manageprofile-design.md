@@ -69,7 +69,7 @@ long alias: manageProfile
 
 **prof is the general-purpose hub (Gene, 10/17).** Commands live in groups; the main menu lists the groups. The
 groups, in menu order: `streams` (the stream board, section 6.1), `setup` (the twelve commands below; it was named
-`streams` until Gene renamed it 10/17 so `streams` could mean the board), `git`, `build`, `ai`, `other`. Other profile commands join as further groups
+`streams` until Gene renamed it 10/17 so `streams` could mean the board), `git`, `build`, `other`. Other profile commands join as further groups
 (section 6). A group is one entry in `$script:ProfGroups`: its commands with one-line and long descriptions, usage
 lines, the function prefix, which commands need `-Machine`, and the menu's question flow. `Verbs.ps1` holds only the
 empty table, the dispatcher, the menu and help; each `*Group.ps1` file registers its own group (`setup` in
@@ -309,11 +309,10 @@ stay as aliases.
 |---|---|---|
 | `setup` | sp, ep, rp, machinecfg, profile/runtime/machine moves | built: the eleven commands of section 4 (named `streams` until 10/17) |
 | `build` | dpspeed, dpcrewchief, dpdatagen, dpmutate, dpall, dpv2, dpContainers | built 10/17, section 4.7; `containers` is Speedy only |
-| `git` | gpush, pps, psql, pushrules | built 10/17, section 4.7; the scripts folders are repos in its list, `-AIOnly` = pushrules |
-| `ai` | dpAI | built 10/17: `prof ai local|remote|git|promote [<repo>]`, the mode is the command |
+| `git` | gpush, pps, psql | built 10/17, section 4.7; the scripts folders are repos in its list. pushrules (`-AIOnly`) and the `ai` group (dpAI) were retired 10/24: Cursor-era rule sync, nothing left to commit once no repo carries `.claude` content (machine-config D3/D13) |
 | `streams` | addStreams, addStreamTab, stopStreams, removeStreamTab, rerunStreamTab, getStreams, pushStreams, updateStreams | built 10/17 as a thin layer (section 6.1): `prof streams add|tab|stop|remove|rerun|get|push|update|status-rebuild` call the profile commands; `-WhatIf` becomes `-DryRun` |
 | `tab` | addtab, addnew, addLinux | |
-| `go` | cdevops, caiprof, cspeed, ccrew, cpower, csql, ccursor | `go speed`, repo names from the machine profile |
+| `go` | cdevops, caiprof, cspeed, ccrew, cpower, csql | `go speed`, repo names from the machine profile (ccursor and its CursorRulesDir key retired 10/24) |
 | (none) | `prof help` lists every group and every old name with its new form | the one name to remember is `prof` |
 
 Old names stay as aliases for a deprecation period; `hubs` and `<hub> help` show the mapping. Each hub moves into

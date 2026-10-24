@@ -4,7 +4,7 @@
 
 $script:ProfGitVerbs = [ordered]@{
     status = 'What changed in the repo, and is the current branch ahead of or behind the server? (changes nothing)'
-    push   = 'Save every change in the repo as one commit and send the current branch (gpush; -AIOnly = pushrules)'
+    push   = 'Save every change in the repo as one commit and send the current branch (gpush)'
     pull   = 'Bring the current branch up to date from the server (only when that needs no merge)'
 }
 $script:ProfGitDetails = @{
@@ -17,8 +17,7 @@ $script:ProfGitDetails = @{
         'The gpush you know: stages everything under this folder (git add .), stops if a staged file looks like a',
         'secret (*.env, *secret*, *.key ...), commits with -Message (default "Update latest") when anything is',
         'staged, then pushes the current branch to origin (setting the upstream on the first push).',
-        'gpush itself still works. -AIOnly commits and pushes only the AI files (.cursor, .vscode, .github, .swarm,',
-        '.claude), as pushrules does. The PowerShell and SQL scripts folders are repos here too: prof git push',
+        'gpush itself still works. The PowerShell and SQL scripts folders are repos here too: prof git push',
         'PowershellScripts replaces pps, prof git push SqlScripts replaces psql.'
     )
     pull   = @(
@@ -28,7 +27,7 @@ $script:ProfGitDetails = @{
 }
 $script:ProfGitUsage = @{
     status = 'prof git status [<repo>] [-WhatIf]'
-    push   = 'prof git push [<repo>] [-Message <text>] [-AIOnly] [-WhatIf]'
+    push   = 'prof git push [<repo>] [-Message <text>] [-WhatIf]'
     pull   = 'prof git pull [<repo>] [-WhatIf]'
 }
 
@@ -63,7 +62,7 @@ function Get-GeneKnownRepos {
     if (-not $global:GeneMachine) { return @() }
     # The profile keeps repo paths in $global:GeneMachine and the AI keys (AIWorkRoot) in $global:GeneMachineAI.
     $all = [ordered]@{}
-    foreach ($k in @($global:GeneMachine.Keys | Where-Object { $_ -like '*Repo' -or $_ -in 'PowershellScriptsDir', 'SqlScriptsDir', 'CursorRulesDir' })) { $all[$k] = [string]$global:GeneMachine.$k }
+    foreach ($k in @($global:GeneMachine.Keys | Where-Object { $_ -like '*Repo' -or $_ -in 'PowershellScriptsDir', 'SqlScriptsDir' })) { $all[$k] = [string]$global:GeneMachine.$k }
     if ($global:GeneMachineAI -and $global:GeneMachineAI.AIWorkRoot) { $all['AIWorkRoot'] = [string]$global:GeneMachineAI.AIWorkRoot }
     $seen = @{}
     foreach ($k in $all.Keys) {
@@ -124,7 +123,7 @@ function Invoke-GeneProfGitStatus {
 }
 
 function Invoke-GeneProfGitPush {
-    param([string]$Repo, [string]$Message, [switch]$AIOnly, [switch]$WhatIf)
+    param([string]$Repo, [string]$Message, [switch]$WhatIf)
     $top = Enter-GeneGitRepo -Repo $Repo
     # Check against the server first, so "behind" and "nothing to do" are said plainly instead of as git's push rejection.
     $sync = Get-GeneGitSync $top
@@ -137,15 +136,8 @@ function Invoke-GeneProfGitPush {
         }
         throw "The server has $($sync.Behind) newer commit(s) this copy does not have. Nothing was committed or pushed. Pull first ($pull); with commits of your own here ($($sync.Ahead)), merge or rebase by hand."
     }
-    elseif (-not $AIOnly -and $sync.Upstream -and -not $sync.Dirty -and $sync.Ahead -eq 0) {
+    elseif ($sync.Upstream -and -not $sync.Dirty -and $sync.Ahead -eq 0) {
         Write-ProfNote 'Nothing to commit or push: same as the server.'
-        return
-    }
-    if ($AIOnly) {
-        if (-not (Get-Command pushrules -ErrorAction SilentlyContinue)) { throw 'pushrules is not loaded. It lives in the PowerShell profile: open a new tab, or . $PROFILE.' }
-        if ($WhatIf) { Write-Host '[WhatIf] Would run: pushrules (commit + push only .cursor, .vscode, .github, .swarm, .claude)' -ForegroundColor Yellow; return }
-        $a = @{}; if ($Message) { $a.Message = $Message }
-        pushrules @a
         return
     }
     if (-not (Get-Command Git-QuickPush -ErrorAction SilentlyContinue)) { Import-Module Gene.GitTools -ErrorAction Stop }
@@ -181,7 +173,6 @@ function Read-GeneGitMenuParams {
     if ($Verb -eq 'push') {
         $m = ([string](Read-GeneText -Reader $Reader -Prompt 'Commit message (Enter = Update latest)')).Trim()
         if ($m) { $p.Message = $m }
-        if (Read-GeneYesNo -Question 'Only the AI files (.cursor, .github, .claude ...) (-AIOnly, like pushrules)?' -Reader $Reader) { $p.AIOnly = $true }
     }
     if ($Verb -in 'push', 'pull' -and (Read-GeneYesNo -Question 'Dry run only (-WhatIf)?' -Reader $Reader)) { $p.WhatIf = $true }
     return $p

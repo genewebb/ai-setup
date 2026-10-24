@@ -15,8 +15,8 @@ $script:ShareManifestName = 'prof-share.json'
 # The plugin marketplace's name (its .claude-plugin\marketplace.json at the repo root): the coworker installs
 # <category>@<this name>. ShareSkills.ps1 writes it; the README here names it.
 $script:ShareMarketplaceName = 'speed-merchants-dba'
-# Hub group files that ship with a category (section 4.1: BuildGroup = build; GitGroup + AiGroup = git).
-$script:ShareGroupFiles = @{ build = @('BuildGroup.ps1'); git = @('GitGroup.ps1', 'AiGroup.ps1') }
+# Hub group files that ship with a category (section 4.1: BuildGroup = build; GitGroup = git).
+$script:ShareGroupFiles = @{ build = @('BuildGroup.ps1'); git = @('GitGroup.ps1') }
 # Files the scans do not read as text (everything else in a staged share is scanned, whatever its extension).
 $script:ShareBinaryExt = @('.png', '.jpg', '.jpeg', '.gif', '.ico', '.zip', '.exe', '.dll', '.pdf', '.woff', '.woff2', '.svgz', '.ttf', '.otf')
 # Generated files staged next to the share so the scans read them before they reach the repo.

@@ -9,7 +9,6 @@ function addtab
 function Assert-PathExists
 function caiprof
 function ccrew
-function ccursor
 function cdevops
 function chocoenv
 function claude-home
@@ -21,7 +20,6 @@ function csm
 function cspeed
 function csql
 function dotnet
-function dpAI
 function dpall
 function dpContainers
 function dpcrewchief
@@ -30,7 +28,6 @@ function dpmutate
 function dpspeed
 function dpv2
 function Enable-DotnetSuggestCompletionsOnce
-function Ensure-DocumentationRepos
 function Enter-GeneStreamRepo
 function Enter-GeneStreamSession
 function ep
@@ -40,7 +37,6 @@ function Format-GeneStreamLayout
 function Format-GeneStreamScriptHelp
 function Format-GeneStreamTabStart
 function Get-ClaudeAccount
-function Get-GeneAiGitPaths
 function Get-GeneAIWorkRoot
 function Get-GeneCloneState
 function Get-GeneMachineSetting
@@ -80,8 +76,6 @@ function Invoke-GeneStreamKitGet
 function Invoke-GeneStreamPush
 function Invoke-GeneStreamTakeover
 function Invoke-GitChecked
-function Invoke-ToolGitSync
-function Load-DpAIToolsConfig
 function markitdown
 function New-GeneTab
 function New-GeneWtTab
@@ -93,7 +87,6 @@ function prompt
 function psql
 function Publish-GeneSharedBits
 function Publish-SpeedMerchantsPackage
-function pushrules
 function pushStreams
 function Read-GeneMachineConfig
 function Read-GeneStreamBoardFile
@@ -103,7 +96,6 @@ function Request-GeneStreamTabClose
 function rerunStreamTab
 function Resolve-GeneStreamRepoPath
 function Resolve-GeneStreamTab
-function Resolve-RemoteUrl
 function rp
 function Say
 function Set-GeneStreamTabTitle

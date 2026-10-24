@@ -259,7 +259,7 @@ try {
     }
 
     # ---------------------------------------------------------------- groups and the dispatcher
-    foreach ($f in 'Verbs.ps1', 'SetupGroup.ps1', 'Share.ps1', 'StreamsGroup.ps1', 'GitGroup.ps1', 'BuildGroup.ps1', 'AiGroup.ps1', 'OtherGroup.ps1') { . (Join-Path $mod $f) }
+    foreach ($f in 'Verbs.ps1', 'SetupGroup.ps1', 'Share.ps1', 'StreamsGroup.ps1', 'GitGroup.ps1', 'BuildGroup.ps1', 'OtherGroup.ps1') { . (Join-Path $mod $f) }
     # The profile is not loaded here, and prof other lists only commands that are defined: stand in for every catalog command.
     foreach ($n in @($script:ProfOtherCatalog.Values | ForEach-Object { $_.Commands.Name })) { if (-not (Test-GeneOtherDefined -Name $n)) { Set-Item -Path "function:\global:$n" -Value { } } }
     Update-GeneOtherGroup
@@ -358,17 +358,17 @@ try {
         Assert-Equal @('Modules\M\Gone.ps1', 'profile.d\old.ps1') @($c.ExtraFiles | Sort-Object)
         Assert-Equal 0 $c.Categories; Assert-Equal 0 $c.Modules
     }
-    Test-Case 'trimmed copy: core + tabs + navigate and a hub without setup/streams/git/build/ai lists only those categories (profile = machinecfg, from the core)' {
+    Test-Case 'trimmed copy: core + tabs + navigate and a hub without setup/streams/git/build lists only those categories (profile = machinecfg, from the core)' {
         $t = New-TestRoot 'trim'; $m2 = Join-Path $t 'Modules\Gene.Profile'
         New-Item -ItemType Directory -Path "$t\profile.d", $m2 -Force | Out-Null
         $src = Join-Path $repoRoot 'pwsh\PowerShell'
         Copy-Item -LiteralPath "$src\Microsoft.PowerShell_profile.ps1" -Destination $t
         foreach ($c in 'tabs', 'navigate') { Copy-Item -LiteralPath "$src\profile.d\$c.ps1" -Destination "$t\profile.d" -ErrorAction Stop }
         Copy-Item -Path "$mod\*" -Destination $m2 -Recurse
-        foreach ($f in 'SetupGroup', 'Target', 'Sync', 'Share', 'ShareSkills', 'StreamsGroup', 'GitGroup', 'BuildGroup', 'AiGroup') { Remove-Item -LiteralPath "$m2\$f.ps1" -ErrorAction Stop }
+        foreach ($f in 'SetupGroup', 'Target', 'Sync', 'Share', 'ShareSkills', 'StreamsGroup', 'GitGroup', 'BuildGroup') { Remove-Item -LiteralPath "$m2\$f.ps1" -ErrorAction Stop }
         $o = @(pwsh -NoProfile -Command "`$ErrorActionPreference = 'Stop'; . '$t\Microsoft.PowerShell_profile.ps1'; Import-Module '$m2\Gene.Profile.psd1' -DisableNameChecking -Force; prof help 6>&1 | Out-String; '--OTHER--'; prof help other 6>&1 | Out-String; '--PROFILE--'; prof other profile 6>&1 | Out-String; 'EXIT-OK'" 2>&1) -join "`n"
         Assert-Match $o 'EXIT-OK'
-        foreach ($g in 'streams', 'setup', 'git', 'build', 'ai') { Assert-NoMatch $o "(?m)^$g  " }
+        foreach ($g in 'streams', 'setup', 'git', 'build') { Assert-NoMatch $o "(?m)^$g  " }
         Assert-Match $o '(?m)^other  '
         # profile stays: machinecfg is an alias to Show-GeneMachineConfig, which the core defines, so every copy has it.
         $other = (($o -split '--OTHER--')[1] -split '--PROFILE--')[0]
@@ -378,7 +378,7 @@ try {
         Assert-Match $prof '(?m)^  machinecfg '
         foreach ($n in 'sp', 'ep', 'rp') { Assert-NoMatch $prof "(?m)^  $n " }
     }
-    Test-Case 'groups: main menu order is streams, setup, git, build, ai, other' { Assert-Equal @('streams', 'setup', 'git', 'build', 'ai', 'other') @($script:ProfGroups.Keys) }
+    Test-Case 'groups: main menu order is streams, setup, git, build, other' { Assert-Equal @('streams', 'setup', 'git', 'build', 'other') @($script:ProfGroups.Keys) }
     Test-Case 'groups: setup holds the twelve commands, help is not one of them' {
         Assert-True ($script:ProfGroups.Contains('setup'))
         Assert-Equal @('push', 'pull', 'status', 'check', 'bootstrap', 'terminal', 'secrets', 'config', 'edit', 'reload', 'show', 'share') @($script:ProfGroups['setup'].Verbs.Keys)
@@ -568,7 +568,7 @@ try {
         }
         Test-Case 'git menu: this folder is offered first; push asks the message' {
             Set-Location $work
-            $o = Invoke-GeneProfMenu -Group git -Reader (New-Queue @('2', '1', 'my msg', 'n', 'y', 'n')) 6>&1 | Out-String
+            $o = Invoke-GeneProfMenu -Group git -Reader (New-Queue @('2', '1', 'my msg', 'y', 'n')) 6>&1 | Out-String
             Assert-Match $o "> prof git push -Message 'my msg' -WhatIf"
         }
         Test-Case 'git: push with nothing to do says so and pushes nothing' {
@@ -588,25 +588,15 @@ try {
             Remove-Item (Join-Path $work 'mine.txt')
             Invoke-GeneProf git pull speedy 6>&1 | Out-Null
         }
-        Test-Case 'git: -AIOnly pushes through pushrules with the message' {
-            function pushrules { param([string]$Message, [string]$Remote) $script:rulesGot = "msg=$Message" }
-            try {
-                $script:rulesGot = $null
-                Invoke-GeneProf git push speedy -AIOnly -Message 'rules x' 6>&1 | Out-Null
-                Assert-Equal 'msg=rules x' $script:rulesGot
-            }
-            finally { Remove-Item Function:\pushrules }
+        Test-Case 'git: -AIOnly is gone with pushrules (retired 10/24)' {
+            Assert-Throws { Invoke-GeneProf git push speedy -AIOnly 6>&1 | Out-Null } '*AIOnly*'
+            Assert-NoMatch ((Get-Content -LiteralPath "$mod\GitGroup.ps1" -Raw) + (Get-Content -LiteralPath "$mod\Verbs.ps1" -Raw)) 'AIOnly|pushrules'
         }
-        Test-Case 'ai: local runs dpAI -Local in the named repo with -Force and -WhatIf' {
-            function dpAI { param([switch]$Local, [switch]$Remote, [switch]$Git, [switch]$Promote, [string]$RepoPath, [string]$Message, [switch]$Force, [switch]$WhatIf, [switch]$Try) $script:aiGot = [ordered]@{} + $PSBoundParameters }
-            try {
-                Invoke-GeneProf ai local speedy -Force -WhatIf 6>&1 | Out-Null
-                Assert-True $script:aiGot.Local; Assert-True $script:aiGot.Force; Assert-True $script:aiGot.WhatIf
-                Assert-Equal $work $script:aiGot.RepoPath
-                $err = try { Invoke-GeneProf ai local speedy -Remote 6>&1 | Out-Null; '' } catch { "$_" }
-                Assert-Match $err 'The mode is the command'
-            }
-            finally { Remove-Item Function:\dpAI }
+        Test-Case 'ai: the group is gone with dpAI (retired 10/24)' {
+            Assert-True (-not $script:ProfGroups.Contains('ai')) 'ai group still registered'
+            Assert-True (-not (Test-Path -LiteralPath "$mod\AiGroup.ps1")) 'AiGroup.ps1 still exists'
+            $o = Invoke-GeneProf ai local 6>&1 | Out-String
+            Assert-Match $o "No group or command called 'ai'"
         }
         Test-Case 'streams: status-rebuild touches the Status inbox file of SpeedyRepo' {
             $inbox = Join-Path $work '.streams\inbox'

@@ -55,7 +55,7 @@ function Format-GeneProfCommand {
     <# The command line a run is equivalent to, so a menu session teaches the syntax. #>
     param([string]$Group, [Parameter(Mandatory)][string]$Verb, [System.Collections.IDictionary]$Params = @{})
     $topic = if ($Group -and $script:ProfGroups.Contains($Group)) { $script:ProfGroups[$Group].TopicParam }
-    $order = @('Topic') + @($topic | Where-Object { $_ }) + @('Machine', 'User', 'WorkDrive', 'Retire', 'Message', 'Bump', 'Configuration', 'Out', 'FixProfile', 'WithTerminal', 'WithSecrets', 'NoPublish', 'AllowSecrets', 'AIOnly', 'Extra', 'WhatIf')
+    $order = @('Topic') + @($topic | Where-Object { $_ }) + @('Machine', 'User', 'WorkDrive', 'Retire', 'Message', 'Bump', 'Configuration', 'Out', 'FixProfile', 'WithTerminal', 'WithSecrets', 'NoPublish', 'AllowSecrets', 'Extra', 'WhatIf')
     $parts = @('prof') + @($Group | Where-Object { $_ }) + @($Verb)
     foreach ($k in $order + @($Params.Keys | Where-Object { $_ -notin $order })) {
         if (-not $Params.Contains($k)) { continue }
@@ -235,7 +235,6 @@ function Invoke-GeneProf {
         [switch]$AllowSecrets,
         [string]$Repo,
         [string]$Product,
-        [switch]$AIOnly,
         [ValidateSet('None', 'Patch', 'Minor', 'Major')][string]$Bump,
         [ValidateSet('Debug', 'Release')][string]$Configuration,
         [string]$Out,
