@@ -402,6 +402,15 @@ try {
         $ok = Invoke-GeneLocalInstall -Hub $fake
         Assert-True ($ok -is [int] -and $ok -eq 0) "returned: $(@($ok) -join ' | ')"
     }
+    Test-Case 'reload: re-importing Gene.Profile from inside its own verb finishes without calling the torn-down module' {
+        $fakeHub = Join-Path $root 'reload-hub'; New-Item -ItemType Directory -Force $fakeHub | Out-Null
+        Set-Content -LiteralPath (Join-Path $fakeHub 'install.ps1') -Value @('param([switch]$NoPull, [switch]$Yes, [switch]$Check)', "'installed'", 'exit 0')
+        $mods = Join-Path $repoRoot 'pwsh\PowerShell\Modules'
+        $o = @(pwsh -NoProfile -Command "`$ErrorActionPreference = 'Stop'; `$env:GENE_PLAIN_MENU = '1'; `$env:GENE_PROF_HUB = '$fakeHub'; `$env:PSModulePath = '$mods;' + `$env:PSModulePath; Import-Module Gene.Profile -DisableNameChecking; prof setup reload 6>&1 | Out-String; 'EXIT-OK'" 2>&1) -join "`n"
+        Assert-Match $o 'EXIT-OK'
+        Assert-Match $o 'reloaded in this window'
+        Assert-NoMatch $o 'not recognized'
+    }
     Test-Case 'PAT hint: the printed commands pin origin to the account''s own GitHub user and let Git Credential Manager ask for the PAT' {
         $h1 = Get-GenePatHint -Origin 'https://genewebb@github.com/genewebb/ai-setup.git' -CloneLocal 'D:\devops\pat\ai-setup' -Label 'CORP\pat on BOX'
         Assert-Match $h1 ([regex]::Escape('git -C D:\devops\pat\ai-setup remote set-url origin https://<github-user>@github.com/genewebb/ai-setup.git'))

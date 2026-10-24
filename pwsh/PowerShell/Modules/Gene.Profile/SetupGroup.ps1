@@ -246,8 +246,11 @@ function Invoke-GeneProfReload {
     elseif (-not $WhatIf) {
         # By name: piping Get-Module's output to Import-Module -Force does not re-read the files. -Global: from inside
         # a module, Import-Module would otherwise load into this module's own scope, not the window's.
+        # Re-importing Gene.Profile tears down the module this code runs in: after the loop only built-in commands are
+        # safe (Write-ProfNote and every other module helper are gone), so nothing below may call them.
+        $done = '  Installed, and prof and the other Gene modules are reloaded in this window. For the profile''s own commands (dp*, addStreams ...): . $PROFILE. Any other window: . $PROFILE there reloads both.'
         foreach ($m in @(Get-Module -Name 'Gene.*' | Select-Object -ExpandProperty Name -Unique)) { Import-Module -Name $m -Force -Global -DisableNameChecking }
-        Write-ProfNote 'Installed, and prof and the other Gene modules are reloaded in this window. For the profile''s own commands (dp*, addStreams ...): . $PROFILE. Any other window: . $PROFILE there reloads both.'
+        Write-Host $done
     }
 }
 
