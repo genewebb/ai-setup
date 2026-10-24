@@ -146,7 +146,7 @@ function Invoke-GenePushToTarget {
     $name = "prof-incoming-$(Get-Date -Format yyyyMMdd-HHmmss).bundle"
     $here = Join-Path ([IO.Path]::GetTempPath()) $name
     $thereRead = Join-Path $Repo.ReadPath ".git\$name"
-    $thereLocal = Join-Path $Repo.Path ".git\$name"
+    $thereLocal = Join-GeneRemotePath $Repo.Path ".git\$name"
     try {
         Invoke-GeneGit $Hub (@('bundle', 'create', '-q', $here) + $range) | Out-Null
         Copy-Item -LiteralPath $here -Destination $thereRead -Force

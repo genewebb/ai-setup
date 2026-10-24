@@ -63,6 +63,16 @@ function ConvertTo-GeneUncPath {
     return "\\$Machine\$($Matches[1].ToUpperInvariant())`$" + $(if ($rest) { "\$rest" } else { '' })
 }
 
+function Join-GeneRemotePath {
+    <#
+    Joins a path that lives on ANOTHER machine (D:\devops\... on the target) as plain text. Join-Path resolves the
+    drive on this machine and throws "Cannot find drive" when the hub has no such letter (the laptop has no D: while
+    its NAS mapping is down). One backslash between the parts; a UNC base works the same way.
+    #>
+    param([Parameter(Mandatory)][string]$Base, [Parameter(Mandatory)][string]$Child)
+    return $Base.TrimEnd('\') + '\' + $Child.TrimStart('\')
+}
+
 function ConvertTo-GeneGitUrl {
     <# Git takes a UNC path as a URL most reliably with forward slashes. #>
     param([string]$Path)

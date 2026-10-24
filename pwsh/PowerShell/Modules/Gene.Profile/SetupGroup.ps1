@@ -357,7 +357,7 @@ function Invoke-GeneProfPush {
         if ($WhatIf) {
             foreach ($d in @($state.Dirty | Select-Object -First 15)) { Write-ProfNote "  target: $d" }
             Write-ProfStep "install.ps1 -Check on $($t.Machine) as $($t.User)"
-            $c = Invoke-GeneRemotePwsh -Target $t -File (Join-Path $clone.Local 'install.ps1') -Arguments @('-NoPull', '-Check')
+            $c = Invoke-GeneRemotePwsh -Target $t -File (Join-GeneRemotePath $clone.Local 'install.ps1') -Arguments @('-NoPull', '-Check')
             Write-ProfNote "(-WhatIf: nothing committed, merged, pushed or installed; the check exited $c)"
             return
         }
@@ -398,7 +398,7 @@ function Invoke-GeneProfPush {
         }
 
         Write-ProfStep "6. install on $($t.Machine) as $($t.User)"
-        $ic = Invoke-GeneRemotePwsh -Target $t -File (Join-Path $clone.Local 'install.ps1') -Arguments @('-NoPull', '-Yes')
+        $ic = Invoke-GeneRemotePwsh -Target $t -File (Join-GeneRemotePath $clone.Local 'install.ps1') -Arguments @('-NoPull', '-Yes')
 
         Write-ProfStep 'summary'
         Write-ProfNote "from $label`: $(if ($h1.Committed) { "$($h1.Files.Count) file(s) harvested, " } else { '' })$($m.Merged) commit(s) merged here"
@@ -436,7 +436,7 @@ function Invoke-GeneProfCheck {
         if (-not $state.Exists) { Write-ProfWarn "no clone at $($clone.Local): prof setup bootstrap"; return }
         Write-ProfNote "clone $($clone.Local) at $($state.Head.Substring(0,7)), $($state.Dirty.Count) uncommitted; $(Get-GeneRelation -Hub $hub -TargetHead $state.Head)"
         Write-ProfStep "install.ps1 -Check on $($t.Machine) as $($t.User)"
-        $c = Invoke-GeneRemotePwsh -Target $t -File (Join-Path $clone.Local 'install.ps1') -Arguments @('-NoPull', '-Check')
+        $c = Invoke-GeneRemotePwsh -Target $t -File (Join-GeneRemotePath $clone.Local 'install.ps1') -Arguments @('-NoPull', '-Check')
         Write-ProfNote "the check exited $c"
     }
     finally { Close-GeneTarget $t }
@@ -452,7 +452,7 @@ function Get-GeneProfileFix {
         $repos = [string]$TargetRaw['ReposRoot']
         $base = if ($repos) { Split-Path $repos } else { '' }
         if (-not $base) { $base = Split-Path ([string]$HubRaw['ReposRoot']) }
-        $aiw = [pscustomobject]@{ Old = [string]$TargetRaw['AIWorkRoot']; New = (Join-Path $base '%USERNAME%\ai-setup') }
+        $aiw = [pscustomobject]@{ Old = [string]$TargetRaw['AIWorkRoot']; New = (Join-GeneRemotePath $base '%USERNAME%\ai-setup') }
     }
     [pscustomobject]@{ Missing = $missing; AIWorkRoot = $aiw; Empty = (-not $missing.Count -and -not $aiw) }
 }
@@ -505,7 +505,7 @@ function New-GeneSeedProfile {
                 if ($v -match "^$hubDrive`:\\") { $v = "$wd" + $v.Substring(1) }
                 if ($cells[0].Trim('`') -eq 'AIWorkRoot') {
                     $repos = [string]$hp.Raw['ReposRoot']; if ($repos -match "^$hubDrive`:\\") { $repos = "$wd" + $repos.Substring(1) }
-                    $v = Join-Path (Split-Path $repos) '%USERNAME%\ai-setup'
+                    $v = Join-GeneRemotePath (Split-Path $repos) '%USERNAME%\ai-setup'
                 }
                 if ($cells.Count -ge 4) { $cells[3] = 'unverified' }
                 $cells[1] = $v
@@ -545,7 +545,7 @@ function Invoke-GeneRetire {
     if ($oldAiw -and -not (Test-Path -LiteralPath (Join-Path (ConvertTo-GeneUncPath -Machine $Target.Machine -Path $oldAiw) '.git'))) { $cands += $oldAiw }
     $items = @($cands | Where-Object { Test-Path -LiteralPath (ConvertTo-GeneUncPath -Machine $Target.Machine -Path $_) })
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $dest = Join-Path $archive "ai-retire-$stamp\$name"
+    $dest = Join-GeneRemotePath $archive "ai-retire-$stamp\$name"
     Write-ProfStep "retire $acc on $($Target.Machine)"
     if (-not $items.Count) { Write-ProfNote 'nothing of that account''s Claude install is there'; return }
     foreach ($i in $items) { Write-ProfNote "move $i -> $dest" }
@@ -696,11 +696,11 @@ function Invoke-GeneProfBootstrap {
 
         Write-ProfStep "5. install on $($t.Machine) as $($t.User)"
         if ($WhatIf) {
-            if (Test-Path -LiteralPath (Join-Path $clone.Unc 'install.ps1')) { $c = Invoke-GeneRemotePwsh -Target $t -File (Join-Path $clone.Local 'install.ps1') -Arguments @('-NoPull', '-Check'); Write-ProfNote "the check exited $c" }
+            if (Test-Path -LiteralPath (Join-Path $clone.Unc 'install.ps1')) { $c = Invoke-GeneRemotePwsh -Target $t -File (Join-GeneRemotePath $clone.Local 'install.ps1') -Arguments @('-NoPull', '-Check'); Write-ProfNote "the check exited $c" }
             else { Write-ProfNote '(-WhatIf: no clone yet, so install.ps1 -Check cannot run there)' }
         }
         else {
-            $ic = Invoke-GeneRemotePwsh -Target $t -File (Join-Path $clone.Local 'install.ps1') -Arguments @('-NoPull', '-Yes')
+            $ic = Invoke-GeneRemotePwsh -Target $t -File (Join-GeneRemotePath $clone.Local 'install.ps1') -Arguments @('-NoPull', '-Yes')
             Write-ProfNote "install exited $ic"
             if ($ic -ne 0) { $left.Add("install.ps1 on $($t.Machine) exited ${ic}: read its output above, fix, then prof setup push -Machine $($t.Machine) -User $($t.User).") }
         }
@@ -721,7 +721,7 @@ function Invoke-GeneProfBootstrap {
 # ------------------------------------------------------------------------------------------------ terminal / secrets
 function Invoke-GeneTerminalOn {
     param($Target, $Clone, [System.Collections.Generic.List[string]]$Left)
-    $script = Join-Path $Clone.Local 'pwsh\AddOrUpdateMyTerminal.ps1'
+    $script = Join-GeneRemotePath $Clone.Local 'pwsh\AddOrUpdateMyTerminal.ps1'
     if (-not (Test-Path -LiteralPath (Join-Path $Clone.Unc 'pwsh\AddOrUpdateMyTerminal.ps1'))) { throw "The clone on $($Target.Machine) has no pwsh\AddOrUpdateMyTerminal.ps1 yet: prof setup push first." }
     Write-ProfStep "Windows Terminal settings for $($Target.User) on $($Target.Machine)"
     $c = Invoke-GeneRemotePwsh -Target $Target -File $script -Arguments @('-ForUser')
@@ -744,13 +744,13 @@ function Invoke-GeneSecretsOn {
     $hubScratch = (Get-AIMachineProfile).Keys['ScratchRoot']
     $name = "secrets-$($Target.Machine)-$(Get-GeneUserName $Target.User)-$(Get-Date -Format yyyyMMdd-HHmmss).bin"
     $localOut = Join-Path $hubScratch "prof\$name"
-    $remoteLocal = Join-Path $Target.Paths.Local['ScratchRoot'] "prof\$name"
+    $remoteLocal = Join-GeneRemotePath $Target.Paths.Local['ScratchRoot'] "prof\$name"
     $remoteUnc = Join-Path $Target.Paths.Unc['ScratchRoot'] "prof\$name"
     try {
         New-Item -ItemType Directory -Force -Path (Split-Path $localOut), (Split-Path $remoteUnc) | Out-Null
         & (Join-Path $Hub 'setup\Export-AISecrets.ps1') -Out $localOut -Passphrase $p1
         Copy-Item -LiteralPath $localOut -Destination $remoteUnc -Force
-        $c = Invoke-GeneRemotePwsh -Target $Target -File (Join-Path $Clone.Local 'install.ps1') -Arguments @('-NoPull', '-Yes', '-SecretsFile', $remoteLocal, '-PassphraseFromStdin') -Stdin $p1
+        $c = Invoke-GeneRemotePwsh -Target $Target -File (Join-GeneRemotePath $Clone.Local 'install.ps1') -Arguments @('-NoPull', '-Yes', '-SecretsFile', $remoteLocal, '-PassphraseFromStdin') -Stdin $p1
         Write-ProfNote "install with the secrets exited $c"
     }
     finally {
