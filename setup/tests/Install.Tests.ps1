@@ -86,6 +86,23 @@ try {
         Assert-Match $c.Out 'runtime: checked into'
         Assert-True (Home-Empty) 'the scratch Claude home gained files under -Check'
     }
+    # ---- stale profile files: a profile.d or Gene.* module file the repo no longer has would still load ----
+    $pd = Join-Path $root 'pwshdir'; $wp = Join-Path $root 'winpsdir'
+    New-Item -ItemType Directory -Force (Join-Path $pd 'profile.d'), (Join-Path $pd 'Modules\Gene.Profile'), (Join-Path $pd 'Modules\Other.Mod'), $wp | Out-Null
+    Set-Content (Join-Path $pd 'profile.d\retired.ps1') '# gone from the repo'
+    Set-Content (Join-Path $pd 'Modules\Gene.Profile\AiGroup.ps1') '# gone from the repo'
+    Set-Content (Join-Path $pd 'Modules\Other.Mod\Other.Mod.psm1') '# not ours'
+    Set-Content (Join-Path $pd 'mine.ps1') '# my own file'
+    $s = Run @('-NoPull', '-WhatIf', '-PwshProfileDir', $pd, '-WinPsProfileDir', $wp)
+    Test-Case '-WhatIf lists stale profile.d and Gene.* module files as would remove; other modules and own files are left alone' {
+        Assert-Equal 0 $s.Code $s.Out
+        Assert-Match $s.Out 'PowerShell 7 profile\s+' + [regex]::Escape($pd)
+        Assert-Match $s.Out ('would remove ' + [regex]::Escape((Join-Path $pd 'profile.d\retired.ps1')))
+        Assert-Match $s.Out ('would remove ' + [regex]::Escape((Join-Path $pd 'Modules\Gene.Profile\AiGroup.ps1')))
+        Assert-NoMatch $s.Out 'would remove .*Other\.Mod|would remove .*mine\.ps1'
+        Assert-Match $s.Out 'PowerShell profile: .*2 stale file\(s\) would be removed'
+        Assert-True (Test-Path (Join-Path $pd 'profile.d\retired.ps1')) 'removed under -WhatIf'
+    }
 
     # ---- no profile at all: the first-run message says what the file is and where it is described ----
     $env:AI_MACHINE_CONFIG = Join-Path $root 'no-such-profile.md'
