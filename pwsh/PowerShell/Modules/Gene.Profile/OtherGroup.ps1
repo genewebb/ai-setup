@@ -17,7 +17,6 @@ $script:ProfOtherCatalog = [ordered]@{
             New-GeneOtherEntry 'caiprof' 'Go to the shared Profisee AI repo (ai-profisee)' @('caiprof')
             New-GeneOtherEntry 'cpower' 'Go to the PowerShell scripts folder (PowershellScriptsDir)' @('cpower')
             New-GeneOtherEntry 'csql' 'Go to the SQL scripts folder (SqlScriptsDir)' @('csql')
-            New-GeneOtherEntry 'ccursor' 'Go to the Cursor rules templates repo (CursorRulesDir)' @('ccursor')
         )
     }
     tabs     = [pscustomobject]@{
@@ -47,8 +46,6 @@ $script:ProfOtherCatalog = [ordered]@{
             New-GeneOtherEntry 'gpush' 'Stage everything, commit and push the current branch of the repo you are in' @('gpush [<message>] [-WhatIf]', "gpush 'fix: tidy logging'") 'prof git push'
             New-GeneOtherEntry 'pps' 'Commit and push the PowerShell scripts folder to github.com/genewebb/powershellscripts' @('pps [-Message <text>] [-WhatIf]') 'prof git push PowershellScripts'
             New-GeneOtherEntry 'psql' 'Commit and push the SQL scripts folder to github.com/genewebb/sqlscripts (note: hides the PostgreSQL psql client of the same name)' @('psql [-Message <text>] [-WhatIf]') 'prof git push SqlScripts'
-            New-GeneOtherEntry 'pushrules' 'Commit and push ONLY the AI files (.cursor, .vscode, .github, .swarm, .claude) of the repo you are in' @('pushrules [-Message <text>] [-Remote <remote>]') 'prof git push -AIOnly'
-            New-GeneOtherEntry 'dpAI' 'Sync AI rules/settings between the template and the current repo: -Local template to repo, -Remote repo to template, -Git template to its remote, -Promote both' @('dpAI (-Local | -Remote | -Git | -Promote) [-Message <text>] [-Force] [-Try] [-WhatIf]', 'dpAI -Local -WhatIf', "dpAI -Promote -Message 'rules: promote updates'") 'prof ai local|remote|git|promote'
         )
     }
     board    = [pscustomobject]@{

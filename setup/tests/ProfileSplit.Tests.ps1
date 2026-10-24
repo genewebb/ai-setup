@@ -67,8 +67,15 @@ Test-Case 'load: sp and rp are the profile functions, not the built-in aliases (
     Assert-True ($out -contains 'rp=Function') "rp resolves to: $($out -join ' | ')"
 }
 
-Test-Case 'load: script-scope state survives dot-sourcing (Get-GeneAiGitPaths)' {
-    Assert-Equal '6' ([string](pwsh -NoProfile -Command ". '$core'; (Get-GeneAiGitPaths).Count" | Select-Object -Last 1))
+Test-Case 'load: script-scope state survives dot-sourcing ($script:ClaudeAccountDirs read by Get-ClaudeAccount)' {
+    Assert-Equal '2' ([string](pwsh -NoProfile -Command ". '$core'; @(Get-ClaudeAccount).Count" | Select-Object -Last 1))
+}
+
+Test-Case 'retired 10/24: ccursor, pushrules, dpAI and Get-GeneAiGitPaths are gone (Cursor-era; D3/D13 left them nothing to do)' {
+    $now = @(Get-CensusNames)
+    foreach ($n in 'function ccursor', 'function pushrules', 'function dpAI', 'function Get-GeneAiGitPaths', 'function Load-DpAIToolsConfig') {
+        Assert-True ($now -notcontains $n) "$n is still defined"
+    }
 }
 
 Test-Case 'load: core + tabs alone defines addtab, and New-GeneTab / addtab resolve every command they call' {

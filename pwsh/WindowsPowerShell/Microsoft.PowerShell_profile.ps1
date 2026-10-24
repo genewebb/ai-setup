@@ -74,7 +74,6 @@ function csm     { Set-Location C:\devops\repos\speedmerchants }
 # -----------------------------
 function cpower  { Set-Location D:\PowershellScripts }
 function csql    { Set-Location D:\SqlScripts }
-function ccursor { Set-Location D:\repos\cursor-rules-templates }
 
 function newguid { (New-Guid).Guid }
 

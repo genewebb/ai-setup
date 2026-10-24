@@ -16,7 +16,7 @@ $pd = Join-Path $hub 'pwsh\PowerShell\profile.d'
 Write-File "$pd\navigate.ps1" @'
 function cdevops { Set-Location $global:GeneMachine.ReposRoot }
 function cspeed { $p = $global:GeneMachine['SpeedMerchantsRepo']; Set-Location $p }
-function ccursor { Set-Location $global:GeneMachine.CursorRulesDir }
+function csql { Set-Location $global:GeneMachine.SqlScriptsDir }
 '@
 Write-File "$pd\build.ps1" @'
 function Publish-GeneSharedBits { $h = $global:GeneMachine.SharedBitsHost; if ($global:GeneMachine.Contains('SharedBitsShare')) { $null } }
@@ -87,7 +87,7 @@ function New-ShareRepo([string]$Name) {
     return $r
 }
 $repo = New-ShareRepo 'repo'
-$global:GeneMachine = [ordered]@{ ReposRoot = 'C:\devops\repos'; SpeedMerchantsRepo = 'C:\devops\repos\speed-merchants'; CursorRulesDir = 'D:\repos\cursor'; PackageShare = '\\NAS\share'; LocalSpeedSecretsFile = 'D:\secrets\x.json'; BitsDir = 'C:\Bits'; MarkitdownVenv = '%USERPROFILE%\.venvs\markitdown'; SharedBitsHost = ''; SharedBitsShare = '' }
+$global:GeneMachine = [ordered]@{ ReposRoot = 'C:\devops\repos'; SpeedMerchantsRepo = 'C:\devops\repos\speed-merchants'; SqlScriptsDir = 'D:\SqlScripts'; PackageShare = '\\NAS\share'; LocalSpeedSecretsFile = 'D:\secrets\x.json'; BitsDir = 'C:\Bits'; MarkitdownVenv = '%USERPROFILE%\.venvs\markitdown'; SharedBitsHost = ''; SharedBitsShare = '' }
 $global:GeneMachineAI = [ordered]@{}
 
 try {
@@ -116,7 +116,7 @@ try {
     Test-Case 'offer: catalog categories with a profile.d file, in catalog order; board never; sp/ep never; undefined catalog commands not offered' {
         $o = @(Get-GeneShareOffer -Hub $hub)
         Assert-Equal @('navigate', 'build', 'profile', 'claude', 'tools') @($o.Category)
-        Assert-Equal @('cdevops', 'cspeed', 'ccursor') @(($o | Where-Object Category -eq navigate).Commands.Name)
+        Assert-Equal @('cdevops', 'cspeed', 'csql') @(($o | Where-Object Category -eq navigate).Commands.Name)
         Assert-Equal @('dpspeed', 'dpcrewchief', 'dpall', 'Publish-SpeedMerchantsPackage') @(($o | Where-Object Category -eq build).Commands.Name) 'catalog order, and a cataloged helper is offered too'
         Assert-Equal @('rp') @(($o | Where-Object Category -eq profile).Commands.Name)
         Assert-Equal @('claude-which') @(($o | Where-Object Category -eq claude).Commands.Name) 'an alias to a function counts'
@@ -150,7 +150,7 @@ try {
         $s = Get-GeneShareState -Repo $repo
         $p = Read-GeneSharePicks -Offer $offer -State $s -Reader (New-Queue @('1,2', '1 3', ''))
         Assert-Equal @('navigate') @($p.Keys)
-        Assert-Equal @('cdevops', 'ccursor') @($p['navigate'])
+        Assert-Equal @('cdevops', 'csql') @($p['navigate'])
     }
     Test-Case 'pick: q cancels at either level' {
         $s = Get-GeneShareState -Repo $repo
@@ -241,14 +241,14 @@ Set-Alias cdv cdevops
 
 function Get-Helper { 'helper stays' }
 
-function ccursor { 3 }
+function csql { 3 }
 '@
-        $t = Edit-GeneShareCategoryText -Path $f -Catalog @('cdevops', 'cspeed', 'ccursor', 'csp') -Keep @('cdevops')
+        $t = Edit-GeneShareCategoryText -Path $f -Catalog @('cdevops', 'cspeed', 'csql', 'csp') -Keep @('cdevops')
         Assert-Match $t 'Quick nav \(banner stays\)'
         Assert-Match $t 'function cdevops'
         Assert-Match $t 'Set-Alias cdv cdevops'
         Assert-Match $t 'function Get-Helper'
-        Assert-NoMatch $t 'cspeed|ccursor|csp\b|this comment goes with it|second comment line'
+        Assert-NoMatch $t 'cspeed|csql|csp\b|this comment goes with it|second comment line'
         Assert-NoMatch $t '\n\s*\n\s*\n' 'no run of blank lines'
         $out = Join-Path $root 'trim-out.ps1'; Set-Content -LiteralPath $out -Value $t
         $m = Get-GeneShareFileMap -Path $out
@@ -257,7 +257,7 @@ function ccursor { 3 }
     Test-Case 'trim: keeping an alias keeps the function behind it; keeping nothing cuts every cataloged function' {
         $t = Edit-GeneShareCategoryText -Path "$pd\claude.ps1" -Catalog @('claude-which') -Keep @('claude-which')
         Assert-Match $t 'function Get-ClaudeAccount'; Assert-Match $t 'Set-Alias -Name claude-which'
-        $t = Edit-GeneShareCategoryText -Path "$pd\navigate.ps1" -Catalog @('cdevops', 'cspeed', 'ccursor')
+        $t = Edit-GeneShareCategoryText -Path "$pd\navigate.ps1" -Catalog @('cdevops', 'cspeed', 'csql')
         Assert-NoMatch $t 'function'
     }
     Test-Case 'core: every GeneMachineDefaults value is emptied, the rest of the file is untouched, and it still parses' {

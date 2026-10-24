@@ -104,17 +104,3 @@ function csql {
     Set-Location $path
 }
 
-function ccursor {
-    [CmdletBinding()]
-    param([Alias('h','help')][switch]$ShowHelp)
-
-    if (Test-HelpRequested -ShowHelp:$ShowHelp) {
-        Write-Usage "ccursor [-h|--help]" @("Navigate to $($global:GeneMachine.CursorRulesDir)")
-        return
-    }
-
-    $path = $global:GeneMachine.CursorRulesDir
-    Assert-PathExists -PathToCheck $path
-    Set-Location $path
-}
-
