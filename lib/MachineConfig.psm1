@@ -31,6 +31,8 @@ $script:AIKeys = @(
 $script:RequiredKeys = @('AIWorkRoot', 'ScratchRoot', 'WorktreesRoot', 'ReposRoot')
 # Keys whose value is not a path (never tested for existence, never rendered into access rules).
 $script:NonPathKeys = @('TestedClaudeVersion', 'TranscriptRetentionDays', 'AllowTempInRepo')
+# Get-AILocationKind's answer for a share or drive that a remote (WinRM) session cannot see.
+$script:NotCheckedRemote = 'not checked (remote session)'
 
 function Get-AIMachineConfigPath {
     <# The profile path: AI_MACHINE_CONFIG (the only environment input) or the fixed convention. #>
@@ -226,22 +228,36 @@ function Get-AIPath {
     return $v
 }
 
+function Test-AIRemoteSession {
+    <#
+    True when this runs over WinRM: prof setup's Invoke-GeneRemotePwsh sets PROF_REMOTE_SESSION=1 for the child pwsh it
+    starts, and $PSSenderInfo covers a script run in the remoting session itself. Such a session cannot reach a second
+    machine (Windows second hop: no delegated credentials) and has no mapped drives, so share checks mean nothing there.
+    #>
+    return ($env:PROF_REMOTE_SESSION -eq '1' -or [bool](Get-Variable -Name PSSenderInfo -Scope Global -ValueOnly -ErrorAction SilentlyContinue))
+}
+
 function Get-AILocationKind {
-    <# local | share | share (disconnected) | missing. Worked out from Get-PSDrive, no profile column. #>
+    <#
+    local | share | share (disconnected) | missing | not checked (remote session). Worked out from Get-PSDrive, no
+    profile column. In a remote session an unreachable share, or a letter that is not a drive there, is not checked.
+    #>
     param([string]$Path)
     if (-not $Path) { return 'blank' }
-    if ($Path -match '^\\\\') { return $(if (Test-Path -LiteralPath $Path) { 'share' } else { 'share (disconnected)' }) }
+    $remote = Test-AIRemoteSession
+    if ($Path -match '^\\\\') { return $(if (Test-Path -LiteralPath $Path) { 'share' } elseif ($remote) { $script:NotCheckedRemote } else { 'share (disconnected)' }) }
     if ($Path -match '^([A-Za-z]):') {
         $letter = $Matches[1]
         $drive = Get-PSDrive -Name $letter -PSProvider FileSystem -ErrorAction SilentlyContinue
         if (-not $drive) {
+            if ($remote) { return $script:NotCheckedRemote }
             # A mapped drive that is disconnected may not appear as a PSDrive at all; ask net use.
             $net = (& net use 2>$null) -join "`n"
             if ($net -match "(?im)^\S*\s+${letter}:\s+\\\\") { return 'share (disconnected)' }
             return 'missing'
         }
         if ($drive.DisplayRoot -and $drive.DisplayRoot -match '^\\\\') {
-            return $(if (Test-Path -LiteralPath "${letter}:\") { 'share' } else { 'share (disconnected)' })
+            return $(if (Test-Path -LiteralPath "${letter}:\") { 'share' } elseif ($remote) { $script:NotCheckedRemote } else { 'share (disconnected)' })
         }
         return 'local'
     }
@@ -261,7 +277,7 @@ function Get-AIConfig {
             Key      = $k
             Value    = $v
             Source   = $(if ($k -in $p.Derived) { 'derived' } else { 'profile' })
-            Exists   = $(if ($isPath -and $kind -ne 'share (disconnected)') { Test-Path -LiteralPath $v } elseif ($isPath) { $false } else { $null })
+            Exists   = $(if ($kind -eq $script:NotCheckedRemote) { $null } elseif ($isPath -and $kind -ne 'share (disconnected)') { Test-Path -LiteralPath $v } elseif ($isPath) { $false } else { $null })
             Location = $kind
         }
     }
@@ -367,7 +383,8 @@ function Test-AIMachineProfile {
         $v = $k[$key]
         if (-not $v -or $key -in $script:NonPathKeys -or $v -notmatch '^([A-Za-z]:|\\\\)') { continue }
         $kind = Get-AILocationKind -Path $v
-        if ($kind -eq 'share (disconnected)' -or $kind -eq 'missing') { & $warn "$key ($v) is unavailable: $kind." }
+        if ($kind -eq $script:NotCheckedRemote) { & $info "$key ($v) not checked: this runs in a remote session, which cannot reach shares or mapped drives (Windows second hop). Check it from a logon on this machine." }
+        elseif ($kind -eq 'share (disconnected)' -or $kind -eq 'missing') { & $warn "$key ($v) is unavailable: $kind." }
     }
 
     # Tested version (R20): a warning only.

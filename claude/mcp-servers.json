@@ -96,7 +96,6 @@
         "@modelcontextprotocol/server-filesystem",
         "{ReposRoot}",
         "{ScratchRoot}",
-        "{DocumentationDir}",
         "{PowershellScriptsDir}"
       ],
       "env": {}

@@ -117,7 +117,8 @@ Step "locations on $env:COMPUTERNAME, from $($prof.Path)"
 $fmt = '  {0,-25} {1,-62} {2}'
 Write-Host ($fmt -f 'KEY', 'PATH', 'STATE') -ForegroundColor DarkGray
 foreach ($c in @(Get-AIConfig) | Where-Object { $_.Location -ne 'value' }) {
-    $state = if (-not $c.Value) { 'blank (not on this machine)' } elseif ($c.Exists) { $c.Location } else { "$($c.Location), MISSING" }
+    # Exists is $null when the location could not be checked (a share seen from a remote session): no MISSING then.
+    $state = if (-not $c.Value) { 'blank (not on this machine)' } elseif ($c.Exists -or $null -eq $c.Exists) { $c.Location } else { "$($c.Location), MISSING" }
     Write-Host ($fmt -f $c.Key, $c.Value, $state) -ForegroundColor $(if ($c.Value -and -not $c.Exists) { 'Yellow' } else { 'Gray' })
 }
 Write-Host '  repos (git policy: a repo not listed gets no commit, push or worktree):' -ForegroundColor DarkGray

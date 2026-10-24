@@ -78,6 +78,17 @@ Test-Case 'retired 10/24: ccursor, pushrules, dpAI and Get-GeneAiGitPaths are go
     }
 }
 
+Test-Case 'the MCP template names only machine keys the core profile defines (a retired key leaves its server unwritten)' {
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($core, [ref]$null, [ref]$null)
+    $keys = [System.Collections.Generic.List[string]]::new()
+    foreach ($a in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and $n.Left.VariablePath.UserPath -in 'global:GeneMachineDefaults', 'global:GeneMachineAIKeys' }, $false)) {
+        if ($a.Left.VariablePath.UserPath -eq 'global:GeneMachineDefaults') { foreach ($h in $a.Right.FindAll({ param($n) $n -is [System.Management.Automation.Language.HashtableAst] }, $true)) { foreach ($kv in $h.KeyValuePairs) { $keys.Add([string]$kv.Item1.Value) } } }
+        else { foreach ($s in $a.Right.FindAll({ param($n) $n -is [System.Management.Automation.Language.StringConstantExpressionAst] }, $true)) { $keys.Add($s.Value) } }
+    }
+    Assert-True ($keys.Count -gt 5) "read only $($keys.Count) key(s) from the core profile"
+    $tokens = @([regex]::Matches((Get-Content -Raw (Join-Path $repoRoot 'claude\mcp-servers.json')), '\{([A-Za-z][A-Za-z0-9]*)\}') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+    Assert-Equal @() @($tokens | Where-Object { $_ -notin $keys -and $_ -ne 'Key' }) 'tokens in claude\mcp-servers.json with no profile key'
+}
 Test-Case 'load: core + tabs alone defines addtab, and New-GeneTab / addtab resolve every command they call' {
     $tmp = New-TestRoot 'split'; Copy-Item -LiteralPath $core -Destination $tmp
     New-Item -ItemType Directory -Path (Join-Path $tmp 'profile.d') | Out-Null

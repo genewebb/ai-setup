@@ -15,7 +15,7 @@ try {
     $cfg = @(Get-AIConfig)
 
     $show = 'AIWorkRoot', 'ClaudeHome', 'ReposRoot', 'SpeedyRepo', 'SpeedMerchantsRepo', 'WorktreesRoot', 'ScratchRoot',
-    'StatusPageDir', 'VaultWorkRoot', 'VaultPersonalRoot', 'VaultDocsRoot', 'DocumentationDir', 'PowershellScriptsDir', 'SecretsDir', 'ArchiveRoot'
+    'StatusPageDir', 'VaultWorkRoot', 'VaultPersonalRoot', 'VaultDocsRoot', 'PowershellScriptsDir', 'SecretsDir', 'ArchiveRoot'
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add("Machine paths ($env:COMPUTERNAME, from $($prof.Path)). {Key} in a skill means the value below; if a key is missing, run Get-AIConfig.")
     foreach ($k in $show) {

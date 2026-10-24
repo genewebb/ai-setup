@@ -272,6 +272,9 @@ function Invoke-GeneRemotePwsh {
     Invoke-Command -Session $Target.Session -ArgumentList $File, $Arguments, $Stdin -ScriptBlock {
         param($file, $argList, $secure)
         $ErrorActionPreference = 'Continue'
+        # The child pwsh cannot see $PSSenderInfo. This tells MachineConfig that shares are out of reach here (second
+        # hop), so install.ps1 reports them as not checked instead of missing.
+        $env:PROF_REMOTE_SESSION = '1'
         $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
         if (-not $pwsh) { 'pwsh 7 is not installed on this machine.'; '__PROF_EXIT__9'; return }
         if ($secure) {

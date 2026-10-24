@@ -132,6 +132,38 @@ try {
         Assert-Equal 'missing' (Get-AILocationKind -Path "$($free):\x")
     }
 
+    # prof setup runs install.ps1 over WinRM; that session cannot reach a second machine (Windows second hop), so an
+    # unreachable share there says nothing about the share. Invoke-GeneRemotePwsh sets PROF_REMOTE_SESSION=1.
+    Test-Case 'in a remote session an unreachable share or absent drive is not checked, not disconnected or missing' {
+        $free = [char[]](70..90) | Where-Object { -not (Get-PSDrive -Name $_ -ErrorAction SilentlyContinue) -and -not ((net use) -match "$($_):") } | Select-Object -Last 1
+        $env:PROF_REMOTE_SESSION = '1'
+        try {
+            Assert-Equal 'not checked (remote session)' (Get-AILocationKind -Path '\\ai-config-no-such-host-1\share\x')
+            Assert-Equal 'not checked (remote session)' (Get-AILocationKind -Path "$($free):\x")
+            Assert-Equal 'local' (Get-AILocationKind -Path $scratch)
+        }
+        finally { Remove-Item Env:PROF_REMOTE_SESSION }
+    }
+
+    Test-Case 'in a remote session an unreachable share is an info line naming the second hop, not a warning; Exists is unknown' {
+        $c9 = Join-Path $root 'p9.md'
+        $k9 = [ordered]@{}; foreach ($k in $base.Keys) { $k9[$k] = $base[$k] }; $k9['PackageShare'] = '\\ai-config-no-such-host-1\share'
+        New-TestProfile -Path $c9 -Keys $k9
+        $env:PROF_REMOTE_SESSION = '1'
+        try {
+            $v = @(Test-AIMachineProfile -Profile (Get-AIMachineProfile -Path $c9) | Where-Object { $_.Message -like '*PackageShare*' })
+            Assert-Equal 1 $v.Count ($v.Message -join ' | ')
+            Assert-Equal 'info' $v[0].Level
+            Assert-Match $v[0].Message 'not checked.*second hop'
+            $row = @(Get-AIConfig -ConfigPath $c9 | Where-Object Key -eq 'PackageShare')[0]
+            Assert-Equal 'not checked (remote session)' $row.Location
+            Assert-True ($null -eq $row.Exists) "Exists should be unknown, was $($row.Exists)"
+        }
+        finally { Remove-Item Env:PROF_REMOTE_SESSION }
+        $w = @(Test-AIMachineProfile -Profile (Get-AIMachineProfile -Path $c9) | Where-Object { $_.Message -like '*PackageShare*' })
+        Assert-Equal 'warning' $w[0].Level 'outside a remote session the same share is still a warning'
+    }
+
     Test-Case 'missing config file throws with the path' {
         Assert-Throws { Get-AIPath ScratchRoot -ConfigPath (Join-Path $root 'nope.md') } '*not found*nope.md*'
     }

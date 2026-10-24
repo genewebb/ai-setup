@@ -86,6 +86,17 @@ try {
         Assert-Match $c.Out 'runtime: checked into'
         Assert-True (Home-Empty) 'the scratch Claude home gained files under -Check'
     }
+    # ---- run over WinRM by prof setup: a share the session cannot reach (second hop) is not reported as missing ----
+    $cfgR = Join-Path $root 'profile-remote.md'
+    New-TestProfile -Path $cfgR -Keys ([ordered]@{ AIWorkRoot = $repo; ClaudeHome = $home1; ReposRoot = $repos; ScratchRoot = $scratch; WorktreesRoot = $wt; TestedClaudeVersion = '2.1.286'; PackageShare = '\\ai-config-no-such-host-1\share' }) -Sections ([ordered]@{ 'Claude access' = $access })
+    $env:AI_MACHINE_CONFIG = $cfgR; $env:PROF_REMOTE_SESSION = '1'
+    try { $rs = Run @('-NoPull', '-WhatIf') } finally { Remove-Item Env:PROF_REMOTE_SESSION; $env:AI_MACHINE_CONFIG = $cfg }
+    Test-Case 'in a remote session an unreachable share is listed as not checked, with no MISSING and no unavailable warning' {
+        Assert-Equal 0 $rs.Code $rs.Out
+        Assert-Match $rs.Out ('(?m)PackageShare\s+' + [regex]::Escape('\\ai-config-no-such-host-1\share') + '\s+not checked \(remote session\)\s*$')
+        Assert-NoMatch $rs.Out 'PackageShare.*(MISSING|unavailable|disconnected)'
+    }
+
     # ---- stale profile files: a profile.d or Gene.* module file the repo no longer has would still load ----
     $pd = Join-Path $root 'pwshdir'; $wp = Join-Path $root 'winpsdir'
     New-Item -ItemType Directory -Force (Join-Path $pd 'profile.d'), (Join-Path $pd 'Modules\Gene.Profile'), (Join-Path $pd 'Modules\Other.Mod'), $wp | Out-Null
