@@ -125,7 +125,7 @@ default, `q` = cancel) otherwise: no module, redirected input (remote runs), tes
 
 ### 4.2 Machines registry
 
-`machines.yaml` at the clone root (the repo is private; `share.yaml` already blocks host names on promote):
+`machines.yaml` at the clone root (the repo is private; `share.yaml` blockedPatterns flag host names when `prof setup share` runs):
 
 ```yaml
 machines:

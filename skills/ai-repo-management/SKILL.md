@@ -26,7 +26,7 @@ installed COPIES; an edit made there is drift and is overwritten (and reported) 
 ├── stream-host\                 # placed into the profile's StreamHostDir
 ├── ai-manifest.json             # runtime inventory: what the installer copies where
 ├── install.ps1  publish.ps1     # the whole sync model
-└── share.yaml  tools\           # one-way promotion of chosen items to a work marketplace
+└── share.yaml  tools\           # blockedPatterns for prof setup share; Find-Secrets.ps1
 ```
 
 ## Add, change or retire a skill
@@ -55,5 +55,8 @@ never delete it.
 
 ## Sharing at work
 
-Items stay private unless listed in `share.yaml`; `tools\Promote-ToWork.ps1 -TargetRepo <work marketplace clone>`
-copies them one way after its checks. Never edit the promoted copy in the work repo.
+Everything stays private until `prof setup share` hands it over: `prof setup share ai-setup` picks skills and writes
+them as one plugin per category into the coworker repo (`ShareRepo` machine key, `ai\plugins`, marketplace at the
+root); `prof setup share profile` does the same for PowerShell commands. A skill with a `{Key}` path or a reference to
+an unshared skill is refused; `share.yaml` `blockedPatterns` hits are listed and confirmed; secrets stop it. share writes
+the working tree and prints the git commands. Never edit the shared copy in that repo; change the source and share again.

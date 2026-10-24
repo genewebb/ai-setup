@@ -787,7 +787,8 @@ function Show-GeneShareHelp {
     Write-Host '  prof setup share ai-setup [-Repo <clone>] [-WhatIf]   pick Claude skills; ship them as one plugin per category'
     Write-Host '  prof setup share help                                 this text'
     Write-Host ''
-    Write-Host "  The repo: the ShareRepo row of this machine's profile (-Repo overrides). The repo is the state: what it holds is"
+    $repoLine = try { "$(Get-GeneShareRepo) (the ShareRepo row of this machine's profile; -Repo overrides)" } catch { "the ShareRepo row of this machine's profile, not set here yet (-Repo overrides)" }
+    Write-Host "  The repo: $repoLine. The repo is the state: what it holds is"
     Write-Host '  preselected, unpicking removes it. share writes the working tree under ai\ and .claude-plugin\ only, then prints'
     Write-Host '  the git add / commit / push commands for you to run. -WhatIf shows the pick and the settings table, writes nothing.'
     Write-Host ''
