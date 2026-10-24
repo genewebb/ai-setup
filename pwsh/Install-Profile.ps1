@@ -122,7 +122,9 @@ function Get-Rows([string[]]$Lines) {
         if ($l -match $rowRx -and $Matches[1] -ne 'Key') { [pscustomobject]@{ Key = $Matches[1]; Value = $Matches[2].Trim(); UsedBy = $Matches[3].Trim(); Status = $Matches[4].Trim() } }
     }
 }
-function Format-Row($r) { "| $($r.Key) | $($r.Value) | $($r.UsedBy) | $($r.Status) |" }
+# The person installing owns this machine's file: every value written here, shared or typed, is set by them.
+$installer = "$env:USERDOMAIN\$env:USERNAME"
+function Format-Row($r) { "| $($r.Key) | $($r.Value) | $($r.UsedBy) | $(if ($r.Value) { "set by $installer" } else { 'fill in' }) |" }
 function Ask-Row($r) {
     # A blank value in the template means "the coworker fills it in": ask, unless nothing may be asked.
     if ($r.Value -or $NonInteractive) { return $r }
@@ -132,7 +134,7 @@ function Ask-Row($r) {
     if ($v -and $v -match '^([A-Za-z]:\\|\\\\|%)' -and -not (Test-Path -LiteralPath ([Environment]::ExpandEnvironmentVariables($v)))) {
         Warn "$($r.Key): $v does not exist on this machine (kept; fix it in $ConfigPath when it is there)"
     }
-    [pscustomobject]@{ Key = $r.Key; Value = $v; UsedBy = $r.UsedBy; Status = $(if ($v) { 'set by you' } else { 'fill in' }) }
+    [pscustomobject]@{ Key = $r.Key; Value = $v; UsedBy = $r.UsedBy; Status = '' }
 }
 
 $tpl = Join-Path $here 'ProfileMachineConfig.md'

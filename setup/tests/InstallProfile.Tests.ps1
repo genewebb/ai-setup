@@ -60,13 +60,15 @@ try {
 
     $t2 = New-Target
     $r2 = Run $t2 @() @('D:\repos')
-    Test-Case 'asks for every blank key, keeps a set one, writes the config with this machine name' {
+    $installer = [regex]::Escape("$env:USERDOMAIN\$env:USERNAME")
+    Test-Case 'asks for every blank key, keeps a set one, writes the config with this machine name and the installer as the setter' {
         Assert-Equal 0 $r2.Code $r2.Out
         Assert-Match $r2.Out 'ReposRoot \(cdevops\)'
         $c = Cfg $t2
         Assert-Match $c "^# PowerShell profile machine config - $env:COMPUTERNAME"
-        Assert-Match $c '\| ReposRoot \| D:\\repos \| cdevops \| set by you \|'
-        Assert-Match $c '\| MarkitdownVenv \| %USERPROFILE%\\\.venvs\\markitdown \| markitdown \| set by Test Owner \|'
+        Assert-Match $c ('\| ReposRoot \| D:\\repos \| cdevops \| set by ' + $installer + ' \|')
+        Assert-Match $c ('\| MarkitdownVenv \| %USERPROFILE%\\\.venvs\\markitdown \| markitdown \| set by ' + $installer + ' \|')
+        Assert-NoMatch $c 'Test Owner|set by you'
         Assert-NoMatch $c '<MACHINE>'
     }
 
@@ -75,7 +77,7 @@ try {
     Test-Case 'a typed folder that does not exist warns and is kept' {
         Assert-Equal 0 $r3.Code $r3.Out
         Assert-Match $r3.Out 'WARNING.*Q:\\nope\\x.*does not exist'
-        Assert-Match (Cfg $t3) '\| ReposRoot \| Q:\\nope\\x \| cdevops \| set by you \|'
+        Assert-Match (Cfg $t3) ('\| ReposRoot \| Q:\\nope\\x \| cdevops \| set by ' + $installer + ' \|')
     }
 
     $t4 = New-Target
@@ -89,7 +91,8 @@ try {
         Assert-Match $c '\| ReposRoot \|\s*\| cdevops \| fill in \|'
         Assert-Match $c '\| Foo \| bar \| x \| y \|'
         Assert-Equal 1 ([regex]::Matches($c, 'MarkitdownVenv')).Count 'MarkitdownVenv row count'
-        Assert-NoMatch $c 'never-used'
+        Assert-Match $c ('\| MarkitdownVenv \| [^|]+ \| markitdown \| set by ' + $installer + ' \|')
+        Assert-NoMatch $c 'never-used|Test Owner'
     }
 
     $t5 = New-Target
