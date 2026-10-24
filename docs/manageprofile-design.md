@@ -99,7 +99,7 @@ The `setup` group (`prof setup <command>`):
 | `edit` | Open the **repo copy** of the profile (`{AIWorkRoot}\pwsh\PowerShell\...`) in the editor. Replaces `ep`, which opens the installed copy that the next install overwrites. | - |
 | `reload` | `install.ps1 -NoPull -Yes` here, then `. $PROFILE`. Replaces `rp`. | - |
 | `show` | Print the installed profile path and the repo copy path with their hashes (in sync or not), then whether the `profile.d` category files and the own modules match the repo, and which installed files the repo no longer has (the install never deletes; a stale `profile.d` file still loads) (`Compare-GeneProfileTrees`). Replaces `sp`. | - |
-| `export` | Pack the profile for someone who is not on the ai-setup repo (Gene, 10/23): the `pwsh\` tree, a blank-value `ProfileMachineConfig.md`, `Install-Profile.ps1` and a README, zipped under `{ScratchRoot}\prof` or `-Out`. The secret scan refuses; every mention of the owner's accounts, machines and personal paths (`share.yaml` blockedPatterns) is listed and confirmed first. Code: `Export.ps1`. | - |
+| `share` | Hand picked commands (`profile`) and Claude skills (`ai-setup`) to a coworker through the shared git repo (the `ShareRepo` machine key, `-Repo` overrides): the trimmed profile, its modules, an installer and a settings template under `<repo>\ai\profile`, the skills as one plugin per category under `<repo>\ai\plugins` with `.claude-plugin\marketplace.json` at the root. The repo is the state (preselected, unpicking removes). Secrets refuse; blockedPatterns mentions are listed and confirmed. Writes the working tree and prints the git commands, never commits. Replaces `export` (Gene, 10/23). Design: vault `99_Frequent\Profile\Share Design.md`. Code: `Share.ps1`, `ShareSkills.ps1` (never shipped). | `What` (profile, ai-setup, help) |
 
 `prof help` (top level, not in a group) lists every group and command, `prof help <group>` one group,
 `prof help <group> <command>` (or `<command> -h`) one command in full, plus old name -> new command.
@@ -125,7 +125,7 @@ default, `q` = cancel) otherwise: no module, redirected input (remote runs), tes
 
 ### 4.2 Machines registry
 
-`machines.yaml` at the clone root (the repo is private; `share.yaml` already blocks host names on promote):
+`machines.yaml` at the clone root (the repo is private; `share.yaml` blockedPatterns flag host names when `prof setup share` runs):
 
 ```yaml
 machines:

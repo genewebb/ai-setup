@@ -10,7 +10,7 @@ permissions, memory, stream kit. Product code is NOT here; it stays in the corpo
 | Use my setup on a machine (first time) | `git clone https://genewebb@github.com/genewebb/ai-setup.git` (`genewebb@` stops the work/personal account picker) into the machine's repos root, then `install.ps1` |
 | Get changes made elsewhere | `install.ps1` (git pull --ff-only + install) |
 | Send changes from this machine | `publish.ps1 -Message "..."` (secret scan, commit, rebase, push) |
-| Share an item at work | add it to `share.yaml`, run `tools\Promote-ToWork.ps1 -TargetRepo <work marketplace clone>` |
+| Share commands or skills with a coworker | `prof setup share profile` / `prof setup share ai-setup` (writes the `ShareRepo` clone, prints the git commands) |
 
 ```powershell
 # from the clone folder
@@ -37,16 +37,19 @@ commit and push for `{ReposRoot}\ai-setup`.
 
 ## Sharing at work
 
-This repo is the source. `share.yaml` lists the skills and agents that are also published to a work plugin
-marketplace. `tools\Promote-ToWork.ps1` copies them one way and refuses an item that:
+This repo is the source. `prof setup share` hands picked parts of it to a coworker through one shared git repo (the
+`ShareRepo` machine key; today ADO `Products/_git/speed-merchants-dba`, under its `ai\` folder):
 
-- matches a `blockedPatterns` entry (personal accounts, hosts, personal paths, `[[memory]]` links)
-- uses a machine-profile `{Key}` path
-- references a private skill that is not promoted with it
-- looks like it holds a secret
+- `prof setup share profile`: categories and commands of the PowerShell profile, really trimmed, with an installer and a
+  machine-settings template (`ai\profile`)
+- `prof setup share ai-setup`: Claude skills as one plugin per category (`ai\plugins\<category>`) behind a plugin
+  marketplace at the repo root; `[[skill]]`, `` `skill` `` and `/skill` references become `<category>:<skill>` in the copy
 
-It never commits in the work repo. Coworkers get plugin-namespaced names (`/plugin:skill`); on my own machines
-the private install keeps the bare names, so I do not install my own promoted plugins.
+The repo is the state: what it holds is preselected, unpicking removes it. A skill is refused when it uses a
+machine-profile `{Key}` path or references a skill that is not shared with it; anything that looks like a secret stops
+the share; every line matching a `share.yaml` `blockedPatterns` entry (personal accounts, hosts, personal paths) is
+listed and needs a yes. share never commits: it prints the `git add / commit / push` lines. Design and coworker steps:
+vault `99_Frequent\Profile\Share Design.md` and `Coworker Handoff.md`; `prof setup share help` has the short version.
 
 ## Secrets
 
