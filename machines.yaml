@@ -3,3 +3,5 @@
 machines:
   SMVMTR1:
     users: [CORP\genewe]
+  SMVMTR2:
+    users: [CORP\genewe]

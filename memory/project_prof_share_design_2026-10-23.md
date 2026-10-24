@@ -1,0 +1,36 @@
+---
+name: project_prof_share_design_2026-10-23
+description: "prof setup share (Gene 10/23): BUILT + MERGED to laptop main fcc7b56 (10 commits, replaces prof setup export, Promote-ToWork retired); git delivery into ADO speed-merchants-dba (marketplace, one plugin per skill category + ai\\profile); clone-path marketplace add verified, ADO URL form unverified until first push; design note vault 99_Frequent\\Profile\\Share Design.md"
+metadata:
+  node_type: memory
+  type: project
+  originSessionId: e936bbac-19b6-4306-a230-cd7db2104ac3
+  modified: 2026-10-24T15:48:18.914Z
+---
+
+2026-10-23 brainstorm with Gene (every decision via picker). Design: `{VaultWorkRoot}\99_Frequent\Profile\Share Design.md` (status line BUILT); coworker steps: `Coworker Handoff.md` (rewritten 10/23 for the git flow).
+
+Status 2026-10-23 evening: change 1 (profile split) merged to main d8625b6, laptop reloaded. Change 2 (share) BUILT on branch `work/prof-share` from the plan `docs/superpowers/plans/2026-10-23-prof-share.md` (8 tasks, executed inline, fresh reviewer at the end); merged to laptop main fcc7b56 after a fresh-reviewer fix pass (7 Important fixed, 6 minors deferred, bare-backtick hard stop kept as a ruling); laptop NOT reloaded yet (prof setup reload), main ahead of origin by 28 and behind by 1 so publish needs a pull first. Push to SMVMTR1 = BACK BURNER (Gene 10/23 16:55: do not nag). First real share NOT done yet: the dba clone holds an uncommitted one-skill probe share (testauto-batch-orchestration) from the marketplace verification; Gene inspects or discards it (`git -C C:\devops\repos\speed-merchants-dba checkout -- README.md`, delete `ai\` and `.claude-plugin\`).
+
+Cleanup 2026-10-24 (branch `work/prof-cleanup`, merged laptop main a0c5baa, not reloaded/published; Gene approved all three): ccursor + CursorRulesDir, pushrules (+ `prof git push -AIOnly`, Get-GeneAiGitPaths) and dpAI + the `prof ai` group RETIRED. Reason: machine-config D3/D13 (Claude Code only, no `.claude` in repos), not share; Gene's first `prof setup share profile -WhatIf` showed them in the offer. Laptop machine config rows CursorRulesDir, DocumentationDir and the `{DocumentationDir}` resource row removed (SMVMTR1/SMVMTR2 configs still have them: the profile warns "unknown key" there after rollout until the rows go). Vault notes (Profile Guide, Command Reference, Share Design, Coworker Handoff) updated. Note: laptop D: is a NAS mapping that was disconnected during the check, not absent. Same day: multi-pick menus got an "all of them" header line (Spectre choice group; numbered fallback a / all), merged 260a7c0. Gene decided to KEEP prof setup secrets (it never ships to a coworker: SetupGroup, install.ps1, setup\, lib\ are not in the share).
+
+What was built (Gene.Profile module: Share.ps1, ShareSkills.ps1, SetupGroup.ps1; pwsh\Install-Profile.ps1; tests Share 31 / ShareSkills 19 / InstallProfile 9 / Prof 83):
+- `prof setup share profile [-WhatIf] [-Repo]`: category then command pick (preselected from the repo), AST-found machine keys asked blank / my value / typed / keep, trimmed copy to `ai\profile` (core + picked profile.d + hub with picked groups only + modules), `prof-share.json`, `ProfileMachineConfig.md` template, Install-Profile.ps1; secrets hard stop (tools\Find-Secrets.ps1), blockedPatterns listed + one yes; refuses while a previous share is uncommitted.
+- `prof setup share ai-setup`: category (first hyphen token when 3+ skills, else general; front-matter `category:` overrides) then skills; `ai\plugins\<category>` with plugin.json (author, version 1.0.0, patch bump when contentHash changes), root `.claude-plugin\marketplace.json` (name speed-merchants-dba), rewrite `[[x]]`/`` `x` ``/`/x` of picked skills to `<category>:<x>`, `[[memory]]` brackets stripped; `{Key}` and references to unpicked skills = hard stop (so most testauto skills need their crewchief/other neighbours picked too; 13 of 56 testauto skills stand alone).
+- `ai\README.md` regenerated every share (clone line from origin, `/plugin marketplace add <the folder you cloned this repo into>`, install lines per plugin); one pointer line in root README.md.
+- `claude plugin validate` passes (marketplace and plugins, --strict too). `claude plugin marketplace add <clone path>` verified 10/23 (Folder source). ADO URL form (`https://profisee.visualstudio.com/Products/_git/speed-merchants-dba`) fails until the share is pushed (clones origin, finds no marketplace.json); Martin's `profisee` marketplace uses the dev.azure.com form of an ADO URL, so it should work after the push: UNVERIFIED.
+
+Decisions (unchanged):
+- `prof setup share` (menu: profile | ai-setup | help) REPLACES `prof setup export` (never released). No zip: delivery is git.
+- Shared repo = existing ADO `Products/_git/speed-merchants-dba`, holds Darias Brown's HCQAImport solution; share lives in `ai\` plus root `.claude-plugin\marketplace.json` only; Darias's files never touched. Machine key `ShareRepo` = C:\devops\repos\speed-merchants-dba on the laptop; git policy: Claude commit no, push no.
+- Coworker `prof` has NO setup group; update = git pull + Install-Profile.ps1 + /plugin update; WindowsPowerShell 5.1 profile never shipped.
+- share writes the working tree and prints git add/commit/push; Gene runs them.
+
+**Why:** ai-setup is private; coworker (Darias, per speed-merchants commit 5d40e37b "handoff to Darias") needs regular updates, so git beats zips.
+**How to apply:** first real share = `prof setup share profile -WhatIf`, then for real, then `prof setup share ai-setup`, then Gene runs the printed git commands and re-tests the ADO URL marketplace form; rollout of the module to other machines via [[feedback_ai_setup_rollout_via_prof]]. Supersedes the export half of [[project_profile_guide_and_export_2026-10-23]]. Related: [[project_ai_setup_private_git_repo_2026-10-14]], [[reference_ai_profisee_review_2026-10-14]].
+
+**10/24 afternoon (laptop main 9de57fd, not reloaded, not published):** SMVMTR2 bootstrap as CORP\genewe OK. Then:
+- 7f2f026 remote share check: install over WinRM can't reach \CORPNAS01 (second hop, verified with Invoke-Command); Invoke-GeneRemotePwsh sets PROF_REMOTE_SESSION=1, MachineConfig reports "not checked (remote session)" as info. Also dropped {DocumentationDir} from filesystem MCP template (my 10/24 cleanup regression).
+- 568427e Install-Profile Status = "set by DOMAIN\installer" (Gene: installer name, not mine).
+- 9de57fd bootstrap/push ASK git name+email every run (default clone, else target global .gitconfig); never copy hub identity; keep origin with account's own GitHub user; LEFT TO DO prints PAT commands (Gene: print the command, prof never takes a PAT); seed + -FixProfile drop every note naming owner (git user.name words).
+- Laptop filesystem MCP entry in ~\.claude.json is old hand-made (D:\ paths missing) = likely "Connection closed"; not touched.
