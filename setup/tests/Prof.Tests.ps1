@@ -339,6 +339,29 @@ try {
         $none = Get-GeneProfileFix -HubRaw $raw -TargetRaw $raw -TargetLines $new -OwnerNames $owner
         Assert-True $none.Empty 'a cleaned profile needs no fix'
     }
+    $policy = @('', '## Git policy', '', '| Repo | Commit | Push | Worktrees | Note |', '|---|---|---|---|---|',
+        '| {ReposRoot}\ai-setup | yes | yes | no | ai-setup clone (10/14) |', '| {ReposRoot}\ai-profisee | yes | no | no | shared repo |')
+    Test-Case 'fix: with a per-user AIWorkRoot the git policy row for the ai-setup clone becomes {AIWorkRoot}; other rows stay' {
+        $raw = [ordered]@{ ReposRoot = 'D:\devops\repos'; AIWorkRoot = 'D:\devops\%USERNAME%\ai-setup' }
+        $lines = @('| Key | Value | Used by | Status |', '|---|---|---|---|', '| ReposRoot | D:\devops\repos | x | ok |', '| AIWorkRoot | D:\devops\%USERNAME%\ai-setup | x | ok |') + $policy
+        $fix = Get-GeneProfileFix -HubRaw $raw -TargetRaw $raw -TargetLines $lines -OwnerNames @()
+        Assert-Equal 1 @($fix.Notes).Count ($fix.Notes | Out-String)
+        Assert-Equal '| {AIWorkRoot} | yes | yes | no | ai-setup clone (10/14) |' $fix.Notes[0].New
+        Assert-Match $fix.Notes[0].Reason 'git policy'
+        $new = Edit-GeneProfileLines -Lines $lines -Fix $fix
+        Assert-True ($new -contains '| {ReposRoot}\ai-profisee | yes | no | no | shared repo |') ($new -join "`n")
+        Assert-True ($new -contains '| {AIWorkRoot} | yes | yes | no | ai-setup clone (10/14) |') ($new -join "`n")
+        $shared = [ordered]@{ ReposRoot = 'D:\devops\repos'; AIWorkRoot = 'D:\devops\repos\ai-setup' }
+        $lines2 = @('| Key | Value | Used by | Status |', '|---|---|---|---|', '| AIWorkRoot | D:\devops\repos\ai-setup | x | ok |') + $policy
+        $f2 = Get-GeneProfileFix -HubRaw $shared -TargetRaw ([ordered]@{ ReposRoot = 'D:\devops\repos'; AIWorkRoot = 'D:\devops\%USERNAME%\ai-setup' }) -TargetLines $lines2 -OwnerNames @()
+        Assert-Equal '| {AIWorkRoot} | yes | yes | no | ai-setup clone (10/14) |' @($f2.Notes)[0].New 'the row follows a per-user AIWorkRoot the fix sets'
+    }
+    Test-Case 'seed: the git policy row for the ai-setup clone is {AIWorkRoot}, since a seeded AIWorkRoot is per-user' {
+        $hp = [pscustomobject]@{ Lines = @($hubLines[0..5]) + $policy; Raw = [ordered]@{ ReposRoot = 'C:\devops\repos'; AIWorkRoot = 'C:\devops\repos\ai-setup' } }
+        $s = New-GeneSeedProfile -Machine BOX -HubProfile $hp -OwnerNames @()
+        Assert-True ($s.Lines -contains '| {AIWorkRoot} | yes | yes | no | ai-setup clone (10/14) |') ($s.Lines -join "`n")
+        Assert-True ($s.Lines -contains '| {ReposRoot}\ai-profisee | yes | no | no | shared repo |') ($s.Lines -join "`n")
+    }
     Test-Case 'git config: the target gets the identity it is given, never the hub''s, and keeps its own origin user' {
         $h = Join-Path $root 'id-hub'; New-Repo $h; Add-Commit $h 'a.txt' 'x'
         git -C $h remote add origin 'https://hubuser@github.com/o/r.git'
@@ -486,7 +509,13 @@ try {
         $t = New-TestRoot 'trim'; $m2 = Join-Path $t 'Modules\Gene.Profile'
         New-Item -ItemType Directory -Path "$t\profile.d", $m2 -Force | Out-Null
         $src = Join-Path $repoRoot 'pwsh\PowerShell'
-        Copy-Item -LiteralPath "$src\Microsoft.PowerShell_profile.ps1" -Destination $t
+        # The copy reads a scratch machine profile, not this machine's: the core dot-sources scripts from
+        # PowershellScriptsDir (clearseq.ps1), which would add the tools category wherever that folder is reachable.
+        $mcfg = Join-Path $t 'machine.md'; New-Item -ItemType Directory -Path (Join-Path $t 'scripts') -Force | Out-Null
+        New-TestProfile -Path $mcfg -Keys ([ordered]@{ PowershellScriptsDir = (Join-Path $t 'scripts') })
+        $core = (Get-Content -LiteralPath "$src\Microsoft.PowerShell_profile.ps1" -Raw).Replace("'C:\Deploy\Setup\ProfileMachineConfig.md'", "'$mcfg'")
+        Assert-True ($core.Contains($mcfg)) 'the core profile no longer names the machine profile path this test replaces'
+        Set-Content -LiteralPath (Join-Path $t 'Microsoft.PowerShell_profile.ps1') -Value $core -NoNewline
         foreach ($c in 'tabs', 'navigate') { Copy-Item -LiteralPath "$src\profile.d\$c.ps1" -Destination "$t\profile.d" -ErrorAction Stop }
         Copy-Item -Path "$mod\*" -Destination $m2 -Recurse
         foreach ($f in 'SetupGroup', 'Target', 'Sync', 'Share', 'ShareSkills', 'StreamsGroup', 'GitGroup', 'BuildGroup') { Remove-Item -LiteralPath "$m2\$f.ps1" -ErrorAction Stop }

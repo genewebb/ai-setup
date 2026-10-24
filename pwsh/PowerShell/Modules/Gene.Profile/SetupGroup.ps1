@@ -422,7 +422,7 @@ function Invoke-GeneProfCheck {
         $fix = Get-GeneProfileFix -HubRaw (Get-GeneHubProfile).Raw -TargetRaw $t.Profile.Raw -TargetLines $t.Profile.Lines -OwnerNames (Get-GeneOwnerNames -Hub $hub)
         Write-ProfNote "machine profile $($t.ProfilePath)"
         if ($fix.Missing.Count) { Write-ProfWarn "rows this machine lacks (the hub has them): $($fix.Missing -join ', ')" } else { Write-ProfNote 'no rows missing compared with the hub' }
-        if ($fix.Notes.Count) { Write-ProfWarn "$($fix.Notes.Count) line(s) carry notes naming $env:COMPUTERNAME's owner: prof setup bootstrap -FixProfile drops them" }
+        foreach ($n in $fix.Notes) { Write-ProfWarn "$($n.Reason): $($n.Old.Trim())  (prof setup bootstrap -FixProfile changes it)" }
         if ($fix.AIWorkRoot) { Write-ProfWarn "AIWorkRoot '$($fix.AIWorkRoot.Old)' is not per-user (one clone per account): prof setup bootstrap -FixProfile sets '$($fix.AIWorkRoot.New)'" }
         $paths = Invoke-Command -Session $t.Session -ArgumentList $t.Profile.Raw -ScriptBlock {
             param($raw)
@@ -511,6 +511,20 @@ function Remove-GeneOwnerNotesFromRow {
     return '| ' + ($cells -join ' | ') + ' |'
 }
 
+function Repair-GenePolicyRow {
+    <#
+    A Git policy row for the ai-setup clone under ReposRoot ({ReposRoot}\ai-setup, or that path written out) names
+    {AIWorkRoot} instead: with a per-user AIWorkRoot each account's clone is there, and a row for the old shared path
+    would leave the real clone without commit or push rights.
+    #>
+    param([AllowEmptyString()][string]$Line, [string]$ReposRoot)
+    if ($Line -notmatch '^\s*\|\s*([^|]+?)\s*\|(.*)$') { return $Line }
+    $repo = $Matches[1]; $rest = $Matches[2]
+    $hits = @('{ReposRoot}\ai-setup'); if ($ReposRoot) { $hits += (Join-GeneRemotePath $ReposRoot 'ai-setup') }
+    if ($repo -in $hits) { return "| {AIWorkRoot} |$rest" }
+    return $Line
+}
+
 function Get-GeneProfileFix {
     <#
     Rows the target lacks compared with the hub, the per-user AIWorkRoot it should have, and (with -TargetLines) the
@@ -528,7 +542,19 @@ function Get-GeneProfileFix {
         if (-not $base) { $base = Split-Path ([string]$HubRaw['ReposRoot']) }
         $aiw = [pscustomobject]@{ Old = [string]$TargetRaw['AIWorkRoot']; New = (Join-GeneRemotePath $base '%USERNAME%\ai-setup') }
     }
-    $notes = @(foreach ($l in @($TargetLines)) { $n = Remove-GeneOwnerNotesFromRow -Line $l -Names $OwnerNames; if ($n -ne $l) { [pscustomobject]@{ Old = $l; New = $n } } })
+    $perUser = Test-GenePerUserValue $(if ($aiw) { $aiw.New } else { $TargetRaw['AIWorkRoot'] })
+    $section = ''
+    $notes = @(foreach ($l in @($TargetLines)) {
+            if ($l -match '^##\s+(.+?)\s*$') { $section = $Matches[1] }
+            $n = $l; $why = @()
+            if ($perUser -and $section -eq 'Git policy') {
+                $p = Repair-GenePolicyRow -Line $n -ReposRoot ([string]$TargetRaw['ReposRoot'])
+                if ($p -ne $n) { $n = $p; $why += 'git policy row follows the per-user AIWorkRoot' }
+            }
+            $o = Remove-GeneOwnerNotesFromRow -Line $n -Names $OwnerNames
+            if ($o -ne $n) { $n = $o; $why += "note naming $env:COMPUTERNAME's owner" }
+            if ($n -ne $l) { [pscustomobject]@{ Old = $l; New = $n; Reason = ($why -join '; ') } }
+        })
     [pscustomobject]@{ Missing = $missing; AIWorkRoot = $aiw; Notes = $notes; Empty = (-not $missing.Count -and -not $aiw -and -not $notes.Count) }
 }
 
@@ -571,9 +597,12 @@ function New-GeneSeedProfile {
     $wd = if ($WorkDrive) { $WorkDrive.Substring(0, 1).ToUpperInvariant() } else { $hubDrive }
     $out = [System.Collections.Generic.List[string]]::new()
     $inFirst = $false; $done = $false; $literal = [System.Collections.Generic.List[string]]::new()
+    $section = ''
     foreach ($line in $hp.Lines) {
         $isRow = $line -match '^\s*\|'
         if ($line -match '^#\s') { $line = $line -replace [regex]::Escape($env:COMPUTERNAME), $Machine }
+        if ($line -match '^##\s+(.+?)\s*$') { $section = $Matches[1] }
+        if ($section -eq 'Git policy' -and $isRow) { $line = Repair-GenePolicyRow -Line $line -ReposRoot ([string]$hp.Raw['ReposRoot']) }
         if (-not $done -and $isRow) { $inFirst = $true }
         if ($inFirst -and -not $done -and -not $isRow) { $done = $true; $inFirst = $false }
         if ($inFirst -and $isRow) {
@@ -732,7 +761,7 @@ function Invoke-GeneProfBootstrap {
             $fix = Get-GeneProfileFix -HubRaw (Get-GeneHubProfile).Raw -TargetRaw $t.Profile.Raw -TargetLines $t.Profile.Lines -OwnerNames (Get-GeneOwnerNames -Hub $hub)
             if ($fix.Missing.Count) { Write-ProfNote "rows missing compared with the hub: $($fix.Missing -join ', ')" }
             if ($fix.AIWorkRoot) { Write-ProfNote "AIWorkRoot '$($fix.AIWorkRoot.Old)' -> '$($fix.AIWorkRoot.New)' (one clone per account)" }
-            foreach ($n in $fix.Notes) { Write-ProfNote "note naming $env:COMPUTERNAME's owner: $($n.Old.Trim())"; Write-ProfNote "  becomes: $($n.New.Trim())" }
+            foreach ($n in $fix.Notes) { Write-ProfNote "$($n.Reason): $($n.Old.Trim())"; Write-ProfNote "  becomes: $($n.New.Trim())" }
             if ($fix.Empty) { Write-ProfNote 'nothing to change' }
             elseif ($FixProfile) {
                 $new = Edit-GeneProfileLines -Lines $t.Profile.Lines -Fix $fix
