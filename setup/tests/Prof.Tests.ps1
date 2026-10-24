@@ -59,7 +59,7 @@ try {
     }
     Test-Case 'remote path join: the hub never calls Join-Path on a target-local base' {
         $src = (Get-Content -LiteralPath "$mod\SetupGroup.ps1" -Raw) + (Get-Content -LiteralPath "$mod\Sync.ps1" -Raw)
-        Assert-NoMatch $src 'Join-Path \$(clone|Clone)\.Local|Join-Path \$\w+\.Paths\.Local|Join-Path \$Repo\.Path|Join-Path \$archive|Join-Path \$base|Join-Path \(Split-Path \$repos\)'
+        Assert-NoMatch $src 'Join-Path \$[\w.]*Local\b|Join-Path \$\w+\.Paths\.Local|Join-Path \$Repo\.Path|Join-Path \$archive|Join-Path \$base|Join-Path \(Split-Path \$repos\)'
     }
     Test-Case 'user: bare name gets this domain; the caller needs no credential' {
         Assert-Equal "$((Get-GeneCaller).Split('\')[0])\zed" (Resolve-GeneUser 'zed')
