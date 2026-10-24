@@ -361,7 +361,8 @@ function Invoke-GeneProfPush {
             Write-ProfNote "(-WhatIf: nothing committed, merged, pushed or installed; the check exited $c)"
             return
         }
-        Set-GeneTargetGitConfig -Hub $hub -Repo $clone.Repo
+        $id = Read-GeneTargetIdentity -Target $t -Repo $clone.Repo
+        Set-GeneTargetGitConfig -Hub $hub -Repo $clone.Repo -Name $id.Name -Email $id.Email
 
         Write-ProfStep '1. publish here'
         if ($NoPublish) {
@@ -417,9 +418,10 @@ function Invoke-GeneProfCheck {
     try {
         Write-ProfStep "check $($t.Machine) for $($t.User)"
         if (-not $t.Profile) { Write-ProfWarn "No machine profile at $($t.ProfilePath). prof setup bootstrap creates one."; return }
-        $fix = Get-GeneProfileFix -HubRaw (Get-GeneHubProfile).Raw -TargetRaw $t.Profile.Raw
+        $fix = Get-GeneProfileFix -HubRaw (Get-GeneHubProfile).Raw -TargetRaw $t.Profile.Raw -TargetLines $t.Profile.Lines -OwnerNames (Get-GeneOwnerNames -Hub $hub)
         Write-ProfNote "machine profile $($t.ProfilePath)"
         if ($fix.Missing.Count) { Write-ProfWarn "rows this machine lacks (the hub has them): $($fix.Missing -join ', ')" } else { Write-ProfNote 'no rows missing compared with the hub' }
+        if ($fix.Notes.Count) { Write-ProfWarn "$($fix.Notes.Count) line(s) carry notes naming $env:COMPUTERNAME's owner: prof setup bootstrap -FixProfile drops them" }
         if ($fix.AIWorkRoot) { Write-ProfWarn "AIWorkRoot '$($fix.AIWorkRoot.Old)' is not per-user (one clone per account): prof setup bootstrap -FixProfile sets '$($fix.AIWorkRoot.New)'" }
         $paths = Invoke-Command -Session $t.Session -ArgumentList $t.Profile.Raw -ScriptBlock {
             param($raw)
@@ -443,9 +445,80 @@ function Invoke-GeneProfCheck {
 }
 
 # ------------------------------------------------------------------------------------------------ machine profile seed and fix
+function Read-GeneTargetIdentity {
+    <#
+    The git identity for -Target's account, asked on every bootstrap and push: its current one is the default (the
+    clone's config, else the account's global .gitconfig over the admin share). With no console, a complete default
+    is kept and a missing one stops.
+    #>
+    param([Parameter(Mandatory)]$Target, [Parameter(Mandatory)]$Repo, [scriptblock]$Reader)
+    $global = ConvertTo-GeneUncPath -Machine $Target.Machine -Path "$($Target.SystemDrive):\Users\$(Get-GeneUserName $Target.User)\.gitconfig"
+    $d = Get-GeneTargetIdentityDefault -Repo $Repo -GlobalConfig $global
+    $label = "$($Target.User) on $($Target.Machine)"
+    if (-not $Reader -and [Console]::IsInputRedirected) {
+        if ($d.Name -and $d.Email) { Write-ProfNote "git identity for $label`: $($d.Name) <$($d.Email)> (no console to ask on: kept)"; return $d }
+        throw "A git name and email are needed for $label and there is no console to ask on. Run prof in a terminal."
+    }
+    return Read-GeneGitIdentity -Label $label -Default $d -Reader $Reader
+}
+
+function Get-GeneOwnerNames {
+    <# The hub owner's name words (the hub repo's git user.name), which profile notes copied from the hub may carry. #>
+    param([string]$Hub = (Get-GeneHubRoot))
+    $n = [string]((Invoke-GeneGitResult $Hub @('config', '--get', 'user.name')).Out | Select-Object -First 1)
+    return @($n -split '\s+' | Where-Object { $_.Length -ge 2 })
+}
+
+function Remove-GeneOwnerNote {
+    <#
+    One note without the owner: a (...) group naming them goes, then any ';' or ',' clause (outside parentheses) still
+    naming them. A name is a whole word, case as written: Gene.Profile, \genewe\ and github.com/genewebb are not names.
+    #>
+    param([AllowEmptyString()][string]$Text, [string[]]$Names)
+    if (-not $Text -or -not @($Names).Count) { return $Text }
+    $name = '(?<![\w.\\/])(?:' + (($Names | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')(?![\w.\\/])'
+    $t = [regex]::Replace($Text, "\s*\([^()]*$name[^()]*\)", '')
+    $parts = [System.Collections.Generic.List[object]]::new(); $depth = 0; $start = 0
+    for ($i = 0; $i -lt $t.Length; $i++) {
+        $ch = $t[$i]
+        if ($ch -eq '(') { $depth++ } elseif ($ch -eq ')' -and $depth) { $depth-- }
+        elseif ($depth -eq 0 -and ($ch -eq ';' -or $ch -eq ',')) { $parts.Add([pscustomobject]@{ Text = $t.Substring($start, $i - $start); Sep = [string]$ch }); $start = $i + 1 }
+    }
+    $parts.Add([pscustomobject]@{ Text = $t.Substring($start); Sep = '' })
+    $out = ''; $sep = ''
+    foreach ($p in $parts) {
+        if (-not [regex]::IsMatch($p.Text, $name)) {
+            $out = if ($out) { "$out$sep $($p.Text.Trim())" } else { $p.Text.Trim() }
+            $sep = $p.Sep
+        }
+        elseif (-not $out) { $sep = '' }
+    }
+    return $out.Trim()
+}
+
+function Remove-GeneOwnerNotesFromRow {
+    <# A table row with Remove-GeneOwnerNote applied to its third cell onward (notes, Used by); the key and value cells and non-rows are untouched. #>
+    param([AllowEmptyString()][string]$Line, [string[]]$Names)
+    if ($Line -notmatch '^\s*\|' -or -not @($Names).Count) { return $Line }
+    $cells = @($Line.Trim().Trim('|') -split '\|' | ForEach-Object { $_.Trim() })
+    $changed = $false
+    for ($i = 2; $i -lt $cells.Count; $i++) {
+        $n = Remove-GeneOwnerNote -Text $cells[$i] -Names $Names
+        if ($n -ne $cells[$i]) { $cells[$i] = $n; $changed = $true }
+    }
+    if (-not $changed) { return $Line }
+    return '| ' + ($cells -join ' | ') + ' |'
+}
+
 function Get-GeneProfileFix {
-    <# Rows the target lacks compared with the hub, and the per-user AIWorkRoot it should have. #>
-    param([Parameter(Mandatory)][System.Collections.IDictionary]$HubRaw, [Parameter(Mandatory)][System.Collections.IDictionary]$TargetRaw)
+    <#
+    Rows the target lacks compared with the hub, the per-user AIWorkRoot it should have, and (with -TargetLines) the
+    lines whose notes name the hub owner: @({ Old; New }), applied by Edit-GeneProfileLines.
+    #>
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$HubRaw, [Parameter(Mandatory)][System.Collections.IDictionary]$TargetRaw,
+        [AllowEmptyString()][string[]]$TargetLines, [string[]]$OwnerNames
+    )
     $missing = @($HubRaw.Keys | Where-Object { -not $TargetRaw.Contains($_) })
     $aiw = $null
     if (-not (Test-GenePerUserValue $TargetRaw['AIWorkRoot'])) {
@@ -454,18 +527,21 @@ function Get-GeneProfileFix {
         if (-not $base) { $base = Split-Path ([string]$HubRaw['ReposRoot']) }
         $aiw = [pscustomobject]@{ Old = [string]$TargetRaw['AIWorkRoot']; New = (Join-GeneRemotePath $base '%USERNAME%\ai-setup') }
     }
-    [pscustomobject]@{ Missing = $missing; AIWorkRoot = $aiw; Empty = (-not $missing.Count -and -not $aiw) }
+    $notes = @(foreach ($l in @($TargetLines)) { $n = Remove-GeneOwnerNotesFromRow -Line $l -Names $OwnerNames; if ($n -ne $l) { [pscustomobject]@{ Old = $l; New = $n } } })
+    [pscustomobject]@{ Missing = $missing; AIWorkRoot = $aiw; Notes = $notes; Empty = (-not $missing.Count -and -not $aiw -and -not $notes.Count) }
 }
 
 function Edit-GeneProfileLines {
     <#
-    Applies a fix to the lines of a machine profile: replaces the AIWorkRoot value and appends missing rows (blank
-    value) at the end of the first table. Every other line is kept as it is.
+    Applies a fix to the lines of a machine profile: replaces the AIWorkRoot value, swaps each owner-note line for its
+    cleaned form and appends missing rows (blank value) at the end of the first table. Every other line is kept as it is.
     #>
     param([Parameter(Mandatory)][AllowEmptyString()][string[]]$Lines, [Parameter(Mandatory)]$Fix, [string]$Note = 'added by prof setup bootstrap: fill in')
     $out = [System.Collections.Generic.List[string]]::new()
     $inFirst = $false; $done = $false
+    $clean = @{}; foreach ($n in @($Fix.Notes)) { if ($n) { $clean[$n.Old] = $n.New } }
     foreach ($line in $Lines) {
+        if ($clean.ContainsKey($line)) { $line = $clean[$line] }
         $isRow = $line -match '^\s*\|'
         if (-not $done -and $isRow) { $inFirst = $true }
         if ($inFirst -and -not $done -and $isRow -and $Fix.AIWorkRoot -and $line -match '^(\s*\|\s*`?AIWorkRoot`?\s*\|)([^|]*)(\|.*)$') {
@@ -484,11 +560,12 @@ function Edit-GeneProfileLines {
 function New-GeneSeedProfile {
     <#
     A machine profile for a machine that has none: the hub's, with the hub's work drive moved to -WorkDrive, a per-user
-    AIWorkRoot, the machine name in the title and 'unverified' in the Status column. Later tables are copied as they
-    are and listed for review: they hold this machine's literal paths.
+    AIWorkRoot, the machine name in the title, 'unverified' in the Status column and no notes naming the hub owner.
+    Later tables are copied otherwise as they are and listed for review: they hold this machine's literal paths.
     #>
-    param([Parameter(Mandatory)][string]$Machine, [string]$WorkDrive)
-    $hp = Get-GeneHubProfile
+    param([Parameter(Mandatory)][string]$Machine, [string]$WorkDrive, $HubProfile, [string[]]$OwnerNames)
+    $hp = if ($HubProfile) { $HubProfile } else { Get-GeneHubProfile }
+    if (-not $PSBoundParameters.ContainsKey('OwnerNames')) { $OwnerNames = Get-GeneOwnerNames }
     $hubDrive = ([string]$hp.Raw['ReposRoot']).Substring(0, 1)
     $wd = if ($WorkDrive) { $WorkDrive.Substring(0, 1).ToUpperInvariant() } else { $hubDrive }
     $out = [System.Collections.Generic.List[string]]::new()
@@ -513,7 +590,8 @@ function New-GeneSeedProfile {
             }
             elseif ($cells[0] -in 'Key', 'Setting' -and $cells.Count -ge 4) { $cells[3] = "Status on $Machine"; $line = '| ' + ($cells -join ' | ') + ' |' }
         }
-        elseif ($done -and $isRow -and $line -match '[A-Za-z]:\\') { $literal.Add($line.Trim()) }
+        $line = Remove-GeneOwnerNotesFromRow -Line $line -Names $OwnerNames
+        if ($done -and $isRow -and $line -match '[A-Za-z]:\\') { $literal.Add($line.Trim()) }
         $out.Add($line)
     }
     [pscustomobject]@{ Lines = $out.ToArray(); LiteralRows = $literal.ToArray() }
@@ -596,7 +674,7 @@ function New-GeneTargetClone {
     Clones the hub's main on the target, AS -User, from a bundle file: one file crosses the share, the checkout is
     written by the target's own git, and the clone belongs to that account (no ACL or safe.directory work).
     #>
-    param($Target, $Clone, [string]$Hub)
+    param($Target, $Clone, [string]$Hub, $Identity)
     $scratchLocal = $Target.Paths.Local['ScratchRoot']; $scratchUnc = $Target.Paths.Unc['ScratchRoot']
     if (-not $scratchLocal) { throw "ScratchRoot is blank in $($Target.ProfilePath); the clone bundle is staged there." }
     $hubScratch = (Get-AIMachineProfile).Keys['ScratchRoot']
@@ -614,7 +692,7 @@ function New-GeneTargetClone {
                 "__PROF_GIT_EXIT__$LASTEXITCODE"
             })
         if ($out[-1] -ne '__PROF_GIT_EXIT__0') { throw "git clone on $($Target.Machine) failed: $(($out | Select-Object -SkipLast 1) -join ' ')" }
-        Set-GeneTargetGitConfig -Hub $Hub -Repo $Clone.Repo
+        Set-GeneTargetGitConfig -Hub $Hub -Repo $Clone.Repo -Name $Identity.Name -Email $Identity.Email
         Write-ProfNote "cloned $((Get-GeneRepoState $Clone.Repo).Head.Substring(0,7)) into $($Clone.Local) as $($Target.User)"
     }
     finally { foreach ($f in $here, $thereUnc) { if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force } } }
@@ -650,9 +728,10 @@ function Invoke-GeneProfBootstrap {
             }
         }
         else {
-            $fix = Get-GeneProfileFix -HubRaw (Get-GeneHubProfile).Raw -TargetRaw $t.Profile.Raw
+            $fix = Get-GeneProfileFix -HubRaw (Get-GeneHubProfile).Raw -TargetRaw $t.Profile.Raw -TargetLines $t.Profile.Lines -OwnerNames (Get-GeneOwnerNames -Hub $hub)
             if ($fix.Missing.Count) { Write-ProfNote "rows missing compared with the hub: $($fix.Missing -join ', ')" }
             if ($fix.AIWorkRoot) { Write-ProfNote "AIWorkRoot '$($fix.AIWorkRoot.Old)' -> '$($fix.AIWorkRoot.New)' (one clone per account)" }
+            foreach ($n in $fix.Notes) { Write-ProfNote "note naming $env:COMPUTERNAME's owner: $($n.Old.Trim())"; Write-ProfNote "  becomes: $($n.New.Trim())" }
             if ($fix.Empty) { Write-ProfNote 'nothing to change' }
             elseif ($FixProfile) {
                 $new = Edit-GeneProfileLines -Lines $t.Profile.Lines -Fix $fix
@@ -689,10 +768,18 @@ function Invoke-GeneProfBootstrap {
         Write-ProfNote "AIWorkRoot $($clone.Local); ClaudeHome $($t.Paths.Local['ClaudeHome']); ScratchRoot $($t.Paths.Local['ScratchRoot'])"
 
         Write-ProfStep '4. clone'
-        if (Test-Path -LiteralPath (Join-Path $clone.Unc '.git')) { Write-ProfNote 'already cloned (prof setup push from now on)' }
-        elseif ((Test-Path -LiteralPath $clone.Unc) -and @(Get-ChildItem -LiteralPath $clone.Unc -Force).Count) { throw "$($clone.Local) exists, is not empty and is not a git clone. Move it aside first." }
-        elseif ($WhatIf) { Write-ProfNote "(-WhatIf: would clone $hub's main into $($clone.Local) as $($t.User), from a bundle file)" }
-        else { New-GeneTargetClone -Target $t -Clone $clone -Hub $hub }
+        $cloned = Test-Path -LiteralPath (Join-Path $clone.Unc '.git')
+        if (-not $cloned -and (Test-Path -LiteralPath $clone.Unc) -and @(Get-ChildItem -LiteralPath $clone.Unc -Force).Count) { throw "$($clone.Local) exists, is not empty and is not a git clone. Move it aside first." }
+        if ($WhatIf) {
+            $d = Get-GeneTargetIdentityDefault -Repo $clone.Repo -GlobalConfig (ConvertTo-GeneUncPath -Machine $t.Machine -Path "$($t.SystemDrive):\Users\$(Get-GeneUserName $t.User)\.gitconfig")
+            Write-ProfNote "(-WhatIf: a real run asks for $($t.User)'s git name and email; default $(if ($d.Name -or $d.Email) { "$($d.Name) <$($d.Email)>" } else { 'none' }))"
+            Write-ProfNote $(if ($cloned) { 'already cloned (prof setup push from now on)' } else { "(-WhatIf: would clone $hub's main into $($clone.Local) as $($t.User), from a bundle file)" })
+        }
+        else {
+            $id = Read-GeneTargetIdentity -Target $t -Repo $clone.Repo
+            if ($cloned) { Write-ProfNote 'already cloned (prof setup push from now on)'; Set-GeneTargetGitConfig -Hub $hub -Repo $clone.Repo -Name $id.Name -Email $id.Email }
+            else { New-GeneTargetClone -Target $t -Clone $clone -Hub $hub -Identity $id }
+        }
 
         Write-ProfStep "5. install on $($t.Machine) as $($t.User)"
         if ($WhatIf) {
@@ -710,6 +797,8 @@ function Invoke-GeneProfBootstrap {
             if ($WithTerminal) { Invoke-GeneTerminalOn -Target $t -Clone $clone -Left $left } else { $left.Add("Windows Terminal settings: prof setup terminal -Machine $($t.Machine) -User $($t.User)") }
             if ($WithSecrets) { Invoke-GeneSecretsOn -Target $t -Clone $clone -Hub $hub } else { $left.Add("Claude secrets (MCP keys): prof setup secrets -Machine $($t.Machine) -User $($t.User)") }
         }
+        $origin = [string]((Invoke-GeneGitResult $hub @('remote', 'get-url', 'origin')).Out | Select-Object -First 1)
+        if ($origin) { $left.Add((Get-GenePatHint -Origin $origin -CloneLocal $clone.Local -Label "$($t.User) on $($t.Machine)")) }
         $left.Add("Sign in to Claude as $($t.User) on $($t.Machine): start it with 'ai'.")
         $left.Add('Chocolatey tools and anything install.ps1 reported as not installed are not done by prof.')
         Write-ProfStep 'LEFT TO DO'
