@@ -306,6 +306,15 @@ function csql { 3 }
             $files = New-GeneShareProfileTree -Plan $plan -Stage $stage
             Assert-True ($files -contains 'PowerShell\Modules\Gene.Profile\BuildGroup.ps1')
             Assert-True ($files -notcontains 'PowerShell\Modules\Gene.Profile\GitGroup.ps1')
+            # The probe reads a scratch machine profile, not this machine's: the core dot-sources scripts from
+            # PowershellScriptsDir (clearseq.ps1), which would add the tools category wherever that folder is reachable.
+            $mcfg = Join-Path $root 'stage-real-machine.md'; $noScripts = Join-Path $root 'stage-real-scripts'
+            New-Item -ItemType Directory -Path $noScripts -Force | Out-Null
+            New-TestProfile -Path $mcfg -Keys ([ordered]@{ PowershellScriptsDir = $noScripts })
+            $stagedCore = Join-Path $stage 'PowerShell\Microsoft.PowerShell_profile.ps1'
+            $coreText = Get-Content -LiteralPath $stagedCore -Raw
+            Assert-True ($coreText.Contains("'C:\Deploy\Setup\ProfileMachineConfig.md'")) 'the shared core no longer names the machine profile path this test replaces'
+            Set-Content -LiteralPath $stagedCore -Value $coreText.Replace("'C:\Deploy\Setup\ProfileMachineConfig.md'", "'$mcfg'") -NoNewline
             $probe = @"
 `$env:PSModulePath = '$stage\PowerShell\Modules;' + `$env:PSModulePath
 `$env:GENE_PLAIN_MENU = '1'

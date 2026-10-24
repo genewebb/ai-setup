@@ -203,10 +203,13 @@ For `-Machine M -User U`; `-WorkDrive D:` (default `C:`) seeds the paths of a ne
    that names the laptop's owner (the words of the laptop clone's git `user.name`): a `(...)` group naming them, then
    any `;` or `,` clause still naming them, in every table cell after the value. Module names such as `Gene.Profile`
    and paths are not names. The machine belongs to the person installing, so the owner's dated decisions do not
-   travel. Present: **never overwritten**. Rows the laptop has and the target lacks, an `AIWorkRoot` that is not
-   per-user on a multi-user machine, and lines whose notes name the owner are printed as the exact lines to add or
-   change; `-FixProfile` applies them (adds rows with a blank value, replaces `AIWorkRoot`, swaps each note line for
-   its cleaned form), after showing a diff and asking. `prof setup check` counts the note lines. Because the file is machine-wide,
+   travel. With a per-user `AIWorkRoot` the Git policy row for the ai-setup clone (`{ReposRoot}\ai-setup`, or that
+   path written out) names `{AIWorkRoot}`, in a seed and in a fix: a row for the old shared path would leave each
+   account's real clone with no commit or push rights. Present: **never overwritten**. Rows the laptop has and the
+   target lacks, an `AIWorkRoot` that is not per-user on a multi-user machine, a stale Git policy row and lines
+   whose notes name the owner are printed as the exact lines to add or change, each with its reason; `-FixProfile`
+   applies them (adds rows with a blank value, replaces `AIWorkRoot`, swaps each changed line for its new form),
+   after showing a diff and asking. `prof setup check` lists the same lines. Because the file is machine-wide,
    changing `AIWorkRoot` changes it for every account on that machine: the verb lists the other accounts that have
    an installed runtime there (`ClaudeHome` under their Users folder) and refuses `-FixProfile` until each is
    either bootstrapped in the same run or named in `-Retire`.
