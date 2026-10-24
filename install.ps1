@@ -26,8 +26,11 @@
          kept as memory.pre-git-<stamp>.
       4. PowerShell: pwsh\PowerShell -> the pwsh 7 profile folder ($PROFILE), pwsh\WindowsPowerShell -> the
          Windows PowerShell profile folder (profiles, powershell.config.json, own Gene.* modules). A changed file's
-         old copy goes to {ScratchRoot}\ai-config-work\backups\install-<stamp>\. PSGallery modules listed in
-         pwsh\modules.txt are installed when missing (a failure there is reported and does not stop the install).
+         old copy goes to {ScratchRoot}\ai-config-work\backups\install-<stamp>\. Files under profile.d\ and
+         Modules\Gene.*\ that the repo no longer has are removed the same way (the profile loads every file there,
+         so a retired one would still run); anything else in the profile folder is left alone. PSGallery modules
+         listed in pwsh\modules.txt are installed when missing (a failure there is reported and does not stop the
+         install). -PwshProfileDir and -WinPsProfileDir replace the two folders PowerShell reports (tests).
       5. stream-host scripts -> the profile's StreamHostDir (skipped when the key is absent or blank).
       6. the hourly scheduled task "AI scratch cleanup" for this account: {ClaudeHome}\bin\Clear-AIScratch.ps1
          -Root {ScratchRoot} -KeepDays 7. It works ONLY under ScratchRoot (and refuses any other root), removing
@@ -59,6 +62,8 @@ param(
     [switch]$AcceptDrift,
     [string]$SecretsFile,
     [switch]$PassphraseFromStdin,
+    [string]$PwshProfileDir,
+    [string]$WinPsProfileDir,
     [switch]$Yes
 )
 $ErrorActionPreference = 'Stop'
@@ -121,9 +126,9 @@ foreach ($g in @($prof.GitPolicy)) {
     Write-Host ($fmt -f '', $g.Repo, "$there, commit=$($g.Commit) push=$($g.Push) worktrees=$($g.Worktrees)") -ForegroundColor $(if ($there -eq 'present') { 'Gray' } else { 'Yellow' })
 }
 # Profile folders come from PowerShell itself, not from an assumed Documents path (OneDrive can move Documents).
-$pwshDir = Split-Path $PROFILE.CurrentUserCurrentHost
-$winPsDir = $null
-if (Get-Command powershell.exe -ErrorAction SilentlyContinue) { try { $winPsDir = (& powershell.exe -NoProfile -NonInteractive -Command 'Split-Path $PROFILE.CurrentUserCurrentHost' 2>$null | Select-Object -First 1) } catch { } }
+$pwshDir = if ($PwshProfileDir) { $PwshProfileDir } else { Split-Path $PROFILE.CurrentUserCurrentHost }
+$winPsDir = if ($WinPsProfileDir) { $WinPsProfileDir } else { $null }
+if (-not $winPsDir -and (Get-Command powershell.exe -ErrorAction SilentlyContinue)) { try { $winPsDir = (& powershell.exe -NoProfile -NonInteractive -Command 'Split-Path $PROFILE.CurrentUserCurrentHost' 2>$null | Select-Object -First 1) } catch { } }
 if (-not $winPsDir) { $winPsDir = Join-Path (Split-Path $pwshDir) 'WindowsPowerShell' }
 $scratch = $keys['ScratchRoot']
 $backupDir = Join-Path $scratch "ai-config-work\backups\install-$stamp"
@@ -252,7 +257,27 @@ foreach ($edition in 'PowerShell', 'WindowsPowerShell') {
         Copy-Item -LiteralPath $f.FullName -Destination $dest -Force
         Write-Host "  updated $dest"
     }
-    $summary.Add("$edition profile: $(if ($dry) { "$updated file(s) would change" } else { "$updated file(s) updated" }) in $to$(if ($updated -and -not $dry) { "; old copies in $backupDir" })")
+    # Files the repo no longer has under profile.d\ and Modules\Gene.*\ (a retired command or hub group). The profile
+    # dot-sources every profile.d\*.ps1 and the hub module loads every .ps1 beside it, so a stale file would still run.
+    # Only those two places are swept; anything else in the profile folder is not the repo's to touch.
+    $stale = @(foreach ($area in 'profile.d', 'Modules') {
+            $dir = Join-Path $to $area
+            if (-not (Test-Path -LiteralPath $dir)) { continue }
+            Get-ChildItem -LiteralPath $dir -Recurse -File | Where-Object {
+                $rel = [IO.Path]::GetRelativePath($to, $_.FullName)
+                ($area -eq 'profile.d' -or $rel -like 'Modules\Gene.*') -and -not (Test-Path -LiteralPath (Join-Path $from $rel))
+            }
+        })
+    foreach ($f in $stale) {
+        if ($dry) { Write-Host "  would remove $($f.FullName) (the repo no longer has it)"; continue }
+        $bak = Join-Path $backupDir "$edition\$([IO.Path]::GetRelativePath($to, $f.FullName))"
+        New-Item -ItemType Directory -Force -Path (Split-Path $bak) | Out-Null
+        Copy-Item -LiteralPath $f.FullName -Destination $bak
+        Remove-Item -LiteralPath $f.FullName -Force
+        Write-Host "  removed $($f.FullName) (the repo no longer has it; copy in $backupDir)"
+    }
+    $staleNote = if ($stale.Count) { "; $($stale.Count) stale file(s) $(if ($dry) { 'would be removed' } else { 'removed' })" } else { '' }
+    $summary.Add("$edition profile: $(if ($dry) { "$updated file(s) would change" } else { "$updated file(s) updated" })$staleNote in $to$(if (($updated -or $stale.Count) -and -not $dry) { "; old copies in $backupDir" })")
 }
 
 # 4b. PSGallery modules listed in pwsh\modules.txt: install the missing ones only. A failure (no internet, gallery
