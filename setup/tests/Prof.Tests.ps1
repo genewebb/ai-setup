@@ -218,6 +218,14 @@ try {
         $r = Select-GeneMenu -Title t -Items @('a', 'b', 'c') -Multi -Reader (New-Queue @('1, 3'))
         Assert-Equal @('a', 'c') $r
     }
+    Test-Case 'menu: -Multi takes a / all for every item, and the hint says so' {
+        $script:hint = $null
+        $q = New-Queue @('all')
+        $r = Select-GeneMenu -Title t -Items @('a', 'b', 'c') -Multi -Reader { param($p) $script:hint = $p; & $q $p }
+        Assert-Equal @('a', 'b', 'c') $r
+        Assert-Match $script:hint 'a = all'
+        Assert-Equal @('a', 'b') (Select-GeneMenu -Title t -Items @('a', 'b') -Multi -Reader (New-Queue @('A')))
+    }
     Test-Case 'yes/no: Enter = default, y and n' {
         Assert-True (Read-GeneYesNo -Question q -Default $true -Reader (New-Queue @('')))
         Assert-True (-not (Read-GeneYesNo -Question q -Reader (New-Queue @('maybe', 'n'))))
@@ -240,18 +248,22 @@ try {
         }
         finally { $script:GeneRichMenu = $null; Remove-Item Function:\Read-SpectreSelection }
     }
-    Test-Case 'arrow-key multi pick: ticked labels map back to items; nothing ticked with -AllowEmpty is an empty list' {
-        function Read-SpectreMultiSelection { param($Message, $Choices, $AllowEmpty, $PageSize, $Color) $Choices | Select-Object -Index $script:multiIdx }
+    Test-Case 'arrow-key multi pick: one group whose header ticks every item; ticked labels map back; nothing ticked with -AllowEmpty is an empty list' {
+        $script:groups = $null
+        function Read-SpectreMultiSelectionGrouped { param($Message, $Choices, $AllowEmpty, $PageSize, $Color) $script:groups = $Choices; @($Choices[0].Choices) | Select-Object -Index $script:multiIdx }
         $script:GeneRichMenu = $true
         try {
             $script:multiIdx = @(0, 2)
             $r = Select-GeneMenu -Title t -Items @('a', 'b', 'c') -Multi
             Assert-Equal @('a', 'c') $r
+            Assert-Equal 1 @($script:groups).Count 'one group'
+            Assert-Match $script:groups[0].Name 'all'
+            Assert-Equal 3 @($script:groups[0].Choices).Count
             $script:multiIdx = @()
             $r = Select-GeneMenu -Title t -Items @('a', 'b') -Multi -AllowEmpty
             Assert-True ($null -ne $r -and @($r).Count -eq 0)
         }
-        finally { $script:GeneRichMenu = $null; Remove-Item Function:\Read-SpectreMultiSelection }
+        finally { $script:GeneRichMenu = $null; Remove-Item Function:\Read-SpectreMultiSelectionGrouped }
     }
     Test-Case 'text: the reader answers, Enter alone is empty' {
         Assert-Equal 'D:' (Read-GeneText -Prompt p -Reader (New-Queue @('D:')))
