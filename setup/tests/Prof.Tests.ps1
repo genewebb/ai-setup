@@ -48,6 +48,19 @@ try {
         Assert-True (Test-GenePerUserValue 'D:\devops\%USERNAME%\ai-setup')
         Assert-True (-not (Test-GenePerUserValue 'D:\AIWork\work-ai'))
     }
+    # A target's own paths (D:\... on SMVMTR2) are joined on the hub, which may have no such drive: Join-Path would
+    # throw "Cannot find drive". Join-GeneRemotePath is plain text.
+    $script:noDrive = @('Z', 'Y', 'X', 'W', 'V', 'U', 'T', 'S', 'R') | Where-Object { -not (Get-PSDrive -Name $_ -ErrorAction SilentlyContinue) } | Select-Object -First 1
+    Test-Case 'remote path join: works for a drive this machine does not have, trims one backslash, keeps UNC' {
+        Assert-Equal "$($script:noDrive):\devops\repos\ai-setup\install.ps1" (Join-GeneRemotePath "$($script:noDrive):\devops\repos\ai-setup" 'install.ps1')
+        Assert-Equal "$($script:noDrive):\devops\repos\ai-setup\install.ps1" (Join-GeneRemotePath "$($script:noDrive):\devops\repos\ai-setup\" '\install.ps1')
+        Assert-Equal '\\BOX\D$\x\y\z' (Join-GeneRemotePath '\\BOX\D$\x' 'y\z')
+        Assert-Equal "$($script:noDrive):\a" (Join-GeneRemotePath "$($script:noDrive):\" 'a')
+    }
+    Test-Case 'remote path join: the hub never calls Join-Path on a target-local base' {
+        $src = (Get-Content -LiteralPath "$mod\SetupGroup.ps1" -Raw) + (Get-Content -LiteralPath "$mod\Sync.ps1" -Raw)
+        Assert-NoMatch $src 'Join-Path \$(clone|Clone)\.Local|Join-Path \$\w+\.Paths\.Local|Join-Path \$Repo\.Path|Join-Path \$archive|Join-Path \$base|Join-Path \(Split-Path \$repos\)'
+    }
     Test-Case 'user: bare name gets this domain; the caller needs no credential' {
         Assert-Equal "$((Get-GeneCaller).Split('\')[0])\zed" (Resolve-GeneUser 'zed')
         Assert-True ($null -eq (Get-GeneTargetCredential -User (Get-GeneCaller).Split('\')[1]))
@@ -275,6 +288,13 @@ try {
     # The profile is not loaded here, and prof other lists only commands that are defined: stand in for every catalog command.
     foreach ($n in @($script:ProfOtherCatalog.Values | ForEach-Object { $_.Commands.Name })) { if (-not (Test-GeneOtherDefined -Name $n)) { Set-Item -Path "function:\global:$n" -Value { } } }
     Update-GeneOtherGroup
+    Test-Case 'profile fix: the per-user AIWorkRoot is built from a ReposRoot on a drive this machine does not have' {
+        $d = $script:noDrive
+        $fix = Get-GeneProfileFix -HubRaw ([ordered]@{ ReposRoot = 'C:\devops\repos'; AIWorkRoot = 'C:\devops\repos\ai-setup' }) -TargetRaw ([ordered]@{ ReposRoot = "$d`:\devops\repos"; AIWorkRoot = "$d`:\devops\repos\ai-setup" })
+        Assert-Equal "$d`:\devops\%USERNAME%\ai-setup" $fix.AIWorkRoot.New
+        Assert-Equal "$d`:\devops\repos\ai-setup" $fix.AIWorkRoot.Old
+        Assert-Equal @() @($fix.Missing)
+    }
     Test-Case 'hub: setup group is registered by SetupGroup.ps1, not Verbs.ps1' {
         Assert-NoMatch (Get-Content -LiteralPath "$mod\Verbs.ps1" -Raw) "ProfGroups\['setup'\]|ProfGroups = \[ordered\]@\{\s*setup"
         Assert-Match (Get-Content -LiteralPath "$mod\SetupGroup.ps1" -Raw -ErrorAction Stop) "ProfGroups\['setup'\]"
