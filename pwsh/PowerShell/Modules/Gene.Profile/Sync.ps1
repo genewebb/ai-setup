@@ -163,18 +163,64 @@ function Invoke-GenePushToTarget {
 }
 
 function Set-GeneTargetGitConfig {
-    <# The target clone's local git config: byte-for-byte files, the hub's identity, origin = the hub's origin URL. #>
-    param([Parameter(Mandatory)][string]$Hub, [Parameter(Mandatory)]$Repo)
+    <#
+    The target clone's local git config: byte-for-byte files, the installer's identity (-Name / -Email, asked by
+    Read-GeneGitIdentity; never the hub's), and origin = the hub's repo. An origin that names the same repo with the
+    account's own user (https://them@host/...) is kept, so the account's credentials keep working.
+    #>
+    param([Parameter(Mandatory)][string]$Hub, [Parameter(Mandatory)]$Repo, [string]$Name, [string]$Email)
     Invoke-GeneRepoGit $Repo @('config', 'core.autocrlf', 'false') | Out-Null
-    foreach ($k in 'user.name', 'user.email') {
-        $v = (Invoke-GeneGitResult $Hub @('config', '--get', $k)).Out | Select-Object -First 1
-        if ($v) { Invoke-GeneRepoGit $Repo @('config', $k, $v) | Out-Null }
-    }
+    if ($Name) { Invoke-GeneRepoGit $Repo @('config', 'user.name', $Name) | Out-Null }
+    if ($Email) { Invoke-GeneRepoGit $Repo @('config', 'user.email', $Email) | Out-Null }
     $origin = (Invoke-GeneGitResult $Hub @('remote', 'get-url', 'origin')).Out | Select-Object -First 1
     if ($origin) {
-        $has = (Invoke-GeneRepoGitResult $Repo @('remote', 'get-url', 'origin')).Code -eq 0
-        Invoke-GeneRepoGit $Repo @('remote', $(if ($has) { 'set-url' } else { 'add' }), 'origin', $origin) | Out-Null
+        $r = Invoke-GeneRepoGitResult $Repo @('remote', 'get-url', 'origin')
+        $now = if ($r.Code -eq 0) { [string]($r.Out | Select-Object -First 1) } else { '' }
+        $bare = { param($u) $u -replace '^(\w+://)[^@/]+@', '$1' }
+        if (-not $now) { Invoke-GeneRepoGit $Repo @('remote', 'add', 'origin', $origin) | Out-Null }
+        elseif ((& $bare $now) -ne (& $bare $origin)) { Invoke-GeneRepoGit $Repo @('remote', 'set-url', 'origin', $origin) | Out-Null }
     }
+}
+
+function Get-GeneTargetIdentityDefault {
+    <#
+    The git identity a target account already has: the clone's own local config, else the account's global .gitconfig
+    (read as a file, e.g. over the admin share). Blank when neither has it.
+    #>
+    param([Parameter(Mandatory)]$Repo, [string]$GlobalConfig)
+    $hasClone = Test-Path -LiteralPath (Join-Path $Repo.ReadPath '.git')
+    $hasGlobal = $GlobalConfig -and (Test-Path -LiteralPath $GlobalConfig)
+    $get = {
+        param($k)
+        if ($hasClone) { $v = (Invoke-GeneRepoGitResult $Repo @('config', '--local', '--get', $k)).Out | Select-Object -First 1; if ($v) { return [string]$v } }
+        if ($hasGlobal) { $v = (& git config --file $GlobalConfig --get $k 2>$null) | Select-Object -First 1; if ($v) { return [string]$v } }
+        return ''
+    }
+    [pscustomobject]@{ Name = (& $get 'user.name'); Email = (& $get 'user.email') }
+}
+
+function Read-GeneGitIdentity {
+    <# Asks for the git name and email commits on the target carry; Enter keeps the default. Both are required. #>
+    param([Parameter(Mandatory)][string]$Label, [Parameter(Mandatory)]$Default, [scriptblock]$Reader)
+    $ask = {
+        param($what, $d)
+        $a = ([string](Read-GeneText -Reader $Reader -Prompt "git $what for $Label$(if ($d) { " (Enter = $d)" })")).Trim()
+        if ($a) { $a } else { [string]$d }
+    }
+    $name = & $ask 'user.name' $Default.Name
+    $email = & $ask 'user.email' $Default.Email
+    if (-not $name -or -not $email) { throw "A git name and email are needed for $Label (commits made there carry them); nothing was changed." }
+    [pscustomobject]@{ Name = $name; Email = $email }
+}
+
+function Get-GenePatHint {
+    <#
+    The commands an account runs at its own logon so its clone can fetch and push origin itself: origin pinned to its
+    own GitHub user, then a fetch, where Git Credential Manager asks for its PAT once and keeps it. prof never takes the PAT.
+    #>
+    param([Parameter(Mandatory)][string]$Origin, [Parameter(Mandatory)][string]$CloneLocal, [Parameter(Mandatory)][string]$Label)
+    $url = $Origin -replace '^(\w+://)(?:[^@/]+@)?', '$1<github-user>@'
+    "GitHub access for $Label (optional; prof setup push needs none). At a logon there run:  git -C $CloneLocal remote set-url origin $url  then  git -C $CloneLocal fetch  (Git Credential Manager asks for that account's PAT once and keeps it)."
 }
 
 function Get-GeneRelation {

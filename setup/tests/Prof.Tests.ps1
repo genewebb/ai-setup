@@ -27,7 +27,7 @@ function New-SyncPair([string]$Name) {
     Add-Commit $hub 'a.txt' 'base'
     git clone -q --no-hardlinks $hub $target
     $repo = New-GeneRepo -Path $target
-    Set-GeneTargetGitConfig -Hub $hub -Repo $repo
+    Set-GeneTargetGitConfig -Hub $hub -Repo $repo -Name t -Email t@t
     return @{ Hub = $hub; Target = $target; Repo = $repo }
 }
 
@@ -106,7 +106,7 @@ try {
     # ---------------------------------------------------------------- sync engine
     $finder = $repoRoot   # tools\Find-Secrets.ps1 lives here
 
-    Test-Case 'target config: byte-for-byte, hub identity' {
+    Test-Case 'target config: byte-for-byte, the identity it is given' {
         $p = New-SyncPair 'cfg'
         Assert-Equal 'false' ((git -C $p.Target config core.autocrlf))
         Assert-Equal 't@t' ((git -C $p.Target config user.email))
@@ -298,6 +298,84 @@ try {
         Assert-Equal "$d`:\devops\%USERNAME%\ai-setup" $fix.AIWorkRoot.New
         Assert-Equal "$d`:\devops\repos\ai-setup" $fix.AIWorkRoot.Old
         Assert-Equal @() @($fix.Missing)
+    }
+    # ---------------------------------------------------------------- the installer's name, not the hub owner's
+    $owner = @('Gene', 'Webb')
+    Test-Case 'owner note: a (...) group or a ; or , clause naming the owner is dropped; module names, URLs and paths stay' {
+        Assert-Equal 'whole working tree (repos, worktrees, myworkspace); deletes need no prompt' (Remove-GeneOwnerNote -Names $owner -Text 'whole working tree (repos, worktrees, myworkspace); deletes need no prompt (Gene 9/28)')
+        Assert-Equal '' (Remove-GeneOwnerNote -Names $owner -Text '(Gene 9/28)')
+        Assert-Equal 'shared Profisee AI repo (Azure DevOps); Promote-ToWork mirrors skills into it' (Remove-GeneOwnerNote -Names $owner -Text 'shared Profisee AI repo (Azure DevOps); Promote-ToWork mirrors skills into it, Gene pushes (Gene 10/17)')
+        Assert-Equal 'private AI setup repo (github.com/genewebb/ai-setup)' (Remove-GeneOwnerNote -Names $owner -Text 'private AI setup repo (github.com/genewebb/ai-setup); Gene 10/14')
+        Assert-Equal 'config tree: skills, memory. Runtime files are drift' (Remove-GeneOwnerNote -Names $owner -Text 'config tree: skills, memory (Gene 9/29 grant, both machines 10/1). Runtime files are drift')
+        Assert-Equal 'cpower, Gene.GitTools, D:\devops\genewe\ai-setup' (Remove-GeneOwnerNote -Names $owner -Text 'cpower, Gene.GitTools, D:\devops\genewe\ai-setup')
+        Assert-Equal 'NAS secrets' (Remove-GeneOwnerNote -Names $owner -Text 'NAS secrets; merged only after Gene confirms each file (R24)')
+        Assert-Equal 'anything (Gene 9/28)' (Remove-GeneOwnerNote -Names @() -Text 'anything (Gene 9/28)')
+    }
+    $hubLines = @("# Config - $env:COMPUTERNAME", '', '| Key | Value | Used by | Status |', '|---|---|---|---|',
+        '| ReposRoot | C:\devops\repos | cdevops, Gene.GitTools | present |', '| AIWorkRoot | C:\devops\repos\ai-setup | AI runtime, Gene runs it | present |',
+        '', '## Claude access', '', '| Path | Access | Note |', '|---|---|---|', '| C:\temp | read, edit, delete | (Gene 9/28) |', '| C:\x | read | plain |')
+    Test-Case 'seed: a new machine profile carries no owner notes in any table; module names stay' {
+        $hp = [pscustomobject]@{ Lines = $hubLines; Raw = [ordered]@{ ReposRoot = 'C:\devops\repos'; AIWorkRoot = 'C:\devops\repos\ai-setup' } }
+        $s = New-GeneSeedProfile -Machine BOX -HubProfile $hp -OwnerNames $owner
+        $all = $s.Lines -join "`n"
+        Assert-True ($s.Lines -contains '| ReposRoot | C:\devops\repos | cdevops, Gene.GitTools | unverified |') $all
+        Assert-True ($s.Lines -contains '| AIWorkRoot | C:\devops\%USERNAME%\ai-setup | AI runtime | unverified |') $all
+        Assert-True ($s.Lines -contains '| C:\temp | read, edit, delete |  |') $all
+        Assert-True ($s.Lines -contains '| C:\x | read | plain |') $all
+        Assert-NoMatch $all '(?<![\w.\\])Gene(?![\w.\\])'
+        Assert-True ($s.Lines -contains '# Config - BOX') $all
+    }
+    Test-Case 'fix: owner notes in an existing profile are listed, make the fix non-empty, and are dropped; other lines unchanged' {
+        $raw = [ordered]@{ ReposRoot = 'C:\devops\repos'; AIWorkRoot = 'C:\devops\%USERNAME%\ai-setup' }
+        $lines = @($hubLines[0..4]) + '| AIWorkRoot | C:\devops\%USERNAME%\ai-setup | AI runtime | ok |' + @($hubLines[6..12])
+        $fix = Get-GeneProfileFix -HubRaw $raw -TargetRaw $raw -TargetLines $lines -OwnerNames $owner
+        Assert-Equal 1 @($fix.Notes).Count ($fix.Notes | Out-String)
+        Assert-Equal '| C:\temp | read, edit, delete | (Gene 9/28) |' $fix.Notes[0].Old
+        Assert-Equal '| C:\temp | read, edit, delete |  |' $fix.Notes[0].New
+        Assert-True (-not $fix.Empty) 'owner notes alone make the fix non-empty'
+        $new = Edit-GeneProfileLines -Lines $lines -Fix $fix
+        Assert-Equal $lines.Count $new.Count
+        for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -ne $fix.Notes[0].Old) { Assert-Equal $lines[$i] $new[$i] "line $i" } else { Assert-Equal $fix.Notes[0].New $new[$i] } }
+        $none = Get-GeneProfileFix -HubRaw $raw -TargetRaw $raw -TargetLines $new -OwnerNames $owner
+        Assert-True $none.Empty 'a cleaned profile needs no fix'
+    }
+    Test-Case 'git config: the target gets the identity it is given, never the hub''s, and keeps its own origin user' {
+        $h = Join-Path $root 'id-hub'; New-Repo $h; Add-Commit $h 'a.txt' 'x'
+        git -C $h remote add origin 'https://hubuser@github.com/o/r.git'
+        $tg = Join-Path $root 'id-target'; git clone -q --no-hardlinks $h $tg
+        git -C $tg remote set-url origin 'https://theirs@github.com/o/r.git'
+        Set-GeneTargetGitConfig -Hub $h -Repo (New-GeneRepo -Path $tg) -Name 'Pat Doe' -Email 'pat@example.test'
+        Assert-Equal 'Pat Doe' ((git -C $tg config --local --get user.name) | Select-Object -First 1)
+        Assert-Equal 'pat@example.test' ((git -C $tg config --local --get user.email) | Select-Object -First 1)
+        Assert-Equal 'https://theirs@github.com/o/r.git' ((git -C $tg remote get-url origin) | Select-Object -First 1)
+        git -C $tg remote set-url origin 'https://theirs@github.com/o/other.git'
+        Set-GeneTargetGitConfig -Hub $h -Repo (New-GeneRepo -Path $tg)
+        Assert-Equal 'https://hubuser@github.com/o/r.git' ((git -C $tg remote get-url origin) | Select-Object -First 1) 'a different repo is pointed back at the hub''s origin'
+        Assert-Equal 'Pat Doe' ((git -C $tg config --local --get user.name) | Select-Object -First 1) 'no -Name leaves the identity alone'
+    }
+    Test-Case 'identity default: the clone''s own config, else the account''s global .gitconfig' {
+        $c = Join-Path $root 'idd-clone'; New-Repo $c; git -C $c config user.name 'Clone Name'; git -C $c config user.email 'clone@example.test'
+        $g = Join-Path $root 'idd-global.gitconfig'; git config --file $g user.name 'Global Name'; git config --file $g user.email 'global@example.test'
+        $d1 = Get-GeneTargetIdentityDefault -Repo (New-GeneRepo -Path $c) -GlobalConfig $g
+        Assert-Equal 'Clone Name' $d1.Name; Assert-Equal 'clone@example.test' $d1.Email
+        $d2 = Get-GeneTargetIdentityDefault -Repo (New-GeneRepo -Path (Join-Path $root 'idd-none')) -GlobalConfig $g
+        Assert-Equal 'Global Name' $d2.Name; Assert-Equal 'global@example.test' $d2.Email
+        $d3 = Get-GeneTargetIdentityDefault -Repo (New-GeneRepo -Path (Join-Path $root 'idd-none')) -GlobalConfig (Join-Path $root 'no.gitconfig')
+        Assert-Equal '' "$($d3.Name)$($d3.Email)"
+    }
+    Test-Case 'identity question: Enter keeps the default, typed text replaces it, nothing at all stops' {
+        $d = [pscustomobject]@{ Name = 'Def Name'; Email = 'def@example.test' }
+        $r = Read-GeneGitIdentity -Label 'x on BOX' -Default $d -Reader (New-Queue @('', 'new@example.test'))
+        Assert-Equal 'Def Name' $r.Name; Assert-Equal 'new@example.test' $r.Email
+        Assert-Throws { Read-GeneGitIdentity -Label 'x on BOX' -Default ([pscustomobject]@{ Name = ''; Email = '' }) -Reader (New-Queue @('', '')) } '*git name and email*'
+    }
+    Test-Case 'PAT hint: the printed commands pin origin to the account''s own GitHub user and let Git Credential Manager ask for the PAT' {
+        $h1 = Get-GenePatHint -Origin 'https://genewebb@github.com/genewebb/ai-setup.git' -CloneLocal 'D:\devops\pat\ai-setup' -Label 'CORP\pat on BOX'
+        Assert-Match $h1 ([regex]::Escape('git -C D:\devops\pat\ai-setup remote set-url origin https://<github-user>@github.com/genewebb/ai-setup.git'))
+        Assert-Match $h1 ([regex]::Escape('git -C D:\devops\pat\ai-setup fetch'))
+        Assert-Match $h1 'PAT'
+        Assert-NoMatch $h1 'genewebb@'
+        Assert-Match (Get-GenePatHint -Origin 'https://github.com/o/r.git' -CloneLocal 'C:\c' -Label 'l') ([regex]::Escape('https://<github-user>@github.com/o/r.git'))
     }
     Test-Case 'hub: setup group is registered by SetupGroup.ps1, not Verbs.ps1' {
         Assert-NoMatch (Get-Content -LiteralPath "$mod\Verbs.ps1" -Raw) "ProfGroups\['setup'\]|ProfGroups = \[ordered\]@\{\s*setup"

@@ -199,10 +199,14 @@ For `-Machine M -User U`; `-WorkDrive D:` (default `C:`) seeds the paths of a ne
 
 1. **Machine profile.** Missing: write one from the laptop's, rewriting the laptop work root to `<WorkDrive>`,
    setting `AIWorkRoot` to the per-user convention `<WorkDrive>\devops\%USERNAME%\ai-setup` (my call; any row Gene
-   edits afterwards is what the tool reads), clearing the Status column to `unverified`. Present: **never
-   overwritten**. Rows the laptop has and the target lacks, and an `AIWorkRoot` that is not per-user on a
-   multi-user machine, are printed as the exact lines to add or change; `-FixProfile` applies them (adds rows
-   with a blank value, replaces `AIWorkRoot`), after showing a diff and asking. Because the file is machine-wide,
+   edits afterwards is what the tool reads), clearing the Status column to `unverified`, and dropping every note
+   that names the laptop's owner (the words of the laptop clone's git `user.name`): a `(...)` group naming them, then
+   any `;` or `,` clause still naming them, in every table cell after the value. Module names such as `Gene.Profile`
+   and paths are not names. The machine belongs to the person installing, so the owner's dated decisions do not
+   travel. Present: **never overwritten**. Rows the laptop has and the target lacks, an `AIWorkRoot` that is not
+   per-user on a multi-user machine, and lines whose notes name the owner are printed as the exact lines to add or
+   change; `-FixProfile` applies them (adds rows with a blank value, replaces `AIWorkRoot`, swaps each note line for
+   its cleaned form), after showing a diff and asking. `prof setup check` counts the note lines. Because the file is machine-wide,
    changing `AIWorkRoot` changes it for every account on that machine: the verb lists the other accounts that have
    an installed runtime there (`ClaudeHome` under their Users folder) and refuses `-FixProfile` until each is
    either bootstrapped in the same run or named in `-Retire`.
@@ -215,15 +219,22 @@ For `-Machine M -User U`; `-WorkDrive D:` (default `C:`) seeds the paths of a ne
 4. **Clone**: `git bundle create` of `main` on the laptop, copied to the target's `{ScratchRoot}\prof\`, then
    `git clone -b main <bundle> <AIWorkRoot>` in the U session (the session cannot reach back to the laptop: second
    hop). The clone is written by U, so it belongs to U: no ACL or `safe.directory` step. Then on the target clone:
-   `remote set-url origin` to the GitHub URL, `user.name` / `user.email` copied from the laptop clone; the
-   `.gitattributes` union rule travels with the clone. Both bundle copies are deleted. U must be remotable
+   origin set to the GitHub URL (kept when it already names the same repo with U's own GitHub user), and
+   `user.name` / `user.email` asked for U. The question offers U's current identity as the default: the clone's
+   local config, else U's global `.gitconfig` read over the admin share; Enter keeps it. Commits made on the
+   target (harvest) carry U's name, never the laptop owner's. `push` asks the same question every run. With no
+   console a complete default is kept and a missing one stops. The `.gitattributes` union rule travels with the
+   clone. Both bundle copies are deleted. U must be remotable
    (Administrators or Remote Management Users on M); the session check says which group otherwise.
 5. (folded into 4)
 6. **Install**: remote `install.ps1 -NoPull -Yes` as U (same as push step 6).
 7. `-WithTerminal` -> `terminal`; `-WithSecrets` -> `secrets`.
 8. **LEFT TO DO** printed: sign in to Claude as U on M (`ai`), MCP secrets if `-WithSecrets` was not used,
    Chocolatey tools from the install notes, Windows Terminal shortcuts and the Windows Terminal install itself
-   (section 4.6), anything `install.ps1` reported as not installed.
+   (section 4.6), anything `install.ps1` reported as not installed, and the optional GitHub access commands for U
+   (`git remote set-url origin https://<github-user>@...` then `git fetch` at U's own logon, where Git Credential
+   Manager asks for U's PAT once). prof never takes or stores a PAT: `push` needs none, since it moves commits
+   by bundle and admin share.
 
 ### 4.6 terminal and secrets
 
