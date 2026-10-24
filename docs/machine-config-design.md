@@ -179,11 +179,11 @@ New rows:
 | `SecretsDir` | `C:\Deploy\Secrets` | App secret export files (TestAuto and CrewChief JSON). Local disk. Blank where there are none (R24) |
 | `ArchiveRoot` | `C:\DataArchive` | Where retirements are archived (R21). Blank means archiving stops and asks |
 
-Rows that already exist are reused: `ReposRoot`, `SpeedyRepo`, `SpeedMerchantsRepo`, `DocumentationDir`, `PowershellScriptsDir`, `VaultDocsRoot`.
+Rows that already exist are reused: `ReposRoot`, `SpeedyRepo`, `SpeedMerchantsRepo`, `PowershellScriptsDir`, `VaultDocsRoot`.
 
-`CursorRulesDir` is removed (D3).
+`CursorRulesDir` and `DocumentationDir` are not profile keys (D3): nothing reads them.
 
-**Resources and routes (R5, R6).** Each resource key (`VaultWorkRoot`, `VaultPersonalRoot`, `DocumentationDir`, `AIWorkRoot`, `ScratchRoot` and so on) gets a `## Resources` table row:
+**Resources and routes (R5, R6).** Each resource key (`VaultWorkRoot`, `VaultPersonalRoot`, `AIWorkRoot`, `ScratchRoot` and so on) gets a `## Resources` table row:
 
 | Key | Route | Obsidian endpoint |
 |---|---|---|
@@ -269,7 +269,7 @@ Resolution order:
 - is inside the other one.
 To override, add `AllowTempInRepo | yes` to the profile. You must choose this explicitly; nothing falls back to it.
 
-The `share-or-local` value is worked out at run time from `Get-PSDrive` (`DisplayRoot`); there is no extra column. A disconnected mapped drive is reported as `share (disconnected)`.
+The `share-or-local` value is worked out at run time from `Get-PSDrive` (`DisplayRoot`); there is no extra column. A disconnected mapped drive is reported as `share (disconnected)`. When `install.ps1` runs over WinRM (prof setup marks it with `PROF_REMOTE_SESSION=1`), an unreachable share or a letter that is not a drive there is `not checked (remote session)`: a remote session holds no credentials for a second machine (Windows second hop) and has no mapped drives, so the check says nothing about the share. It is an info line, not a warning.
 
 Consumers that cannot import a PowerShell module (`.mjs`, bash) read the `AI_*` env vars. The applicator writes those into the `settings.json` `env` block (4.3). **These exports are outputs only (R3).** The resolver never reads them back.
 

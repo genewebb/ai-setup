@@ -57,6 +57,10 @@ try {
         Assert-Equal '\\BOX\D$\x\y\z' (Join-GeneRemotePath '\\BOX\D$\x' 'y\z')
         Assert-Equal "$($script:noDrive):\a" (Join-GeneRemotePath "$($script:noDrive):\" 'a')
     }
+    Test-Case 'Invoke-GeneRemotePwsh marks the child pwsh as a remote session (PROF_REMOTE_SESSION=1) so install.ps1 does not call an unreachable share missing' {
+        $body = (Get-Command Invoke-GeneRemotePwsh).ScriptBlock.Ast.Extent.Text
+        Assert-Match $body '\$env:PROF_REMOTE_SESSION\s*=\s*''1''[\s\S]*& \$pwsh'
+    }
     Test-Case 'remote path join: the hub never calls Join-Path on a target-local base' {
         $src = (Get-Content -LiteralPath "$mod\SetupGroup.ps1" -Raw) + (Get-Content -LiteralPath "$mod\Sync.ps1" -Raw)
         Assert-NoMatch $src 'Join-Path \$[\w.]*Local\b|Join-Path \$\w+\.Paths\.Local|Join-Path \$Repo\.Path|Join-Path \$archive|Join-Path \$base|Join-Path \(Split-Path \$repos\)'
