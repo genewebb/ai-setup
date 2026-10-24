@@ -98,7 +98,8 @@ function Get-GeneHubRepo { New-GeneRepo -Path (Get-GeneHubRoot) }
 function Invoke-GeneLocalInstall {
     param([string]$Hub, [switch]$WhatIf)
     $a = @('-NoProfile', '-File', (Join-Path $Hub 'install.ps1'), '-NoPull') + $(if ($WhatIf) { '-Check' } else { '-Yes' })
-    & pwsh @a
+    # To the screen: left in the pipeline, install.ps1's output would become part of this function's return value.
+    & pwsh @a | Out-Host
     return $LASTEXITCODE
 }
 

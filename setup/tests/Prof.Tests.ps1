@@ -369,6 +369,16 @@ try {
         Assert-Equal 'Def Name' $r.Name; Assert-Equal 'new@example.test' $r.Email
         Assert-Throws { Read-GeneGitIdentity -Label 'x on BOX' -Default ([pscustomobject]@{ Name = ''; Email = '' }) -Reader (New-Queue @('', '')) } '*git name and email*'
     }
+    Test-Case 'local install: the script''s output goes to the screen and only its exit code comes back' {
+        $fake = Join-Path $root 'fake-hub'; New-Item -ItemType Directory -Force $fake | Out-Null
+        Set-Content -LiteralPath (Join-Path $fake 'install.ps1') -Value @('param([switch]$NoPull, [switch]$Yes, [switch]$Check)', "'line one'", "Write-Warning 'a warning'", 'exit 3')
+        $code = Invoke-GeneLocalInstall -Hub $fake
+        Assert-Equal 1 @($code).Count "returned: $(@($code) -join ' | ')"
+        Assert-Equal 3 $code
+        Set-Content -LiteralPath (Join-Path $fake 'install.ps1') -Value @('param([switch]$NoPull, [switch]$Yes, [switch]$Check)', "'fine'", 'exit 0')
+        $ok = Invoke-GeneLocalInstall -Hub $fake
+        Assert-True ($ok -is [int] -and $ok -eq 0) "returned: $(@($ok) -join ' | ')"
+    }
     Test-Case 'PAT hint: the printed commands pin origin to the account''s own GitHub user and let Git Credential Manager ask for the PAT' {
         $h1 = Get-GenePatHint -Origin 'https://genewebb@github.com/genewebb/ai-setup.git' -CloneLocal 'D:\devops\pat\ai-setup' -Label 'CORP\pat on BOX'
         Assert-Match $h1 ([regex]::Escape('git -C D:\devops\pat\ai-setup remote set-url origin https://<github-user>@github.com/genewebb/ai-setup.git'))
