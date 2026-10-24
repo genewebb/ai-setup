@@ -601,7 +601,7 @@ function New-GeneTargetClone {
     if (-not $scratchLocal) { throw "ScratchRoot is blank in $($Target.ProfilePath); the clone bundle is staged there." }
     $hubScratch = (Get-AIMachineProfile).Keys['ScratchRoot']
     $name = "ai-setup-$(Get-Date -Format yyyyMMdd-HHmmss).bundle"
-    $here = Join-Path $hubScratch "prof\$name"; $thereUnc = Join-Path $scratchUnc "prof\$name"; $thereLocal = Join-Path $scratchLocal "prof\$name"
+    $here = Join-Path $hubScratch "prof\$name"; $thereUnc = Join-Path $scratchUnc "prof\$name"; $thereLocal = Join-GeneRemotePath $scratchLocal "prof\$name"
     try {
         New-Item -ItemType Directory -Force -Path (Split-Path $here), (Split-Path $thereUnc) | Out-Null
         Invoke-GeneGit $Hub @('bundle', 'create', '-q', $here, 'main') | Out-Null
