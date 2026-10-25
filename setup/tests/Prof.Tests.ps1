@@ -750,6 +750,32 @@ try {
             Remove-Item (Join-Path $work 'mine.txt')
             Invoke-GeneProf git pull speedy 6>&1 | Out-Null
         }
+        Test-Case 'git: new makes the branch and switches to it; again just switches' {
+            Invoke-GeneProf git new speedy -Branch 'work/try' 6>&1 | Out-Null
+            Assert-Equal 'work/try' ([string](git -C $work branch --show-current)).Trim()
+            git -C $work switch -q main
+            Invoke-GeneProf git new speedy -Branch 'work/try' 6>&1 | Out-Null
+            Assert-Equal 'work/try' ([string](git -C $work branch --show-current)).Trim()
+            $err = try { Invoke-GeneProf git new speedy -Branch 'bad..name' 6>&1 | Out-Null; '' } catch { "$_" }
+            Assert-Match $err 'not a valid branch name'
+        }
+        Test-Case 'git: main goes to main and pulls; stops on uncommitted changes' {
+            git -C $other pull -q 2>$null; Add-Commit $other 'm.txt' 'main side'; git -C $other push -q 2>$null
+            Set-Content -LiteralPath (Join-Path $work 'dirty.txt') -Value 'dirty'
+            $err = try { Invoke-GeneProf git main speedy 6>&1 | Out-Null; '' } catch { "$_" }
+            Assert-Match $err 'uncommitted changes; nothing was switched'
+            Assert-Equal 'work/try' ([string](git -C $work branch --show-current)).Trim()
+            Remove-Item -LiteralPath (Join-Path $work 'dirty.txt')
+            Invoke-GeneProf git main speedy 6>&1 | Out-Null
+            Assert-Equal 'main' ([string](git -C $work branch --show-current)).Trim()
+            Assert-True (Test-Path (Join-Path $work 'm.txt')) 'main was not pulled'
+        }
+        Test-Case 'git menu: new asks the branch name; main is listed with its text' {
+            Set-Location $work
+            $o = Invoke-GeneProfMenu -Group git -Reader (New-Queue @('5', '1', 'work/menu', 'y', 'n')) 6>&1 | Out-String
+            Assert-Match $o "> prof git new -Branch work/menu -WhatIf"
+            Assert-Match $o '4\) main\s+Go to main and pull'
+        }
         Test-Case 'git: -AIOnly is gone with pushrules (retired 10/24)' {
             Assert-Throws { Invoke-GeneProf git push speedy -AIOnly 6>&1 | Out-Null } '*AIOnly*'
             Assert-NoMatch ((Get-Content -LiteralPath "$mod\GitGroup.ps1" -Raw) + (Get-Content -LiteralPath "$mod\Verbs.ps1" -Raw)) 'AIOnly|pushrules'

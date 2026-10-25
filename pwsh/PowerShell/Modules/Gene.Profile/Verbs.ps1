@@ -55,7 +55,7 @@ function Format-GeneProfCommand {
     <# The command line a run is equivalent to, so a menu session teaches the syntax. #>
     param([string]$Group, [Parameter(Mandatory)][string]$Verb, [System.Collections.IDictionary]$Params = @{})
     $topic = if ($Group -and $script:ProfGroups.Contains($Group)) { $script:ProfGroups[$Group].TopicParam }
-    $order = @('Topic') + @($topic | Where-Object { $_ }) + @('Machine', 'User', 'WorkDrive', 'Retire', 'Message', 'Bump', 'Configuration', 'Out', 'FixProfile', 'WithTerminal', 'WithSecrets', 'NoPublish', 'AllowSecrets', 'Extra', 'WhatIf')
+    $order = @('Topic') + @($topic | Where-Object { $_ }) + @('Machine', 'User', 'WorkDrive', 'Retire', 'Message', 'Branch', 'Bump', 'Configuration', 'Out', 'FixProfile', 'WithTerminal', 'WithSecrets', 'NoPublish', 'AllowSecrets', 'Extra', 'WhatIf')
     $parts = @('prof') + @($Group | Where-Object { $_ }) + @($Verb)
     foreach ($k in $order + @($Params.Keys | Where-Object { $_ -notin $order })) {
         if (-not $Params.Contains($k)) { continue }
@@ -228,6 +228,7 @@ function Invoke-GeneProf {
         [string]$WorkDrive,
         [string[]]$Retire,
         [string]$Message,
+        [string]$Branch,
         [switch]$FixProfile,
         [switch]$WithTerminal,
         [switch]$WithSecrets,

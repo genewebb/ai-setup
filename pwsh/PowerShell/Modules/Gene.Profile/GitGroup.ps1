@@ -6,6 +6,8 @@ $script:ProfGitVerbs = [ordered]@{
     status = 'What changed in the repo, and is the current branch ahead of or behind the server? (changes nothing)'
     push   = 'Save every change in the repo as one commit and send the current branch (gpush)'
     pull   = 'Bring the current branch up to date from the server (only when that needs no merge)'
+    main   = 'Go to main and pull'
+    new    = 'Switch to a branch by name (asks for the name; makes the branch when it does not exist yet)'
 }
 $script:ProfGitDetails = @{
     status = @(
@@ -24,11 +26,21 @@ $script:ProfGitDetails = @{
         'git pull --ff-only on the current branch. When this branch and GitHub both have new commits, it stops',
         'and says so instead of merging; then merge or rebase by hand.'
     )
+    main   = @(
+        'git switch main, then git pull --ff-only. Stops before switching when the repo has uncommitted changes,',
+        'so they are not carried onto main; commit (prof git push) or put them aside first.'
+    )
+    new    = @(
+        'git switch <name> when the branch exists here, else git switch -c <name> (a new branch from where you stand).',
+        'Uncommitted changes come along to the branch. prof git push sends the new branch to the server.'
+    )
 }
 $script:ProfGitUsage = @{
     status = 'prof git status [<repo>] [-WhatIf]'
     push   = 'prof git push [<repo>] [-Message <text>] [-WhatIf]'
     pull   = 'prof git pull [<repo>] [-WhatIf]'
+    main   = 'prof git main [<repo>] [-WhatIf]'
+    new    = 'prof git new [<repo>] -Branch <name> [-WhatIf]'
 }
 
 $script:ProfGroups['git'] = [pscustomobject]@{
@@ -157,6 +169,30 @@ function Invoke-GeneProfGitPull {
     if ($LASTEXITCODE -ne 0) { throw 'git pull --ff-only stopped (see above). If this branch and the server both have new commits, merge or rebase by hand.' }
 }
 
+function Invoke-GeneProfGitMain {
+    param([string]$Repo, [switch]$WhatIf)
+    $top = Enter-GeneGitRepo -Repo $Repo
+    if ($WhatIf) { Write-Host '[WhatIf] Would run: git switch main, then git pull --ff-only' -ForegroundColor Yellow; return }
+    if (git -c safe.directory=* -C $top status --porcelain) { throw 'This repo has uncommitted changes; nothing was switched. Commit them (prof git push) or put them aside, then run prof git main again.' }
+    git -c safe.directory=* -C $top switch main
+    if ($LASTEXITCODE -ne 0) { throw 'git switch main stopped (see above).' }
+    git -c safe.directory=* -C $top pull --ff-only
+    if ($LASTEXITCODE -ne 0) { throw 'git pull --ff-only stopped (see above). If main here and the server both have new commits, merge or rebase by hand.' }
+}
+
+function Invoke-GeneProfGitNew {
+    param([string]$Repo, [string]$Branch, [switch]$WhatIf)
+    if (-not $Branch) { throw 'Give the branch name: prof git new [<repo>] -Branch <name> (the menu asks for it).' }
+    git check-ref-format --branch $Branch 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "'$Branch' is not a valid branch name." }
+    $top = Enter-GeneGitRepo -Repo $Repo
+    git -c safe.directory=* -C $top show-ref --verify --quiet "refs/heads/$Branch"
+    $gitArgs = if ($LASTEXITCODE -eq 0) { @('switch', $Branch) } else { @('switch', '-c', $Branch) }
+    if ($WhatIf) { Write-Host "[WhatIf] Would run: git $($gitArgs -join ' ')" -ForegroundColor Yellow; return }
+    git -c safe.directory=* -C $top @gitArgs
+    if ($LASTEXITCODE -ne 0) { throw "git $($gitArgs -join ' ') stopped (see above)." }
+}
+
 function Read-GeneGitMenuParams {
     <# The menu's questions for one git command. Returns the parameters, or $null when the user cancels. #>
     param([Parameter(Mandatory)][string]$Verb, [scriptblock]$Reader)
@@ -174,6 +210,10 @@ function Read-GeneGitMenuParams {
         $m = ([string](Read-GeneText -Reader $Reader -Prompt 'Commit message (Enter = Update latest)')).Trim()
         if ($m) { $p.Message = $m }
     }
-    if ($Verb -in 'push', 'pull' -and (Read-GeneYesNo -Question 'Dry run only (-WhatIf)?' -Reader $Reader)) { $p.WhatIf = $true }
+    if ($Verb -eq 'new') {
+        $p.Branch = ([string](Read-GeneText -Reader $Reader -Prompt 'Branch name')).Trim()
+        if (-not $p.Branch) { return $null }
+    }
+    if ($Verb -in 'push', 'pull', 'main', 'new' -and (Read-GeneYesNo -Question 'Dry run only (-WhatIf)?' -Reader $Reader)) { $p.WhatIf = $true }
     return $p
 }
