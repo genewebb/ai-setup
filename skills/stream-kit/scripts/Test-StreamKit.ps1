@@ -772,6 +772,19 @@ try {
     Case 'the build gate reads IDLE while only frozen-group rows are ticketed' (($gate -join "`n") -match '(?m)^IDLE nothing to take for build') ($gate -join '|')
     $gateA = @(& "$S\Start-StreamRunner.ps1" -Repo $cr -Role author -DryRun)
     Case 'the author gate reads GATE planned for the focus group' (($gateA -join "`n") -match '(?m)^GATE planned 3 \(C1\.\S+\) focus C1') ($gateA -join '|')
+    # The GATE line names the row the claim takes (kit item IN-20261024221545-7b45): claim order, not board order. Both
+    # board orders are probed, the last planned row marked an integration fix (claimed first, listed last).
+    $gateMiss = @()
+    foreach ($rev in @($false, $true)) {
+        $gdoc = J $cr; $gl = @($gdoc.tasks); if ($rev) { [array]::Reverse($gl) }; $gdoc.tasks = $gl; $glast = @($gl | Where-Object { $_.state -eq 'planned' })[-1]; $glast['origin'] = 'integration'
+        $gdoc | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $cr '.streams\tasks.json') -Encoding utf8
+        $gOut = @(& "$S\Start-StreamRunner.ps1" -Repo $cr -Role author -DryRun)
+        $gateRow = if (($gOut -join "`n") -match '(?m)^GATE planned \d+ \((\S+)\)') { $Matches[1] } else { '' }
+        $gateClaim = (& "$S\Claim-Task.ps1" -Repo $cr -Role author -Session gate-order-probe | Out-String | ConvertFrom-Json).id
+        if (-not $gateRow -or $gateRow -ne $gateClaim) { $gateMiss += "reversed=$rev gate=$gateRow claim=$gateClaim" }
+        $kdoc | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $cr '.streams\tasks.json') -Encoding utf8
+    }
+    Case 'the author GATE line names the row Claim-Task takes' ($gateMiss.Count -eq 0) ($gateMiss -join '; ')
     $snd = & "$S\Send-InboxItem.ps1" -Repo $cr -To stream-build -From owner -Kind request -Ask 'rebuild' -Task C2.L1
     Case 'an inbox item to a builder about a frozen-group row is refused' ($LASTEXITCODE -eq 9 -and ($snd -join ' ') -match 'outside the focus group C1') ($snd -join '|')
     $snd2 = & "$S\Send-InboxItem.ps1" -Repo $cr -To stream-build -From owner -Kind request -Ask 'rebuild' -Task C2.L1 -Force
@@ -1497,6 +1510,13 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $ct[1].dependsOn = @('C.T1')
     $co = @(Get-CompositionEditRefusals $ct 'C.T1' $cg @('src/Web/Program.cs'))
     Case 'ORDERED-BY-MERGE: a shared composition file takes appends only, unless the sharer is ordered' ($ca.Count -eq 0 -and $cr.Count -eq 1 -and $cr[0] -match '^COMPOSITION-EDIT src/Web/Program\.cs removes or changes 1 line\(s\); shared with C\.T2 ' -and $co.Count -eq 0) ("append=$($ca -join '|') change=$($cr -join '|') ordered=$($co -join '|')")
+    # A sharer already on main (integrated, like done) is in the builder's base, so it is no merge peer (kit item
+    # IN-20261023051312-f824); a built sharer has not landed and still is one.
+    $ct += [ordered]@{ id = 'C.T4'; state = 'integrated'; dependsOn = @(); writeSet = @('src/Web/Program.cs') }
+    $ci = @(Get-CompositionEditRefusals $ct 'C.T1' $cg @('src/Web/Program.cs'))
+    $ct[3].state = 'built'
+    $cb = @(Get-CompositionEditRefusals $ct 'C.T1' $cg @('src/Web/Program.cs'))
+    Case 'ORDERED-BY-MERGE: an integrated sharer is no merge peer, a built one still is' ($ci.Count -eq 0 -and $cb.Count -eq 1 -and $cb[0] -match 'shared with C\.T4 ') ("integrated=$($ci -join '|') built=$($cb -join '|')")
 
     # ORDERED-BY-MERGE, integrator side (kit item IN-20261018134210-ede5): an append that no longer applies because
     # another row appended at the same place is merged by its added lines and reverses clean; a patch that changes a
@@ -1517,6 +1537,22 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $mgC = New-CompositionMergedPatch $mg "$mg\..\m-chg.patch" "$mg\..\m-chg.merged.patch"
     $mgB = New-CompositionMergedPatch $mg "$mg\..\m-both.patch" "$mg\..\m-both.merged.patch"
     Case 'ORDERED-BY-MERGE: the integrator merges an append by its added lines, refuses a change or an ordinary conflict' ($mgRaw -ne 0 -and $mgA.Ok -and $mgApplied -eq "s.AddA();`ns.AddB();`ns.AddC();`ns.AddD();`n}`n" -and $mgBack -eq "s.AddA();`ns.AddB();`ns.AddD();`n}`n" -and -not $mgC.Ok -and $mgC.Reason -match 'not add-only' -and -not $mgB.Ok -and $mgB.Reason -match 'outside the composition' -and [IO.File]::ReadAllText($of) -eq "o1 theirs`n") ("raw=$mgRaw a=$($mgA.Ok)/$($mgA.Reason) applied=$($mgApplied -replace "`n", '\n') back=$($mgBack -replace "`n", '\n') c=$($mgC.Reason) b=$($mgB.Reason)")
+    # ORDERED-BY-MERGE for the id register (kit item IN-20261023221543-c537): two rows that both append allocate events
+    # to docs/requirements/ids.yaml need no dependsOn order; the second lands by its added lines, unless it allocates an
+    # id main already allocates (two rows numbered the same id in parallel), which is refused and main is left alone.
+    $ix = Join-Path $Scratch 'idsmerge'; New-Item -ItemType Directory -Path "$ix\docs\requirements" -Force | Out-Null
+    git -C $ix init -q -b main; git -C $ix config user.email t@t; git -C $ix config user.name t; git -C $ix config core.autocrlf false
+    $ixf = "$ix\docs\requirements\ids.yaml"; $ixE = { param($id) "- {event: allocate, kind: REQ, id: $id, owner_artifact: F}`n" }
+    [IO.File]::WriteAllText($ixf, "events:`n" + (& $ixE 'REQ-X-001')); git -C $ix add -A; git -C $ix commit -q -m base
+    [IO.File]::WriteAllText($ixf, "events:`n" + (& $ixE 'REQ-X-001') + (& $ixE 'REQ-X-002')); git -C $ix diff --output="$ix\..\i-a.patch"
+    [IO.File]::WriteAllText($ixf, "events:`n" + (& $ixE 'REQ-X-001') + (& $ixE 'REQ-Y-001')); git -C $ix diff --output="$ix\..\i-dup.patch"
+    [IO.File]::WriteAllText($ixf, "events:`n" + (& $ixE 'REQ-X-001') + (& $ixE 'REQ-Y-001')); git -C $ix add -A; git -C $ix commit -q -m peer
+    $ixA = New-CompositionMergedPatch $ix "$ix\..\i-a.patch" "$ix\..\i-a.merged.patch"
+    $ixApplied = ''; if ($ixA.Ok) { git -C $ix apply "$ix\..\i-a.merged.patch"; $ixApplied = [IO.File]::ReadAllText($ixf); git -C $ix checkout -q -- . }
+    $ixD = @(Get-AllocatorDuplicates $ix "$ix\..\i-dup.patch"); $ixDa = @(Get-AllocatorDuplicates $ix "$ix\..\i-a.patch")
+    $ixOv = Test-MergeOrderedOverlap @('docs/requirements/ids.yaml') @('docs\requirements\ids.yaml', 'docs/requirements/x.yaml')
+    $ixBp = (Get-BoardProblems @(@{ id = 'I.T1'; state = 'ticketed'; writeSet = @('docs/requirements/ids.yaml'); dependsOn = @() }, @{ id = 'I.T2'; state = 'ticketed'; writeSet = @('docs/requirements/ids.yaml'); dependsOn = @() })); $ixBp = @($ixBp | Where-Object { $_ })
+    Case 'ORDERED-BY-MERGE: ids.yaml appends merge in parallel, a duplicate allocation is refused' ($ixOv -and $ixBp.Count -eq 0 -and $ixA.Ok -and $ixApplied -match 'REQ-X-002' -and $ixApplied -match 'REQ-Y-001' -and "$ixD" -eq 'REQ-Y-001' -and $ixDa.Count -eq 0 -and [IO.File]::ReadAllText($ixf) -notmatch 'REQ-X-002') ("ov=$ixOv bp=$($ixBp -join '|') a=$($ixA.Ok)/$($ixA.Reason) applied=$($ixApplied -replace "`n", '\n') d=$($ixD -join '|') da=$($ixDa -join '|')")
     # Owner ruling 2026-10-18 (kit item IN-20261019000559-20fa): the runner's status field shows local machine time.
     $lsNow = Format-LocalStamp; $lsUtc = Format-LocalStamp ([datetime]::new(2026, 1, 15, 12, 0, 0, [DateTimeKind]::Utc))
     $lsWant = [datetime]::new(2026, 1, 15, 12, 0, 0, [DateTimeKind]::Utc).ToLocalTime().ToString('yyyy-MM-dd HH:mm')
@@ -1595,6 +1631,15 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $amHead = git -C $amR rev-parse HEAD
     $amI2 = @(& "$S\Integrate-Patch.ps1" -Repo $amR -Session integ-am -Task A1.Q)
     Case 'ALREADY-ON-MAIN: a patch already committed on HEAD is integrated with nothing applied or committed' ($amI2[0] -eq 'INTEGRATED A1.Q (already in HEAD)' -and (T $amR 'A1.Q').state -eq 'integrated' -and (git -C $amR rev-parse HEAD) -eq $amHead -and -not (git -C $amR status --porcelain -- q.txt)) ($amI2 -join ' | ')
+
+    # ---- A runner whose pwsh.exe an update replaced reports the renamed image ('<hex>.rbf') as its ProcessName but
+    # still runs: it must stay live, or the watchdog breaks its units' claims (kit item IN-20261023121821-8738).
+    $pwOut = @(pwsh -NoProfile -Command ". '$S\lib\Streams.ps1'; @(
+        (Test-PwshProcess ([pscustomobject]@{ ProcessName = '2ae27b44.rbf'; Path = 'C:\Program Files\PowerShell\7\pwsh.exe' })),
+        (Test-PwshProcess ([pscustomobject]@{ ProcessName = 'pwsh'; Path = '' })),
+        (Test-PwshProcess ([pscustomobject]@{ ProcessName = 'node'; Path = 'C:\Program Files\nodejs\node.exe' })),
+        (Test-PwshProcess ([pscustomobject]@{ ProcessName = '2ae27b44.rbf'; Path = '' }))) -join ','")
+    Case 'a runner pwsh replaced by an update (renamed .rbf image) still counts as pwsh; other processes do not' ($pwOut[-1] -eq 'True,True,False,False') ($pwOut -join ' | ')
 } catch {
     "FAIL harness: $_ at $($_.InvocationInfo.PositionMessage)`n$($_.ScriptStackTrace)"; $fails++
 } finally {

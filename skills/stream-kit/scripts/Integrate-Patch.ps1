@@ -213,16 +213,58 @@ if (-not $clean) {
         "ALREADY-APPLIED $($t.id)"
     }
 }
+# ID REGISTER (kit item IN-20261023221543-c537): rows append to ids.yaml unordered, so two may allocate the same id; a
+# patch that allocates an id main already allocates applies clean but must not land: rebase, so the builder re-numbers.
+if ($clean -and -not $alreadyOnMain) {
+    $dupIds = @(Get-AllocatorDuplicates $Repo $patch)
+    if ($dupIds.Count) {
+        $clean = $false; $mergeWhy = "; id register: $($dupIds -join ', ') already allocated on main, re-number"
+        Add-Decision $P $Session "$($t.id): allocates $($dupIds -join ', ') already allocated on main (ids.yaml, parallel allocation); REBASE to re-number"
+        "ID-CLASH $($t.id) $($dupIds -join ',')"
+    }
+}
 if (-not $clean) {
     & $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To ticketed -Note "rebase: base moved (patch kept as the builder's starting point)$mergeWhy" | Out-Null
     $applyLock.Dispose()
     "REBASE $($t.id)"; exit 0
 }
+# CENSUS BASELINE (kit item IN-20261023162852-ea21): before the apply, while this session holds the main tree, the repo
+# census (config "census") is run on main as it stands when the cached baseline is for another HEAD or dirty tree, so
+# Invoke-Grader can tell main's own census red (BASELINE) from red this patch brings. Only when the patch touches a
+# census path: a patch the census never judges costs no census run.
+$censusCfg = (Get-StreamConfig $P)['census']
+if ($censusCfg -is [Collections.IDictionary] -and $censusCfg['script'] -and -not $alreadyOnMain) {
+    $cRx = if ($censusCfg['paths']) { [string]$censusCfg['paths'] } else { '.' }
+    $cPaths = @(Get-Content -LiteralPath $patch | Where-Object { $_ -match '^diff --git a/(\S+) b/' } | ForEach-Object { $Matches[1] } | Where-Object { $_ -match $cRx })
+    $cScript = [string]$censusCfg['script']; if (-not [IO.Path]::IsPathRooted($cScript)) { $cScript = Join-Path $Repo $cScript }
+    if ($cPaths.Count -and (Test-Path -LiteralPath $cScript)) {
+        $bFile = Join-Path $P.Root 'suites\census-baseline.json'
+        $cHead = (& git -C $Repo rev-parse HEAD 2>$null | Select-Object -First 1)
+        $cDirtyText = (@(& git -C $Repo diff HEAD 2>$null) + @(& git -C $Repo ls-files --others --exclude-standard 2>$null)) -join "`n"
+        $cDirty = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($cDirtyText))).Replace('-', '')
+        $cOld = $null
+        if (Test-Path -LiteralPath $bFile) { try { $cOld = Get-Content -LiteralPath $bFile -Raw | ConvertFrom-Json -AsHashtable } catch { $cOld = $null } }
+        if (-not $cOld -or $cOld['head'] -ne $cHead -or $cOld['dirtyHash'] -ne $cDirty) {
+            $cOut = @(& pwsh -NoProfile -NonInteractive -File $cScript -Root $Repo 2>&1 | ForEach-Object { "$_" })
+            $cFails = @($cOut | Where-Object { $_ -match '^FAIL\s+([^\s:]+)' } | ForEach-Object { $Matches[1] })
+            New-Item -ItemType Directory -Path (Split-Path $bFile) -Force | Out-Null
+            Write-AtomicText $bFile (@{ head = $cHead; dirtyHash = $cDirty; fails = $cFails; at = (Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json -Depth 4)
+            if ($cFails.Count) { Add-Decision $P $Session "census baseline on main before $($t.id): already red $($cFails -join ',')" }
+        }
+    }
+}
 if (-not $alreadyOnMain) { [void](Invoke-Git $Repo @('apply', '--binary', '--whitespace=nowarn', $patch)) }
 $script:appliedPatch = $patch; $script:appliedTask = $t.id
+# GRADE-PENDING (kit item IN-20261024221200-772a): while this patch sits on main for its grader, the grader holds
+# main-grader.lock for the whole run (27 min for G23.T074) and every builder pre-stage starved behind it. The grade
+# writes nothing tracked, so main is read-stable under it: this marker names the patch, and New-TaskWorktree lays a
+# base beside the grade with the patch reversed out (lib Get-GradePendingPatch). The drain's finally removes it.
+Write-AtomicText (Join-Path $P.Root 'main-pending.json') (@{ task = $t.id; patch = $patch; at = (Get-Now) } | ConvertTo-Json)
 $applyLock.Dispose()
 # A grader that crashes must never leave the patch half-integrated on main: reverse it and bounce the task.
-try { $g = & "$PSScriptRoot\Invoke-Grader.ps1" -Repo $Repo -Task $t.id -Root $Repo -Label main -BeatSession $Session; $gcode = $LASTEXITCODE }
+# The patch's own paths decide whether the repo census (config "census", Invoke-Grader) runs on main.
+$censusPaths = @(Get-Content -LiteralPath $patch | Where-Object { $_ -match '^diff --git a/(\S+) b/' } | ForEach-Object { $Matches[1] })
+try { $g = & "$PSScriptRoot\Invoke-Grader.ps1" -Repo $Repo -Task $t.id -Root $Repo -Label main -BeatSession $Session -CensusPaths $censusPaths; $gcode = $LASTEXITCODE }
 catch {
     $revLock = Enter-MainTreeLock $P "integrate $($t.id) reverse" 600
     [void](Invoke-Git $Repo @('apply', '-R', '--binary', '--whitespace=nowarn', $patch))
@@ -298,6 +340,10 @@ if ($gcode -eq 0) {
     $redIds = @(Get-ClauseIds @(Get-Content -LiteralPath $mainLog -ErrorAction SilentlyContinue) 'FAIL')
     $why = @()
     if (-not $redIds.Count) { $why += 'no FAIL clause named (grader crashed or exit code only)' }
+    # A census id red on main is never a grader defect: Invoke-Grader already took main's own census red out as
+    # BASELINE, so what is left is red only with this patch (kit item IN-20261023162852-ea21).
+    $censusRed = @($redIds | Where-Object { $_ -match '^CENSUS-' })
+    if ($censusRed.Count) { $why += "census $($censusRed -join ',') red only with this patch" }
     if (-not (Test-Path $wtLog)) { $why += 'no worktree grader log' }
     else {
         $wtLines = Get-Content $wtLog
@@ -381,6 +427,7 @@ if ($gcode -eq 0) {
     try { & $update -Repo $Repo -Task $script:appliedTask -Role integrate -Session $Session -Note "integrate: a step after the apply threw, patch reversed, task stays built for retry: $err" | Out-Null } catch { }
     "RETRY $($script:appliedTask) (a step after the apply threw; patch reversed, still built): $err"; exit 0
 } finally {
+    Remove-Item -LiteralPath (Join-Path $P.Root 'main-pending.json') -Force -ErrorAction SilentlyContinue
     $script:drainLock.Dispose()
     if (-not $prevTasksWait) { Remove-Item Env:\STREAM_TASKS_LOCK_WAIT_SECONDS -ErrorAction SilentlyContinue }
 }

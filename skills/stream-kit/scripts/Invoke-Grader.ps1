@@ -41,6 +41,7 @@ param(
     [string] $BeatTask = '',
     [ValidateSet('', 'grader', 'check')] [string] $Only = '',
     [int] $TimeoutSeconds = 0,
+    [string[]] $CensusPaths = @(),
     [switch] $ExpectRed
 )
 $missing = @(foreach ($n in 'Repo', 'Task', 'Root') { if (-not (Get-Variable $n -ValueOnly)) { "-$n" } })
@@ -60,6 +61,41 @@ foreach ($kind in @('check', 'grader')) {
     $scripts.Add($s)
 }
 if (-not $scripts.Count) { "NO-GRADER $Task$(if ($Only) { " (no $Only)" } else { ' (neither a check nor a grader)' })"; exit 4 }
+# THE CENSUS (kit item IN-20261023162852-ea21): a repo-wide script named in .streams\config.json
+# ("census": { "script": "<path>", "paths": "<regex on repo-relative / paths>" }) runs as a third script when the tree's
+# changed paths match. A row's own check and grader never judge the repo-wide census tests (Tests.Architecture
+# *CensusTests), so G18.T061 integrated green and left main red. The changed paths are -CensusPaths (the integrator
+# passes the patch's paths on main), else the worktree's own diff against HEAD plus untracked files, else the row's
+# kept patch. A census FAIL id already in .streams\suites\census-baseline.json (main's own red) is rewritten BASELINE
+# and does not fail the run. Never with -Only or -ExpectRed: a RED proof is about the row's clauses.
+$censusScript = ''
+$censusCfg = (Get-StreamConfig $P)['census']
+if ($censusCfg -is [Collections.IDictionary] -and $censusCfg['script'] -and -not $Only -and -not $ExpectRed) {
+    $cs = [string]$censusCfg['script']
+    if (-not [IO.Path]::IsPathRooted($cs)) { $cs = Join-Path $Repo $cs }
+    $rootFull = (Resolve-Path $Root).Path.TrimEnd('\')
+    $changed = @($CensusPaths | Where-Object { $_ })
+    if (-not $changed.Count -and $rootFull -ne $Repo.TrimEnd('\')) {
+        $changed = @(& git -C $rootFull diff --name-only HEAD 2>$null) + @(& git -C $rootFull ls-files --others --exclude-standard 2>$null)
+    }
+    if (-not $changed.Count) {
+        $kept = Get-Field $t 'artifacts', 'patch'
+        if ($kept -and -not [IO.Path]::IsPathRooted($kept)) { $kept = Join-Path $Repo $kept }
+        if ($kept -and (Test-Path -LiteralPath $kept)) {
+            $changed = @(Get-Content -LiteralPath $kept | Where-Object { $_ -match '^diff --git a/(\S+) b/' } | ForEach-Object { $Matches[1] })
+        }
+    }
+    $rx = if ($censusCfg['paths']) { [string]$censusCfg['paths'] } else { '.' }
+    if (@($changed | ForEach-Object { $_ -replace '\\', '/' } | Where-Object { $_ -match $rx }).Count -and (Test-Path -LiteralPath $cs)) {
+        $censusScript = $cs
+        $scripts.Add($cs)
+    }
+}
+$censusBaseline = @()
+if ($censusScript) {
+    $bf = Join-Path $P.Root 'suites\census-baseline.json'
+    if (Test-Path -LiteralPath $bf) { try { $censusBaseline = @((Get-Content -LiteralPath $bf -Raw | ConvertFrom-Json -AsHashtable)['fails']) } catch { $censusBaseline = @() } }
+}
 $log = Join-Path $P.Logs "$Task.grader.$Label.txt"
 if (Test-Path -LiteralPath $log) { Remove-Item -LiteralPath $log -Force }
 $since = Get-TaskSince $doc $t
@@ -137,6 +173,15 @@ try {
         if ($scripts.Count -gt 1) { Add-LineTo $log "== $(Split-Path -Leaf (Split-Path $g)) $(Split-Path -Leaf $g) exit $one" }
         $body = Read-RedirectText $part
         if ($tail) { $body = "$body$(if ($body) { [Environment]::NewLine })$tail" }
+        if ($g -eq $censusScript -and $one -ne 0 -and -not $timedOut) {
+            # Main's own census red is not this row's: rewrite those FAIL lines BASELINE, and the census fails the run
+            # only when a FAIL is left (or it printed no FAIL at all, so its exit code is all there is).
+            $lines = @($body -split '\r?\n')
+            $newFail = @($lines | Where-Object { $_ -match '^FAIL\s+([^\s:]+)' -and $censusBaseline -notcontains $Matches[1] })
+            $wasFail = @($lines | Where-Object { $_ -match '^FAIL\s+\S' })
+            $body = ($lines | ForEach-Object { if ($_ -match '^FAIL\s+([^\s:]+)' -and $censusBaseline -contains $Matches[1]) { "BASELINE $($Matches[1]) (red on main before this change)" } else { $_ } }) -join [Environment]::NewLine
+            if ($wasFail.Count -and -not $newFail.Count) { $one = 0 }
+        }
         if ($body -or (Test-Path -LiteralPath $part)) { Invoke-IoRetry { [IO.File]::AppendAllText($log, $body + [Environment]::NewLine) } }
         foreach ($f in @($part, $err, $in)) { if ($f) { Remove-RedirectFile $f } }
         if ($one -ne 0 -and $code -eq 0) { $code = $one }
@@ -148,7 +193,7 @@ try {
     if ($proc -and -not $proc.HasExited) { try { $proc.Kill($true) } catch { } }
     if ($mainLock) { $mainLock.Dispose() }
 }
-$identity = ($scripts | ForEach-Object { Get-GraderHash $_ }) -join '+'
+$identity = ($scripts | ForEach-Object { if ($_ -eq $censusScript) { "census:$(Get-GraderHash $_)" } else { Get-GraderHash $_ } }) -join '+'
 Add-LineTo $log ("GRADER sha {0} since {1}" -f $identity, $(if ($since) { $since } else { '-' }))
 $verdicts = @(Get-Content $log | Where-Object { $_ -match '^(PASS|FAIL)\s+\S' })
 $verdicts

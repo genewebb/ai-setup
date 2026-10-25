@@ -1,6 +1,6 @@
 ---
 name: stream-build
-description: v0.12. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
+description: v0.13. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
 ---
 
 # stream-build
@@ -161,6 +161,10 @@ do the held item's work (an item). Never run them again.
      on top of it. A kept patch whose row has no `artifacts.check` gets one written now (step 4b, minus the RED run,
      which the kept patch makes impossible; say so in the test record).
    - `CONFLICT` or `NO-PRIOR`: nothing was written; build as usual from step 4.
+   - **Census (v0.13, kit item IN-20261023162852-ea21).** When `.streams\config.json` names a `census`, every
+     `Invoke-Grader.ps1 -Label wt` run whose worktree diff touches its `paths` also runs the repo's census script
+     (repo-wide architecture census tests). A `FAIL CENSUS-<id>` line is your change's: fix it before hand-off, the
+     same as a red clause; a `BASELINE CENSUS-<id>` line was red on main already and is not yours.
 4. **RED, first, in the worktree** (owner rulings 2026-10-02, kit items IN-20261002160453-ce2a and
    IN-20261002160643-741d). The author no longer proves RED: that ran on the main tree under
    `.streams\main-grader.lock` and queued every release behind any long main-tree run. Your worktree is private, so it

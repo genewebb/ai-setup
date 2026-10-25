@@ -318,6 +318,10 @@ $dpgSilent = @(
     "rm -rf $rpF/speedmerchants/bin",
     "cd $rpM/speedmerchants && rm -rf src/obj",
     'rm -rf src/obj bin/Debug',
+    # A shell script run INSIDE a container (docker run ... sh -c '...') names container paths: /w/a is no host path
+    # while the script itself deletes nothing (kit item IN-20261024162923-3943).
+    'rm -f srv.log; MSYS_NO_PATHCONV=1 docker run --rm $SDK sh -c ''mkdir -p /w/a && cd /w/a''',
+    'rm -f srv.log; docker exec -i speedy-sql bash -lc "mkdir -p /var/opt/x && ls /var/opt/x"',
     "Remove-Item -Recurse -Force $tmpW\claude\x\scratchpad\trx",
     'rm -rf /tmp/cx/out',
     'grep -n rm C:\Users\agenewe\.claude\memory\foo.md',
@@ -354,7 +358,20 @@ $dpgSilent = @(
     "x('/c')`nRemove-Item -Recurse -Force $scW\x",
     "`$g = `$g.Replace('at <c>a</c>','at <c>b</c>')`nRemove-Item -Recurse -Force $scW\x",
     "`$g = [regex]::Replace(`$g,'x','a <c>b</c>'); Remove-Item -Recurse -Force $scW\x",
-    "`$b = [regex]::Replace(`$g,'<see cref=`"TheCanvasBlock`"/>','the test'); Remove-Item -Recurse -Force $scW\x"
+    "`$b = [regex]::Replace(`$g,'<see cref=`"TheCanvasBlock`"/>','the test'); Remove-Item -Recurse -Force $scW\x",
+    # A quoted value that opens with a C# comment ("// x.txt ...") is text, not a UNC root: on 2026-10-23 an author
+    # stalled on a Set-Content value beside an in-scratch Remove-Item (kit item IN-20261023124711-6fbc).
+    "Remove-Item -Recurse -Force $scW\x; Set-Content `"$scW/x/a.cs`" `"// Baseline.txt NFR-ENGINEERING-001.yaml common-test-fake``nclass A { }`"",
+    # A PATH value is a search list, not an operand: on 2026-10-23 a builder stalled on PATH="/c/Windows/System32:..."
+    # beside an in-scratch rm -rf (kit item IN-20261023161132-1e65).
+    "rm -rf `"$scW/x/a`"; PATH=`"/c/Windows/System32:/c/Windows:/c/Windows/System32/WindowsPowerShell/v1.0`" bash run.sh",
+    "rm -rf $scW/x/a; export PATH=/c/Windows/System32:/c/Windows:`$PATH; bash run.sh",
+    "rm -rf $scW/x/a; export PATH='/c/Windows/System32:/c/Windows'; bash run.sh",
+    "Remove-Item -Recurse -Force $scW\x; `$env:PATH = 'C:\Windows\System32;C:\Windows'; & bash run.sh",
+    # A quoted literal appended with + to another value is a suffix, not an absolute path: on 2026-10-23 a builder
+    # stalled on python -c "p=sys.argv[1]+'/sim/docs/x.yaml'" beside an in-scratch rm -rf (kit item IN-20261023212118-f23c).
+    "rm -rf `"$scW/sim`"; python -I -c `"`nimport sys;p=sys.argv[1]+'/sim/docs/x.yaml';open(p,'wb').write(b'')`" `"$scW`"",
+    "Remove-Item -Recurse -Force $scW\x; `$p = `$base + '/sim/x'; `$p += '/y'"
 )
 # Rows with the delete right (whole working trees, ~\.claude) are trusted too; their cases are built from this
 # machine's rows. The 8.3 form of THIS profile expands to the same root as its long spelling; another account's
@@ -387,6 +404,9 @@ $dpgAsk = @(
     'rm -rf C:\',
     'ls C:\devops\repos | xargs rm -f /etc/hosts',
     'cat C:\Users\agenewe\x.txt; rm -rf ./build',
+    'rm -f srv.log; mkdir -p /w/a',                      # host mkdir: cross-statement scan stays
+    'rm -rf /w/a',
+    'rm -f x.log; docker run --rm img sh -c ''rm -rf /w/a''',   # a container script that deletes keeps its prompt
     'rm -rf /c',
     'Remove-Item -LiteralPath C:\devopslocal\repos\x\bin -Recurse',   # retired root: no longer trusted
     'cmd /c echo x; rm -rf /c',
@@ -402,7 +422,17 @@ $dpgAsk = @(
     'rm -f x; Start-Process pwsh -ArgumentList ''-NoProfile'',''-Command'',''Remove-Item -Recurse C:/Users/agenewe/Documents/x''',
     # A call's drive, UNC or home argument is still a path (IN-20261021201746-bedf skips only a POSIX-form one).
     '$s = [IO.Path]::Combine(''C:\Users\agenewe\Documents'',''x''); Remove-Item -Recurse $s',
-    'rm -rf (Join-Path ''/c'' x)'
+    'rm -rf (Join-Path ''/c'' x)',
+    # Only '//' followed by whitespace is text (IN-20261023124711-6fbc): a '//server/share' path is still checked.
+    'rm -rf //server/share/x',
+    'Remove-Item -Recurse "//server/share/x y"',
+    # Only the value assigned to PATH is a search list (IN-20261023161132-1e65): a target beside it is still checked.
+    'PATH="/c/Windows/System32:/c/Windows" bash x.sh; rm -rf /c/Windows/x',
+    'export PATH=/c/Windows; rm -rf "/c/Windows/x"',
+    'MYPATH="/c/Windows/x"; rm -rf "/c/Windows/x"',
+    # Only a POSIX-form suffix after + is skipped (IN-20261023212118-f23c): a drive value or a literal that LEADS is checked.
+    'rm -rf ($x + ''C:\Users\agenewe\Documents\x'')',
+    'rm -rf ''/c/Windows/x'' + $y'
 ) + $dpgAskExtra
 foreach ($c in $dpgAsk) {
     Test-Hook -Name "dpg: ask    | $c" -ScriptPath $dpg -Json (New-BashJson $c) `

@@ -7,10 +7,10 @@
 # stored in that broken shape can be named exactly as it is stored. Pass an array to remove several paths.
 #   -File <json>   { "note": "why (inbox ids)", "edits": [ { "task": "G3.T025", "addWriteSet": [], "removeWriteSet": [],
 #                    "addDependsOn": [], "removeDependsOn": [], "dependsWhy": { "G3.T010": "reads the table T010 adds" },
-#                    "title": "...", "tests": ["FullyQualifiedName~X"],
+#                    "title": "...", "tests": ["FullyQualifiedName~X"], "clearTests": true (empties tests.targeted; not with tests),
 #                    "addWhy": [], "removeWhy": [], "estMinutes": 130, "estBasis": "why that many minutes",
 #                    "release": "auto|planned|ticketed|keep|block|retire", "note": "..." } ] }
-#   or one task inline: -Task -AddWriteSet -RemoveWriteSet -AddDependsOn -RemoveDependsOn -DependsWhy @{dep=reason} -AddWhy -RemoveWhy -Title -Group -EstMinutes -EstBasis -Release -Note
+#   or one task inline: -Task -AddWriteSet -RemoveWriteSet -AddDependsOn -RemoveDependsOn -DependsWhy @{dep=reason} -AddWhy -RemoveWhy -Title -ClearTests -Group -EstMinutes -EstBasis -Release -Note
 # group: a row's GROUP is the planner's only lever on the claim ORDER, because Claim-Task.ps1:47 sorts fix-first, then
 # group rank, then chain depth - so a short row that gates the FIRST group's close can sit almost last while it lives
 # in a later group (owner ruling on G3.T149, kit item IN-20260930210139-4afa). A move KEEPS the row's id: G3.T149 in
@@ -62,6 +62,7 @@ param(
     [string] $Group = '',
     [int] $EstMinutes = 0,
     [string] $EstBasis = '',
+    [switch] $ClearTests,
     [ValidateSet('auto', 'planned', 'ticketed', 'keep', 'block', 'retire')] [string] $Release = 'auto',
     [string] $Note = ''
 )
@@ -71,7 +72,7 @@ $P = Get-StreamPaths (Resolve-Path $Repo).Path
 
 if ($File) { $in = Get-Content -Raw $File | ConvertFrom-Json -AsHashtable -Depth 20 }
 elseif ($Task) {
-    $in = @{ note = $Note; edits = @(@{ task = $Task; addWriteSet = $AddWriteSet; removeWriteSet = $RemoveWriteSet; addDependsOn = $AddDependsOn; removeDependsOn = $RemoveDependsOn; dependsWhy = $DependsWhy; addWhy = $AddWhy; removeWhy = $RemoveWhy; title = $Title; group = $Group; estMinutes = $EstMinutes; estBasis = $EstBasis; release = $(if ($PSBoundParameters.ContainsKey('Release')) { $Release } else { '' }); note = $Note }) }
+    $in = @{ note = $Note; edits = @(@{ task = $Task; addWriteSet = $AddWriteSet; removeWriteSet = $RemoveWriteSet; addDependsOn = $AddDependsOn; removeDependsOn = $RemoveDependsOn; dependsWhy = $DependsWhy; addWhy = $AddWhy; removeWhy = $RemoveWhy; title = $Title; group = $Group; estMinutes = $EstMinutes; estBasis = $EstBasis; clearTests = [bool] $ClearTests; release = $(if ($PSBoundParameters.ContainsKey('Release')) { $Release } else { '' }); note = $Note }) }
 } else { 'REFUSED give -File or -Task'; exit 2 }
 function Arr($h, $k) { if ($h.Contains($k) -and $null -ne $h[$k]) { @($h[$k] | Where-Object { $_ }) } else { @() } }
 
@@ -166,7 +167,12 @@ trap { if ("$_" -like 'TRANSITION-REFUSED*') { "REFUSED $_"; exit 2 } else { bre
             $script:moved[$t.id] = @($from, $g)
         }
         if ($e['title']) { $t.title = $e['title']; $parts += 'title' }
-        $tests = @(Arr $e 'tests'); if ($tests.Count) { $t['tests'] = [ordered]@{ targeted = $tests }; $parts += "tests $($tests -join ' / ')" }
+        # An empty tests list reads as "no change", so clearing needs its own key (kit item IN-20261023072040-b37a: a
+        # docs or measurement row kept a filter that matched no test, G18.T110).
+        $tests = @(Arr $e 'tests'); $clear = [bool]($e.Contains('clearTests') -and $e['clearTests'])
+        if ($clear -and $tests.Count) { $problems.Add("TESTS-CONFLICT $($t.id): clearTests and tests in one edit contradict each other; name one"); continue }
+        if ($clear) { $t['tests'] = [ordered]@{ targeted = @() }; $parts += 'tests cleared' }
+        elseif ($tests.Count) { $t['tests'] = [ordered]@{ targeted = $tests }; $parts += "tests $($tests -join ' / ')" }
         $em = if ($e.Contains('estMinutes') -and $null -ne $e['estMinutes']) { $e['estMinutes'] } else { 0 }
         $eb = if ($e.Contains('estBasis') -and $e['estBasis']) { [string] $e['estBasis'] } else { '' }
         if ("$em" -ne '0') {

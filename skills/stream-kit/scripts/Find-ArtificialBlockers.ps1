@@ -24,7 +24,7 @@ function Get-DepWhy($x, [string] $d) { $w = if ($x -is [Collections.IDictionary]
 $P = Get-StreamPaths $Repo
 if ($Apply -and -not $Session) { 'REFUSED -Apply needs -Session'; exit 2 }
 $landed = @('built', 'integrated', 'done')
-$compRx = '(^|/)src/Composition/|(^|/)Program\.cs$|Module\.cs$|ServiceCollectionExtensions\.cs$|(^|/)Routes\.razor$'
+$compRx = '(^|/)src/Composition/|(^|/)Program\.cs$|Module\.cs$|ServiceCollectionExtensions\.cs$|(^|/)Routes\.razor$|(^|/)ids\.yaml$'
 $fileOrderWhyRx = '^\s*(file[- ]order\b|shared[- ]file\b|orders?\s+(the\s+)?(edits?|writes?)\s+(to|of|on|in)\b|both\s+(rows?\s+)?(write|edit|touch)\b)'
 function Test-AppliedEdge($x, [string] $d) {
     $aRx = "Find-ArtificialBlockers -Apply: $([regex]::Escape($d)) ahead of ([^\s(]+)"

@@ -128,6 +128,33 @@ function Test-CallArgument([string] $Masked, [int] $Index) {
     $false
 }
 
+# The destructive verbs the guard looks for: one in command position (start, after a separator, subshell or loop
+# keyword, or after a wrapper such as sudo / xargs / find -exec / cmd /c), or find ... -delete.
+$script:DestructiveVerbRx = '(?im)(?:^|[;&|(]\s*|\b(?:do|then|else|sudo|gsudo|nohup|xargs(?:\s+-\S+)*|-exec(?:dir)?|timeout\s+\S+|nice(?:\s+-n\s+\d+)?|cmd(?:\.exe)?\s+/[cCkK])\s+)(?:rm|rmdir|rd|del|erase|Remove-Item|ri)(?=\s|$)'
+$script:FindDeleteRx      = '(?im)(?:^|[;&|(]\s*)find\b[^;&|]*\s-delete\b'
+function Test-DestructiveCommand([string] $cmd) { $cmd -match $script:DestructiveVerbRx -or $cmd -match $script:FindDeleteRx }
+
+# True when the quoted string at $Index of $cmd belongs to a command that runs it inside a container: docker / podman
+# / nerdctl run or exec (also docker compose run / exec) and kubectl exec. Its POSIX paths (/w/a, /var/opt/x) name
+# the container's file system, not this host's. $Masked is as in Test-ScriptOperand.
+function Test-ContainerCommand([string] $Masked, [int] $Index) {
+    $prefix = $Masked.Substring(0, $Index)
+    $start  = $prefix.LastIndexOfAny([char[]](';&|(' + "`n")) + 1
+    $words  = @(($prefix.Substring($start)) -split '\s+' | Where-Object { $_ })
+    $i = 0
+    while ($i -lt $words.Count -and ($words[$i] -match '^[A-Za-z_][A-Za-z0-9_]*=' -or $words[$i] -match '^(sudo|nohup|env|time|command)$')) { $i++ }
+    if ($i -ge $words.Count) { return $false }
+    $rest = @($words | Select-Object -Skip ($i + 1))
+    if ($words[$i] -match '^(?:.*[\\/])?(docker|podman|nerdctl)(\.exe)?$') { return [bool]($rest | Where-Object { $_ -match '^(run|exec)$' }) }
+    if ($words[$i] -match '^(?:.*[\\/])?kubectl(\.exe)?$') { return [bool]($rest | Where-Object { $_ -eq 'exec' }) }
+    $false
+}
+# True when $Before (the command text up to a value) ends in an assignment to PATH: bash PATH= / export PATH= or
+# PowerShell $env:PATH = / +=. Only PATH itself: another variable's value may be the target a later command deletes.
+function Test-PathAssignment([string] $Before) {
+    $Before -cmatch '(?:^|[\s;|&(])PATH=$' -or $Before -match '(?i)\$env:PATH\s*\+?=\s*$'
+}
+
 # Candidate path tokens of a shell command: quoted strings first, then bare tokens split on shell separators.
 function Get-CommandPathTokens([string] $cmd) {
     $tokens = New-Object System.Collections.Generic.List[string]
@@ -135,6 +162,9 @@ function Get-CommandPathTokens([string] $cmd) {
     $masked = [regex]::Replace($cmd, '"[^"]*"|''[^'']*''', { param($q) 'Q' * $q.Length })
     foreach ($m in $quoted) {
         if (Test-ScriptOperand $masked $m.Index) { continue }
+        # The value assigned to PATH (PATH="/c/a:/c/b", export PATH='...', $env:PATH = '...') is a search list, not
+        # an operand: it read as one POSIX absolute and stalled a builder on 2026-10-23 (kit item IN-20261023161132-1e65).
+        if (Test-PathAssignment $masked.Substring(0, $m.Index)) { continue }
         $v = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
         # A call's argument is data: never a nested command, and a POSIX-form value ('/c', '/>') is no path; a drive,
         # UNC or home value is still checked ([IO.Path]::Combine('C:\x', ...)).
@@ -142,12 +172,23 @@ function Get-CommandPathTokens([string] $cmd) {
             if ($v -and $v -notmatch '^/') { $tokens.Add($v) }
             continue
         }
+        # A literal appended with + or += (sys.argv[1]+'/sim/x', $base + '/x') is a suffix of another value, so a
+        # POSIX-form one is no absolute path; it stalled a builder on 2026-10-23 (kit item IN-20261023212118-f23c).
+        # A drive, UNC or home value is still checked, and so is a literal that leads ('/c/x' + $y).
+        if ($v -match '^/' -and $masked.Substring(0, $m.Index) -match '\+=?\s*$') { continue }
         if ($v) { $tokens.Add($v) }
         # A quoted string with whitespace may be a nested command (pwsh -Command "...", bash -c '...'): its own tokens
         # are checked too, since the whole string reads as no path and would hide an outside one (IN-20261018050026-e429).
         # Only a launcher's script recurses: quoted prose ("-Value 'see bin/<config>/<tfm>'") split on <> into a bare
         # "/" and stalled an author on a prompt nobody could answer (kit item IN-20261021183719-aa28).
-        if ($v -match '\s' -and (Test-NestedCommandOperand $masked $m.Index)) { foreach ($i in (Get-CommandPathTokens $v)) { $tokens.Add($i) } }
+        # A script a container runs (docker run ... sh -c '...') names container paths, so its POSIX-form tokens are
+        # dropped while the script deletes nothing: 'mkdir -p /w/a && cd /w/a' held a builder on a prompt nobody could
+        # answer on 2026-10-24 (kit item IN-20261024162923-3943). A script that deletes ('rm -rf /w/a') is checked whole,
+        # and a drive, UNC or home token in any container script is still checked.
+        if ($v -match '\s' -and (Test-NestedCommandOperand $masked $m.Index)) {
+            $inContainer = (Test-ContainerCommand $masked $m.Index) -and -not (Test-DestructiveCommand $v)
+            foreach ($i in (Get-CommandPathTokens $v)) { if (-not ($inContainer -and $i -match '^/')) { $tokens.Add($i) } }
+        }
     }
     $stripped = [regex]::Replace($cmd, '"[^"]*"|''[^'']*''', ' ')
     # cmd.exe-family tools take /x switches (cmd /c, mklink /J, robocopy /MIR, icacls /grant). Without
@@ -176,6 +217,8 @@ function Find-OutsideScopeToken($Tokens, $Roots) {
         # "https:" + POSIX "//host" and stopped three runners on 2026-10-20 (kit item IN-20261020133758-c46f).
         # A file: URL is a path and is still checked.
         if ($p -match '^[A-Za-z][A-Za-z0-9+.-]+://' -and $p -notmatch '^file:') { continue }
+        # A bare PATH=/c/a:/c/b (also after export) is a search list, as its quoted form (kit item IN-20261023161132-1e65).
+        if ($p -cmatch '^PATH=') { continue }
         # example-path: the optional prefix is lazy (??) so "C:/x" is read as a drive path first, not as prefix "C:" + POSIX "/x".
         # The prefix holds no whitespace, quote or comma: an option name is one word, and a nested command's
         # "... 'C:/x' ..." must not read as prefix "... 'C:" + POSIX "/x" (its own tokens are checked instead).
@@ -183,6 +226,9 @@ function Find-OutsideScopeToken($Tokens, $Roots) {
         else { continue }
 
         if ($p -match '^(/dev/null|/dev/stdout|/dev/stderr)$') { continue }
+        # A UNC share needs a server name right after //: '// ' opens a comment line in a quoted value ("// x.txt ...`n
+        # class ..."), which stalled an author on 2026-10-23 (kit item IN-20261023124711-6fbc). '//server/share' is checked.
+        if ($p -match '^//\s') { continue }
         if ($p -match '^(~|\$HOME|\$env:USERPROFILE|%USERPROFILE%|%HOMEPATH%)([\\/]|$)') { return $t }   # home-relative
         if ($p -match '^\\\\') { return $t }                                                             # UNC share
         if ($p -match '^/tmp(/|$)') { continue }                                                         # Git Bash temp

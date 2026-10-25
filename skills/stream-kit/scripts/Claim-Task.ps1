@@ -130,21 +130,9 @@ $held = [Collections.Generic.List[string]]::new()
     # and Integrate-Patch.ps1 read too, so a gate that says "work" and a claim that says NONE cannot disagree.
     $sel = Get-Claimable $P $doc $Role $busy
     foreach ($h in $sel.heldIds) { $script:held.Add("$h skipped: $($busy[$h])") }
-    $boardOrder = @{}; $o = 0; foreach ($x in $doc.tasks) { $boardOrder[[string]$x.id] = ++$o }
-    $cands = foreach ($t in $sel.rows) {
-        $order = $boardOrder[[string]$t.id]
-        $fix = [int]($t.Contains('origin') -and $t['origin'] -eq 'integration')
-        # The AUTHOR sort ranks a row by its effective group (lib\Streams.ps1 Get-EffectiveGroupRank): a later-group row
-        # that blocks earlier-group work is ticketed with that earlier group, and Chain then puts it ahead of its
-        # dependents. The build sort keeps the row's own group, because dependency readiness already filters it.
-        $rank = if ($Role -eq 'author') { $erank[$t.id].rank } else { $grank[$t.group] }
-        # ReadyOnRelease (author only): the ticket would be claimable the moment it is released.
-        $ready = [int]($Role -eq 'author' -and (Test-ReadyWhenTicketed $doc $t))
-        [pscustomobject]@{ Task = $t; Fix = $fix; Rank = $rank; Ready = $ready; Chain = $chain[$t.id]; Order = $order }
-    }
-    $best = @($cands | Sort-Object @{ e = 'Fix'; Descending = $true }, @{ e = 'Rank'; Descending = $false }, @{ e = 'Ready'; Descending = $true }, @{ e = 'Chain'; Descending = $true }, @{ e = 'Order'; Descending = $false }) | Select-Object -First 1
+    $best = @(Get-ClaimOrder $P $doc $Role $sel.rows) | Select-Object -First 1
     if (-not $best) { return $doc }
-    $t = $best.Task
+    $t = $best
     $now = Get-Now
     $prior = if ($t.claim) { " (took over stale claim of $($t.claim.session), beat $($t.claim.beat))" } else { '' }
     $t.claim = [ordered]@{ session = $Session; role = $Role; at = $now; beat = $now }

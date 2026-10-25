@@ -35,9 +35,8 @@ try {
 
     # 1. Destructive verb in command position (start, after a separator/subshell/loop keyword,
     #    or after a wrapper such as sudo/xargs/find -exec/cmd /c).
-    $verbAt   = '(?im)(?:^|[;&|(]\s*|\b(?:do|then|else|sudo|gsudo|nohup|xargs(?:\s+-\S+)*|-exec(?:dir)?|timeout\s+\S+|nice(?:\s+-n\s+\d+)?|cmd(?:\.exe)?\s+/[cCkK])\s+)(?:rm|rmdir|rd|del|erase|Remove-Item|ri)(?=\s|$)'
-    $findDel  = '(?im)(?:^|[;&|(]\s*)find\b[^;&|]*\s-delete\b'
-    if (-not ($cmd -match $verbAt -or $cmd -match $findDel)) { return }
+    #    The patterns live in lib\PathScope.ps1 (Test-DestructiveCommand), which also reads a container script by them.
+    if (-not (Test-DestructiveCommand $cmd)) { return }
 
     # 2. Any path token outside the trusted roots.
     $roots    = Get-ScopeRoots $PSScriptRoot

@@ -33,8 +33,18 @@ $wt = Join-Path $WorktreeRoot $name
 # that never landed. The wait is short (60 s, STREAM_MAIN_LOCK_WAIT_SECONDS overrides): a busy main tree throws
 # "main-grader.lock busy for <n>s", which a runner's pre-stage reads as PRESTAGE-BUSY and retries with no backoff.
 $mainWait = if ("$env:STREAM_MAIN_LOCK_WAIT_SECONDS" -match '^\d+$') { [int]$env:STREAM_MAIN_LOCK_WAIT_SECONDS } else { 60 }
-$mainLock = Enter-MainTreeLock $P "worktree $name for $Task by $Session" $mainWait
-if (-not $mainLock) { throw "main-grader.lock busy for ${mainWait}s: held by $(Get-MainTreeLockHolder $P); no worktree made for $Task" }
+# BESIDE A GRADE (kit item IN-20261024221200-772a): when the holder is an integrator's grade of a patch it applied
+# (lib Get-GradePendingPatch), main is read without the lock and that patch is reversed out of this copy, so the base is
+# main as it was before the apply. Integrate-Patch's grade held the lock 27 min for G23.T074 and every builder pre-stage
+# starved behind it. The holder is read again after the copy; any change (the grade ended, the patch was reversed or
+# committed) throws the same BUSY text, because main may have moved mid-read.
+$pending = Get-GradePendingPatch $P
+$mainLock = if ($pending) { [IO.MemoryStream]::new() } else { Enter-MainTreeLock $P "worktree $name for $Task by $Session" $mainWait }
+if (-not $mainLock) {
+    $pending = Get-GradePendingPatch $P
+    if ($pending) { $mainLock = [IO.MemoryStream]::new() }
+    else { throw "main-grader.lock busy for ${mainWait}s: held by $(Get-MainTreeLockHolder $P); no worktree made for $Task" }
+}
 try {
 $baseSha = (Invoke-Git $Repo @('rev-parse', 'HEAD')) | Select-Object -First 1
 $untracked = Get-MainUntracked $Repo
@@ -64,6 +74,11 @@ $mainDiff = Join-Path $P.Logs "$name.base-main.patch"
 $gone = @(Add-MainBase $Repo $wt $baseSha $mainDiff $untracked)
 $ignBase = @(Add-IgnoredWriteSetBase $Repo $wt @($t.writeSet))
 if ($ignBase.Count) { $notes.Add("BASE ignored main-tree write-set file(s) copied and staged: $($ignBase -join ', ')") }
+if ($pending) {
+    [void](Invoke-Git $wt @('apply', '-R', '--binary', '--whitespace=nowarn', $pending.patch))
+    if ((Get-MainTreeLockHolder $P) -ne $pending.holder) { throw "main-grader.lock busy for 0s: main moved while this base was read beside the grade of $($pending.task) (held by $(Get-MainTreeLockHolder $P)); no worktree made for $Task" }
+    $notes.Add("BASE read beside the main grade of $($pending.task): its patch $(Split-Path -Leaf $pending.patch) reversed out of this base")
+}
 $mainLock.Dispose()
 if ($gone.Count) {
     $untracked = @($untracked | Where-Object { $gone -notcontains $_ })
@@ -114,6 +129,21 @@ foreach ($pp in $depPatches) {
             }
         }
         if ($dropped.Count) { $notes.Add("DROPPED empty untracked main-tree copy of $($dropped -join ', ') from this tree: dependency patch $(Split-Path -Leaf $full) creates it") }
+        # ORDERED-BY-MERGE in the base (kit item IN-20261024234800-fab8): two built dependencies with no edge between
+        # them may both append to one composition or id-register file, so the second no longer applies on top of the
+        # first. It is merged by its added lines the way Integrate-Patch merges it on main (lib New-CompositionMergedPatch);
+        # base.deps still names the dependency's own patch. G17.T100 stacked four G26 patches appending to ids.yaml and
+        # every pre-stage died on the second one.
+        & git -C $wt apply --check --binary --whitespace=nowarn $full 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $merge = New-CompositionMergedPatch $wt $full (Join-Path $P.Logs "$name.$(Split-Path -Leaf $full).merged.patch")
+            if ($merge.Ok) {
+                $notes.Add("MERGED dependency patch $(Split-Path -Leaf $full) by its added lines into $($merge.Files -join ', ') (ORDERED-BY-MERGE)")
+                [void](Invoke-Git $wt @('apply', '--binary', '--whitespace=nowarn', $merge.Path))
+                $applied.Add($pp)
+                continue
+            }
+        }
     }
     [void](Invoke-Git $wt @('apply', '--binary', '--whitespace=nowarn', $full))
     $applied.Add($pp)

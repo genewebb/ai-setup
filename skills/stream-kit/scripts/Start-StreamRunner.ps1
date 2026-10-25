@@ -205,7 +205,8 @@ function Get-WorkGate {
     $open = @(Get-ActionableInboxItems $doc)
     if ($open.Count -gt 0) { return "inbox $($open.Count) actionable ($($open[0].id))" }
     $cl = Get-Claimable $P $doc $Role
-    if ($cl.ids.Count -gt 0) { return "$(if ($Role -eq 'build') { 'claimable' } else { 'planned' }) $($cl.ids.Count) ($($cl.ids[0])) focus $($cl.focusGroup) ($($cl.focusSource))$(if ($cl['spill']) { ' AUTHOR SPILL outside focus' })" }
+    # The row named is the one the claim takes (lib Get-ClaimOrder), not Get-Claimable's board order (kit item IN-20261024221545-7b45).
+    if ($cl.ids.Count -gt 0) { $first = @(Get-ClaimOrder $P $doc $Role $cl.rows)[0].id; return "$(if ($Role -eq 'build') { 'claimable' } else { 'planned' }) $($cl.ids.Count) ($first) focus $($cl.focusGroup) ($($cl.focusSource))$(if ($cl['spill']) { ' AUTHOR SPILL outside focus' })" }
     $null
 }
 
@@ -495,6 +496,16 @@ function Get-TickNote($Step, [string] $Skipped = 'skipped') {
     $t = if ($last) { ("$last" -replace '\s+', ' ').Trim() } else { 'ok' }
     if ($t.Length -gt 100) { $t.Substring(0, 100) + '...' } else { $t }
 }
+# Every TICK-BUSY, TICK-FAILED and STATUS-TICK line also goes to .streams\logs\status-tick.log, so a session outside the
+# runner's tab (the planner, the coordinator) can see what the last ticks did (kit item IN-20261023131800-4894).
+function Write-TickLog([string] $Line) {
+    try {
+        $tl = Join-Path $P.Root 'logs\status-tick.log'
+        if (-not (Test-Path -LiteralPath (Split-Path $tl))) { New-Item -ItemType Directory -Path (Split-Path $tl) -Force | Out-Null }
+        Add-Content -LiteralPath $tl -Value $Line -Encoding utf8
+    } catch { }
+    $Line
+}
 function Invoke-StatusTick([string] $Session) {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $steps = [Collections.Generic.List[object]]::new()
@@ -552,10 +563,10 @@ function Invoke-StatusTick([string] $Session) {
             # Lock contention files a bug only when it repeats on STREAM_TICK_BUSY_REPORT (3) ticks in a row: that is a
             # lock nobody lets go, not a slow holder.
             $script:tickBusy[$s.Script] = 1 + [int]$script:tickBusy[$s.Script]
-            "$(Get-TabNow) TICK-BUSY $($s.Script) ($($script:tickBusy[$s.Script]) in a row): $detail"
+            Write-TickLog "$(Get-TabNow) TICK-BUSY $($s.Script) ($($script:tickBusy[$s.Script]) in a row): $detail"
             if ($script:tickBusy[$s.Script] -lt $tickBusyReport) { continue }
         } else {
-            "$(Get-TabNow) TICK-FAILED $($s.Script) exit $($s.Code): $detail"
+            Write-TickLog "$(Get-TabNow) TICK-FAILED $($s.Script) exit $($s.Code): $detail"
         }
         if (-not $script:tickFailures.ContainsKey($s.Script)) {
             $script:tickFailures[$s.Script] = Get-Now
@@ -563,7 +574,7 @@ function Invoke-StatusTick([string] $Session) {
         }
     }
     $script:ticks++
-    "$(Get-TabNow) STATUS-TICK $Session $([int]$sw.Elapsed.TotalSeconds)s | $wdLine | $inboxLine | page: $(Get-TickNote $pg) | cost: $(Get-TickNote $cp) | priority: $(Get-TickNote $pr) | archive: $archiveNote | activation: $(if ($actNotes.Count) { $actNotes -join '; ' } else { 'none needed' }) | freshness: $(if ($freshNotes.Count) { $freshNotes -join '; ' } else { 'clean' }) | next tick at $(Get-TabAt $IntervalSeconds)"
+    Write-TickLog "$(Get-TabNow) STATUS-TICK $Session $([int]$sw.Elapsed.TotalSeconds)s | $wdLine | $inboxLine | page: $(Get-TickNote $pg) | cost: $(Get-TickNote $cp) | priority: $(Get-TickNote $pr) | archive: $archiveNote | activation: $(if ($actNotes.Count) { $actNotes -join '; ' } else { 'none needed' }) | freshness: $(if ($freshNotes.Count) { $freshNotes -join '; ' } else { 'clean' }) | next tick at $(Get-TabAt $IntervalSeconds)"
     $state.lastTick = Get-Now; $state.ticks = $script:ticks
     $state.status = "ticked $(Format-LocalStamp); next tick in $IntervalSeconds s$(if ($openItems.Count) { "; $($openItems.Count) open inbox item(s): launching a unit" })"
     Write-RunnerState $state
@@ -1438,8 +1449,13 @@ while ($true) {
         $wakeForce = $false
         "$(Get-TabNow) GATE skipped: a forced owner wake launches this unit"
     } elseif ($statusTick -and $wakeForce) {
+        # A forced status wake is an owner asking for a fresh page: it runs the script tick now (the pages are rebuilt),
+        # then launches the /stream-status unit. It used to launch the unit alone, so the page stayed as old as the last
+        # tick and the idle unit's backoff kept it so for up to 20 min more (kit item IN-20261023131800-4894).
         $wakeForce = $false
-        "$(Get-TabNow) GATE skipped: a forced owner wake launches a /stream-status inbox unit"
+        $script:tickOpenCount = 0
+        try { Invoke-StatusTick $stableSession } catch { Write-TickLog "$(Get-TabNow) TICK-FAILED the status tick threw: $(("$_" -split "`n")[0])" }
+        "$(Get-TabNow) GATE skipped: a forced owner wake ran the tick and launches a /stream-status inbox unit"
     } elseif ($timedGated -and $wakeForce) {
         $wakeForce = $false
         Clear-IdleStatus
@@ -1456,7 +1472,7 @@ while ($true) {
         "  doing      : $(Get-GatePlain $why)"
     } elseif ($statusTick) {
         $script:tickOpenCount = 0
-        try { Invoke-StatusTick $stableSession } catch { "$(Get-TabNow) TICK-FAILED the status tick threw: $(("$_" -split "`n")[0])" }
+        try { Invoke-StatusTick $stableSession } catch { Write-TickLog "$(Get-TabNow) TICK-FAILED the status tick threw: $(("$_" -split "`n")[0])" }
         $openCount = [int]$script:tickOpenCount
         if (-not $openCount) { [void](Wait-ForTick $IntervalSeconds); continue }
         "$(Get-TabNow) GATE inbox $openCount open $skill item(s): a unit works them"
@@ -1493,8 +1509,15 @@ while ($true) {
         # or one already past its time ends the wait at once, and an owner wake ends it too (the gate then re-checks).
         while ($holdWait -gt 0 -and -not (Test-StopRequested) -and -not $script:wakeHit) {
             Start-Sleep -Seconds ([Math]::Min(15, $holdWait)); $holdWait -= 15; [void](Test-WakeRequested)
+            # One runner per repo probes the account every STREAM_RUNNER_QUOTA_PROBE_SECONDS; a success lifts the
+            # hold early for every runner (lib\Streams.ps1 Invoke-QuotaProbe, kit item IN-20261024093536-3be3).
+            $probeCfg = Get-RoleConfig; $probe = Invoke-QuotaProbe $P $runnerId ([string]$(if ($probeCfg) { $probeCfg.model }))
+            if ($probe -in @('LIFTED', 'HELD', 'UNKNOWN')) { "$(Get-TabNow) QUOTA-PROBE $probe" }
             if (-not (Get-QuotaHold $P)) { "$(Get-TabNow) QUOTA-HOLD lifted: the hold file is gone or past its time"; break }
         }
+        # The state file is what Wake-StreamRunner and the status page read: say the hold is over at once, or a lifted
+        # runner reads as held through its whole pre-stage (kit item IN-20261024091316-c6c2).
+        if (-not (Get-QuotaHold $P)) { $state.status = "quota hold lifted $(Format-LocalStamp); back to the gate"; Write-RunnerState $state }
         continue
     }
     $check = Sync-LaunchEnvironment
@@ -1514,6 +1537,7 @@ while ($true) {
     if ($cfg.note) { "$(Get-TabNow) $($cfg.note)" }
     $checkFailed = $check -like 'REFUSED*' -or $check -like 'FAILED*'
     if ($preStage -and -not $checkFailed) {
+        $state.status = "pre-staging $session (claim, worktree, RED check)"; Write-RunnerState $state
         $pre = Invoke-PreStageGuarded $session
         foreach ($l in $pre.Lines) { "$(Get-TabNow) $l" }
         # A NONE claim in the pre-stage left an idle beat for this new session id, which never becomes a unit, so it

@@ -548,6 +548,40 @@ try {
     $tw22b = T $r22b 'G1.W'
     Case 'write-set file absent from the worktree: REVERSED, not SUSPECT' ("$o22b" -eq 'REVERSED G1.W' -and $tw22b.state -eq 'ticketed') "$o22b state=$($tw22b.state)"
     Case 'the reversal names the missing write-set file' ($tw22b.history[-1].note -match 'outside the patch differ.*sweep22b\.ts') $tw22b.history[-1].note
+
+    # ---- 22c. CENSUS GATE (kit item IN-20261023162852-ea21): a repo census named in config runs after the row's grader
+    # when the patch touches a census path. G18.T061 passed its own check, integrated, and left a Tests.Architecture
+    # census red on main. (a) red only with the patch: REVERSED with a census why, never SUSPECT; (b) census red on main
+    # before the patch (baseline): the patch integrates; (d) the patch touches no census path: the census never runs.
+    $census22c = "param([string]`$Root)`nif (@(Get-ChildItem `$Root -Filter 'G1.*.txt' | Where-Object { (Get-Content -Raw `$_.FullName) -match 'MARK' }).Count) { 'FAIL CENSUS-Marker: a marked file' } else { 'PASS CENSUS-Marker' }`nif (Test-Path (Join-Path `$Root 'main-red.txt')) { 'FAIL CENSUS-Main: red on main' } else { 'PASS CENSUS-Main' }`nexit ([int](@(Get-ChildItem `$Root -Filter 'G1.*.txt' | Where-Object { (Get-Content -Raw `$_.FullName) -match 'MARK' }).Count -gt 0 -or (Test-Path (Join-Path `$Root 'main-red.txt'))))"
+    function Set-Census22c([string] $repo, [string] $paths) {
+        New-Item -ItemType Directory -Path (Join-Path $repo '.streams\checks') -Force | Out-Null
+        Set-Content (Join-Path $repo '.streams\checks\census.ps1') $census22c
+        @{ census = @{ script = '.streams\checks\census.ps1'; paths = $paths } } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $repo '.streams\config.json')
+    }
+    $r22c = New-Repo 'r22c' ([ordered]@{ 'G1.X' = (ContentGrader 'G1.X' 'ok') }); $repos += $r22c
+    Set-Census22c $r22c '\.txt$'
+    [void](Build $r22c 'G1.X' 'X ok MARK' 'build-1')
+    $o22c = & "$S\Integrate-Patch.ps1" -Repo $r22c -Session integ-22c -Task G1.X
+    $tx22c = T $r22c 'G1.X'
+    Case 'census red only with the patch: REVERSED, not SUSPECT' ("$o22c" -eq 'REVERSED G1.X' -and $tx22c.state -eq 'ticketed') "$o22c state=$($tx22c.state)"
+    Case 'the reversal names the census' ($tx22c.history[-1].note -match 'census CENSUS-Marker red only with this patch') $tx22c.history[-1].note
+    Case 'census joins the grader identity' ((Get-Content (Join-Path $r22c '.streams\logs\G1.X.grader.main.txt'))[-1] -match '^GRADER sha [0-9A-F]+\+census:[0-9A-F]+ ') ((Get-Content (Join-Path $r22c '.streams\logs\G1.X.grader.main.txt'))[-1])
+    $r22d = New-Repo 'r22d' ([ordered]@{ 'G1.Y' = (ContentGrader 'G1.Y' 'ok') }); $repos += $r22d
+    Set-Census22c $r22d '\.txt$'
+    Set-Content (Join-Path $r22d 'main-red.txt') 'already red'
+    git -C $r22d add main-red.txt; git -C $r22d commit -q -m red
+    [void](Build $r22d 'G1.Y' 'Y ok' 'build-1')
+    $o22d = @(& "$S\Integrate-Patch.ps1" -Repo $r22d -Session integ-22d -Task G1.Y)
+    $base22d = Get-Content -Raw (Join-Path $r22d '.streams\suites\census-baseline.json') | ConvertFrom-Json
+    Case 'census red on main before the patch is a baseline: patch integrates' ($o22d[0] -eq 'INTEGRATED G1.Y') ($o22d -join ' | ')
+    Case 'baseline records main''s census red' (@($base22d.fails) -contains 'CENSUS-Main') (@($base22d.fails) -join ',')
+    Case 'baseline id is logged BASELINE, not FAIL' ((Get-Content -Raw (Join-Path $r22d '.streams\logs\G1.Y.grader.main.txt')) -match '(?m)^BASELINE CENSUS-Main' -and (Get-Content -Raw (Join-Path $r22d '.streams\logs\G1.Y.grader.main.txt')) -notmatch '(?m)^FAIL CENSUS-')
+    $r22e = New-Repo 'r22e' ([ordered]@{ 'G1.V' = (ContentGrader 'G1.V' 'ok') }); $repos += $r22e
+    Set-Census22c $r22e '^nomatch/'
+    [void](Build $r22e 'G1.V' 'V ok MARK' 'build-1')
+    $o22e = @(& "$S\Integrate-Patch.ps1" -Repo $r22e -Session integ-22e -Task G1.V)
+    Case 'census path not touched: census not run, patch integrates' ($o22e[0] -eq 'INTEGRATED G1.V' -and (Get-Content -Raw (Join-Path $r22e '.streams\logs\G1.V.grader.main.txt')) -notmatch 'CENSUS-') ($o22e -join ' | ')
     # ---- 23. the reaper: an integrated worktree goes, a live builder's stays, and a refusal never deletes
     $r23 = New-Repo 'r23' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok'); 'G1.B' = (ContentGrader 'G1.B' 'ok') }); $repos += $r23
     $wtA23 = Build $r23 'G1.A' 'ok' 'build-1'
@@ -1611,6 +1645,23 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     [void](& "$S\Revise-Task.ps1" -Repo $r37 -Session 'plan-37' -Task 'G1.A' -AddWriteSet 'tests/three.cs,tests/four.cs' -Note 'test: add still splits')
     $ws37c = @((T $r37 'G1.A').writeSet)
     Case 'write set: the add side still splits after the remove side stopped' (($ws37c -contains 'tests/three.cs') -and ($ws37c -contains 'tests/four.cs')) ($ws37c -join ' | ')
+    # tests.targeted must be clearable: an empty 'tests' list is ignored (it reads as "no change"), so a docs or
+    # measurement row kept a filter that matches no test (G18.T110, kit item IN-20261023072040-b37a). clearTests
+    # empties it; clearTests together with tests is refused, because the two contradict each other.
+    $f37t = Join-Path $Scratch 'tests37.json'
+    @{ note = 'test: set tests'; edits = @(@{ task = 'G1.A'; tests = @('FullyQualifiedName~Gone') }) } | ConvertTo-Json -Depth 10 | Set-Content $f37t
+    [void](& "$S\Revise-Task.ps1" -Repo $r37 -Session 'plan-37' -File $f37t)
+    $tg37a = @((T $r37 'G1.A').tests.targeted)
+    @{ note = 'test: clear tests'; edits = @(@{ task = 'G1.A'; clearTests = $true }) } | ConvertTo-Json -Depth 10 | Set-Content $f37t
+    $o37t = @(& "$S\Revise-Task.ps1" -Repo $r37 -Session 'plan-37' -File $f37t); $c37t = $LASTEXITCODE
+    $tg37b = @((T $r37 'G1.A').tests.targeted | Where-Object { $_ })
+    Case 'tests: clearTests empties tests.targeted' (($tg37a -contains 'FullyQualifiedName~Gone') -and ($c37t -eq 0) -and ($tg37b.Count -eq 0) -and (($o37t -join ' ') -match 'tests cleared')) ("exit $c37t before=$($tg37a -join ',') after=$($tg37b -join ',') $($o37t -join ' | ')")
+    @{ note = 'test: both'; edits = @(@{ task = 'G1.A'; tests = @('FullyQualifiedName~X'); clearTests = $true }) } | ConvertTo-Json -Depth 10 | Set-Content $f37t
+    $o37u = @(& "$S\Revise-Task.ps1" -Repo $r37 -Session 'plan-37' -File $f37t); $c37u = $LASTEXITCODE
+    Case 'tests: clearTests with tests in one edit is refused' (($c37u -eq 2) -and (($o37u -join ' ') -match 'TESTS-CONFLICT G1\.A') -and -not @((T $r37 'G1.A').tests.targeted | Where-Object { $_ }).Count) ("exit $c37u $($o37u -join ' | ')")
+    [void](& "$S\Revise-Task.ps1" -Repo $r37 -Session 'plan-37' -File (& { @{ note = 'test: set again'; edits = @(@{ task = 'G1.A'; tests = @('FullyQualifiedName~Y') }) } | ConvertTo-Json -Depth 10 | Set-Content $f37t; $f37t }))
+    $o37v = @(& "$S\Revise-Task.ps1" -Repo $r37 -Session 'plan-37' -Task 'G1.A' -ClearTests -Note 'test: inline clear'); $c37v = $LASTEXITCODE
+    Case 'tests: -ClearTests clears inline' (($c37v -eq 0) -and -not @((T $r37 'G1.A').tests.targeted | Where-Object { $_ }).Count) ("exit $c37v $($o37v -join ' | ')")
 
     # ---- 23. A ROW'S GROUP IS REVISABLE, BECAUSE THE GROUP IS THE CLAIM ORDER. Claim-Task.ps1:47 sorts fix-first, then
     # group rank, then chain depth, so a row that gates the FIRST group's close is claimed almost last while it lives in
@@ -2363,6 +2414,36 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case '66e the main tree keeps its own empty copy' ((Test-Path (Join-Path $e66.repo 'New66.cs')) -and (Get-Item (Join-Path $e66.repo 'New66.cs')).Length -eq 0) "main copy exists=$(Test-Path (Join-Path $e66.repo 'New66.cs'))"
     Case '66f a NON-empty untracked main copy is never dropped: New-TaskWorktree still fails on it' (($f66.err -match 'already exists') -and ($f66.out -notmatch 'DROPPED')) "err='$($f66.err)' out=$($f66.out)"
 
+    # ---- 66m. Two built dependencies that both APPEND to an id register (ORDERED-BY-MERGE, no edge between them) stack
+    # into one base: the second patch is merged by its added lines, as Integrate-Patch merges it on main. G17.T100's
+    # pre-stage stacked four G26 patches that all appended to docs/requirements/ids.yaml and died on the second one
+    # (kit item IN-20261024234800-fab8). base.deps still records the dependency's own patch, not the merged copy.
+    $r66m = New-Repo 'r66m' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok'); 'G1.B' = (ContentGrader 'G1.B' 'ok'); 'G1.C' = (ContentGrader 'G1.C' 'ok') }); $repos += $r66m
+    New-Item -ItemType Directory -Force (Join-Path $r66m 'docs\requirements') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $r66m 'docs\requirements\ids.yaml'), "ids:`n- id: ONE`n- id: TWO`n- id: THREE`n")
+    & git -C $r66m add -A 2>&1 | Out-Null; & git -C $r66m commit -q -m 'ids register' 2>&1 | Out-Null
+    $d66m = J $r66m
+    foreach ($tm in $d66m.tasks) {
+        if ($tm.id -in 'G1.A', 'G1.B') { $tm.writeSet = @("$($tm.id).txt", 'docs/requirements/ids.yaml') }
+        if ($tm.id -eq 'G1.C') { $tm.dependsOn = @('G1.A', 'G1.B') }
+    }
+    Set-Content -Path (Join-Path $r66m '.streams\tasks.json') -Encoding utf8 -Value ($d66m | ConvertTo-Json -Depth 50)
+    foreach ($km in 'A', 'B') {
+        [void](& "$S\Claim-Task.ps1" -Repo $r66m -Role build -Session "build-66m$km" -Task "G1.$km")
+        $wm = & "$S\New-TaskWorktree.ps1" -Repo $r66m -Task "G1.$km" -Session "build-66m$km" -WorktreeRoot (Join-Path $Scratch "wt66m$km") | Select-Object -Last 1
+        Set-Content (Join-Path $wm "G1.$km.txt") "$km done"
+        [IO.File]::AppendAllText((Join-Path $wm 'docs\requirements\ids.yaml'), "- id: ADD-$km`n")
+        & "$S\Export-TaskPatch.ps1" -Repo $r66m -Task "G1.$km" -Worktree $wm | Out-Null
+        & "$S\Update-Task.ps1" -Repo $r66m -Task "G1.$km" -Role build -Session "build-66m$km" -To built -Release -Artifacts @{ patch = ".streams\patches\G1.$km.patch"; verdict = 'PASS' } | Out-Null
+    }
+    [void](& "$S\Claim-Task.ps1" -Repo $r66m -Role build -Session 'build-66mC' -Task G1.C)
+    $e66m = ''; $o66m = @()
+    try { $o66m = @(& "$S\New-TaskWorktree.ps1" -Repo $r66m -Task G1.C -Session 'build-66mC' -WorktreeRoot (Join-Path $Scratch 'wt66mC') 2>&1) } catch { $e66m = ("$_" -split "`n")[0].Trim() }
+    $ids66m = if (Test-Path (Join-Path $Scratch 'wt66mC\G1.C\docs\requirements\ids.yaml')) { [IO.File]::ReadAllText((Join-Path $Scratch 'wt66mC\G1.C\docs\requirements\ids.yaml')) } else { '' }
+    $deps66m = @((J $r66m).tasks | Where-Object { $_.id -eq 'G1.C' } | ForEach-Object { $_.base.deps })
+    Case '66m two built deps appending to ids.yaml stack: the tree is made with both appends and a MERGED note' ((-not $e66m) -and ($ids66m -match 'ADD-A') -and ($ids66m -match 'ADD-B') -and (Test-Path (Join-Path $Scratch 'wt66mC\G1.C\G1.B.txt')) -and (($o66m -join ' ') -match 'MERGED dependency patch G1\.B\.patch')) "err='$e66m' ids='$ids66m' out=$($o66m -join ' | ')"
+    Case '66m base.deps records both dependency patches by their own name' ((($deps66m -join ' ') -match '^G1\.A\.patch:\S+ G1\.B\.patch:\S+$')) "deps=$($deps66m -join ' ')"
+
     # ---- 66g. A BASE IS NEVER LAID WHILE ANOTHER HOLDER HAS THE MAIN TREE. On 2026-10-17 Builder 4's pre-stage listed
     # main's untracked files while the integrator had G9.T010's patch applied for its grader (kit item
     # IN-20261017025015-83de). New-TaskWorktree now reads main under main-grader.lock; a busy lock throws with the text a
@@ -2398,6 +2479,33 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case '66h a vanished untracked file is skipped with a note and the tree is made' ((-not $err66h) -and (Test-Path (Join-Path $wt66h 'stay66.txt')) -and -not (Test-Path (Join-Path $wt66h 'vanish66.txt')) -and (($o66h -join ' ') -match 'SKIPPED untracked main-tree file\(s\) gone before the copy: vanish66\.txt')) "err='$err66h' out=$($o66h -join ' | ')"
     Case '66h the main-tree lock is released once the base is laid' ((-not $err66h) -and -not (Test-Path (Join-Path $r66h '.streams\main-grader.lock'))) "lock exists=$(Test-Path (Join-Path $r66h '.streams\main-grader.lock'))"
 
+    # ---- 66j. A BASE IS LAID BESIDE AN INTEGRATOR GRADE, WITH THE GRADED PATCH REVERSED OUT. Integrate-Patch's grade of
+    # G23.T074 held main-grader.lock 27 min and every builder pre-stage starved (kit item IN-20261024221200-772a). With
+    # the holder '<task> main pid ..' and main-pending.json naming that task's patch, New-TaskWorktree reads main unlocked
+    # and reverses the patch in its copy, so the tree is main as it was before the apply.
+    $r66j = New-Repo 'r66j' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok') }); $repos += $r66j
+    Set-Content (Join-Path $r66j 'pend66.txt') 'before'
+    & git -C $r66j add pend66.txt; & git -C $r66j commit -q -m pend66 | Out-Null
+    Set-Content (Join-Path $r66j 'pend66.txt') 'graded patch'
+    Set-Content (Join-Path $r66j 'new66j.txt') 'created by the graded patch'
+    & git -C $r66j add -N new66j.txt
+    $p66j = Join-Path $Scratch 'pend66j.patch'
+    & git -C $r66j diff --binary "--output=$p66j"
+    & git -C $r66j reset -q -- new66j.txt
+    Set-Content (Join-Path $r66j '.streams\main-pending.json') (@{ task = 'G1.X'; patch = $p66j; at = '2026-10-24T00:00:00Z' } | ConvertTo-Json)
+    [void](& "$S\Claim-Task.ps1" -Repo $r66j -Role build -Session build-66j)
+    $held66j = [IO.FileStream]::new((Join-Path $r66j '.streams\main-grader.lock'), [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::Read, 4096, [IO.FileOptions]::DeleteOnClose)
+    $b66j = [Text.Encoding]::UTF8.GetBytes('G1.X main pid 1 at 2026-10-24T00:00:00Z'); $held66j.Write($b66j, 0, $b66j.Length); $held66j.Flush()
+    $prevWait66j = $env:STREAM_MAIN_LOCK_WAIT_SECONDS; $env:STREAM_MAIN_LOCK_WAIT_SECONDS = '1'
+    $err66j = ''; $o66j = @()
+    try { $o66j = @(& "$S\New-TaskWorktree.ps1" -Repo $r66j -Task G1.A -Session build-66j -WorktreeRoot (Join-Path $Scratch 'wt66j') 2>&1) } catch { $err66j = ("$_" -split "`n")[0].Trim() }
+    finally {
+        $held66j.Dispose()
+        if ($null -eq $prevWait66j) { Remove-Item Env:\STREAM_MAIN_LOCK_WAIT_SECONDS -ErrorAction SilentlyContinue } else { $env:STREAM_MAIN_LOCK_WAIT_SECONDS = $prevWait66j }
+    }
+    $wt66j = Join-Path $Scratch 'wt66j\G1.A'
+    Case '66j a grade-only holder does not stop the base: the tree is made beside it with the graded patch reversed out' ((-not $err66j) -and ((Get-Content -Raw (Join-Path $wt66j 'pend66.txt')) -match '^before\s*$') -and -not (Test-Path (Join-Path $wt66j 'new66j.txt')) -and (($o66j -join ' ') -match 'BASE read beside the main grade of G1\.X')) "err='$err66j' out=$($o66j -join ' | ')"
+    Case '66j the main tree keeps the graded patch' (((Get-Content -Raw (Join-Path $r66j 'pend66.txt')) -match 'graded patch') -and (Test-Path (Join-Path $r66j 'new66j.txt'))) "main pend66=$(Get-Content -Raw (Join-Path $r66j 'pend66.txt'))"
     # ---- 66i. A BUILT DEPENDENCY WHOSE OWN DEPENDENCY IS NO LONGER BUILT IS NOT A BASE. A is building again (bounced),
     # B is built on A's old patch, C depends on B. C's base would stack B.patch without A's, so C is not claimable;
     # once A is integrated it is (kit item IN-20261017100037-aa62, G9.T026 over G9.T011 over G9.T010).
@@ -2560,6 +2668,8 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $tickST = @($oST | Where-Object { $_ -match '^\S+ STATUS-TICK ' })
     Case 'status tick: one tick prints one STATUS-TICK heartbeat with the watchdog, inbox, page, cost, priority, archive and activation notes' ((-not $eST) -and $tickST.Count -eq 1 -and $tickST[0] -match '^\S+ STATUS-TICK status-\S+ \d+s \| Watchdog QUIET: no stale claim\. \| Own inbox: no open items\. \| page: .+ \| cost: .+ \| priority: .+ \| archive: .+ \| activation: G1 ') "err='$eST' lines=$($oST.Count) tick=$($tickST -join ' || ') out=$(($oST | Select-Object -Last 6) -join ' | ')"
     Case 'status tick: the status page is written, the archive day is recorded, the focus group is activated, and no unit was launched' ((Test-Path (Join-Path $rST '.streams\status.html')) -and (Test-Path (Join-Path $rST '.streams\runners\status-archive.day')) -and (Test-Path (Join-Path $rST '.streams\plans\G1.activation.json')) -and -not (Test-Path -LiteralPath $markST) -and (($oST -join "`n") -notmatch '(?m)^\S+ RUN ')) "page=$(Test-Path (Join-Path $rST '.streams\status.html')) day=$(Test-Path (Join-Path $rST '.streams\runners\status-archive.day')) act=$(Test-Path (Join-Path $rST '.streams\plans\G1.activation.json')) called=$(Test-Path -LiteralPath $markST)"
+    $logST = Join-Path $rST '.streams\logs\status-tick.log'; $logTextST = if (Test-Path -LiteralPath $logST) { Get-Content -Raw -LiteralPath $logST } else { '' }
+    Case 'status tick: the STATUS-TICK heartbeat is also appended to .streams\logs\status-tick.log (kit item IN-20261023131800-4894)' ($tickST.Count -eq 1 -and $logTextST.Contains($tickST[0])) "log=$(Test-Path -LiteralPath $logST) text=$($logTextST.Trim())"
     Case 'status tick: the runner header says the role is a script tick with a unit only for an inbox item' (($oST -join "`n") -match '(?m)^RUNNER runner-status-\S+ role status mode print every 1 s \(script tick; a unit only for an open inbox item\)') "$(($oST | Select-Object -First 2) -join ' | ')"
     # A tick whose watchdog loses the tasks.json lock race (a live holder past the wait) is BUSY: the heartbeat says so,
     # TICK-BUSY is printed, and no stream-kit bug is filed until it repeats (kit item IN-20261018192923-9972).
@@ -2574,6 +2684,8 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $kitTextSTB = if (Test-Path -LiteralPath $kitSTB) { Get-Content -Raw -LiteralPath $kitSTB } else { '' }
     $tickSTB = @($oSTB | Where-Object { $_ -match '^\S+ STATUS-TICK ' })
     Case 'status tick: a watchdog that loses the tasks.json lock race is BUSY on the heartbeat and TICK-BUSY, and files no kit bug' ((-not $eSTB) -and $tickSTB.Count -eq 1 -and $tickSTB[0] -match '\| Watchdog BUSY \(lock contention; the next tick retries\)\. \|' -and (($oSTB -join "`n") -match '(?m)^\S+ TICK-BUSY Invoke-Watchdog\.ps1 \(1 in a row\): .*lock busy') -and (($oSTB -join "`n") -notmatch 'TICK-FAILED Invoke-Watchdog') -and $kitTextSTB -notmatch 'status runner''s script tick') "err='$eSTB' tick=$($tickSTB -join ' || ') busy=$(@($oSTB | Where-Object { $_ -match 'TICK-(BUSY|FAILED)' }) -join ' || ') kit=$($kitTextSTB.Length)"
+    $logSTB = Join-Path $rSTB '.streams\logs\status-tick.log'; $logTextSTB = if (Test-Path -LiteralPath $logSTB) { Get-Content -Raw -LiteralPath $logSTB } else { '' }
+    Case 'status tick: a TICK-BUSY line is also appended to .streams\logs\status-tick.log' ($logTextSTB -match '(?m)^\S+ TICK-BUSY Invoke-Watchdog\.ps1 \(1 in a row\)') "text=$($logTextSTB.Trim())"
 
     # ---- 71. every runner session runs on the applied machine config (kit item IN-20261004143031-d21b), and the check
     # that applies it runs once per -LaunchCheckMinutes, not once per unit (ai's Install-AIMachine.ps1 -Launch took 111 s
@@ -2811,6 +2923,17 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $launched75h = Test-Path $args75q
     $c75h = if (Test-Path $pid75q) { [int](Get-Content -Raw $pid75q) } else { 0 }
     if ($launched75h -and $c75h) { Stop-Process -Id $c75h -Force -ErrorAction SilentlyContinue }
+    # The owner clears the hold (another account): a runner already waiting on it leaves the wait at its next 15 s
+    # step instead of sleeping to the old reset (kit item IN-20261022190804-192f).
+    $job75c = Start-ThreadJob -ScriptBlock { param($s, $r) & "$s\Start-StreamRunner.ps1" -Repo $r -Role kit -Live -IntervalSeconds 1 -UnitTimeoutSeconds 90 -MaxRuns 1 } -ArgumentList $S, $r75q
+    $w75c = 0; while ($w75c -lt 200 -and -not (@(Receive-Job $job75c -Keep) -match 'QUOTA-HOLD until')) { Start-Sleep -Milliseconds 100; $w75c++ }
+    $hold75c = Test-Path $hf75q
+    Move-Item -LiteralPath $hf75q -Destination "$hf75q.cleared" -Force -ErrorAction SilentlyContinue
+    $w75c = 0; while ($w75c -lt 250 -and -not (@(Receive-Job $job75c -Keep) -match 'QUOTA-HOLD lifted')) { Start-Sleep -Milliseconds 100; $w75c++ }
+    $o75c = @(Receive-Job $job75c -Keep); Stop-Job $job75c -ErrorAction SilentlyContinue; Remove-Job $job75c -Force -ErrorAction SilentlyContinue
+    $c75c = if (Test-Path $pid75q) { [int](Get-Content -Raw $pid75q) } else { 0 }
+    if ((Test-Path $args75q) -and $c75c) { Stop-Process -Id $c75c -Force -ErrorAction SilentlyContinue }
+    Case 'usage limit: a hold the owner clears ends a runner''s wait within one step' ($hold75c -and (($o75c -join "`n") -match 'QUOTA-HOLD lifted')) "hold=$hold75c out=$($o75c -join ' | ')"
     Remove-Item Env:\STREAM_RUNNER_AI, Env:\STREAM_RUNNER_CLAUDE, Env:\STREAM_CLAUDE_PROJECTS, Env:\STREAM_RUNNER_QUOTA_CHECK_SECONDS -ErrorAction SilentlyContinue
     Case 'usage limit: another runner of the repo waits on the hold and launches nothing' ((($o75h -join "`n") -match 'QUOTA-HOLD until \d\d:\d\d:\d\d [A-Za-z]+ \(\d+ s\): five_hour limit seen by ') -and -not $launched75h) "launched=$launched75h out=$($o75h -join ' | ')"
 
@@ -4791,6 +4914,47 @@ if ($st -eq 'expected') { exit 0 } else { "STREAM_T107='$env:STREAM_T107'"; exit
     Case '112 a pre-stage that loses the lock race retries (BUSY-RETRY), never backs off, and launches once the lock is free' ([bool]$done112 -and (Test-Path $ready112) -and $t112 -match 'PRESTAGE-BUSY .*lock busy for 2s' -and $t112 -match 'BUSY-RETRY \d+ s' -and $t112 -notmatch 'BACKOFF' -and $t112 -notmatch 'PRESTAGE-FAILED' -and $t112 -match 'PRESTAGE \S+ claimed G1\.L' -and $t112 -match ' EXIT 0 outcome built .* ok -> ') "finished=$([bool]$done112) out=$($o112 -join ' | ')"
     Case '112b runner tab: a build GATE line is followed by a plain line naming the row it claims' (($t112 -match '(?m)^\d\d:\d\d:\d\d GATE claimable 1 \(G1\.L\)') -and ($t112 -match '(?m)^  doing      : 1 ticketed row\(s\) are ready to build; this runner claims the first \(G1\.L\) and starts a build session$')) "out=$($o112 -join ' | ')"
 
+    # ---- 112c. A runner leaving a usage-limit hold says so in its state file before the pre-stage (kit item
+    # IN-20261024091316-c6c2: on 2026-10-24 four build runners still read 'quota hold until ...' for minutes after the hold
+    # lifted, while each claimed and RED-checked a row, so the status page and Wake-StreamRunner showed them held). The
+    # row's author grader runs inside the pre-stage and records the runner state status it sees.
+    $r112c = Join-Path $Scratch 'runner112c'; $cap112c = Join-Path $Scratch 'runner112c.status.txt'
+    $g112c = "param([string]`$Root)`nGet-ChildItem -Path '$r112c\.streams\runners' -Filter 'runner-*.json' | ForEach-Object { (Get-Content -Raw `$_.FullName | ConvertFrom-Json).status } | Set-Content -LiteralPath '$cap112c'`nif ((Get-Content -Raw (Join-Path `$Root 'G1.Q.txt')) -match 'done') { 'PASS C1'; exit 0 } else { 'FAIL C1: not done'; exit 1 }"
+    $r112c = New-Repo 'runner112c' ([ordered]@{ 'G1.Q' = $g112c }); $repos += $r112c
+    $dir112c = Join-Path $r112c '.streams\runners'; New-Item -ItemType Directory -Path $dir112c -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $dir112c 'quota-hold.json') -Value (@{ until = (Get-Date).ToUniversalTime().AddSeconds(4).ToString('yyyy-MM-ddTHH:mm:ssZ'); by = 'test-112c'; type = 'seven_day'; at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } | ConvertTo-Json)
+    $env:STREAM_RUNNER_AI = $ai112; $env:STREAM_RUNNER_CLAUDE = $cl112
+    $job112c = Start-ThreadJob -ScriptBlock { param($s, $r) & "$s\Start-StreamRunner.ps1" -Repo $r -Role build -Live -IntervalSeconds 1 -MaxRuns 1 } -ArgumentList $S, $r112c
+    $done112c = Wait-Job $job112c -Timeout 180
+    $o112c = @(Receive-Job $job112c -Keep -ErrorAction SilentlyContinue); Stop-Job $job112c -ErrorAction SilentlyContinue; Remove-Job $job112c -Force -ErrorAction SilentlyContinue
+    Remove-Item Env:\STREAM_RUNNER_AI, Env:\STREAM_RUNNER_CLAUDE -ErrorAction SilentlyContinue
+    $s112c = @(if (Test-Path $cap112c) { Get-Content $cap112c })
+    Case '112c after a quota hold lifts, the runner state reads pre-staging, not quota hold, while the pre-stage runs' ([bool]$done112c -and (($o112c -join "`n") -match 'QUOTA-HOLD until') -and $s112c.Count -ge 1 -and ($s112c -join ' ') -notmatch 'quota hold' -and ($s112c -join ' ') -match 'pre-staging build-') "finished=$([bool]$done112c) status=$($s112c -join ' / ') out=$($o112c -join ' | ')"
+
+    # ---- 112d. A quota hold is probed early: one minimal claude call per STREAM_RUNNER_QUOTA_PROBE_SECONDS per repo
+    # lifts a hold the account no longer enforces (kit item IN-20261024093536-3be3: a seven_day hold kept every runner
+    # out ~3 h after a headless call already worked). Stub seam STREAM_RUNNER_QUOTA_PROBE_CMD (a .ps1).
+    $r112d = Join-Path $Scratch 'probe112d'; New-Item -ItemType Directory -Path (Join-Path $r112d '.streams\runners') -Force | Out-Null
+    $mk112d = Join-Path $Scratch 'probe112d.called'
+    $ok112d = Join-Path $Scratch 'probe112d-ok.ps1'; Set-Content -LiteralPath $ok112d -Value "Set-Content -LiteralPath '$mk112d' 'x'; '{`"type`":`"result`",`"is_error`":false,`"result`":`"OK`"}'"
+    $no112d = Join-Path $Scratch 'probe112d-no.ps1'; Set-Content -LiteralPath $no112d -Value "Set-Content -LiteralPath '$mk112d' 'x'; '{`"type`":`"result`",`"is_error`":true,`"result`":`"You''ve hit your weekly limit · resets Oct 25`"}'"
+    $hf112d = Join-Path $r112d '.streams\runners\quota-hold.json'
+    $res112d = @{}
+    foreach ($c112d in @(@{ k = 'a'; cmd = $ok112d; sec = '1'; probed = $null }, @{ k = 'b'; cmd = $no112d; sec = '1'; probed = $null }, @{ k = 'c'; cmd = $ok112d; sec = '1800'; probed = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }, @{ k = 'd'; cmd = $ok112d; sec = '0'; probed = $null })) {
+        Remove-Item -LiteralPath $mk112d -Force -ErrorAction SilentlyContinue
+        Get-ChildItem (Join-Path $r112d '.streams\runners') -Filter 'quota-hold*' | Remove-Item -Force
+        $h112d = [ordered]@{ until = (Get-Date).ToUniversalTime().AddHours(1).ToString('yyyy-MM-ddTHH:mm:ssZ'); by = 'test-112d'; type = 'seven_day'; at = (Get-Date).ToUniversalTime().AddHours(-1).ToString('yyyy-MM-ddTHH:mm:ssZ') }
+        if ($c112d.probed) { $h112d.probedAt = $c112d.probed }
+        Set-Content -LiteralPath $hf112d -Value ($h112d | ConvertTo-Json)
+        $v112d = pwsh -NoProfile -Command "`$env:STREAM_RUNNER_QUOTA_PROBE_CMD='$($c112d.cmd)'; `$env:STREAM_RUNNER_QUOTA_PROBE_SECONDS='$($c112d.sec)'; . '$S\lib\Streams.ps1'; `$P = Get-StreamPaths '$r112d'; Invoke-QuotaProbe `$P 'runner-112d'" 2>&1
+        $hd112d = $null; if (Test-Path $hf112d) { $hd112d = Get-Content -Raw $hf112d | ConvertFrom-Json -AsHashtable }
+        $res112d[$c112d.k] = @{ v = (@($v112d) -join ' '); called = (Test-Path $mk112d); held = (Test-Path $hf112d); hold = $hd112d; lifted = @(Get-ChildItem (Join-Path $r112d '.streams\runners') -Filter 'quota-hold.lifted-*.json').Count }
+    }
+    $a112d = $res112d['a']; $b112d = $res112d['b']; $c112d = $res112d['c']; $d112d = $res112d['d']
+    Case '112d probe a: a probe that succeeds lifts the hold (moved aside, not deleted)' ($a112d.v -match 'LIFTED' -and -not $a112d.held -and $a112d.lifted -eq 1) "v=$($a112d.v) held=$($a112d.held) lifted=$($a112d.lifted)"
+    Case '112d probe b: a probe the limit rejects keeps the hold and stamps probedAt' ($b112d.v -match 'HELD' -and $b112d.held -and $b112d.hold -and [string]$b112d.hold['probedAt'] -and [string]$b112d.hold['probedBy'] -eq 'runner-112d') "v=$($b112d.v) held=$($b112d.held)"
+    Case '112d probe c: inside the interval since probedAt no probe call is made' ($c112d.v -match 'SKIP' -and -not $c112d.called -and $c112d.held) "v=$($c112d.v) called=$($c112d.called)"
+    Case '112d probe d: STREAM_RUNNER_QUOTA_PROBE_SECONDS=0 never probes' ($d112d.v -match 'OFF' -and -not $d112d.called -and $d112d.held) "v=$($d112d.v) called=$($d112d.called)"
     # ---- 113. Add-Tasks.ps1 on a board-sized release finishes well inside the 120 s lock break limit (kit item
     # IN-20261010174706-ed53: an 81-row release ran 15 min under the lock, because the dependency chain was walked
     # twice, rebuilding an id table over the whole board, for every (new row, open row) pair before the write sets were

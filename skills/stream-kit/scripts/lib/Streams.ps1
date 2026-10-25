@@ -924,6 +924,18 @@ function Get-EndedRunnerSessions($P, $Units = $null) {
     , $ended
 }
 
+# True when a process is a pwsh: its name is pwsh, or its image path ends in pwsh.exe. The name alone is not enough: a
+# PowerShell update replaces pwsh.exe under running processes, which then report the renamed image as their name
+# ('2ae27b44.rbf') while Path still reads ...\pwsh.exe. On 2026-10-23 every runner started the evening before read dead,
+# so the watchdog broke the claims of live units at every tick and moved the live runners' state files away (kit item
+# IN-20261023121821-8738).
+function Test-PwshProcess($Process) {
+    if ([string]$Process.ProcessName -eq 'pwsh') { return $true }
+    $path = ''
+    try { $path = [string]$Process.Path } catch { }
+    return [bool]($path -and [IO.Path]::GetFileName($path) -eq 'pwsh.exe')
+}
+
 # True while the runner process a state file names still runs. A pid alone is not enough: a runner killed with its
 # console runs no finally block, so its state file stays behind naming a pid Windows hands out again, and any process
 # that later gets that pid made the dead runner read live, kept its last unit off the ended list and its claims held
@@ -934,7 +946,7 @@ function Test-RunnerProcess($State) {
     $id = 0
     if (-not [int]::TryParse([string]$State['pid'], [ref]$id) -or $id -le 0) { return $false }
     $p = Get-Process -Id $id -ErrorAction SilentlyContinue
-    if (-not $p -or $p.ProcessName -ne 'pwsh') { return $false }
+    if (-not $p -or -not (Test-PwshProcess $p)) { return $false }
     $started = [string]$State['started']
     if (-not $started) { return $true }
     try {
@@ -1110,6 +1122,23 @@ function Get-SpillDrift($P, $doc, [string] $Id = '') {
     }
     , $out
 }
+# CLAIM ORDER (kit item IN-20261024221545-7b45): Get-Claimable's rows in the order Claim-Task.ps1 takes them, integration
+# fix rows first, then group rank (an author's effective group), ready-on-release (author), chain minutes, board order.
+# The runner GATE line names the first of these, so it names the row the claim takes, not Get-Claimable's board order.
+function Get-ClaimOrder($P, $doc, [string] $Role, $Rows) {
+    $chain = Get-ChainMinutes $doc
+    $grank = Get-PriorityRankMap $doc $P
+    $erank = if ($Role -eq 'author') { Get-EffectiveGroupRank $doc $grank } else { @{} }
+    $boardOrder = @{}; $o = 0; foreach ($x in $doc.tasks) { $boardOrder[[string]$x.id] = ++$o }
+    $cands = foreach ($t in @($Rows)) {
+        if (-not $t) { continue }
+        $fix = [int]($t.Contains('origin') -and $t['origin'] -eq 'integration')
+        $rank = if ($Role -eq 'author') { $erank[$t.id].rank } else { $grank[$t.group] }
+        $ready = [int]($Role -eq 'author' -and (Test-ReadyWhenTicketed $doc $t))
+        [pscustomobject]@{ Task = $t; Fix = $fix; Rank = $rank; Ready = $ready; Chain = $chain[$t.id]; Order = $boardOrder[[string]$t.id] }
+    }
+    @(@($cands | Sort-Object @{ e = 'Fix'; Descending = $true }, @{ e = 'Rank'; Descending = $false }, @{ e = 'Ready'; Descending = $true }, @{ e = 'Chain'; Descending = $true }, @{ e = 'Order'; Descending = $false }) | ForEach-Object { $_.Task })
+}
 # The build selector, kept by name for its callers (Get-StreamStatus.ps1, Start-StreamRunner.ps1).
 function Get-BuildClaimable($P, $doc) { Get-Claimable $P $doc 'build' }
 
@@ -1220,6 +1249,57 @@ function Set-QuotaHold($P, [datetime] $Until, [string] $By, [string] $Type) {
     Write-AtomicText (Join-Path $dir 'quota-hold.json') ($doc | ConvertTo-Json)
 }
 
+# THE EARLY-LIFT PROBE (kit item IN-20261024093536-3be3): a weekly hold is capped at 6 h, but the account can lift
+# sooner (re-login, extra usage). While a hold is in force one runner per repo makes one minimal claude call every
+# STREAM_RUNNER_QUOTA_PROBE_SECONDS (1800; 0 = off), on the units' model (another model's bucket could lift falsely).
+# probedAt/probedBy in quota-hold.json, written under runners\quota-probe.lock before the call, pick the one prober.
+# A success moves the hold aside to quota-hold.lifted-<stamp>.json (audit) and ends every runner's wait; a rejection
+# keeps it; anything else (timeout, no JSON) is UNKNOWN and changes nothing. A false lift corrects itself: the next
+# unit meets the rejection and re-sets the hold. STREAM_RUNNER_QUOTA_PROBE_CMD names a .ps1 that replaces the claude
+# call (self-tests). Returns OFF, NONE (no hold), SKIP, BUSY, LIFTED, HELD or UNKNOWN.
+function Invoke-QuotaProbe($P, [string] $Session, [string] $Model = '') {
+    $every = 1800; $n = 0
+    if ($null -ne $env:STREAM_RUNNER_QUOTA_PROBE_SECONDS -and [int]::TryParse([string]$env:STREAM_RUNNER_QUOTA_PROBE_SECONDS, [ref]$n)) { $every = $n }
+    if ($every -le 0) { return 'OFF' }
+    $dir = Join-Path $P.Root 'runners'; $f = Join-Path $dir 'quota-hold.json'
+    $hold = Get-QuotaHold $P
+    if (-not $hold) { return 'NONE' }
+    $lock = Join-Path $dir 'quota-probe.lock'
+    try {
+        if ((Test-Path -LiteralPath $lock) -and ((Get-Date) - (Get-Item -LiteralPath $lock).LastWriteTime).TotalSeconds -gt 300) { Remove-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue }
+        $fs = [IO.File]::Open($lock, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    } catch { return 'BUSY' }
+    try {
+        try { $doc = Get-Content -LiteralPath $f -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop } catch { return 'NONE' }
+        # A hold with no time of its own starts the interval now, never with a call.
+        if (-not $doc['probedAt'] -and -not $doc['at']) { $doc['probedAt'] = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); Write-AtomicText $f ($doc | ConvertTo-Json); return 'SKIP' }
+        $last = [datetime]::MinValue; $since = if ($doc['probedAt']) { [string]$doc['probedAt'] } else { [string]$doc['at'] }
+        if ($since -and [datetime]::TryParse($since, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal, [ref]$last) -and ((Get-Date).ToUniversalTime() - $last).TotalSeconds -lt $every) { return 'SKIP' }
+        $doc['probedAt'] = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); $doc['probedBy'] = $Session
+        Write-AtomicText $f ($doc | ConvertTo-Json)
+    } finally { $fs.Dispose(); Remove-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue }
+    $in = [IO.Path]::GetTempFileName(); $out = "$in.out"; $err = "$in.err"
+    try {
+        if ($env:STREAM_RUNNER_QUOTA_PROBE_CMD) { $exe = 'pwsh'; $argv = @('-NoProfile', '-NonInteractive', '-File', $env:STREAM_RUNNER_QUOTA_PROBE_CMD) }
+        else { $exe = 'claude'; $argv = @('-p', '"Reply with OK."', '--output-format', 'json', '--max-turns', '1'); if ($Model) { $argv += @('--model', $Model) } }
+        $proc = Start-Process -FilePath $exe -ArgumentList $argv -NoNewWindow -PassThru -RedirectStandardInput $in -RedirectStandardOutput $out -RedirectStandardError $err
+        if (-not $proc.WaitForExit(120000)) { & taskkill.exe /PID $proc.Id /T /F | Out-Null; return 'UNKNOWN' }
+        $lines = @(Get-Content -LiteralPath $out -ErrorAction SilentlyContinue)
+    } catch { return 'UNKNOWN' } finally { Remove-Item -LiteralPath $in, $out, $err -Force -ErrorAction SilentlyContinue }
+    $rej = Find-QuotaRejection $lines
+    $res = $null
+    foreach ($l in $lines) { try { $o = $l | ConvertFrom-Json -AsHashtable -ErrorAction Stop; if ($o -is [Collections.IDictionary] -and $o.Contains('is_error')) { $res = $o } } catch { } }
+    if ($rej -or ($res -and $res['is_error'] -eq $true -and [string]$res['result'] -match 'limit')) {
+        if ($rej -and $rej.resetsAt) { Set-QuotaHold $P (Get-QuotaResumeTime $rej.resetsAt) $Session $rej.type }
+        return 'HELD'
+    }
+    if (-not $res -or $res['is_error'] -ne $false) { return 'UNKNOWN' }
+    if (-not (Test-Path -LiteralPath $f)) { return 'LIFTED' }
+    $dest = Join-Path $dir ("quota-hold.lifted-{0}.json" -f (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ'))
+    Move-Item -LiteralPath $f -Destination $dest -Force
+    Add-Decision $P $Session "QUOTA-PROBE lifted $($hold.type) hold early (until was $($hold.until.ToString('yyyy-MM-ddTHH:mm:ssZ')))"
+    'LIFTED'
+}
 # THE OWNER'S CONFIGURATION, .streams\config.json: a hand-edited file, read by the lib through the paths of the repo in
 # hand ($P) or of the last repo Get-StreamPaths resolved, and re-parsed only when its write time or length changes.
 # Missing or unreadable = @{} (every default applies). Start-StreamRunner.ps1 writes it with empty fields the first
@@ -1498,7 +1578,11 @@ function Test-WriteSetOverlap($A, $B) {
 # them. True only when A and B overlap and EVERY overlapping pair is the same exact path (no wildcard, no directory
 # entry) matching $script:CompositionFileRx; any other shared path still needs an order. Same regex as
 # Find-ArtificialBlockers.ps1's 'composition' kind.
-$script:CompositionFileRx = '(^|/)src/Composition/|(^|/)Program\.cs$|Module\.cs$|ServiceCollectionExtensions\.cs$|(^|/)Routes\.razor$'
+# The append-only id register docs/requirements/ids.yaml is in the set too (kit item IN-20261023221543-c537): rows that
+# only append allocate events there need no order, and an edit of an existing line is still refused at export
+# (COMPOSITION-EDIT); two rows that allocate the same id in parallel are caught at integration (Get-AllocatorDuplicates).
+$script:AllocatorFileRx = '(^|/)ids\.yaml$'
+$script:CompositionFileRx = '(^|/)src/Composition/|(^|/)Program\.cs$|Module\.cs$|ServiceCollectionExtensions\.cs$|(^|/)Routes\.razor$|(^|/)ids\.yaml$'
 function Test-MergeOrderedOverlap($A, $B) {
     $as = @(@($A) | Where-Object { $_ } | ForEach-Object { ([string]$_ -replace '\\', '/') -replace '^\./', '' })
     $bs = @(@($B) | Where-Object { $_ } | ForEach-Object { ([string]$_ -replace '\\', '/') -replace '^\./', '' })
@@ -1518,7 +1602,7 @@ function Test-MergeOrderedOverlap($A, $B) {
 # file with another open row and no dependsOn path between them (either way) may only APPEND lines there, because the
 # integrator merges such patches by their added lines. Returns one 'COMPOSITION-EDIT <path> ...' line per changed
 # composition file of $Changed whose diff in $Worktree removes or changes a line while such a peer exists; empty when
-# the patch is add-only there, or the file is the row's alone, or every sharer is ordered with it.
+# the patch is add-only there, or the file is the row's alone, or every sharer is ordered with it or already on main.
 function Get-CompositionEditRefusals($Tasks, [string] $Task, [string] $Worktree, [string[]] $Changed) {
     $rows = @($Tasks | Where-Object { $_ })
     $byId = @{}; foreach ($r in $rows) { $byId[[string]$r['id']] = $r }
@@ -1536,7 +1620,8 @@ function Get-CompositionEditRefusals($Tasks, [string] $Task, [string] $Worktree,
         if ($n -notmatch $script:CompositionFileRx) { continue }
         $peers = @(foreach ($r in $rows) {
             $id = [string]$r['id']
-            if ($id -eq $Task -or [string]$r['state'] -eq 'done') { continue }
+            # An integrated or done sharer is already on main, so in this row's base: no merge peer (IN-20261023051312-f824).
+            if ($id -eq $Task -or [string]$r['state'] -in @('done', 'integrated')) { continue }
             $hit = @(@($r['writeSet']) | Where-Object { (([string]$_ -replace '\\', '/') -replace '^\./', '') -ieq $n })
             if (-not $hit.Count -or $myAnc.Contains($id) -or (& $ancOf $id).Contains($Task)) { continue }
             $id })
@@ -1631,7 +1716,27 @@ function New-CompositionMergedPatch([string] $Repo, [string] $PatchPath, [string
         [pscustomobject]@{ Ok = $true; Path = $OutPath; Files = @($toMerge | ForEach-Object { $_.Path }); Reason = '' }
     } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 }
-# A write-set index for comparing many rows at once (Add-Tasks.ps1: every new row against every open row). An entry
+# The id register's side of ORDERED-BY-MERGE (kit item IN-20261023221543-c537): the ids a patch's added lines allocate
+# in an id register file ($script:AllocatorFileRx: 'event: allocate' ... 'id: <id>') that main's copy of that file
+# already allocates, or that the patch allocates twice. Two rows numbering the same next id in parallel both append
+# cleanly, so this is checked before the apply; Integrate-Patch.ps1 sends such a row back to rebase (re-number).
+function Get-AllocatorDuplicates([string] $Repo, [string] $PatchPath) {
+    $rx = '^\s*-\s*\{\s*event:\s*allocate\b.*?\bid:\s*([^,}\s]+)'
+    $raw = [IO.File]::ReadAllText($PatchPath)
+    $dups = [Collections.Generic.List[string]]::new()
+    foreach ($sec in @([regex]::Split($raw, '(?m)^(?=diff --git )') | Where-Object { $_ -match '^diff --git ' })) {
+        $path = if ($sec -match '^diff --git a/(.+?) b/(.+?)\r?\n') { $Matches[2] } else { '' }
+        if ($path -notmatch $script:AllocatorFileRx) { continue }
+        $have = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        $full = Join-Path $Repo $path
+        if (Test-Path -LiteralPath $full) { foreach ($l in [IO.File]::ReadAllLines($full)) { if ($l -match $rx) { [void]$have.Add($Matches[1]) } } }
+        foreach ($pl in ($sec -split "`n")) {
+            if (-not $pl.StartsWith('+') -or $pl.StartsWith('+++')) { continue }
+            if ($pl.Substring(1).TrimEnd("`r") -match $rx -and -not $have.Add($Matches[1]) -and -not $dups.Contains($Matches[1])) { $dups.Add($Matches[1]) }
+        }
+    }
+    $dups.ToArray()
+}# A write-set index for comparing many rows at once (Add-Tasks.ps1: every new row against every open row). An entry
 # with no wildcard character and no trailing '/' overlaps another such entry only when the two are equal ignoring case,
 # which is all Test-WriteSetOverlap can find for that pair, so those go in a dictionary; a row with any pattern or
 # directory entry is kept aside and always compared in full. Get-WriteSetCandidates returns the rows a write set can
@@ -1696,6 +1801,22 @@ function Read-MainTreeLockText($P) {
     try { ([IO.StreamReader]::new($fs)).ReadToEnd().Trim() } finally { $fs.Dispose() }
 }
 function Get-MainTreeLockHolder($P) { try { Read-MainTreeLockText $P } catch { '?' } }
+
+# The patch an integrator grade holds on main, when the main-grader.lock holder is exactly that grade: the holder text
+# reads '<task> main pid <n> at <t>' (Invoke-Grader -Label main) and .streams\main-pending.json (Integrate-Patch, written
+# after the apply) names the same task and a patch that exists. Returns @{ task; patch; holder }, or $null for any other
+# holder. A grade writes no tracked file, so main can be read beside it with that patch reversed out of the copy (kit
+# item IN-20261024221200-772a); the caller re-reads the holder after its read and gives up if it changed.
+function Get-GradePendingPatch($P) {
+    $holder = Get-MainTreeLockHolder $P
+    if ($holder -notmatch '^(\S+) main pid \d+ at \S+$') { return $null }
+    $task = $Matches[1]
+    $mf = Join-Path $P.Root 'main-pending.json'
+    if (-not (Test-Path -LiteralPath $mf)) { return $null }
+    try { $m = Get-Content -LiteralPath $mf -Raw | ConvertFrom-Json -AsHashtable } catch { return $null }
+    if ($m['task'] -ne $task -or -not $m['patch'] -or -not (Test-Path -LiteralPath $m['patch'])) { return $null }
+    @{ task = $task; patch = [string]$m['patch']; holder = $holder }
+}
 
 # Who holds the main-grader lock and for how long, or $null when it is free. The lock is opened with FileShare.Read, so
 # the holder text ('<holder> pid <n> at <utc>') can be read while it is held. Age comes from that 'at', or from the
