@@ -6,9 +6,10 @@
 # This file is never shipped (section 4.2): it assumes the ai-setup hub. Gene.Profile.psm1 loads it when present.
 using namespace System.Management.Automation.Language
 
-# What is never offered: the board (stream kit, needs ai-setup) and the two profile commands that call the hub.
+# What is never offered: the board (stream kit, needs ai-setup), the two profile commands that call the hub, and pps /
+# psql (they push to the owner's own GitHub repos).
 $script:ShareNeverCategories = @('board')
-$script:ShareNeverCommands = @('sp', 'ep')
+$script:ShareNeverCommands = @('sp', 'ep', 'pps', 'psql')
 # Where the profile half lives inside the shared repo, and its manifest.
 $script:ShareProfileRel = 'ai\profile'
 $script:ShareManifestName = 'prof-share.json'
@@ -46,13 +47,49 @@ function Get-GeneShareRepo {
     throw "No ShareRepo on $env:COMPUTERNAME: add a ShareRepo row (the clone of the coworker repo) to $cfg, or give -Repo."
 }
 
+function Get-GeneShareMainBranch {
+    <# The repo's main branch: what origin/HEAD points at, else main. #>
+    param([Parameter(Mandatory)][string]$Repo)
+    $head = "$(& git -C $Repo symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>$null)".Trim()
+    if ($head -match '^origin/(.+)$') { return $Matches[1] }
+    return 'main'
+}
+
 function Assert-GeneShareRepo {
-    <# A git clone whose share folders (ai\, .claude-plugin\) have no uncommitted change from a previous share. #>
+    <#
+    A git clone ready for a share: on its main branch, level with origin (fetched first; main takes changes only
+    through a pull request, so a local commit there is refused and a merged share PR must be pulled), and no
+    uncommitted change under ai\ or .claude-plugin\ from a previous share. Without an origin, or when the fetch fails,
+    only the local checks run.
+    #>
     param([Parameter(Mandatory)][string]$Repo)
     if (-not (Test-Path -LiteralPath (Join-Path $Repo '.git'))) { throw "$Repo is not a git clone. Clone the coworker repo there first (prof setup share help)." }
     $dirty = @(& git -C $Repo status --porcelain --untracked-files=all -- ai .claude-plugin 2>&1 | Where-Object { "$_" -and $_ -isnot [System.Management.Automation.ErrorRecord] })
     if ($dirty.Count) {
-        throw "$Repo has $($dirty.Count) uncommitted change(s) under ai\ or .claude-plugin\ from a previous share. Commit and push them (the printed git commands), or discard them, then share again."
+        throw "$Repo has $($dirty.Count) uncommitted change(s) under ai\ or .claude-plugin\ from a previous share. Commit them on a share branch and open the pull request (the printed git commands), or discard them, then share again."
+    }
+    $main = Get-GeneShareMainBranch -Repo $Repo
+    $branch = "$(& git -C $Repo branch --show-current 2>$null)".Trim()
+    if ($branch -ne $main) {
+        throw "$Repo is on $branch, not $main. A share starts from an up-to-date ${main}: once its pull request has merged, run: git -C $Repo switch $main; git -C $Repo pull"
+    }
+    $hasOrigin = "$(& git -C $Repo remote 2>$null)" -match '(^|\s)origin(\s|$)'
+    if (-not $hasOrigin) { return }
+    # No prompt from git or the credential manager: a fetch that needs one fails, and the check uses what is local.
+    $saved = $env:GIT_TERMINAL_PROMPT, $env:GCM_INTERACTIVE
+    $env:GIT_TERMINAL_PROMPT = '0'; $env:GCM_INTERACTIVE = 'never'
+    try { & git -C $Repo fetch --quiet origin 2>$null; $fetched = $LASTEXITCODE -eq 0 }
+    finally { $env:GIT_TERMINAL_PROMPT, $env:GCM_INTERACTIVE = $saved }
+    if (-not $fetched) { Write-ProfNote "Could not fetch origin in $Repo; checking against the last fetched origin/$main." }
+    & git -C $Repo rev-parse --verify --quiet "refs/remotes/origin/$main" *> $null
+    if ($LASTEXITCODE -ne 0) { return }
+    $counts = "$(& git -C $Repo rev-list --left-right --count "$main...origin/$main" 2>$null)".Trim() -split '\s+'
+    $ahead = [int]$counts[0]; $behind = [int]$counts[1]
+    if ($ahead) {
+        throw "$Repo $main has $ahead commit(s) that are not on origin/$main. $main takes changes only through a pull request: move them to a branch (git -C $Repo switch -c <branch>), put $main back to origin/$main, then share again."
+    }
+    if ($behind) {
+        throw "$Repo $main is $behind commit(s) behind origin/$main (a merged pull request not pulled yet). Run: git -C $Repo pull"
     }
 }
 
@@ -557,7 +594,8 @@ function Get-GeneShareReadmeText {
     $o.Add('# Shared PowerShell profile and Claude skills')
     $o.Add('')
     $o.Add("Shared by $Owner with ``prof setup share``. This folder (``ai\``) and ``.claude-plugin\marketplace.json`` at the repo root are the only")
-    $o.Add('things the share writes; everything else in the repo is untouched. Every later share is a commit: `git pull` brings it.')
+    $o.Add('things the share writes; everything else in the repo is untouched. Every later share arrives as a pull request into main:')
+    $o.Add('`git pull` brings it once it has merged.')
     $o.Add('')
     # The origin URL without its userinfo: a clone URL may carry an account or a token (https://user:pat@host/...).
     $origin = try { (git -C $Repo remote get-url origin 2>$null | Select-Object -First 1) } catch { $null }
@@ -624,7 +662,7 @@ function Get-GeneShareReadmeText {
     $plugins = @(Get-ChildItem -LiteralPath $PluginsDir -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'skills') } | Sort-Object Name)
     if (-not $plugins.Count) { $o.Add('No skills shared yet.'); $o.Add('') }
     else {
-        $o.Add('One Claude Code plugin per category. In Claude Code, once, with the full path of your clone:')
+        $o.Add('One Claude Code plugin per category. In Claude Code (git and the clone below already in place), once, with the full path of your clone:')
         $o.Add('')
         $o.Add('```text')
         $o.Add('/plugin marketplace add <the folder you cloned this repo into>')
@@ -637,7 +675,15 @@ function Get-GeneShareReadmeText {
             $o.Add("- ``/plugin install $($p.Name)@$script:ShareMarketplaceName``: $($skills -join ', ')")
         }
         $o.Add('')
-        $o.Add('Update: `git pull`, then `/plugin update` in Claude Code.')
+        $o.Add('In a session, `/plugin install` opens the plugin''s panel: pick the scope (user: every project) and install.')
+        $o.Add('')
+        $o.Add('Update: `git pull`, then `/reload-plugins` in Claude Code (or start a new session): a marketplace added from your')
+        $o.Add('clone folder loads its plugins from that folder, so pulled changes need no update step. When a share adds a new')
+        $o.Add('category plugin, refresh the listing first, then install it as above:')
+        $o.Add('')
+        $o.Add('```text')
+        $o.Add("/plugin marketplace update $script:ShareMarketplaceName")
+        $o.Add('```')
         $o.Add('')
     }
     $o.Add('## Questions')
@@ -740,13 +786,27 @@ function Assert-GeneShareOnlyOwnFiles {
 }
 
 function Show-GeneShareGitCommands {
-    <# The add line names only the paths that exist: one missing pathspec makes git add stage nothing (exit 128). #>
-    param([Parameter(Mandatory)][string]$Repo, [Parameter(Mandatory)][string]$Message)
+    <#
+    main takes changes only through a pull request, so the commands put the share on its own branch, push that, and
+    name the pull request to open (Azure DevOps: the create link). The add line names only the paths that exist: one
+    missing pathspec makes git add stage nothing (exit 128).
+    #>
+    param([Parameter(Mandatory)][string]$Repo, [Parameter(Mandatory)][string]$Message, [Parameter(Mandatory)][string]$Branch)
+    $main = Get-GeneShareMainBranch -Repo $Repo
     $paths = @('ai', 'README.md', '.claude-plugin' | Where-Object { Test-Path -LiteralPath (Join-Path $Repo $_) })
-    Write-ProfStep 'Now commit and push (share never does):'
+    Write-ProfStep 'Now commit on a share branch and push it (share never does; main takes changes only through a pull request):'
+    Write-Host "  git -C $Repo switch -c $Branch"
     Write-Host "  git -C $Repo add -- $($paths -join ' ')"
     Write-Host "  git -C $Repo commit -m `"$Message`""
-    Write-Host "  git -C $Repo push"
+    Write-Host "  git -C $Repo push -u origin $Branch"
+    # The origin URL without its userinfo: a clone URL may carry an account or a token.
+    $origin = "$(& git -C $Repo remote get-url origin 2>$null)".Trim()
+    $origin = [regex]::Replace($origin, '^([a-z][a-z0-9+.-]*://)[^/@]*@', '$1').TrimEnd('/')
+    if ($origin -match '/_git/') { Write-ProfStep "Then open the pull request into ${main}: $origin/pullrequestcreate?sourceRef=$Branch&targetRef=$main" }
+    else { Write-ProfStep "Then open a pull request from $Branch into $main." }
+    Write-ProfNote "Once it has merged (the coworker gets the share from $main), before the next share:"
+    Write-Host "  git -C $Repo switch $main"
+    Write-Host "  git -C $Repo pull"
 }
 
 function Write-GeneShareProfile {
@@ -791,7 +851,7 @@ function Write-GeneShareProfile {
         $pointer = Add-GeneShareRootPointer -Repo $Plan.Repo
         Assert-GeneShareOnlyOwnFiles -Repo $Plan.Repo -Before $before
         Write-ProfStep "written: $dest ($($files.Count) file(s)) and ai\README.md$(if ($pointer) { ', one pointer line in README.md' })"
-        Show-GeneShareGitCommands -Repo $Plan.Repo -Message "share: profile $stamp"
+        Show-GeneShareGitCommands -Repo $Plan.Repo -Message "share: profile $stamp" -Branch "share/profile-$stamp"
         return [pscustomobject]@{ Repo = $Plan.Repo; Files = @($files | Sort-Object); Mentions = $mentions; Stamp = $stamp; Written = $true }
     }
     finally { if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue } }
@@ -831,7 +891,9 @@ function Show-GeneShareHelp {
     $repoLine = try { "$(Get-GeneShareRepo) (the ShareRepo row of this machine's profile; -Repo overrides)" } catch { "the ShareRepo row of this machine's profile, not set here yet (-Repo overrides)" }
     Write-Host "  The repo: $repoLine. The repo is the state: what it holds is"
     Write-Host '  preselected, unpicking removes it. share writes the working tree under ai\ and .claude-plugin\ only, then prints'
-    Write-Host '  the git add / commit / push commands for you to run. -WhatIf shows the pick and the settings table, writes nothing.'
+    Write-Host '  the git commands for you to run: a share/<what>-<stamp> branch, add, commit, push -u, then the pull request into main'
+    Write-Host '  (main takes changes only through one). Starts only from main level with origin. -WhatIf shows the pick and the'
+    Write-Host '  settings table, writes nothing.'
     Write-Host ''
     Write-Host '  Never shared: prof setup, prof streams and the board commands, sp and ep, the Windows PowerShell 5.1 profile,'
     Write-Host '  agents, slash commands, hooks, settings, memory, secrets. A secret in a picked file stops the share; every'
@@ -839,7 +901,8 @@ function Show-GeneShareHelp {
     Write-Host ''
     Write-Host '  The coworker: clone the repo, run ai\profile\Install-Profile.ps1 (-WhatIf first), and in Claude Code'
     Write-Host '  /plugin marketplace add <repo>, then /plugin install <category>@<marketplace>. Updates: git pull, Install-Profile.ps1'
-    Write-Host '  again, /plugin update. ai\README.md in the repo says the same with the real names.'
+    Write-Host '  again, /reload-plugins (a new category: /plugin marketplace update <marketplace> first). ai\README.md in the repo'
+    Write-Host '  says the same with the real names.'
 }
 
 function Invoke-GeneShareProfile {

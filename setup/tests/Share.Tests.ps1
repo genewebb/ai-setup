@@ -112,6 +112,63 @@ try {
         try { Assert-GeneShareRepo -Repo $repo } finally { Remove-Item -LiteralPath "$repo\other.txt" -Force }
     }
 
+    # main takes changes only through a pull request: share starts from a main that matches origin and prints a branch
+    function New-OriginPair([string]$Name) {
+        $r = New-ShareRepo $Name
+        $bare = Join-Path $root "$Name.git"
+        git clone -q --bare $r $bare
+        git -C $r remote add origin $bare
+        git -C $r fetch -q origin
+        git -C $r branch -q -u origin/main main
+        git -C $r remote set-head origin -a *> $null
+        return [pscustomobject]@{ Repo = $r; Bare = $bare }
+    }
+    Test-Case 'repo: refuses a branch other than main, naming the switch and pull to run' {
+        $o = New-OriginPair 'repo-branch'
+        git -C $o.Repo switch -q -c share/profile-1
+        Assert-Throws { Assert-GeneShareRepo -Repo $o.Repo } '*on share/profile-1, not main*git -C * switch main*'
+        git -C $o.Repo switch -q main
+        Assert-GeneShareRepo -Repo $o.Repo
+    }
+    Test-Case 'repo: refuses a main with local commits that are not on origin (main changes only through a PR)' {
+        $o = New-OriginPair 'repo-ahead'
+        Write-File "$($o.Repo)\local.txt" 'x'; git -C $o.Repo add -A; git -C $o.Repo commit -q -m local
+        Assert-Throws { Assert-GeneShareRepo -Repo $o.Repo } '*1 commit(s) that are not on origin/main*'
+    }
+    Test-Case 'repo: refuses a main behind origin (a merged share PR not pulled yet), naming the pull' {
+        $o = New-OriginPair 'repo-behind'
+        $other = Join-Path $root 'repo-behind-other'
+        git clone -q $o.Bare $other
+        git -C $other config user.name t; git -C $other config user.email t@t
+        Write-File "$other\merged.txt" 'x'; git -C $other add -A; git -C $other commit -q -m merged; git -C $other push -q origin main
+        Assert-Throws { Assert-GeneShareRepo -Repo $o.Repo } '*behind origin/main*git -C * pull*'
+        git -C $o.Repo pull -q
+        Assert-GeneShareRepo -Repo $o.Repo
+    }
+    Test-Case 'git commands: a share branch, add, commit, push -u, and the ADO pull request link (no account in it); never a push to main' {
+        $r = New-ShareRepo 'repo-ado'
+        git -C $r remote add origin 'https://gene@profisee.visualstudio.com/Products/_git/speed-merchants-dba'
+        $out = (Show-GeneShareGitCommands -Repo $r -Message 'share: profile 1' -Branch 'share/profile-1' 6>&1) -join "`n"
+        Assert-Match $out ([regex]::Escape("git -C $r switch -c share/profile-1"))
+        Assert-Match $out ([regex]::Escape("git -C $r commit -m `"share: profile 1`""))
+        Assert-Match $out ([regex]::Escape("git -C $r push -u origin share/profile-1"))
+        Assert-Match $out ([regex]::Escape('https://profisee.visualstudio.com/Products/_git/speed-merchants-dba/pullrequestcreate?sourceRef=share/profile-1&targetRef=main'))
+        Assert-NoMatch $out 'gene@'
+        Assert-NoMatch $out 'push\s*$'
+        Assert-Match $out ([regex]::Escape("git -C $r switch main")) 'after the merge'
+    }
+    Test-Case 'git commands: a non-ADO origin gets the plain pull request line' {
+        $r = New-ShareRepo 'repo-gh'
+        git -C $r remote add origin 'https://github.com/x/y.git'
+        $out = (Show-GeneShareGitCommands -Repo $r -Message 'share: skills 1' -Branch 'share/skills-1' 6>&1) -join "`n"
+        Assert-Match $out 'pull request from share/skills-1 into main'
+        Assert-NoMatch $out 'pullrequestcreate'
+    }
+    Test-Case 'offer: pps and psql (they push to the owner''s GitHub repos) are never offered; gpush is' {
+        $h2 = Join-Path $root 'hub-git'
+        Write-File "$h2\pwsh\PowerShell\profile.d\git.ps1" "function gpush { }`nfunction pps { }`nfunction psql { }"
+        Assert-Equal @('gpush') @((@(Get-GeneShareOffer -Hub $h2) | Where-Object Category -eq git).Commands.Name)
+    }
     # ---------------------------------------------------------------- offer
     Test-Case 'offer: catalog categories with a profile.d file, in catalog order; board never; sp/ep never; undefined catalog commands not offered' {
         $o = @(Get-GeneShareOffer -Hub $hub)
@@ -392,6 +449,7 @@ prof help | Out-Null; 'help=ok'
         $readme = Get-Content -LiteralPath "$repo\ai\README.md" -Raw
         Assert-Match $readme '\*\*build\*\*'; Assert-Match $readme '- `dpspeed`: TestAuto'; Assert-Match $readme 'Publish-SpeedMerchantsPackage`:.*needed by a shared command'
         Assert-Match $readme '\| BitsDir \| \(asked at install\) \| dpspeed, prof build \|'; Assert-Match $readme 'No skills shared yet'
+        Assert-Match $readme 'pull request into main' 'how a share reaches main'
         Assert-Match (Get-Content -LiteralPath "$repo\README.md" -Raw) 'coworker repo\r?\n\r?\nShared PowerShell commands and Claude skills: see \[ai/README.md\]'
         $changes = Get-RepoChanges $repo
         Assert-True (($changes | Where-Object { $_ -notmatch '^ai/|^README\.md$' }).Count -eq 0) "outside ai/: $($changes -join ', ')"

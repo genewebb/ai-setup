@@ -7,6 +7,10 @@
     Run it from the share folder it sits in (<repo>\ai\profile; it reads the files next to itself):
       1. PowerShell\             -> your PowerShell 7 profile folder (-ProfileDir; default: where $PROFILE lives).
                                     A file that exists and differs is backed up first (the folder is printed).
+                                    A profile it did not put there (your own) is not replaced without asking:
+                                    M moves it to profile.d\zz-mine.ps1 (the default; -NonInteractive does this),
+                                    R replaces it, A aborts. prof-share-installed.json in the profile folder records
+                                    what it installed; only those files (and Gene.* modules) are ever removed.
       2. modules.txt             -> installs the PSGallery modules you do not have yet (skip with -SkipModules).
       3. ProfileMachineConfig.md -> the machine config (-ConfigPath; default C:\Deploy\Setup\ProfileMachineConfig.md):
            - no file yet: every blank value is asked for (the "Used by" column says which commands read it), then
@@ -57,43 +61,98 @@ Step 'PowerShell profile'
 $from = Join-Path $here 'PowerShell'
 if (-not (Test-Path -LiteralPath $from)) { Write-Host '  no PowerShell folder next to this script; skipped' }
 else {
+    # prof-share-installed.json in the profile folder lists every file the last install put there, with its hash. A file
+    # it does not list, or one edited since, is the coworker's own: never swept, and their profile is not replaced
+    # without asking.
+    $recordFile = Join-Path $pwshDir 'prof-share-installed.json'
+    $recorded = @{}
+    if (Test-Path -LiteralPath $recordFile) {
+        try { $recorded = (Get-Content -LiteralPath $recordFile -Raw | ConvertFrom-Json -AsHashtable).files }
+        catch { Warn "$recordFile is unreadable; every file in the profile folder counts as your own" }
+        if (-not $recorded) { $recorded = @{} }
+    }
+    $shipped = [ordered]@{}
+    foreach ($f in Get-ChildItem -LiteralPath $from -Recurse -File | Sort-Object FullName) {
+        $shipped[[IO.Path]::GetRelativePath($from, $f.FullName)] = (Get-FileHash -LiteralPath $f.FullName).Hash
+    }
+
+    # A profile this installer did not put there (the coworker's own, or ours edited since): ask before replacing it.
+    # M moves it into profile.d, where the shared profile dot-sources it last (zz- sorts after every category file).
+    $coreRel = 'Microsoft.PowerShell_profile.ps1'
+    $coreDest = Join-Path $pwshDir $coreRel
+    if ($shipped.Contains($coreRel) -and (Test-Path -LiteralPath $coreDest)) {
+        $h = (Get-FileHash -LiteralPath $coreDest).Hash
+        if ($h -ne $shipped[$coreRel] -and $recorded[$coreRel] -ne $h) {
+            $mineDir = Join-Path $pwshDir 'profile.d'
+            $mine = Join-Path $mineDir 'zz-mine.ps1'
+            if (Test-Path -LiteralPath $mine) { $mine = Join-Path $mineDir "zz-mine-$stamp.ps1" }
+            if ($dry) { Write-Host "  would ask what to do with $coreDest (a profile this installer did not put there)" }
+            else {
+                $choice = 'M'
+                if (-not $NonInteractive) {
+                    Write-Host "  $coreDest is a profile this installer did not put there; the shared profile replaces it."
+                    Write-Host "    M = move it to $mine (it keeps loading, after the shared commands) - the default"
+                    Write-Host "    R = replace it (a copy goes to $backupDir)"
+                    Write-Host '    A = abort (nothing is written)'
+                    do {
+                        $choice = ([string](Read-Host '  M, R or A')).Trim().ToUpperInvariant()
+                        if (-not $choice) { $choice = 'M' }
+                    } while ($choice -notin 'M', 'R', 'A')
+                }
+                if ($choice -eq 'A') { Write-Host '  aborted; nothing written.'; exit 1 }
+                # The copy below backs the old profile up either way.
+                if ($choice -eq 'M') {
+                    New-Item -ItemType Directory -Force -Path $mineDir | Out-Null
+                    Copy-Item -LiteralPath $coreDest -Destination $mine
+                    Write-Host "  moved your profile to $mine"
+                    $summary.Add("your own profile: moved to $mine")
+                }
+                else { $summary.Add("your own profile: replaced (copy in $backupDir)") }
+            }
+        }
+    }
+
     $updated = 0
-    foreach ($f in Get-ChildItem -LiteralPath $from -Recurse -File) {
-        $rel = [IO.Path]::GetRelativePath($from, $f.FullName)
+    foreach ($rel in $shipped.Keys) {
+        $src = Join-Path $from $rel
         $dest = Join-Path $pwshDir $rel
-        if ((Test-Path -LiteralPath $dest) -and (Get-FileHash $f.FullName).Hash -eq (Get-FileHash $dest).Hash) { continue }
+        if ((Test-Path -LiteralPath $dest) -and (Get-FileHash -LiteralPath $dest).Hash -eq $shipped[$rel]) { continue }
         $updated++
         if ($dry) { Write-Host "  would update $dest"; continue }
         if (Test-Path -LiteralPath $dest) { Backup $dest "PowerShell\$rel" }
         New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
-        Copy-Item -LiteralPath $f.FullName -Destination $dest -Force
+        Copy-Item -LiteralPath $src -Destination $dest -Force
         Write-Host "  updated $dest"
     }
     $summary.Add("PowerShell profile: $updated file(s) $(if ($dry) { 'would be updated' } else { 'updated' }) in $pwshDir$(if ($updated -and -not $dry) { "; old copies in $backupDir" })")
 
-    # Files an earlier share installed that this share no longer has (an unpicked category, a module no picked command
+    # Files an earlier install put here that this share no longer has (an unpicked category, a module no picked command
     # calls). The profile dot-sources every profile.d\*.ps1 and imports every Gene.* module, so a stale file would still
-    # load. Only those two places are swept, and only files the manifest (prof-share.json) does not list; anything else
-    # in the profile folder is the coworker's own. Removed files go to the backup folder first.
-    $manifestFile = Join-Path $here 'prof-share.json'
-    if (Test-Path -LiteralPath $manifestFile) {
-        $shipped = @(((Get-Content -LiteralPath $manifestFile -Raw | ConvertFrom-Json -AsHashtable).files).Keys | ForEach-Object { $_ -replace '^PowerShell/', '' -replace '/', '\' })
-        $swept = @(foreach ($area in 'profile.d', 'Modules') {
-                $dir = Join-Path $pwshDir $area
-                if (-not (Test-Path -LiteralPath $dir)) { continue }
-                Get-ChildItem -LiteralPath $dir -Recurse -File | Where-Object {
-                    $rel = [IO.Path]::GetRelativePath($pwshDir, $_.FullName)
-                    ($area -eq 'profile.d' -or $rel -like 'Modules\Gene.*') -and $rel -notin $shipped
-                }
-            })
-        foreach ($f in $swept) {
+    # load. Swept: the files the record lists, and any Modules\Gene.* file (those module names are the share's). Nothing
+    # else: the coworker's own files stay, in profile.d too. Removed files go to the backup folder first.
+    $swept = [System.Collections.Generic.List[string]]::new()
+    foreach ($rel in $recorded.Keys) {
+        if (-not $shipped.Contains($rel) -and (Test-Path -LiteralPath (Join-Path $pwshDir $rel))) { $swept.Add($rel) }
+    }
+    $modDir = Join-Path $pwshDir 'Modules'
+    if (Test-Path -LiteralPath $modDir) {
+        foreach ($f in Get-ChildItem -LiteralPath $modDir -Recurse -File) {
             $rel = [IO.Path]::GetRelativePath($pwshDir, $f.FullName)
-            if ($dry) { Write-Host "  would remove $($f.FullName) (the share no longer has it)"; continue }
-            Backup $f.FullName "PowerShell\$rel"
-            Remove-Item -LiteralPath $f.FullName -Force
-            Write-Host "  removed $($f.FullName) (the share no longer has it; copy in $backupDir)"
+            if ($rel -like 'Modules\Gene.*' -and -not $shipped.Contains($rel) -and $rel -notin $swept) { $swept.Add($rel) }
         }
-        if ($swept.Count) { $summary.Add("$(if ($dry) { 'would remove' } else { 'removed' }) $($swept.Count) file(s) the share no longer has$(if (-not $dry) { " (copies in $backupDir)" })") }
+    }
+    foreach ($rel in $swept) {
+        $full = Join-Path $pwshDir $rel
+        if ($dry) { Write-Host "  would remove $full (the share no longer has it)"; continue }
+        Backup $full "PowerShell\$rel"
+        Remove-Item -LiteralPath $full -Force
+        Write-Host "  removed $full (the share no longer has it; copy in $backupDir)"
+    }
+    if ($swept.Count) { $summary.Add("$(if ($dry) { 'would remove' } else { 'removed' }) $($swept.Count) file(s) the share no longer has$(if (-not $dry) { " (copies in $backupDir)" })") }
+
+    if (-not $dry) {
+        New-Item -ItemType Directory -Force -Path $pwshDir | Out-Null
+        [IO.File]::WriteAllText($recordFile, (@{ version = 1; files = $shipped } | ConvertTo-Json), $utf8)
     }
 }
 

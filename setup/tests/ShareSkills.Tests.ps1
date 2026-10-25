@@ -186,6 +186,10 @@ try {
         Assert-Match $readme 'git clone https://example\.test/Products/_git/share'
         Assert-NoMatch $readme 's3cr3t|owner1'
         Assert-Match $readme '/plugin marketplace add <the folder you cloned this repo into>'
+        Assert-Match $readme '/reload-plugins' 'a local-folder marketplace loads pulled changes in place'
+        Assert-Match $readme '/plugin marketplace update speed-merchants-dba' 'a new category plugin needs the listing refreshed'
+        Assert-NoMatch $readme '/plugin update' 'not a Claude Code command'
+        Assert-Match $text 'push -u origin share/skills-\d{8}-\d{6}'
         Assert-NoMatch $readme ([regex]::Escape($repo))
         Assert-Equal 0 $r.Mentions 'the stripped origin is no mention'
         Assert-Match (Get-Content -LiteralPath "$repo\README.md" -Raw) 'ai/README\.md'
