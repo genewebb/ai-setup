@@ -348,7 +348,7 @@ function Write-GeneShareSkills {
         $pointer = Add-GeneShareRootPointer -Repo $Plan.Repo
         Assert-GeneShareOnlyOwnFiles -Repo $Plan.Repo -Before $before
         Write-ProfStep "written: $dest ($($files.Count) file(s)), $script:ShareMarketplaceRel and ai\README.md$(if ($pointer) { ', one pointer line in README.md' })"
-        Show-GeneShareGitCommands -Repo $Plan.Repo -Message "share: skills $stamp"
+        Show-GeneShareGitCommands -Repo $Plan.Repo -Message "share: skills $stamp" -Branch "share/skills-$stamp"
         $result.Written = $true
         return $result
     }
