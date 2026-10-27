@@ -1,6 +1,6 @@
 ---
 name: stream-plan
-description: v0.16. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
+description: v0.17. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
 ---
 
 # stream-plan
@@ -101,6 +101,8 @@ Never ticket detail, never a secret.
 Each cycle:
 
 1. Read the open items with `Get-InboxItems.ps1 -Skill stream-plan -Open`, and print the **Inbox status line**.
+   Also read `.streams\owner\permission-prompts.md` (runner permission prompts; kit item IN-20261025224420-209f) and
+   show every line still starting `- ESCALATE` (a `RESOLVED` line is answered) to the owner in chat, as a list, never as an owner question.
 2. Work every open item as **Inbox** says: take, act through `Add-Tasks.ps1` / `Revise-Task.ps1`, then close or
    forward. After any board change, `Test-BoardOrder.ps1` must print `CLEAN`, and the pass gets one line in
    `decisions.md`.

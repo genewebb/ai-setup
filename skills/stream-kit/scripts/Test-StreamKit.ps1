@@ -368,6 +368,28 @@ try {
     Case 'the tile names the applied defaults as the second number' ($html -match '(?s)<a class="tile owner".*?3 applied') 'tile does not name the applied defaults'
     Case 'the tile links to the question list' ($html -match 'href="#owner-questions"' -and $html -match '<div class="panel" id="owner-questions">') 'tile link or panel anchor missing'
     Case 'the question list itself keeps both shapes and drops the resolved lines' (($html -match 'applied default three') -and ($html -match 'escalation two') -and ($html -notmatch 'answered already') -and ($html -notmatch 'escalation answered')) 'resolved line leaked into the page or a shape was dropped'
+    # OWNER PROMPTS (kit item IN-20261025224357-fa2a): a runner's 'permission prompt in tab' ESCALATE line is its own
+    # number and panel, never an owner question; a real ESCALATE question still counts as one. RESOLVED stays out of both.
+    $qfOwnerPrompt = @(
+        '- ESCALATE build-prompt-1 | permission prompt in tab Builder 7 : Bash: destructive-path-guard: stubcmd | the session waits on the owner; its unit timeout is paused | answer the prompt in that tab [prompt-x]',
+        'RESOLVED - ESCALATE build-prompt-2 | permission prompt in tab Builder 8 : Bash: stubold | the session waits on the owner | answer the prompt in that tab [prompt-y] (answered x)',
+        '- ESCALATE G1.T9 | real owner question with no default')
+    # Since kit item IN-20261025224420-209f the runner writes prompts to owner\permission-prompts.md; a legacy prompt
+    # line left in questions.md is history and counts as neither a question nor a prompt.
+    $pfOp = Join-Path $repo '.streams\owner\permission-prompts.md'
+    $qfPrevOp = Get-Content $qf
+    Set-Content $pfOp $qfOwnerPrompt[0..1]
+    Set-Content $qf @($qfOwnerPrompt[2], '- ESCALATE build-prompt-old | permission prompt in tab Builder 6 : Bash: legacy | the session waits on the owner | answer the prompt in that tab [prompt-z]')
+    $sqOp = & "$S\Get-StreamStatus.ps1" -Repo $repo -Json | ConvertFrom-Json
+    Case 'OWNER-PROMPTS: status json splits prompts from questions' ((@($sqOp.owner.prompts).Count -eq 1) -and (@($sqOp.owner.escalations).Count -eq 1) -and (@($sqOp.owner.questions).Count -eq 1)) ('prompts ' + @($sqOp.owner.prompts).Count + ' escalations ' + @($sqOp.owner.escalations).Count + ' questions ' + @($sqOp.owner.questions).Count)
+    $pgOp = Join-Path $Scratch 'status-prompts.html'
+    [void](& "$S\Build-StatusPage.ps1" -Repo $repo -Session status-tile -Out $pgOp -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
+    $htmlOp = Get-Content -Raw $pgOp
+    Case 'OWNER-PROMPTS: page renders 1 owner question and 1 owner prompt tile' (($htmlOp -match '<b>1</b><span>owner questions &middot; 0 applied') -and ($htmlOp -match 'href="#owner-prompts"><b>1</b><span>owner prompts</span>')) 'tiles not 1 and 1'
+    Case 'OWNER-PROMPTS: prompt panel lists tab, session and blocked command; resolved prompt absent' (($htmlOp -match 'id="owner-prompts"') -and ($htmlOp -match 'Builder 7</td><td class="id">build-prompt-1</td><td class="note">Bash: destructive-path-guard: stubcmd</td>') -and ($htmlOp -notmatch 'build-prompt-2')) 'prompt panel row wrong or resolved leaked'
+    Case 'OWNER-PROMPTS: a legacy prompt line in questions.md is neither a prompt nor a question' (($htmlOp -notmatch 'build-prompt-old') -and (-not (@($sqOp.owner.prompts) -match 'build-prompt-old'))) 'legacy prompt line counted'
+    Set-Content $qf $qfPrevOp
+    Remove-Item $pfOp -ErrorAction SilentlyContinue
     # The real board (no -MirrorFile) also mirrors to the machine profile's StatusPageDir (spec D17); a blank row
     # leaves the page in .streams\ alone. A throwaway profile stands in for ProfileMachineConfig.md.
     $iis = Join-Path $Scratch 'iis-speedy'
@@ -1631,6 +1653,36 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $amHead = git -C $amR rev-parse HEAD
     $amI2 = @(& "$S\Integrate-Patch.ps1" -Repo $amR -Session integ-am -Task A1.Q)
     Case 'ALREADY-ON-MAIN: a patch already committed on HEAD is integrated with nothing applied or committed' ($amI2[0] -eq 'INTEGRATED A1.Q (already in HEAD)' -and (T $amR 'A1.Q').state -eq 'integrated' -and (git -C $amR rev-parse HEAD) -eq $amHead -and -not (git -C $amR status --porcelain -- q.txt)) ($amI2 -join ' | ')
+    # NO-CODE-CHANGE (kit item IN-20261026203916-9d38): a row built with no code change hands off a patch with no file
+    # sections (G17.T116's was its test record). It is graded on main in place: green integrates with no commit, red
+    # goes back to ticketed. Before the fix both REBASEd (git apply --check refuses a patch with no diff), forever.
+    $ncR = Join-Path $Scratch 'ncrepo'; New-Item -ItemType Directory -Path $ncR -Force | Out-Null
+    git -C $ncR init -q -b main; git -C $ncR config user.email t@t; git -C $ncR config user.name t; Grant-GitPolicy $ncR
+    Set-Content (Join-Path $ncR 'p.txt') 'p DONE-P'; Set-Content (Join-Path $ncR 'q.txt') 'q base'
+    git -C $ncR add -A; git -C $ncR commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $ncR | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $ncR '.streams\graders') -Force | Out-Null
+    Grader (Join-Path $ncR '.streams\graders\N1.P.ps1') 'p.txt' 'DONE-P'
+    Grader (Join-Path $ncR '.streams\graders\N1.Q.ps1') 'q.txt' 'DONE-Q'
+    $ncPlan = @{
+        groups = @(@{ id = 'N1'; name = 'nc'; state = 'released'; scope = @{ include = @('F-NC') }; origin = 'plan' })
+        tasks  = @(
+            @{ id = 'N1.P'; group = 'N1'; title = 'P'; why = @('AC-P'); kind = 'code'; writeSet = @('p.txt'); dependsOn = @(); estMinutes = 10; artifacts = @{ ticket = '.streams\tickets\N1.P.md'; grader = '.streams\graders\N1.P.ps1' } }
+            @{ id = 'N1.Q'; group = 'N1'; title = 'Q'; why = @('AC-Q'); kind = 'code'; writeSet = @('q.txt'); dependsOn = @(); estMinutes = 10; artifacts = @{ ticket = '.streams\tickets\N1.Q.md'; grader = '.streams\graders\N1.Q.ps1' } }
+        ) }
+    $ncPf = Join-Path $Scratch 'ncplan.json'; $ncPlan | ConvertTo-Json -Depth 10 | Set-Content $ncPf
+    & "$S\Add-Tasks.ps1" -Repo $ncR -Role plan -Session plan-nc -File $ncPf | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $ncR '.streams\verdicts') -Force | Out-Null
+    foreach ($ncId in 'N1.P', 'N1.Q') {
+        & "$S\Claim-Task.ps1" -Repo $ncR -Role build -Session "build-$ncId" -Task $ncId | Out-Null
+        Set-Content (Join-Path $ncR ".streams\verdicts\$ncId.tests.md") "# $ncId test record`n`nNo code change; patch is empty by design."
+        & "$S\Update-Task.ps1" -Repo $ncR -Task $ncId -Role build -Session "build-$ncId" -To built -Release -Artifacts @{ patch = ".streams\verdicts\$ncId.tests.md" } | Out-Null
+    }
+    & "$S\Enter-Integrator.ps1" -Repo $ncR -Session integ-nc | Out-Null
+    $ncHead = git -C $ncR rev-parse HEAD
+    $ncI1 = @(& "$S\Integrate-Patch.ps1" -Repo $ncR -Session integ-nc -Task N1.P)
+    $ncI2 = @(& "$S\Integrate-Patch.ps1" -Repo $ncR -Session integ-nc -Task N1.Q)
+    Case 'NO-CODE-CHANGE: a patch with no file sections is graded on main; green integrates with no commit, red bounces, never REBASE' ($ncI1[-1] -eq 'INTEGRATED N1.P (no code change)' -and (T $ncR 'N1.P').state -eq 'integrated' -and (git -C $ncR rev-parse HEAD) -eq $ncHead -and $ncI2[-1] -like 'BOUNCED N1.Q*' -and (T $ncR 'N1.Q').state -eq 'ticketed' -and -not (@($ncI1 + $ncI2) -match '^REBASE')) (($ncI1 -join ' | ') + ' :: ' + ($ncI2 -join ' | '))
 
     # ---- A runner whose pwsh.exe an update replaced reports the renamed image ('<hex>.rbf') as its ProcessName but
     # still runs: it must stay live, or the watchdog breaks its units' claims (kit item IN-20261023121821-8738).
@@ -1640,6 +1692,37 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
         (Test-PwshProcess ([pscustomobject]@{ ProcessName = 'node'; Path = 'C:\Program Files\nodejs\node.exe' })),
         (Test-PwshProcess ([pscustomobject]@{ ProcessName = '2ae27b44.rbf'; Path = '' }))) -join ','")
     Case 'a runner pwsh replaced by an update (renamed .rbf image) still counts as pwsh; other processes do not' ($pwOut[-1] -eq 'True,True,False,False') ($pwOut -join ' | ')
+    # ---- A nightly Tier 2 that YIELDED and never ran again goes to the owner queue once, by 07:00 local (kit item
+    # IN-20261025145313-3448).
+    $nyRepo = Join-Path $Scratch 'nightly-yield'
+    New-Item -ItemType Directory -Path (Join-Path $nyRepo '.streams\logs'), (Join-Path $nyRepo '.streams\owner'), (Join-Path $nyRepo '.streams\suites\runs') -Force | Out-Null
+    $nyLog = Join-Path $nyRepo '.streams\logs\suite-nightly.txt'
+    [IO.File]::WriteAllText($nyLog, "2026-10-19T01:00:02 RUN-STARTED run-E1-1 snapshot x`n2026-10-20T01:00:02 YIELDED integrator lock held by integ-x; inbox item filed`n")
+    $nyScript = Join-Path $Scratch 'nightly-yield.ps1'
+    [IO.File]::WriteAllText($nyScript, @"
+. '$S\lib\Streams.ps1'
+`$P = Get-StreamPaths '$nyRepo'
+Add-NightlyYieldNotice `$P ([datetime]'2026-10-20T06:59:00')
+Add-NightlyYieldNotice `$P ([datetime]'2026-10-20T07:05:00')
+Add-NightlyYieldNotice `$P ([datetime]'2026-10-20T09:00:00')
+"@)
+    $nyOut = @(pwsh -NoProfile -File $nyScript)
+    $nyQ = Join-Path $nyRepo '.streams\owner\questions.md'
+    $nyQText = if (Test-Path $nyQ) { [IO.File]::ReadAllText($nyQ) } else { '' }
+    Case 'a nightly that yielded is queued for the owner at 07:00, not before, and only once' ($nyOut.Count -eq 3 -and $nyOut[0] -match 'not due' -and $nyOut[1] -eq 'NIGHTLY-YIELDED 2026-10-20 queued' -and $nyOut[2] -match 'already queued' -and ([regex]::Matches($nyQText, 'NIGHTLY-YIELDED 2026-10-20')).Count -eq 1) (($nyOut -join ' | ') + ' / ' + $nyQText)
+    [IO.File]::AppendAllText($nyLog, "2026-10-21T01:00:02 YIELDED integrator lock held by integ-x; inbox item filed`n")
+    $nyAt = [datetime]::SpecifyKind([datetime]'2026-10-21T01:30:00', [DateTimeKind]::Local).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    [IO.File]::WriteAllText((Join-Path $nyRepo '.streams\suites\runs\run-E1-2.json'), "{ `"id`": `"run-E1-2`", `"startedAt`": `"$nyAt`" }")
+    [IO.File]::WriteAllText($nyScript, @"
+. '$S\lib\Streams.ps1'
+`$P = Get-StreamPaths '$nyRepo'
+Add-NightlyYieldNotice `$P ([datetime]'2026-10-21T08:00:00')
+[IO.File]::AppendAllText('$nyLog', "2026-10-22T01:00:02 RUN-STARTED run-E1-3 snapshot x``n")
+Add-NightlyYieldNotice `$P ([datetime]'2026-10-22T08:00:00')
+"@)
+    $nyOut2 = @(pwsh -NoProfile -File $nyScript)
+    $nyQText2 = [IO.File]::ReadAllText($nyQ)
+    Case 'a yield followed by a run record, or a nightly that ran, is not queued' ($nyOut2.Count -eq 2 -and $nyOut2[0] -match 'followed by run-E1-2' -and $nyOut2[1] -eq 'last nightly did not yield' -and $nyQText2 -notmatch 'NIGHTLY-YIELDED 2026-10-21') (($nyOut2 -join ' | ') + ' / ' + $nyQText2)
 } catch {
     "FAIL harness: $_ at $($_.InvocationInfo.PositionMessage)`n$($_.ScriptStackTrace)"; $fails++
 } finally {

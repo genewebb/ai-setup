@@ -44,6 +44,9 @@ $doc = Read-Tasks $P
 if (-not $Group) { $Group = Get-FocusGroup $doc }
 if (-not $Group) { 'NO-FOCUS every group is closed'; exit 0 }
 $defPath = Join-Path $P.Suites "$Group.run.json"
+# A group activated before activation wrote run definitions gets one now (kit item IN-20261025141723-5621).
+$rdSrc = Initialize-GroupRunDefinition $P $Group
+if ($rdSrc -and $rdSrc -notlike '!*') { Add-Decision $P $Session "RUN-DEFINITION $Group copied from $rdSrc"; "RUN-DEFINITION $Group from $rdSrc" }
 $def = Read-JsonFile $defPath
 if (-not $def) { "NO-RUN-DEFINITION $defPath (the integrator writes it once per group, stream-integrate step B)"; exit 2 }
 

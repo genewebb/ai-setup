@@ -239,6 +239,16 @@ function Get-QuietSetting([string] $Name, [double] $Default) {
     $v = [Environment]::GetEnvironmentVariable($Name)
     if ($v -and ($v -as [double]) -ne $null) { [double]$v } else { $Default }
 }
+# An idle Visual Studio Test Explorer vstest.console.exe (parent DevHub.exe, 4 s CPU in all) held Playwright.Perf from
+# 09:02 at host CPU 0-6% (kit item IN-20261025141724-a801, F7). A vstest.console.exe or testhost under a VS host
+# (devenv.exe, DevHub.exe, ServiceHub.*.exe among its ancestors) is load only on first sight or when its CPU time grew
+# more than STREAM_QUIET_PROC_CPU_SECONDS (0.5) since the last sample. $true = idle, not load.
+function Test-IdleIdeTestProcess([string] $Name, [string[]] $Ancestors, $CpuNow, $CpuBefore) {
+    if ($Name -notmatch '^(testhost(\.x86)?|vstest\.console)\.exe$') { return $false }
+    if (-not @($Ancestors | Where-Object { $_ -match '^(devenv|DevHub|ServiceHub\..+)\.exe$' }).Count) { return $false }
+    if ($null -eq $CpuBefore -or $null -eq $CpuNow) { return $false }
+    ([double]$CpuNow - [double]$CpuBefore) -le (Get-QuietSetting 'STREAM_QUIET_PROC_CPU_SECONDS' 0.5)
+}
 # One sample: @{ cpu = <percent>; busy = @(<why>, ...) }.
 function Get-HostLoadSample($P) {
     $probe = $env:STREAM_QUIET_PROBE_FILE
@@ -252,14 +262,30 @@ function Get-HostLoadSample($P) {
     $mine = @{}; $id = $PID
     # This process and its ancestors are never "another" test process.
     for ($i = 0; $id -and $i -lt 12; $i++) { $mine[[int]$id] = $true; $pp = Get-CimInstance Win32_Process -Filter "ProcessId=$id" -ErrorAction SilentlyContinue; $id = if ($pp) { [int]$pp.ParentProcessId } else { 0 } }
-    foreach ($p in @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)) {
+    $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+    $byPid = @{}; foreach ($p in $all) { $byPid[[int]$p.ProcessId] = $p }
+    if (-not (Test-Path variable:script:QuietProcCpu)) { $script:QuietProcCpu = @{} }
+    $seen = @{}
+    foreach ($p in $all) {
         if ($mine.ContainsKey([int]$p.ProcessId)) { continue }
         $n = [string]$p.Name; $c = [string]$p.CommandLine
         $hit = ($n -match '^testhost(\.x86)?\.exe$') -or ($n -match '^vstest\.console\.exe$') -or
                ($n -eq 'dotnet.exe' -and $c -match '(?i)\s(test|vstest)(\s|$)') -or
                ($n -eq 'node.exe' -and $c -match '(?i)playwright' -and $c -match '(?i)\stest(\s|$)')
-        if ($hit) { $busy.Add("$n pid $($p.ProcessId)") }
+        if (-not $hit) { continue }
+        if ($n -match '^(testhost(\.x86)?|vstest\.console)\.exe$') {
+            # Key by pid and start time, so a reused pid is a first sight.
+            $key = "$($p.ProcessId)|$($p.CreationDate)"
+            $cpuNow = ([double]$p.KernelModeTime + [double]$p.UserModeTime) / 1e7
+            $anc = [Collections.Generic.List[string]]::new(); $pp = [int]$p.ParentProcessId
+            for ($i = 0; $pp -and $i -lt 6 -and $byPid.ContainsKey($pp); $i++) { $q = $byPid[$pp]; $anc.Add([string]$q.Name); $pp = [int]$q.ParentProcessId }
+            $before = if ($script:QuietProcCpu.ContainsKey($key)) { $script:QuietProcCpu[$key] } else { $null }
+            $script:QuietProcCpu[$key] = $cpuNow; $seen[$key] = $true
+            if (Test-IdleIdeTestProcess $n @($anc) $cpuNow $before) { continue }
+        }
+        $busy.Add("$n pid $($p.ProcessId)")
     }
+    foreach ($k in @($script:QuietProcCpu.Keys)) { if (-not $seen.ContainsKey($k)) { $script:QuietProcCpu.Remove($k) } }
     $cpu = 0
     try { $cpu = [double](Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'" -ErrorAction Stop).PercentProcessorTime } catch { $cpu = 0 }
     @{ cpu = $cpu; busy = @($busy) }

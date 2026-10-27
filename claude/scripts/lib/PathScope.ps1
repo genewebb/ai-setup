@@ -147,7 +147,41 @@ function Test-ContainerCommand([string] $Masked, [int] $Index) {
     $rest = @($words | Select-Object -Skip ($i + 1))
     if ($words[$i] -match '^(?:.*[\\/])?(docker|podman|nerdctl)(\.exe)?$') { return [bool]($rest | Where-Object { $_ -match '^(run|exec)$' }) }
     if ($words[$i] -match '^(?:.*[\\/])?kubectl(\.exe)?$') { return [bool]($rest | Where-Object { $_ -eq 'exec' }) }
-    $false
+    # A shell function this command defines around docker run (run() { docker run ... "$@"; }; run -c 'sh /cmd.sh')
+    # runs its arguments in the container too (kit item IN-20261026165829-709d).
+    $words[$i] -in @(Get-ContainerWrappers $Masked)
+}
+
+# Names of the shell functions a command defines whose body runs a container (docker / podman / nerdctl run, exec or
+# create, kubectl exec): name() { docker run ...; }. $Masked is as in Test-ScriptOperand.
+function Get-ContainerWrappers([string] $Masked) {
+    foreach ($m in [regex]::Matches($Masked, '(?i)(?:^|[\s;&|(])([A-Za-z_][\w-]*)\s*\(\)\s*\{[^}]*?(?:\b(?:docker|podman|nerdctl)(?:\.exe)?\s[^}]*?\b(?:run|exec|create)\b|\bkubectl(?:\.exe)?\s[^}]*?\bexec\b)')) {
+        $m.Groups[1].Value
+    }
+}
+
+# True when a bare command segment (quoted strings already removed) runs a container: docker / podman / nerdctl run,
+# exec, create or cp (also compose run / exec), kubectl exec, or a call of a function from Get-ContainerWrappers.
+function Test-ContainerSegment([string] $Segment, [string[]] $Wrappers) {
+    if ($Segment -match '(?i)(?:^|[\s{(])(?:\S*[\\/])?(?:docker|podman|nerdctl)(?:\.exe)?\s+(?:\S+\s+)*?(?:run|exec|create|cp)(?=\s|$)') { return $true }
+    if ($Segment -match '(?i)(?:^|[\s{(])(?:\S*[\\/])?kubectl(?:\.exe)?\s+(?:\S+\s+)*?exec(?=\s|$)') { return $true }
+    $first = @($Segment -split '[\s{(]+' | Where-Object { $_ -and $_ -notmatch '^[A-Za-z_][A-Za-z0-9_]*=' }) | Select-Object -First 1
+    [bool]($first -and $first -in $Wrappers)
+}
+
+# The host-side tokens of a container segment's bare words. The container side of host:/path[:opts] (-v, --volume=,
+# docker cp name:/path) is dropped and its host side kept; any other POSIX-form word (--entrypoint /bin/sh, -w /app,
+# the command run in the container) names the container's file system and is dropped. Drive, UNC and home words stay.
+function Get-ContainerHostTokens([string[]] $Words) {
+    foreach ($w in $Words) {
+        if (-not $w) { continue }
+        if ($w -match '^(?<pre>--?[A-Za-z][\w-]*=)?(?<host>(?:[A-Za-z]:)?[^:]*):(?<ctr>/.*)$') {
+            if ($Matches['host']) { $Matches['host'] }
+            continue
+        }
+        if ($w -match '^/') { continue }
+        $w
+    }
 }
 # True when $Before (the command text up to a value) ends in an assignment to PATH: bash PATH= / export PATH= or
 # PowerShell $env:PATH = / +=. Only PATH itself: another variable's value may be the target a later command deletes.
@@ -156,10 +190,14 @@ function Test-PathAssignment([string] $Before) {
 }
 
 # Candidate path tokens of a shell command: quoted strings first, then bare tokens split on shell separators.
-function Get-CommandPathTokens([string] $cmd) {
+# -Posix (the Bash tool): a double-quoted string ends only at an unescaped quote, as bash reads it. '\"' inside one
+# split the sed script "s/^.*-c\", '//; s/'..." so its fragment '//; s/' read as a root target and held a builder on a
+# prompt nobody could answer (kit item IN-20261025234510-db78). PowerShell keeps '\' literal ("C:\x\" ends there).
+function Get-CommandPathTokens([string] $cmd, [switch] $Posix) {
     $tokens = New-Object System.Collections.Generic.List[string]
-    $quoted = [regex]::Matches($cmd, '"([^"]*)"|''([^'']*)''')
-    $masked = [regex]::Replace($cmd, '"[^"]*"|''[^'']*''', { param($q) 'Q' * $q.Length })
+    $qRx    = if ($Posix) { '"((?:[^"\\]|\\.)*)"|''([^'']*)''' } else { '"([^"]*)"|''([^'']*)''' }
+    $quoted = [regex]::Matches($cmd, $qRx)
+    $masked = [regex]::Replace($cmd, $qRx, { param($q) 'Q' * $q.Length })
     foreach ($m in $quoted) {
         if (Test-ScriptOperand $masked $m.Index) { continue }
         # The value assigned to PATH (PATH="/c/a:/c/b", export PATH='...', $env:PATH = '...') is a search list, not
@@ -176,7 +214,11 @@ function Get-CommandPathTokens([string] $cmd) {
         # POSIX-form one is no absolute path; it stalled a builder on 2026-10-23 (kit item IN-20261023212118-f23c).
         # A drive, UNC or home value is still checked, and so is a literal that leads ('/c/x' + $y).
         if ($v -match '^/' -and $masked.Substring(0, $m.Index) -match '\+=?\s*$') { continue }
-        if ($v) { $tokens.Add($v) }
+        $isScript    = $v -match '\s' -and (Test-NestedCommandOperand $masked $m.Index)
+        $inContainer = $isScript -and (Test-ContainerCommand $masked $m.Index) -and -not (Test-DestructiveCommand $v)
+        # A container script that starts with a container path (sh -c '/opt/mssql-tools18/bin/sqlcmd ...') is no host
+        # path as a whole either: it held Builder 2 on a prompt on 2026-10-26 (kit item IN-20261026174134-8d0e).
+        if ($v -and -not ($inContainer -and $v -match '^/')) { $tokens.Add($v) }
         # A quoted string with whitespace may be a nested command (pwsh -Command "...", bash -c '...'): its own tokens
         # are checked too, since the whole string reads as no path and would hide an outside one (IN-20261018050026-e429).
         # Only a launcher's script recurses: quoted prose ("-Value 'see bin/<config>/<tfm>'") split on <> into a bare
@@ -185,29 +227,35 @@ function Get-CommandPathTokens([string] $cmd) {
         # dropped while the script deletes nothing: 'mkdir -p /w/a && cd /w/a' held a builder on a prompt nobody could
         # answer on 2026-10-24 (kit item IN-20261024162923-3943). A script that deletes ('rm -rf /w/a') is checked whole,
         # and a drive, UNC or home token in any container script is still checked.
-        if ($v -match '\s' -and (Test-NestedCommandOperand $masked $m.Index)) {
-            $inContainer = (Test-ContainerCommand $masked $m.Index) -and -not (Test-DestructiveCommand $v)
-            foreach ($i in (Get-CommandPathTokens $v)) { if (-not ($inContainer -and $i -match '^/')) { $tokens.Add($i) } }
+        if ($isScript) {
+            foreach ($i in (Get-CommandPathTokens $v -Posix:$Posix)) { if (-not ($inContainer -and $i -match '^/')) { $tokens.Add($i) } }
         }
     }
-    $stripped = [regex]::Replace($cmd, '"[^"]*"|''[^'']*''', ' ')
+    $stripped = [regex]::Replace($cmd, $qRx, ' ')
     # cmd.exe-family tools take /x switches (cmd /c, mklink /J, robocopy /MIR, icacls /grant). Without
     # this, "/c" reads as the Git Bash drive root and every such segment prompts. Switches are dropped
     # only in segments that invoke one of these tools; "rm -rf /c" in any other segment still prompts.
     # taskkill /PID, tasklist /FI, sc query, net stop, schtasks /query, reg query, findstr /c: and the other Windows
     # tools below take the same /x switches; a builder's Monitor loop polling its grader by PID stopped on one.
     $cmdFamily = '(?i)(?:^|\s)(?:cmd|mklink|robocopy|xcopy|icacls|attrib|takeown|taskkill|tasklist|sc|net|schtasks|reg|findstr|wmic|where|forfiles|wevtutil|certutil|msiexec|dism|sfc|chkdsk|netsh|netstat|ipconfig|ping|tracert|nslookup|systeminfo|powercfg|bcdedit|shutdown)(?:\.exe)?(?=\s|$)'
-    $segments  = foreach ($s in ($stripped -split '[;|&\r\n]+')) {
+    # A bash line continuation ('\' at the end of a line) keeps one command on the next line: a docker run continued
+    # over lines is one segment, so its later -v words are read as its own.
+    $stripped  = $stripped -replace '\\\r?\n', ' '
+    $wrappers  = @(Get-ContainerWrappers $masked)
+    foreach ($s in ($stripped -split '[;|&\r\n]+')) {
         # Git Bash spells a switch //x so MSYS does not rewrite the slash; both forms go.
-        if ($s -match $cmdFamily) { [regex]::Replace($s, '(?<=^|\s)//?[A-Za-z?][A-Za-z0-9]{0,5}(?::\S*)?(?=\s|$)', ' ') } else { $s }
+        if ($s -match $cmdFamily) { $s = [regex]::Replace($s, '(?<=^|\s)//?[A-Za-z?][A-Za-z0-9]{0,5}(?::\S*)?(?=\s|$)', ' ') }
+        $words = @($s -split '[\s;|&()<>]+' | Where-Object { $_ })
+        # A container command's own words name the container's paths (kit item IN-20261026165829-709d).
+        if (Test-ContainerSegment $s $wrappers) { $words = @(Get-ContainerHostTokens $words) }
+        foreach ($t in $words) { if ($t) { $tokens.Add($t) } }
     }
-    foreach ($t in (($segments -join ' ; ') -split '[\s;|&()<>]+')) { if ($t) { $tokens.Add($t) } }
     , $tokens
 }
 
 # The first token that names a place outside the roots, or $null when every absolute token is inside. Relative tokens
 # are inside (the shell starts in a trusted working directory). Home-relative (~, $HOME, %USERPROFILE%), UNC shares,
-# drive roots and other POSIX absolutes (/etc, /q/...) are outside; /tmp and /dev/null are inside.
+# drive roots and other POSIX absolutes (/etc, /q/...) are outside; /tmp and the /dev streams are inside.
 function Find-OutsideScopeToken($Tokens, $Roots) {
     foreach ($t in $Tokens) {
         # example-path: a path must start the token, or follow an option separator (--path=C:\x, -LiteralPath:C:\x).
@@ -225,7 +273,8 @@ function Find-OutsideScopeToken($Tokens, $Roots) {
         if ($p -match '^(?:[^=:\s''",]*[=:])??(?<path>(?:[A-Za-z]:[\\/]|\\\\|/[A-Za-z]/|/|~|\$env:USERPROFILE|\$HOME|%USERPROFILE%|%HOMEPATH%).*)$') { $p = $Matches['path'] }
         else { continue }
 
-        if ($p -match '^(/dev/null|/dev/stdout|/dev/stderr)$') { continue }
+        # The standard streams are no files: pwsh -File /dev/stdin <<'EOF' (kit item IN-20261027020941-131c).
+        if ($p -match '^(/dev/null|/dev/stdin|/dev/stdout|/dev/stderr)$') { continue }
         # A UNC share needs a server name right after //: '// ' opens a comment line in a quoted value ("// x.txt ...`n
         # class ..."), which stalled an author on 2026-10-23 (kit item IN-20261023124711-6fbc). '//server/share' is checked.
         if ($p -match '^//\s') { continue }

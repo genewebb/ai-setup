@@ -313,7 +313,7 @@ function New-BashJson {
 $mcLib = @((Join-Path $PSScriptRoot '..\..\lib\MachineConfig.psm1'), (Join-Path $PSScriptRoot '..\..\..\lib\MachineConfig.psm1')) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 Import-Module $mcLib -Force -DisableNameChecking
 $rpW = (Get-AIPath ReposRoot).TrimEnd('\'); $rpF = $rpW -replace '\\', '/'; $rpM = '/' + $rpF.Substring(0, 1).ToLowerInvariant() + $rpF.Substring(2)
-$wtW = (Get-AIPath WorktreesRoot).TrimEnd('\'); $scW = (Get-AIPath ScratchRoot).TrimEnd('\'); $tmpW = [IO.Path]::GetTempPath().TrimEnd('\')
+$wtW = (Get-AIPath WorktreesRoot).TrimEnd('\'); $scW = (Get-AIPath ScratchRoot).TrimEnd('\'); $scF = $scW -replace '\\', '/'; $tmpW = [IO.Path]::GetTempPath().TrimEnd('\')
 $dpgSilent = @(
     "rm -rf $rpF/speedmerchants/bin",
     "cd $rpM/speedmerchants && rm -rf src/obj",
@@ -322,6 +322,23 @@ $dpgSilent = @(
     # while the script itself deletes nothing (kit item IN-20261024162923-3943).
     'rm -f srv.log; MSYS_NO_PATHCONV=1 docker run --rm $SDK sh -c ''mkdir -p /w/a && cd /w/a''',
     'rm -f srv.log; docker exec -i speedy-sql bash -lc "mkdir -p /var/opt/x && ls /var/opt/x"',
+    # A docker command's own arguments name the container's file system: --entrypoint /bin/sh, the container side of
+    # -v host:/cmd.sh:ro and of docker cp, a script run through a shell function that wraps docker run, and a docker
+    # run continued over lines with '\'. On 2026-10-26 Builder 3 sat on prompts for /bin/sh and /cmd.sh beside an
+    # in-scratch rm (kit item IN-20261026165829-709d). The host side of a volume is still checked.
+    "rm -f $scF/x/w1; docker run --rm --user 1654:1654 -v $scF/x/settings:/settings --entrypoint /bin/sh img:latest -c 'touch /settings/w1 && echo ok'",
+    "S=$scF/x; rm -rf `$S; mkdir -p `$S/settings`nrun() { docker run --rm --user 0 --entrypoint /bin/sh \`n -v `$S/settings:/settings -v $scF/cmd.sh:/cmd.sh:ro img:latest `"`$@`"; }`nrun -c 'sh /cmd.sh' >> `$L 2>&1`nrun -c 'stat -c `"%u:%g %n`" /settings /state' >> `$L 2>&1",
+    "rm -f x.log; docker cp sm-probe:/var/log/a.log $scF/a.log",
+    # A container script that STARTS with a container path ('/opt/mssql-tools18/bin/sqlcmd ...') read as one POSIX
+    # absolute beside an in-scratch rm on another line, and held Builder 2 on a prompt (kit item IN-20261026174134-8d0e).
+    "rm -rf /d/tmp/t/run5 && mkdir -p /d/tmp/t/run5`nsleep 1; until [ -f /d/tmp/t/run5/a.txt ]; do sleep 5; done; docker exec w-1 sh -c '/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P `"`$P`" -Q `"select 1`"' 2>&1 | head -24",
+    "rm -f x.log; cd /d/tmp; docker run -d --name p --network n -p 127.0.0.1::18443 alpine:3.20 nc -ll -p 18443 -e nc coordinator 8443 >/dev/null; P=`$(docker port p 18443/tcp | head -1 | sed 's/.*://'); curl -sk https://localhost:`$P/worker/claim; docker exec p sh -c 'echo | nc -w3 coordinator 8443 | wc -c'; docker rm -f p >/dev/null",
+    # A script piped through a here-doc (pwsh -File /dev/stdin <<'EOF') names a stream, not a file, beside an in-repo rm;
+    # it held Builder 2 on a prompt on 2026-10-26 (kit item IN-20261027020941-131c).
+    "cd /d/tmp/g; pwsh -NoProfile -File /dev/stdin <<'EOF'
+'ok'
+EOF
+rm -f /d/devops/repos/speedmerchants/.streams/logs/x.i2*; bash /dev/stdin < /dev/null",
     "Remove-Item -Recurse -Force $tmpW\claude\x\scratchpad\trx",
     'rm -rf /tmp/cx/out',
     'grep -n rm C:\Users\agenewe\.claude\memory\foo.md',
@@ -391,6 +408,22 @@ foreach ($c in $dpgSilent) {
         -Expect { param($o) $o.Trim() -eq '' }
 }
 
+# A Bash double-quoted string ends only at an unescaped quote: '\"' inside it split the sed script
+# "s/^.*-c\", '//; s/'\]..." so its fragment '//; s/' read as a root target and held a builder on a prompt nobody
+# could answer (kit item IN-20261025234510-db78). The PowerShell tool keeps '\' literal, so its '"C:\x\"' still ends there.
+$dpgEscQ = @(
+    'cd /d/tmp/claude/probe109; grep -m1 ''entrypoint: \["/bin/sh"'' /d/devops/worktrees/speedmerchants/G17.T109/compose.yaml | tr -d ''\r'' | sed -E "s/^.*-c\", ''//; s/''\]\s*\$//; s/\\\$\\\$/\$/g" > cmd.sh; tail -c 120 cmd.sh; echo; rm -f err.txt out.txt; MSYS_NO_PATHCONV=1 bash run.sh > out.txt 2>&1; cat out.txt; wc -l < err.txt; head -3 err.txt',
+    'rm -f a.txt; sed -E "s/a\"b//; s/c/d/" f > g'
+)
+foreach ($c in $dpgEscQ) {
+    Test-Hook -Name "dpg: silent | escaped quote: $($c.Substring(0, [Math]::Min(60, $c.Length)))" -ScriptPath $dpg -Json (New-BashJson $c) `
+        -Expect { param($o) $o.Trim() -eq '' }
+}
+Test-Hook -Name 'dpg: ask    | an outside path after an escaped-quote string still prompts (Bash)' -ScriptPath $dpg `
+    -Json (New-BashJson 'rm -f a.txt; sed -E "s/a\"b//" f; rm -rf /etc/x') -Expect { param($o) $o -match '"permissionDecision":"ask"' }
+Test-Hook -Name 'dpg: ask    | PowerShell tool: a trailing \ does not escape the quote' -ScriptPath $dpg `
+    -Json (New-BashJson 'Remove-Item "C:\ok\" ; Remove-Item -Recurse "/c/Windows/x"' -Tool PowerShell) -Expect { param($o) $o -match '"permissionDecision":"ask"' }
+
 $dpgAsk = @(
     'rm -rf C:\Users\agenewe\Documents\stuff',
     'cd /q/Work/Work && rm old.md',
@@ -407,6 +440,13 @@ $dpgAsk = @(
     'rm -f srv.log; mkdir -p /w/a',                      # host mkdir: cross-statement scan stays
     'rm -rf /w/a',
     'rm -f x.log; docker run --rm img sh -c ''rm -rf /w/a''',   # a container script that deletes keeps its prompt
+    'rm -f x.log; docker exec w sh -c ''/opt/x/run.sh; rm -rf /w/a''',   # also when it starts with a path (8d0e)
+    # Only the container side of a docker argument is skipped (IN-20261026165829-709d): the host side of a volume, a
+    # deleting script run through a docker-wrapping function, and a host rm beside docker still prompt.
+    'rm -f x; docker run --rm -v C:/Users/agenewe/Documents:/data img ls /data',
+    'rm -f x; docker run --rm -v /etc:/data img ls /data',
+    'rm -f x; run() { docker run --rm img "$@"; }; run sh -c ''rm -rf /w/a''',
+    'docker run --rm --entrypoint /bin/sh img -c true; rm -rf /bin/sh',
     'rm -rf /c',
     'Remove-Item -LiteralPath C:\devopslocal\repos\x\bin -Recurse',   # retired root: no longer trusted
     'cmd /c echo x; rm -rf /c',

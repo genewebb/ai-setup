@@ -11,6 +11,10 @@
 #   graders    : the run record's graders list: test 'grader:<task>', outcome by exit code.
 # outcome is passed, failed, skipped or not-measured (a perf leg the host never let run). A leg whose command failed but left no result file gets one row
 # 'leg:<name>' failed, so a crash before the first test is never read as green. Prints "RESULTS <run> passed N failed N skipped N".
+# Skipped tests ([Ignore], or a live test's Assert.Inconclusive: both NotExecuted in a trx) are never passes: when there are any it also
+# prints "NOT-RUN <run> N test(s) skipped, not passes: <leg> N, ..." (TestRunFindings-2026-10-25 F6, kit item IN-20261025152845-1d06).
+# A live proof whose record (<runDir>\proofs\<name>.json) reads failed or timeout is named on
+# "PROOF-FAILED <run> N live proof(s) failed, their tests not run: <name> (<variable>, <status>: <reason>); ..." (kit item IN-20261026151607-13e0).
 # -Step sweep reads the record's 'sweep' legs instead (a Tier 3 retest's whole-leg sweeps, Invoke-Retest.ps1
 # retestSweeps; kit item IN-20261020141232-7f92) into <run>.sweep.results.json, with no grader rows, so a sweep never
 # changes the retest's own results or outcome.
@@ -101,7 +105,10 @@ foreach ($leg in @($rec['legs'] | Where-Object { $_ -and $_['step'] -eq $Step })
                         $cands = @((Join-Path $pr "tests\$sf"), (Join-Path $pr $sf), $sf)
                         $file = ConvertTo-RepoRel $cands[1]
                         foreach ($cand in $cands) { if ($sf -and (Test-Path -LiteralPath (Join-Path $snap $cand))) { $file = ConvertTo-RepoRel $cand; break } }
-                        $rows.Add([ordered]@{ test = ((@($t) + [string]$sp['title']) -join ' > '); suite = $name; outcome = $outc; durationMs = $ms; file = $file; project = [string]$leg['project']; head = $rec['head'] })
+                        # pwProject is the Playwright project the test ran under (project is the leg's folder): a
+                        # retest of a teardown project's test needs it (Invoke-Retest.ps1 retestWholeFile, kit item
+                        # IN-20261026151817-80e7).
+                        $rows.Add([ordered]@{ test = ((@($t) + [string]$sp['title']) -join ' > '); suite = $name; outcome = $outc; durationMs = $ms; file = $file; project = [string]$leg['project']; pwProject = [string]$tt['projectName']; head = $rec['head'] })
                     }
                 }
                 foreach ($c in @($suite['suites'])) { if ($c) { & $walk $c $t } }
@@ -121,4 +128,17 @@ $outName = if ($Step -eq 'sweep') { "$Run.sweep.results.json" } else { "$Run.res
 Write-JsonFile (Join-Path $rd $outName) ([ordered]@{ run = $Run; group = $rec['group']; head = $rec['head']; tests = @($rows) })
 $c = @{ passed = 0; failed = 0; skipped = 0 }; foreach ($r in $rows) { $c[$r.outcome]++ }
 "RESULTS $Run$(if ($Step -eq 'sweep') { ' sweep' }) passed $($c.passed) failed $($c.failed) skipped $($c.skipped)$(if ($c['not-measured']) { " not-measured $($c['not-measured'])" })$(if ($c['not-run']) { " not-run $($c['not-run'])" })"
+$sk = @($rows | Where-Object { $_.outcome -eq 'skipped' } | Group-Object { $_.suite } | ForEach-Object { "$($_.Name) $($_.Count)" })
+if ($sk.Count) { "NOT-RUN $Run$(if ($Step -eq 'sweep') { ' sweep' }) $($c.skipped) test(s) skipped, not passes: $($sk -join ', ')" }
+# A live proof (setup step .streams\suites\Invoke-Tier2Proof.ps1, record <runDir>\proofs\<name>.json) that failed or
+# timed out leaves its tests Inconclusive: name each one, so the NOT-RUN count says why (kit item IN-20261026151607-13e0).
+$pdir = if ($Step -eq 'leg' -and $rec['runDir']) { Join-Path ([string]$rec['runDir']) 'proofs' } else { '' }
+if ($pdir -and (Test-Path -LiteralPath $pdir)) {
+    $pf = @(Get-ChildItem -LiteralPath $pdir -Filter '*.json' -File | Sort-Object Name | ForEach-Object {
+        $p = try { Read-JsonFile $_.FullName } catch { $null }
+        # A proof's own report may sit beside its record ('<name>.report.json'): only a record names its variable.
+        if ($p -and $p['name'] -and $p['variable'] -and [string]$p['status'] -in 'failed', 'timeout') { "$($p['name']) ($($p['variable']), $($p['status']): $($p['reason']))" }
+    })
+    if ($pf.Count) { "PROOF-FAILED $Run $($pf.Count) live proof(s) failed, their tests not run: $($pf -join '; ')" }
+}
 exit 0
