@@ -140,6 +140,29 @@ if ($drift.Count) {
 }
 $patch = $t.artifacts.patch
 if (-not [IO.Path]::IsPathRooted($patch)) { $patch = Join-Path $Repo $patch }
+# NO-CODE-CHANGE (kit item IN-20261026203916-9d38): a row built with no code change (its clause already true at HEAD)
+# hands off a patch with no file sections. git apply --check refuses such a file, the composition merge and the reverse
+# check refuse it too, so it REBASEd and looped (G17.T116 built and REBASEd twice). There is nothing to apply or commit:
+# the row's check/grader runs on main as it stands; green integrates it with no commit, red sends it back to ticketed.
+if ((Test-Path -LiteralPath $patch -PathType Leaf) -and -not @(Get-PatchPaths $patch).Count) {
+    $g = @(& "$PSScriptRoot\Invoke-Grader.ps1" -Repo $Repo -Task $t.id -Root $Repo -Label main -BeatSession $Session); $gcode = $LASTEXITCODE
+    $mainLog = Join-Path $P.Logs "$($t.id).grader.main.txt"
+    if ($gcode -eq 0) {
+        $u = @(& $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To integrated -Note 'no code change: the patch has no file sections (clause already true at HEAD); check/grader PASS on main in place, nothing applied or committed')
+        if ($LASTEXITCODE -ne 0) { throw "state write -To integrated refused (exit $LASTEXITCODE): $($u -join ' ')" }
+        Add-Decision $P $Session "$($t.id): no code change (patch has no file sections); graded on main in place, integrated with no apply or commit"
+        "INTEGRATED $($t.id) (no code change)"; exit 0
+    }
+    $envHit = @(@(Get-Content $mainLog -ErrorAction SilentlyContinue) + $g | Where-Object { "$_" -match $script:EnvFailurePattern } | Select-Object -First 1)
+    if ($gcode -in @(5, 8) -or $envHit.Count) {
+        & $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -Note "integrate: no-code-change row could not be graded on main (exit $gcode), task stays built for retry" | Out-Null
+        "RETRY $($t.id) (no code change, grader exit $gcode)"; exit 0
+    }
+    $fails = ($g | Where-Object { "$_" -like 'FAIL *' }) -join ' | '
+    & $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To ticketed -Note "integrate: no code change handed off, but its check/grader is RED on main (log $mainLog): $fails" | Out-Null
+    Add-Decision $P $Session "$($t.id): no-code-change row red on main; to ticketed"
+    "BOUNCED $($t.id) (no code change, red on main)"; exit 0
+}
 # A write to main and a main-tree grader build must exclude each other. Without this an author's RED run compiled a
 # tree that was being rewritten under it and reported a phantom CS1061 for a member HEAD declares (kit item
 # IN-20260929183913-7850). The lock is released before the grader, which takes it itself.

@@ -494,6 +494,37 @@ foreach ($path in @($mine.Keys | Sort-Object)) {
     $changed = @(& git -C $path status --porcelain 2>$null | Where-Object { $_ }).Count
     $why = "OUTSIDE-ROOT $path ($mb MB, $binMB MB of it build output, $changed changed file(s), last written $quiet min ago) is registered to this repo and no task records it, so no reaper rule reaches it; the drive is $band at $freeMB MB free against $needMB MB needed"
     if ($changed) { $why += "; those changes exist nowhere else unless a patch already carries them, so export before anybody deletes this tree" }
+    # A SCRATCH tree ({WorktreesRoot}\<repo>-scratch\<task>-<purpose>, lib Get-StreamScratchRoot's note) is laid down by
+    # hand for one probe, RED run or refresh check and recorded by no task, so the report above was all it ever got: on
+    # 2026-10-25 ten such trees, 2 to 5 days old and 8 of them dirty, had to be exported and removed by the owner (kit
+    # item IN-20261025140859-22ee). The scratch folder rule applies to it instead: once nothing in it has been written for
+    # StreamScratchKeepHours, no live session names it and no process runs out of it, its changes are saved as a patch
+    # under .streams\salvage\scratch and the tree is removed. A save that fails keeps the tree.
+    if ((Split-Path $path) -eq "$((Get-StreamWorktreeRoot $Repo).ToLowerInvariant().TrimEnd('\'))-scratch" -and $quiet -ge ($script:StreamScratchKeepHours * 60)) {
+        $owner = Get-LiveTreeOwner $path
+        if ($owner) { $notes.Add("SCRATCH $path is quiet $quiet min, but $owner, so it is kept"); continue }
+        $procs = @(Get-TreeProcesses $path)
+        if ($procs.Count) { $notes.Add("SCRATCH $path is quiet $quiet min, but $($procs.Count) process(es) run out of it ($(@($procs | ForEach-Object { "pid $($_.ProcessId) $($_.Name)" }) -join ', ')), so it is kept"); continue }
+        $saved = ''
+        if ($changed) {
+            $salDir = Join-Path $P.Root 'salvage\scratch'
+            New-Item -ItemType Directory -Path $salDir -Force | Out-Null
+            $salFile = Join-Path $salDir ("{0}-{1}.patch" -f (Split-Path $path -Leaf), (Get-Date).ToUniversalTime().ToString('yyyyMMddHHmmss'))
+            # Untracked files are part of the work, so they are staged first; --output keeps CR bytes a captured stdout drops.
+            & git -C $path add -A 2>$null | Out-Null
+            $addExit = $LASTEXITCODE
+            & git -C $path diff --cached --binary HEAD --output=$salFile 2>$null | Out-Null
+            $diffExit = $LASTEXITCODE
+            if ($addExit -ne 0 -or $diffExit -ne 0 -or -not (Test-Path -LiteralPath $salFile) -or (Get-Item -LiteralPath $salFile).Length -eq 0) {
+                $notes.Add("$why; SCRATCH save failed (git add exit $addExit, diff exit $diffExit), so the tree is kept for a person to export")
+                continue
+            }
+            $saved = "; its $changed changed file(s) were saved to $salFile"
+        }
+        $out = & $remove -Repo $Repo -Session $Session -Path $path -Label 'scratch' -Reason "watchdog: scratch tree untouched $quiet min, no live owner$saved"
+        $acts.Add("REAPED-SCRATCH $path (quiet $quiet min$saved): $out")
+        continue
+    }
     if ($band -in @('ok', 'unknown')) { $notes.Add("$why, and nothing is deleted while the drive is not under pressure"); continue }
     if ($binMB -lt 1) { $notes.Add("$why, and it holds no build output to prune"); continue }
     $owner = Get-LiveTreeOwner $path

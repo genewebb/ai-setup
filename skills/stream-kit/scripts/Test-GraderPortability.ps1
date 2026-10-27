@@ -21,6 +21,8 @@
 #   FLAG UNTRIMMED-TESTNAME <file>:<line> splits a trx testName on '(' without trimming: MSTest writes a DataRow
 #                                   result as 'MyTest ("arg")', so the name keeps a trailing space and a test that ran
 #                                   reads as "did not run" (kit item IN-20260930183248-206d).
+#   FLAG RENDER-STAMP <file>:<line> runs reqtools render but never masks its 'Source repository' HEAD stamp, so a
+#                                   compare with the committed view passes in the worktree and fails on main.
 #   FLAG PARSE-ERROR <file>:<line>  the file does not parse, so it can never print a verdict. Checked FIRST and
 #                                   never waivable: an unparseable grader used to print PORTABLE (kit item
 #                                   IN-20260929170537-8760), and it reads as RED everywhere because it dies
@@ -89,6 +91,7 @@ foreach ($f in $files) {
     $n = 0
     $rootedVars = @{}
     $body = @([IO.File]::ReadAllLines($f))
+    $whole = $body -join "`n"
     foreach ($l in [IO.File]::ReadLines($f)) {
         $n++
         if ($l -match '^\s*#') { continue }
@@ -127,6 +130,11 @@ foreach ($f in $files) {
         # and passed reads as "did not run". 65 graders carried the untrimmed form on 2026-09-30 (kit item
         # IN-20260930183248-206d). Trim the name, or match by prefix.
         if ($l -match 'testName\s*-split' -and $l -notmatch '\.Trim(End)?\(\)') { $flags.Add("UNTRIMMED-TESTNAME ${f}:$n") }
+        # reqtools render stamps 'Source repository: `<HEAD 12>[ (dirty)]`' into the view (reqtools.py git_provenance).
+        # The worktree renders at its base HEAD, main at a later one, so a whole-text compare of a fresh render with
+        # the committed .md passes in the worktree and fails on main on identical content (G21.T097 A8b, G23.T081,
+        # G25.T022, G24.T072; kit item IN-20261027041932-62df). Mask that token on both sides before comparing.
+        if ($whole -match 'reqtools' -and $whole -notmatch 'Source repository' -and ($l -match 'reqtools\S*\s+render\b' -or $l -match '\$\w+\s+render\b')) { $flags.Add("RENDER-STAMP ${f}:$n") }
     }
     # A rooted literal assigned to a variable only matters when a path call uses that variable. G4.T063's -Dir
     # default fed a Join-Path; G2.T19's expected buildDownloadDirectory value feeds nothing.

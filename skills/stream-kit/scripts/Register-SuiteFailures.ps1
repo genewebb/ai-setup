@@ -139,6 +139,7 @@ foreach ($slot in $fixByFile.Keys) {
 $summary = "ATTRIBUTED $label fix $(@($failures | Where-Object { $_.disposition -eq 'fix' }).Count) later $(@($failures | Where-Object { $_.disposition -eq 'later' }).Count) unowned $($unowned.Count) flaky $flaky$(if ($exempt.Count -or @($failures | Where-Object { $_.disposition -eq 'exempt' }).Count) { " exempt $(@($failures | Where-Object { $_.disposition -eq 'exempt' }).Count)" })"
 if ($DryRun) { "DRY-RUN $summary"; exit 0 }
 
+$joined = [System.Collections.Generic.List[string]]::new()
 if ($fixTasks.Count) {
     $ff = Join-Path $rd "$label.fixes.json"
     Write-JsonFile $ff ([ordered]@{ groups = @(); tasks = @($fixTasks) })
@@ -148,7 +149,7 @@ if ($fixTasks.Count) {
     if ($code) { "ADD-FAILED exit $code (attribution not written; fix the refusal and run again)"; exit 3 }
     # A fix that joined an unlanded row is carried by that row.
     foreach ($l in $out) {
-        if ($l -match '^JOINED (\S+) into (\S+)') { $a = $Matches[1]; $b = $Matches[2]; foreach ($f in $failures) { if ($f.fixTask -eq $a) { $f.fixTask = $b } } }
+        if ($l -match '^JOINED (\S+) into (\S+)') { $a = $Matches[1]; $b = $Matches[2]; $joined.Add("$a into $b"); foreach ($f in $failures) { if ($f.fixTask -eq $a) { $f.fixTask = $b } } }
     }
 }
 foreach ($g in $later.Keys) {
@@ -158,11 +159,26 @@ foreach ($g in $later.Keys) {
     $add = @($later[$g] | Where-Object { $names -notcontains $_.test })
     Write-JsonFile $kp @(@($have) + $add)
 }
+# A later group that is already active never runs activation step 2 again (ALREADY-ACTIVE), so its known failures
+# would wait for ever: they get their fix rows now (Activate-Group.ps1 -KnownFailuresOnly; kit item IN-20261026142341-f136).
+foreach ($g in @($later.Keys)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $P.Plans "$g.activation.json"))) { continue }
+    $out = @(& "$PSScriptRoot\Activate-Group.ps1" -Repo $Repo -Session $Session -Group $g -KnownFailuresOnly)
+    $out | ForEach-Object { "  $_" }
+    foreach ($l in $out) {
+        if ($l -match '^KNOWN-FAILURE (\S+) (.+)$') { $kid = $Matches[1]; $kt = $Matches[2]; foreach ($f in $failures) { if ($f.disposition -eq 'later' -and $f.test -eq $kt) { $f.fixTask = $kid } } }
+    }
+    foreach ($l in $out) {
+        if ($l -match '^\s*JOINED (\S+) into (\S+)') { $a = $Matches[1]; $b = $Matches[2]; $joined.Add("$a into $b"); foreach ($f in $failures) { if ($f.fixTask -eq $a) { $f.fixTask = $b } } }
+    }
+}
 if ($unowned.Count) {
     $ask = "$(if ($Retest) { "Tier 3 retest $Retest sweep (base $Run)" } else { "Tier 2 run $Run" }) ($group) has $($unowned.Count) failure(s) no row owns: $(($unowned | Select-Object -First 10) -join '; '). Decide the earliest group whose feature each covers and add the fix task there (stream-integrate B.3)."
     & "$PSScriptRoot\Send-InboxItem.ps1" -Repo $Repo -To stream-plan -From $Session -Kind request -Ask $ask -Evidence $attrPath | Out-Null
 }
 Write-JsonFile $attrPath ([ordered]@{ run = $label; baseRun = $Run; group = $group; groups = @($covered); at = Get-Now; failures = @($failures) })
+# A joined fix is carried by an unlanded row: name it, or the failure seems to have no fix row (kit item IN-20261026141829-aeb7).
+if ($joined.Count) { $summary += " joined $($joined.Count) ($($joined -join ', '))" }
 Add-Decision $P $Session $summary
 $summary
 exit 0

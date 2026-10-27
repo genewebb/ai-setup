@@ -176,6 +176,7 @@ function Get-StreamPaths([string] $Repo) {
         Verdicts  = Join-Path $root 'verdicts'
         Owner     = Join-Path $root 'owner'
         Questions = Join-Path $root 'owner\questions.md'
+        Prompts   = Join-Path $root 'owner\permission-prompts.md'
         Gates     = Join-Path $root 'owner\gates.md'
         Worktrees = Join-Path $root 'owner\worktrees.md'
         Idle      = Join-Path $root 'idle'
@@ -316,6 +317,36 @@ function Get-PreStageOnlySessions($P) {
     , $only
 }
 function Get-Now { (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+# A nightly Tier 2 that YIELDED (Start-SuiteRun.ps1: the integrator lock was held) writes no run record, so nothing
+# showed that the night's run never happened (kit item IN-20261025145313-3448, TestRunFindings F1). When the last
+# stamped entry of logs\suite-nightly.txt (local 's' stamps) is YIELDED and no run record started after it by 07:00
+# local, one 'NIGHTLY-YIELDED <yield date>' line goes to the owner queue, once per yield date. The status tick calls
+# it. Returns a short note for the tick line.
+function Add-NightlyYieldNotice($P, $Now = $null) {
+    $nowAt = if ($null -eq $Now) { Get-Date } else { [datetime]$Now }
+    $log = Join-Path $P.Root 'logs\suite-nightly.txt'
+    if (-not (Test-Path -LiteralPath $log)) { return 'no nightly log' }
+    $last = $null
+    foreach ($l in [IO.File]::ReadAllLines($log)) { if ($l -match '^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d) (\S+)\s*(.*)$') { $last = @($Matches[1], $Matches[2], $Matches[3]) } }
+    if (-not $last -or $last[1] -ne 'YIELDED') { return 'last nightly did not yield' }
+    $at = [datetime]::ParseExact($last[0], 's', [Globalization.CultureInfo]::InvariantCulture)
+    $due = $at.Date.AddHours(7); if ($at -ge $due) { $due = $due.AddDays(1) }
+    if ($nowAt -lt $due) { return "yield $($last[0]) not due before $($due.ToString('yyyy-MM-dd HH:mm'))" }
+    $atUtc = [datetime]::SpecifyKind($at, [DateTimeKind]::Local).ToUniversalTime()
+    $runs = Join-Path $P.Suites 'runs'
+    foreach ($rf in @(if (Test-Path -LiteralPath $runs) { Get-ChildItem -LiteralPath $runs -File | Where-Object { $_.Name -match '^(run|retest)-.+-\d+\.json$' } })) {
+        try { $r = Get-Content -LiteralPath $rf.FullName -Raw | ConvertFrom-Json -AsHashtable } catch { continue }
+        if ($r -isnot [Collections.IDictionary] -or -not $r['startedAt']) { continue }
+        $sa = $r['startedAt']
+        try { $saUtc = if ($sa -is [datetime]) { $sa.ToUniversalTime() } else { [datetime]::Parse([string]$sa, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal) } } catch { continue }
+        if ($saUtc -gt $atUtc) { return "yield $($last[0]) followed by $($r['id'])" }
+    }
+    $tag = "NIGHTLY-YIELDED $($at.ToString('yyyy-MM-dd'))"
+    $qText = if (Test-Path -LiteralPath $P.Questions) { [IO.File]::ReadAllText($P.Questions) } else { '' }
+    if ($qText.Contains($tag)) { return "$tag already queued" }
+    Add-LineTo $P.Questions "- $(Format-LocalStamp) ${tag}: the nightly Tier 2 at $(Format-LocalStamp $at 'HH:mm') yielded ($($last[2].Trim())) and no run record started since, so no Tier 2 ran that night. Start one with Start-SuiteRun.ps1 -Reason manual, or let the integrator work its yield inbox item."
+    "$tag queued"
+}
 # Owner-facing display time (owner ruling 2026-10-18, kit item IN-20261019000559-20fa): local machine time with the
 # zone's initials, e.g. '2026-10-18 19:43 EDT'. Display only: stored stamps stay Get-Now's UTC Z form.
 function Format-LocalStamp($At = $null, [string] $Format = 'yyyy-MM-dd HH:mm') {

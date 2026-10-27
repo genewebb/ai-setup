@@ -40,7 +40,8 @@ try {
 
     # 2. Any path token outside the trusted roots.
     $roots    = Get-ScopeRoots $PSScriptRoot
-    $offender = Find-OutsideScopeToken (Get-CommandPathTokens $cmd) $roots
+    # Bash reads '\"' inside a double-quoted string as a quote, not its end; PowerShell does not.
+    $offender = Find-OutsideScopeToken (Get-CommandPathTokens $cmd -Posix:([string]$d.tool_name -eq 'Bash')) $roots
 
     if ($offender) {
         @{

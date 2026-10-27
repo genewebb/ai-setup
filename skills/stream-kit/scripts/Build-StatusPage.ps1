@@ -154,6 +154,10 @@ foreach ($s in $states) {
 $pendingQs = @($model.owner.escalations).Count
 $appliedQs = @($model.owner.questions).Count - $pendingQs
 W ('<a class="tile owner" href="#owner-questions"><b>' + $pendingQs + '</b><span>owner questions &middot; ' + $appliedQs + ' applied</span></a>')
+# OWNER PROMPTS (kit item IN-20261025224357-fa2a): runner units stuck at a permission prompt, answered in their tab. Kept
+# out of the questions above; the tile links to its own panel.
+$promptCount = @($model.owner.prompts).Count
+W ('<a class="tile owner" href="#owner-prompts"><b>' + $promptCount + '</b><span>owner prompts</span></a>')
 # The board's predicted finish is the other number the owner comes to this page for, so it sits in the tiles rather
 # than only inside the category table. The date is the headline; the distance from now is the label under it.
 $bfTile = $model.forecast
@@ -480,6 +484,19 @@ function WriteListPanel([string]$title, $items, [string]$Id = '') {
   W '</div>'
 }
 WriteListPanel 'Open questions' $qs 'owner-questions'
+# One row per prompt: the tab to answer it in, the session and the blocked command (the text after '<tool>:').
+$prs = @($model.owner.prompts)
+W ('<div class="panel" id="owner-prompts"><h2>Owner prompts (' + $prs.Count + ')</h2>')
+if ($prs.Count -eq 0) { W '<div class="empty">None.</div>' } else {
+  W '<div class="scroll"><table><thead><tr><th>Tab</th><th>Session</th><th>Blocked command</th></tr></thead><tbody>'
+  foreach ($x in @($prs | Select-Object -First 40)) {
+    $pm = [regex]::Match([string]$x, 'ESCALATE\s+(\S+)\s+\|\s+permission prompt in tab (.*?) : (.*?)(?:\s\|\s|$)')
+    if ($pm.Success) { W ('<tr><td class="mono">' + (E $pm.Groups[2].Value) + '</td><td class="id">' + (E $pm.Groups[1].Value) + '</td><td class="note">' + (E $pm.Groups[3].Value) + '</td></tr>') }
+    else { W ('<tr><td colspan="3" class="note">' + (E ([string]$x)) + '</td></tr>') }
+  }
+  W '</tbody></table></div>'
+}
+W '</div>'
 WriteListPanel 'Worktrees ready to remove' $wts
 W '</div></section>'
 

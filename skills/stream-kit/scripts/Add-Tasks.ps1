@@ -54,7 +54,7 @@ $report = [Collections.Generic.List[string]]::new()
                     continue
                 }
                 if ($Role -eq 'integrate' -and $o.state -ne 'done') {
-                    Add-History $o $Session $o.state "integration fix joined: $($t.title) [$(@($t.writeSet) -join ', ')]"
+                    Add-History $o $Session $o.state "integration fix joined: $($t.title) [$(@($t.writeSet) -join ', ')]$(if ($t['note']) { " -- $($t['note'])" })"
                     $report.Add("JOINED $($t.id) into $($o.id)")
                     $t = $null; break
                 }

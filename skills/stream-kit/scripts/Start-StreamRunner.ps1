@@ -62,7 +62,7 @@
 # cannot wait on a prompt). A -Live session still running -ResultGraceSeconds (default 120) after it wrote its result
 # file is ended too and logged RESULT-GRACE, an ok run: its /exit was swallowed, its work is done. Time a live session spends on an open permission prompt does not count: the stream-unit
 # mod writes <result>.waiting.json while one is open, and the runner then retitles its tab '<tab> - NEEDS YOU', rings
-# the bell, sets its state to 'waiting on owner' and files an ESCALATE line in owner\questions.md (re-written RESOLVED
+# the bell, sets its state to 'waiting on owner' and files an ESCALATE line in owner\permission-prompts.md, never owner\questions.md (re-written RESOLVED
 # once answered). The console modes are put back after every live unit, so a killed session never leaves the tab dead.
 #
 # Output: one result per launch under .streams\logs\runner\<runner>\ (<stamp>-<session>.json; -Stream adds .jsonl with
@@ -534,6 +534,9 @@ function Invoke-StatusTick([string] $Session) {
         if ($ar.Ok) { Write-AtomicText $dayFile $today }
         $archiveNote = Get-TickNote $ar
     }
+    # A nightly Tier 2 that yielded and was never started again goes to the owner queue by 07:00 (kit item
+    # IN-20261025145313-3448).
+    $nightlyNote = try { Add-NightlyYieldNotice $P } catch { "FAILED: $(("$_" -split "`n")[0])" }
     # A focus group with no activation record is activated (Activate-Group.ps1: stale tickets back to planned, known
     # failures to fix tasks, owner gates up front), which the coordinator used to do when it happened to notice.
     $actNotes = @(); $freshNotes = @()
@@ -574,7 +577,7 @@ function Invoke-StatusTick([string] $Session) {
         }
     }
     $script:ticks++
-    Write-TickLog "$(Get-TabNow) STATUS-TICK $Session $([int]$sw.Elapsed.TotalSeconds)s | $wdLine | $inboxLine | page: $(Get-TickNote $pg) | cost: $(Get-TickNote $cp) | priority: $(Get-TickNote $pr) | archive: $archiveNote | activation: $(if ($actNotes.Count) { $actNotes -join '; ' } else { 'none needed' }) | freshness: $(if ($freshNotes.Count) { $freshNotes -join '; ' } else { 'clean' }) | next tick at $(Get-TabAt $IntervalSeconds)"
+    Write-TickLog "$(Get-TabNow) STATUS-TICK $Session $([int]$sw.Elapsed.TotalSeconds)s | $wdLine | $inboxLine | page: $(Get-TickNote $pg) | cost: $(Get-TickNote $cp) | priority: $(Get-TickNote $pr) | archive: $archiveNote | activation: $(if ($actNotes.Count) { $actNotes -join '; ' } else { 'none needed' }) | freshness: $(if ($freshNotes.Count) { $freshNotes -join '; ' } else { 'clean' }) | nightly: $nightlyNote | next tick at $(Get-TabAt $IntervalSeconds)"
     $state.lastTick = Get-Now; $state.ticks = $script:ticks
     $state.status = "ticked $(Format-LocalStamp); next tick in $IntervalSeconds s$(if ($openItems.Count) { "; $($openItems.Count) open inbox item(s): launching a unit" })"
     Write-RunnerState $state
@@ -1191,7 +1194,8 @@ function Restore-RunnerTabTitle {
 }
 
 # A permission prompt opened in the unit: say so everywhere the owner looks without drawing over the dialog (the
-# session owns the screen): the tab title, the bell, the runner state and one ESCALATE line in the owner queue.
+# session owns the screen): the tab title, the bell, the runner state and one ESCALATE line in owner\permission-prompts.md. A prompt is not an owner question (owner
+# 2026-10-25, kit item IN-20261025224420-209f): the status page counts that file as 'owner prompts' and the planner shows them in chat.
 function Enter-OwnerWait($W, [string] $Session, [string] $Token) {
     $where = if ($Tab) { "tab $Tab" } else { "runner $runnerId" }
     $what = ("$($W.tool): $($W.reason)" -replace '\s+', ' ').Trim(' ', ':')
@@ -1199,7 +1203,7 @@ function Enter-OwnerWait($W, [string] $Session, [string] $Token) {
     $state.status = "waiting on owner since $(Get-Now): permission prompt ($what)"; Write-RunnerState $state
     Set-RunnerTabTitle "$(if ($Tab) { $Tab } else { $Session }) - NEEDS YOU" -Needs
     if (-not [Console]::IsOutputRedirected) { [Console]::Write([char]7) }
-    try { Add-LineTo $P.Questions "- ESCALATE $Session | permission prompt in $where : $what | the session waits on the owner; its unit timeout is paused | answer the prompt in that tab [$Token]" } catch { }
+    try { Add-LineTo $P.Prompts "- ESCALATE $Session | permission prompt in $where : $what | the session waits on the owner; its unit timeout is paused | answer the prompt in that tab [$Token]" } catch { }
 }
 
 # The prompt was answered (or the unit ended): title back, and the queue line re-written in place as RESOLVED, the way
@@ -1209,13 +1213,13 @@ function Exit-OwnerWait([string] $Session, [string] $Token, [string] $How) {
     Set-RunnerTabTitle $(if ($Tab) { $Tab } else { $Session }) -Clear
     try {
         Invoke-IoRetry {
-            if (-not (Test-Path -LiteralPath $P.Questions)) { return }
-            $lines = [IO.File]::ReadAllLines($P.Questions)
+            if (-not (Test-Path -LiteralPath $P.Prompts)) { return }
+            $lines = [IO.File]::ReadAllLines($P.Prompts)
             $hit = $false
             for ($i = 0; $i -lt $lines.Count; $i++) {
                 if ($lines[$i] -like "- ESCALATE *``[$Token``]") { $lines[$i] = "RESOLVED $($lines[$i]) ($How $(Format-LocalStamp))"; $hit = $true }
             }
-            if ($hit) { Write-AtomicText $P.Questions (($lines -join "`n") + "`n") }
+            if ($hit) { Write-AtomicText $P.Prompts (($lines -join "`n") + "`n") }
         }
     } catch { }
 }

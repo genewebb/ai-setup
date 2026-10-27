@@ -499,6 +499,21 @@ function Test-Escalation([string] $line) {
     if ($line -match '(?i)\bapplied default\b|\bdefault applied\b') { return $false }
     @($line -split '\s\|\s').Count -lt 4
 }
+# An OWNER PROMPT is not an owner question (owner request 2026-10-25, kit item IN-20261025224357-fa2a): Start-StreamRunner
+# -Live writes '- ESCALATE <session> | permission prompt in tab <Tab> : <tool>: <reason> | ...' while a unit sits at a
+# permission prompt, and 243 of them had piled into the questions count. They are answered in the runner's tab, not
+# in the queue, so they get their own number and panel and leave both the questions and the escalations. Since kit item
+# IN-20261025224420-209f the runner writes them to owner\permission-prompts.md; the lines already in questions.md are
+# history and count as neither.
+function Test-OwnerPrompt([string] $line) {
+    $line -cmatch '\bESCALATE\s+\S+\s+\|\s+permission prompt in tab '
+}
+function OwnerPrompts($lines) {
+    ,@(@($lines) | Where-Object { Test-OwnerPrompt $_ })
+}
+function OwnerQuestions($lines) {
+    ,@(@($lines) | Where-Object { -not (Test-OwnerPrompt $_) })
+}
 function Escalations($lines) {
     ,@(@($lines) | Where-Object { Test-Escalation $_ })
 }
@@ -1022,7 +1037,7 @@ $model = [ordered]@{
     disks = @($diskReport)
     # The page renders whatever this lists, in this order, so a bucket can never be added here and missed there.
     stateBuckets = @($StateBuckets)
-    owner = [ordered]@{ questions = Lines $P.Questions; escalations = Escalations (Lines $P.Questions); gates = Lines $P.Gates; worktrees = Worktrees $P.Worktrees
+    owner = [ordered]@{ questions = OwnerQuestions (Lines $P.Questions); escalations = Escalations (OwnerQuestions (Lines $P.Questions)); prompts = OwnerPrompts (Lines $P.Prompts); gates = Lines $P.Gates; worktrees = Worktrees $P.Worktrees
         uncommitted = @($doc.tasks | Where-Object { $_.state -in 'integrated', 'done' -and -not (Test-Retired $_) } | ForEach-Object { $_.id }) }
 }
 if ($Json) { $model | ConvertTo-Json -Depth 20; exit 0 }
@@ -1038,7 +1053,7 @@ function FinText($f) {
 # Sessions ride on the tasks line, not a line of their own: the terminal summary is six lines by contract.
 "tasks: " + (($StateBuckets | ForEach-Object { $s = $_; "$s $(@($all | Where-Object { (Bucket $_) -eq $s }).Count)" }) -join ', ') + " | sessions: " + (($sessions.Keys | ForEach-Object { "$_ $($sessions[$_].live) live ($($sessions[$_].working) working, $($sessions[$_].idle) idle$(if ($sessions[$_].quiet) { ", $($sessions[$_].quiet) quiet" })$(if ($_ -eq 'build') { ", $($claimable.count) claimable of $($claimable.ticketed) ticketed" }))" }) -join ', ') +
     $(if ($leftToPlan.known) { " | left to plan $($leftToPlan.total) of $($leftToPlan.clauses) clauses ($($leftToPlan.notInGroup) in no group)" } else { " | left to plan unknown: $($leftToPlan.reason)" })
-"owner: questions $(@($model.owner.questions).Count) ($(@($model.owner.escalations).Count) to answer, $(@($model.owner.questions).Count - @($model.owner.escalations).Count) applied defaults), gates $(@($model.owner.gates).Count), worktrees $(@($model.owner.worktrees).Count)"
+"owner: questions $(@($model.owner.questions).Count) ($(@($model.owner.escalations).Count) to answer, $(@($model.owner.questions).Count - @($model.owner.escalations).Count) applied defaults), prompts $(@($model.owner.prompts).Count), gates $(@($model.owner.gates).Count), worktrees $(@($model.owner.worktrees).Count)"
 "inbox: " + (($inbox.Keys | ForEach-Object { "$(($_ -replace '^stream-', '')) $($inbox[$_].open)" }) -join ', ')
 "flags: " + $(if ($flags.Count) { $flags -join '; ' } else { 'none' })
 "page: " + $(if (Test-Path (Join-Path $P.Root 'status-url.txt')) { (Get-Content (Join-Path $P.Root 'status-url.txt') -Raw).Trim() } else { 'not published yet' })

@@ -27,13 +27,18 @@
 #     expected order of work and the stacked base carries it into the builder's tree, while another row's commit into
 #     MY files is real staleness. Prints "FRESHNESS <G> stale <n> skipped <n>", writes no activation record, logs a
 #     decision line only when a row moved. It needs no activation record and never prints ALREADY-ACTIVE.
+#  -KnownFailuresOnly (kit item IN-20261026142341-f136): step 2 alone, for a group that is already active. A Tier 2 run
+#     of an earlier group files a later group's failure in known-failures.<G>.json, and an active group never reached
+#     step 2 again (ALREADY-ACTIVE), so run-G17-3's 21 G23 failures sat with no fix row. Register-SuiteFailures.ps1
+#     runs it for each such group. Prints KNOWN-FAILURE lines, then "KNOWN-FAILURES <G> fixes <n>".
 param(
     [Parameter(Mandatory)] [string] $Repo,
     [Parameter(Mandatory)] [string] $Session,
     [Parameter(Mandatory)] [string] $Group,
     [switch] $DryRun,
     [switch] $Force,
-    [switch] $FreshnessOnly
+    [switch] $FreshnessOnly,
+    [switch] $KnownFailuresOnly
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\lib\Streams.ps1"
@@ -44,7 +49,7 @@ $P = Get-StreamPaths $Repo
 $doc = Read-Tasks $P
 if (-not @($doc.groups | Where-Object { [string]$_.id -eq $Group }).Count) { "REFUSED unknown group $Group"; exit 2 }
 $actPath = Get-ActivationPath $P $Group
-if ((Test-Path -LiteralPath $actPath) -and -not $Force -and -not $FreshnessOnly) { "ALREADY-ACTIVE $Group ($actPath)"; exit 0 }
+if ((Test-Path -LiteralPath $actPath) -and -not $Force -and -not $FreshnessOnly -and -not $KnownFailuresOnly) { "ALREADY-ACTIVE $Group ($actPath)"; exit 0 }
 
 $set = Get-GroupSet $doc $Group
 $byId = @{}; foreach ($t in $doc.tasks) { $byId[[string]$t.id] = $t }
@@ -54,7 +59,7 @@ $head = (Invoke-Git $Repo @('rev-parse', 'HEAD') | Select-Object -Last 1).Trim()
 $stale = [Collections.Generic.List[object]]::new(); $skipped = [Collections.Generic.List[object]]::new()
 $edits = [Collections.Generic.List[object]]::new()
 $diffCache = @{}
-foreach ($t in @($doc.tasks | Where-Object { $_.state -eq 'ticketed' -and $set.Contains([string]$_.id) })) {
+foreach ($t in @($doc.tasks | Where-Object { -not $KnownFailuresOnly -and $_.state -eq 'ticketed' -and $set.Contains([string]$_.id) })) {
     $id = [string]$t.id
     $at = Get-TicketedAt $t
     if (-not $at) { "NO-TICKET-TIME $id (no history entry to ticketed; left as it is)"; $skipped.Add([ordered]@{ id = $id; why = 'no ticket time' }); continue }
@@ -90,8 +95,13 @@ foreach ($t in @($doc.tasks | Where-Object { $_.state -eq 'ticketed' -and $set.C
     $edits.Add([ordered]@{ task = $id; release = 'planned'; note = $note })
 }
 
+# A group with no Tier 2 run definition gets one copied from the newest other group's (lib\Activation.ps1
+# Initialize-GroupRunDefinition; kit item IN-20261025141723-5621), in both modes, so the nightly never meets NO-RUN-DEFINITION.
+function Write-RunDefinition { $src = Initialize-GroupRunDefinition $P $Group; if ($src -like '!*') { "RUN-DEFINITION-FAILED $Group $($src.Substring(1))" } elseif ($src) { Add-Decision $P $Session "RUN-DEFINITION $Group copied from $src"; "RUN-DEFINITION $Group from $src" } }
+
 if ($FreshnessOnly) {
     if ($DryRun) { "DRY-RUN FRESHNESS $Group stale $($stale.Count) skipped $($skipped.Count)"; exit 0 }
+    Write-RunDefinition
     if ($edits.Count) {
         $bf = Join-Path $P.Plans "$Group.freshness-revise.json"
         if (-not (Test-Path $P.Plans)) { New-Item -ItemType Directory -Path $P.Plans -Force | Out-Null }
@@ -124,6 +134,21 @@ foreach ($e in $kf) {
     $e['fixTask'] = $fid
     "KNOWN-FAILURE $fid $($e['test'])"
 }
+if ($KnownFailuresOnly) {
+    if ($DryRun) { "DRY-RUN KNOWN-FAILURES $Group fixes $($fixTasks.Count)"; exit 0 }
+    if ($fixTasks.Count) {
+        $ff = Join-Path $P.Plans "$Group.known-failure-fixes.json"
+        if (-not (Test-Path $P.Plans)) { New-Item -ItemType Directory -Path $P.Plans -Force | Out-Null }
+        Write-AtomicText $ff ([ordered]@{ groups = @(); tasks = @($fixTasks) } | ConvertTo-Json -Depth 6)
+        $out = @(& "$PSScriptRoot\Add-Tasks.ps1" -Repo $Repo -Role integrate -Session $Session -File $ff)
+        $out | ForEach-Object { "  $_" }
+        if ($LASTEXITCODE) { "ADD-FAILED exit $LASTEXITCODE (known failures kept for the next run)"; exit 3 }
+        Write-AtomicText $kfPath (ConvertTo-Json -InputObject @($kf) -Depth 6)
+        Add-Decision $P $Session "KNOWN-FAILURES $Group (already active): fix rows $(@($fixTasks | ForEach-Object { $_.id }) -join ', ')"
+    }
+    "KNOWN-FAILURES $Group fixes $($fixTasks.Count)"
+    exit 0
+}
 
 # ---- 3. owner gates ----
 $gateLines = [Collections.Generic.List[string]]::new()
@@ -137,6 +162,7 @@ foreach ($g in @($doc.tasks | Where-Object { [string]$_.group -eq $Group -and $_
 $m = Get-GroupMilestones $P $doc $Group
 "MILESTONES M1 $($m.M1) M2 $($m.M2) M3 $($m.M3)"
 if ($DryRun) { "DRY-RUN $Group stale $($stale.Count) skipped $($skipped.Count) gates $($gateLines.Count) fixes $($fixTasks.Count)"; exit 0 }
+Write-RunDefinition
 
 # ---- write ----
 if ($edits.Count) {

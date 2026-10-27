@@ -209,23 +209,32 @@ foreach ($suite in @($want | Where-Object { -not ([string]$_['test']).StartsWith
         # (7000); batch 1 keeps the leg's own log and folder, batch n uses leg.<name>.<n>.txt and <runDir>\<name>.<n>,
         # and every batch is one legs entry under the leg's name, so Export-SuiteResults reads them all.
         $max = if ($env:STREAM_RETEST_CMD_MAX) { [int]$env:STREAM_RETEST_CMD_MAX } else { 7000 }
+        # A test reported under a Playwright project the leg names in "retestWholeFile" (a teardown project such as
+        # fleet-stopping) cannot be re-run by --grep: the grep selects it alone, without the projects it depends on, so
+        # it ran with no preflight and no CLI credential (G17.T122). Such tests go in batches of their own that run their
+        # spec files with no --grep, so the project runs after its dependency chain (kit item IN-20261026151817-80e7).
+        $wholeProj = @(if ($ld -and $ld['retestWholeFile']) { @($ld['retestWholeFile']) | ForEach-Object { [string]$_ } })
         $items = @($suite.Group | ForEach-Object {
             $f = [string]$_['file']
-            [pscustomobject]@{ term = (ConvertTo-PlaywrightGrepTerm (([string]$_['test']) -split ' > ')[-1]); file = $(if ($f) { & $sq ([IO.Path]::GetRelativePath((Join-Path $snap $proj), (Join-Path $snap $f)).Replace('\', '/')) } else { '' }) }
+            $pw = if ($_.Contains('pwProject')) { [string]$_['pwProject'] } else { '' }
+            [pscustomobject]@{ term = (ConvertTo-PlaywrightGrepTerm (([string]$_['test']) -split ' > ')[-1]); file = $(if ($f) { & $sq ([IO.Path]::GetRelativePath((Join-Path $snap $proj), (Join-Path $snap $f)).Replace('\', '/')) } else { '' }); whole = [bool]($pw -and $wholeProj -contains $pw) }
         })
+        $items = @(@($items | Where-Object { -not $_.whole }) + @($items | Where-Object { $_.whole }))
         $cmdFor = {
             param($batch, [string] $bOut, [string] $bLeg)
-            $grep = (@($batch | ForEach-Object { $_.term }) | Select-Object -Unique) -join '|'
+            $whole = @($batch | Where-Object { $_.whole }).Count -gt 0
+            $grep = if ($whole) { '' } else { (@($batch | ForEach-Object { $_.term }) | Select-Object -Unique) -join '|' }
             $files = (@($batch | ForEach-Object { $_.file } | Where-Object { $_ } | Select-Object -Unique)) -join ' '
             $v = $vars.Clone(); $v['grep'] = $grep; $v['files'] = $files; $v['leg'] = $bLeg; $v['out'] = $bOut
             if ($ld -and $ld['retestCommand']) { $envPre + (Expand-SuiteCommand ([string]$ld['retestCommand']) $v) }
             # The reporter list is quoted: where npx resolves to npx.ps1, PowerShell reads a bare json,line as an array and
             # passes '--reporter=json line', and Playwright stops on "Cannot find module 'json line'" (run-G14-2; kit item
             # IN-20261016100941-a15f).
-            else { "$envPre`$env:PLAYWRIGHT_JSON_OUTPUT_NAME = $(& $sq (Join-Path $bOut 'results.json')); Set-Location -LiteralPath $(& $sq (Join-Path $snap $proj)); npx playwright test $files '--reporter=json,line' --grep $(& $sq $grep)" }
+            else { "$envPre`$env:PLAYWRIGHT_JSON_OUTPUT_NAME = $(& $sq (Join-Path $bOut 'results.json')); Set-Location -LiteralPath $(& $sq (Join-Path $snap $proj)); npx playwright test $files '--reporter=json,line'$(if ($grep) { " --grep $(& $sq $grep)" })" }
         }
         $batches = [Collections.Generic.List[object]]::new(); $cur = [Collections.Generic.List[object]]::new()
         foreach ($it in $items) {
+            if ($cur.Count -and $cur[0].whole -ne $it.whole) { $batches.Add(@($cur)); $cur = [Collections.Generic.List[object]]::new() }
             $cur.Add($it)
             if ($cur.Count -gt 1 -and (& $cmdFor $cur $out $name).Length -gt $max) { $cur.RemoveAt($cur.Count - 1); $batches.Add(@($cur)); $cur = [Collections.Generic.List[object]]::new(); $cur.Add($it) }
         }

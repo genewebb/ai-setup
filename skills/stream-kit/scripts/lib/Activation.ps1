@@ -101,3 +101,22 @@ function Test-AppendOnlyChange([string] $Repo, [string] $Since, [string] $Head, 
     for ($i = 0; $i -lt $old.Count; $i++) { if ([string]$new[$i] -cne [string]$old[$i]) { return $false } }
     $true
 }
+
+# The group's Tier 2 run definition (.streams\suites\<group>.run.json) is written when the group is activated, not at
+# its first Tier 2 run (kit item IN-20261025141723-5621, TestRunFindings-2026-10-25 F1: the 01:00 nightly read
+# NO-RUN-DEFINITION from 10-21 to 10-24 because nothing had written G15's or G17's). A missing one is copied from the
+# newest other group's definition with its group field set (the commands take {group}). Returns the source file name,
+# '' when the group has one or there is none to copy, or '!<message>' when the copy failed (the caller reports it).
+function Initialize-GroupRunDefinition($P, [string] $Group) {
+    $path = Join-Path $P.Suites "$Group.run.json"
+    if (Test-Path -LiteralPath $path) { return '' }
+    try {
+        $src = Get-ChildItem -LiteralPath $P.Suites -Filter '*.run.json' -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^[A-Za-z]+\d+\.run\.json$' } | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+        if (-not $src) { return '' }
+        $def = Get-Content -LiteralPath $src.FullName -Raw | ConvertFrom-Json
+        $def | Add-Member -NotePropertyName group -NotePropertyValue $Group -Force
+        Write-AtomicText $path ($def | ConvertTo-Json -Depth 20)
+        return $src.Name
+    } catch { return "!$($_.Exception.Message)" }
+}
