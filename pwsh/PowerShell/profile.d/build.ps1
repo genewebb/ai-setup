@@ -1335,8 +1335,8 @@ function dpmutate {
     }
 
     Write-Host "Building $ProjectName (and reference closure) [$Configuration]..." -ForegroundColor Yellow
-    dotnet build $projectPath -c $Configuration --nologo --verbosity minimal
-    if ($LASTEXITCODE -ne 0) { throw "dotnet build failed (exit $LASTEXITCODE)" }
+    Import-GeneModuleOnce "Gene.DevOpsTools"   # Invoke-GeneDotnetBuild: interactive NuGet sign-in retry
+    Invoke-GeneDotnetBuild $projectPath $Configuration
 
     Write-Host "Publishing $ProjectName [$Configuration]..." -ForegroundColor Yellow
     dotnet publish $projectPath -c $Configuration -o $outDir --no-build --nologo --verbosity minimal
@@ -1660,6 +1660,10 @@ function dpall {
     else {
         # Each job is its own pwsh process: no profile, no shared runspace state, and one product's
         # $ErrorActionPreference or working directory cannot leak into another's build.
+        # A job has no console, so a NuGet feed device-code sign-in would wait unseen: the scripts fail
+        # fast instead (-NoInteractiveRestore). Serial dpall signs in interactively on a failed publish.
+        $jobArgs = $packArgs.Clone()
+        $jobArgs.NoInteractiveRestore = $true
         $jobs = @{}
         foreach ($key in $selected) {
             $entry = $catalog[$key]
@@ -1690,7 +1694,7 @@ function dpall {
                         try { Set-Content -LiteralPath $LogPath -Value $lines -Encoding utf8 } catch { }
                     }
                     [pscustomobject]@{ Ok = $ok; Error = $err }
-                } -ArgumentList $entry.Script, $packArgs, $log
+                } -ArgumentList $entry.Script, $jobArgs, $log
             }
         }
 
