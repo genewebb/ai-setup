@@ -19,6 +19,26 @@ function Get-GeneBitsZipPath([string]$FileName) {
     return Join-Path $global:GeneBitsDir $FileName
 }
 
+# dotnet build with ONE interactive NuGet sign-in retry. The Azure Artifacts feed authenticates
+# through the credential provider; when its token has expired and the silent Windows sign-in fails,
+# a non-interactive restore cannot wait for the device code it prints (MSBuild kills the node,
+# MSB4166). On failure: `dotnet restore --interactive` in the foreground (open the URL, enter the
+# code, it waits), then the same build once more. A real compile error just fails twice.
+# The speed-merchants installer scripts do the same for publish (installer\Invoke-DotnetPublish.ps1).
+function Invoke-GeneDotnetBuild([string]$ProjectPath, [string]$Configuration) {
+    dotnet build $ProjectPath -c $Configuration --nologo --verbosity minimal
+    if ($LASTEXITCODE -eq 0) { return }
+
+    Write-Warning ("dotnet build failed (exit $LASTEXITCODE). Usual cause: the Azure Artifacts NuGet feed needs sign-in. " +
+                   "Running an INTERACTIVE restore - if a device code is shown, open the URL and enter it; this waits.")
+    dotnet restore $ProjectPath --interactive --nologo --verbosity minimal
+    if ($LASTEXITCODE -ne 0) { throw "Interactive dotnet restore failed (exit $LASTEXITCODE)" }
+
+    Write-Host "Restore OK - retrying build..." -ForegroundColor Yellow
+    dotnet build $ProjectPath -c $Configuration --nologo --verbosity minimal
+    if ($LASTEXITCODE -ne 0) { throw "dotnet build failed (exit $LASTEXITCODE) after the interactive restore retry" }
+}
+
 function Dev-SpeedMerchantsRestart {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Justification='Profile helper')]
     [CmdletBinding()]
@@ -135,8 +155,7 @@ function Dev-SpeedMerchantsRestart {
     }
 
     Write-Host "Building $ProjectName (and reference closure) [$Configuration]..." -ForegroundColor Yellow
-    dotnet build $projectPath -c $Configuration --nologo --verbosity minimal
-    if ($LASTEXITCODE -ne 0) { throw "dotnet build failed (exit $LASTEXITCODE)" }
+    Invoke-GeneDotnetBuild $projectPath $Configuration
 
     Write-Host "Publishing $ProjectName [$Configuration]..." -ForegroundColor Yellow
     dotnet publish $projectPath -c $Configuration -o $OutDir --no-build --nologo --verbosity minimal
@@ -372,8 +391,7 @@ function Dev-CrewChiefRestart {
     }
 
     Write-Host "Building $ProjectName (and reference closure) [$Configuration]..." -ForegroundColor Yellow
-    dotnet build $projectPath -c $Configuration --nologo --verbosity minimal
-    if ($LASTEXITCODE -ne 0) { throw "dotnet build failed (exit $LASTEXITCODE)" }
+    Invoke-GeneDotnetBuild $projectPath $Configuration
 
     Write-Host "Publishing $ProjectName [$Configuration]..." -ForegroundColor Yellow
     dotnet publish $projectPath -c $Configuration -o $outDir --no-build --nologo --verbosity minimal
@@ -635,8 +653,7 @@ function Dev-DataGenRestart {
     }
 
     Write-Host "Building $ProjectName (and reference closure) [$Configuration]..." -ForegroundColor Yellow
-    dotnet build $projectPath -c $Configuration --nologo --verbosity minimal
-    if ($LASTEXITCODE -ne 0) { throw "dotnet build failed (exit $LASTEXITCODE)" }
+    Invoke-GeneDotnetBuild $projectPath $Configuration
 
     Write-Host "Publishing $ProjectName [$Configuration]..." -ForegroundColor Yellow
     dotnet publish $projectPath -c $Configuration -o $outDir --no-build --nologo --verbosity minimal
@@ -714,4 +731,4 @@ function Dev-DataGenRestart {
 }
 
 Export-ModuleMember -Function `
-    Dev-SpeedMerchantsRestart, Dev-CrewChiefRestart, Dev-DataGenRestart
+    Dev-SpeedMerchantsRestart, Dev-CrewChiefRestart, Dev-DataGenRestart, Invoke-GeneDotnetBuild
