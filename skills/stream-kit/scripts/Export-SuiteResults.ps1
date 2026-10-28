@@ -104,7 +104,16 @@ function Get-CommandWords([string] $Command, [string] $From) {
 # from another run). dotnet: dotnet vstest /ListFullyQualifiedTests on the leg project's built assembly with the leg's own
 # --filter (a literal, or a $variable the command assigns a literal). playwright: playwright test --list with the leg's own
 # spec files, --grep, --grep-invert and --project. Returns @{ keys = test names (playwright 'name|project') ; error = '' }.
-function Get-DiscoveredTests($leg) {
+# True when $Text is the start of (or all of) one of the sorted, ordinal $Keys.
+function Test-KeyPrefix([string[]] $Keys, [string] $Text) {
+    if (-not $Keys -or -not $Keys.Count) { return $false }
+    $i = [array]::BinarySearch($Keys, $Text, [StringComparer]::Ordinal)
+    if ($i -ge 0) { return $true }
+    $i = -bnot $i
+    $i -lt $Keys.Count -and $Keys[$i].StartsWith($Text, [StringComparison]::Ordinal)
+}
+# $Reported: the leg's reported display keys, sorted ordinal; they tell a data row's own indented line from a new entry.
+function Get-DiscoveredTests($leg, [string[]] $Reported = @()) {
     $cmd = [string]$leg['command']
     $proj = if ($leg['project']) { Join-Path $snap $leg['project'] } else { $snap }
     try {
@@ -130,14 +139,22 @@ function Get-DiscoveredTests($leg) {
             # rejects a filter); /ListFullyQualifiedTests has one namespace.class.method per test method, which names an
             # entry whose display name is its method's.
             $lf = @(if ($filter) { '--filter'; $filter })
-            $o = @(& dotnet test $proj --no-build --list-tests @lf 2>&1 | ForEach-Object { "$_" })
+            # dotnet writes UTF-8; read with the console's OEM code page, an em dash in a display name became "ΓÇö" and
+            # matched no result (run-G17-7)
+            $enc = [Console]::OutputEncoding; [Console]::OutputEncoding = [Text.Encoding]::UTF8
+            try { $o = @(& dotnet test $proj --no-build --list-tests @lf 2>&1 | ForEach-Object { "$_" }) } finally { [Console]::OutputEncoding = $enc }
             if ($LASTEXITCODE -ne 0) { return @{ keys = @(); error = "dotnet test --list-tests exit $LASTEXITCODE $(@($o) | Select-Object -Last 1)" } }
             $at = [array]::FindIndex([string[]]$o, [Predicate[string]] { param($l) $l -match 'Tests are available' })
             if ($at -lt 0) { return @{ keys = @(); error = "dotnet test --list-tests printed no test list ($(@($o) | Select-Object -Last 1))" } }
-            # an entry starts with four spaces; a display name holding a line break goes on over the lines that do not
+            # an entry starts with four spaces; a display name holding a line break goes on over the lines that do not. A
+            # data row's own text can hold lines indented four spaces too (a PowerShell script argument), so such a line
+            # also goes on the entry before it when the two together still begin a display name the leg reported; read as
+            # entries of their own, they were 699 tests that never existed, all "not run" (run-G17-7)
             $entries = [Collections.Generic.List[string]]::new()
             foreach ($l in @($o | Select-Object -Skip ($at + 1))) {
-                if ($l -match '^    \S') { $entries.Add($l.Substring(4)) } elseif ($entries.Count -and $l) { $entries[$entries.Count - 1] += "`n$l" }
+                $last = $entries.Count - 1
+                if ($l -match '^    \S' -and -not ($last -ge 0 -and (Test-KeyPrefix $Reported (ConvertTo-DisplayKey "$($entries[$last]) $l")))) { $entries.Add($l.Substring(4)) }
+                elseif ($last -ge 0 -and $l) { $entries[$last] += "`n$l" }
             }
             $entries = @($entries | ForEach-Object { ConvertTo-DisplayKey $_ })
             $f = @(if ($filter) { "/TestCaseFilter:$filter" })
@@ -160,7 +177,8 @@ function Get-DiscoveredTests($leg) {
             $saved = $env:PLAYWRIGHT_JSON_OUTPUT_NAME; $env:PLAYWRIGHT_JSON_OUTPUT_NAME = $null
             Push-Location -LiteralPath $proj
             # npx.cmd, not npx.ps1: the PowerShell shim would run under this script's preferences
-            try { $o = @(& npx.cmd @a 2>$null) } finally { Pop-Location; $env:PLAYWRIGHT_JSON_OUTPUT_NAME = $saved }
+            $enc = [Console]::OutputEncoding; [Console]::OutputEncoding = [Text.Encoding]::UTF8
+            try { $o = @(& npx.cmd @a 2>$null) } finally { Pop-Location; $env:PLAYWRIGHT_JSON_OUTPUT_NAME = $saved; [Console]::OutputEncoding = $enc }
             $text = $o -join "`n"; $at = $text.IndexOf('{')
             if ($at -lt 0) { return @{ keys = @(); error = "playwright --list wrote no json (exit $LASTEXITCODE)" } }
             $j = $text.Substring($at) | ConvertFrom-Json -AsHashtable -Depth 60
@@ -184,13 +202,6 @@ function Add-NotRunRows($leg, [string] $name, [int] $from) {
     # The flag is the run definition's (<group>.run.json): the run record's leg rows do not carry it.
     $defLeg = @(@(if ($runDef) { $runDef['legs'] }) | Where-Object { $_ -and [string]$_['name'] -eq $name }) | Select-Object -First 1
     if (($leg.Contains('discover') -and $leg['discover'] -eq $false) -or ($defLeg -and $defLeg.Contains('discover') -and $defLeg['discover'] -eq $false)) { $notDiscovered.Add($name); return }
-    $d = Get-DiscoveredTests $leg
-    if ($d.error) {
-        $discoveryFailed.Add("$name ($($d.error))")
-        $rows.Add([ordered]@{ test = "discover:$name"; suite = $name; outcome = 'failed'; durationMs = 0; file = ''; project = [string]$leg['project']; head = $rec['head'] })
-        return
-    }
-    $discovered[$name] = $d.keys.Count
     # Multiset difference: each reported result takes one discovered entry with its key (a playwright test+project+file,
     # a dotnet display name); the entries left over are the leg's tests that reported nothing.
     $have = [Collections.Generic.Dictionary[string, int]]::new([StringComparer]::Ordinal)
@@ -202,6 +213,14 @@ function Add-NotRunRows($leg, [string] $name, [int] $from) {
         $have[$k] = 1 + $(if ($have.ContainsKey($k)) { $have[$k] } else { 0 })
         if ($r['fqn']) { [void]$reportedFqn.Add([string]$r['fqn']) }
     }
+    [string[]] $sorted = @($have.Keys); [array]::Sort($sorted, [StringComparer]::Ordinal)
+    $d = Get-DiscoveredTests $leg $sorted
+    if ($d.error) {
+        $discoveryFailed.Add("$name ($($d.error))")
+        $rows.Add([ordered]@{ test = "discover:$name"; suite = $name; outcome = 'failed'; durationMs = 0; file = ''; project = [string]$leg['project']; head = $rec['head'] })
+        return
+    }
+    $discovered[$name] = $d.keys.Count
     # A not-run dotnet entry is named by its method's namespace.class.method when its display name (cut at '(') is the
     # name of exactly one method that reported nothing; otherwise by its display name.
     $byMethod = @{}
@@ -210,8 +229,22 @@ function Add-NotRunRows($leg, [string] $name, [int] $from) {
     # bare name and expands into its rows only when it runs: that entry is covered by any reported row of the method.
     $expanded = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($hk in $have.Keys) { $pi = $hk.IndexOf(' ('); if ($pi -gt 0) { [void]$expanded.Add($hk.Substring(0, $pi)) } }
+    $unmatched = [Collections.Generic.List[string]]::new()
     foreach ($k in $d.keys) {
         if ($have.ContainsKey($k) -and $have[$k] -gt 0) { $have[$k]--; continue }
+        $unmatched.Add($k)
+    }
+    # A data row whose argument holds a control character, a tab or a surrogate pair is spelled one way by the test list
+    # and another by the trx, so its two keys never meet (19 rows in run-G17-7, every one of them run). A reported row
+    # of the same method that took no discovered entry covers it, one for one.
+    $spare = @{}
+    if ($leg['kind'] -ne 'playwright') {
+        foreach ($hk in $have.Keys) { if ($have[$hk] -gt 0) { $pi = $hk.IndexOf(' ('); if ($pi -gt 0) { $m = $hk.Substring(0, $pi); $spare[$m] = $have[$hk] + $(if ($spare.ContainsKey($m)) { $spare[$m] } else { 0 }) } } }
+    }
+    foreach ($k in $unmatched) {
+        if ($leg['kind'] -ne 'playwright') {
+            $pi = $k.IndexOf(' ('); if ($pi -gt 0) { $m = $k.Substring(0, $pi); if ($spare.ContainsKey($m) -and $spare[$m] -gt 0) { $spare[$m]--; continue } }
+        }
         if ($leg['kind'] -ne 'playwright' -and $k.IndexOf('(') -lt 0 -and $expanded.Contains($k)) { continue }
         if ($leg['kind'] -eq 'playwright') {
             $p = $k.Split('|')
