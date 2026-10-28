@@ -4038,11 +4038,13 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     Case '96 a registration that leaves no task is REFUSED' ($rsx -ne 0 -and ($rs -join ' ') -match 'REFUSED .*not found' -and ($rs -join ' ') -notmatch 'REGISTERED') "exit=$rsx $($rs -join ' | ')"
     Remove-Module $kitT96; Remove-Item Env:\KIT_T96_REG
     # An empty trx (a filter that matched nothing) and a namespaced one, as VSTest writes them, export without a throw.
+    # These trx-only fixtures have no test project behind them, so their records are not tier 2: only a Tier 2 run's legs
+    # are discovered from its build (owner 2026-10-28), which the TX-3 case below covers.
     $rx = Join-Path $rdir 'run-TX-1'; New-Item -ItemType Directory -Path (Join-Path $rx 'Empty'), (Join-Path $rx 'Full') -Force | Out-Null
     $ns = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'
     Set-Content (Join-Path $rx 'Empty\e.trx') "<TestRun xmlns=`"$ns`"><Results /></TestRun>"
     Set-Content (Join-Path $rx 'Full\f.trx') "<TestRun xmlns=`"$ns`"><TestDefinitions><UnitTest id=`"1`"><TestMethod className=`"NS.Q`" name=`"M`" /></UnitTest></TestDefinitions><Results><UnitTestResult testId=`"1`" testName=`"M`" outcome=`"Passed`" duration=`"00:00:00.1`" /></Results></TestRun>"
-    @{ id = 'run-TX-1'; tier = '2'; group = 'TX'; startedAt = '2026-10-01T00:00:00Z'; status = 'done'; snapshot = $tr; runDir = $rx; head = 'h'
+    @{ id = 'run-TX-1'; tier = 'fixture'; group = 'TX'; startedAt = '2026-10-01T00:00:00Z'; status = 'done'; snapshot = $tr; runDir = $rx; head = 'h'
        legs = @(@{ step = 'leg'; name = 'Empty'; kind = 'dotnet'; project = 'tests'; exit = 1 }, @{ step = 'leg'; name = 'Full'; kind = 'dotnet'; project = 'tests'; exit = 0 }) } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $rdir 'run-TX-1.json')
     $ex = ''; $xo = @(); try { $xo = @(& "$S\Export-SuiteResults.ps1" -Repo $tr -Run run-TX-1) } catch { $ex = ("$_" -split "`n")[0] }
     Case '96 an empty or namespaced trx exports: the empty leg is one leg: failure' (-not $ex -and ($xo -join ' ') -match 'RESULTS run-TX-1 passed 1 failed 1') "err=$ex out=$($xo -join ' | ')"
@@ -4050,7 +4052,7 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     # own NOT-RUN line per leg, never as passes (TestRunFindings-2026-10-25 F6, kit item IN-20261025152845-1d06).
     $rx2 = Join-Path $rdir 'run-TX-2'; New-Item -ItemType Directory -Path (Join-Path $rx2 'Live') -Force | Out-Null
     Set-Content (Join-Path $rx2 'Live\l.trx') "<TestRun xmlns=`"$ns`"><TestDefinitions><UnitTest id=`"1`"><TestMethod className=`"NS.L`" name=`"A`" /></UnitTest><UnitTest id=`"2`"><TestMethod className=`"NS.L`" name=`"B`" /></UnitTest><UnitTest id=`"3`"><TestMethod className=`"NS.L`" name=`"C`" /></UnitTest></TestDefinitions><Results><UnitTestResult testId=`"1`" testName=`"A`" outcome=`"Passed`" duration=`"00:00:00.1`" /><UnitTestResult testId=`"2`" testName=`"B`" outcome=`"NotExecuted`" duration=`"00:00:00.1`" /><UnitTestResult testId=`"3`" testName=`"C`" outcome=`"Inconclusive`" duration=`"00:00:00.1`" /></Results></TestRun>"
-    @{ id = 'run-TX-2'; tier = '2'; group = 'TX'; startedAt = '2026-10-01T00:00:00Z'; status = 'done'; snapshot = $tr; runDir = $rx2; head = 'h'
+    @{ id = 'run-TX-2'; tier = 'fixture'; group = 'TX'; startedAt = '2026-10-01T00:00:00Z'; status = 'done'; snapshot = $tr; runDir = $rx2; head = 'h'
        legs = @(@{ step = 'leg'; name = 'Live'; kind = 'dotnet'; project = 'tests'; exit = 0 }) } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $rdir 'run-TX-2.json')
     $ex2 = ''; $xo2 = @(); try { $xo2 = @(& "$S\Export-SuiteResults.ps1" -Repo $tr -Run run-TX-2) } catch { $ex2 = ("$_" -split "`n")[0] }
     Case '96 skipped tests are a counted NOT-RUN line per leg, never passes' (-not $ex2 -and ($xo2 -join ' ') -match 'RESULTS run-TX-2 passed 1 failed 0 skipped 2' -and ($xo2 -join ' ') -match 'NOT-RUN run-TX-2 2 test\(s\) skipped, not passes: Live 2') "err=$ex2 out=$($xo2 -join ' | ')"
@@ -4063,6 +4065,16 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $ex3 = ''; $xo3 = @(); try { $xo3 = @(& "$S\Export-SuiteResults.ps1" -Repo $tr -Run run-TX-2) } catch { $ex3 = ("$_" -split "`n")[0] }
     $pf3 = @($xo3 | Where-Object { "$_" -match '^PROOF-FAILED ' })
     Case '96 a failed or timed-out live proof is named on a PROOF-FAILED line, an ok one is not' (-not $ex3 -and $pf3.Count -eq 1 -and $pf3[0] -match '^PROOF-FAILED run-TX-2 2 live proof\(s\) failed' -and $pf3[0] -match 'outage \(SM_OUTAGE_OUT, timeout: no exit after 1800 s' -and $pf3[0] -match 'store-change \(SM_STORE_CHANGE_OUT, failed: exit 1\)' -and $pf3[0] -notmatch 'fresh') "err=$ex3 out=$($xo3 -join ' | ')"
+    # A Tier 2 run's total is discovered from its own build, never from another run (owner 2026-10-28). A leg whose build
+    # cannot be discovered (here: no project) is a failed 'discover:<leg>' row and a DISCOVERY-FAILED line, never silent.
+    $rx4 = Join-Path $rdir 'run-TX-3'; New-Item -ItemType Directory -Path (Join-Path $rx4 'Full') -Force | Out-Null
+    Copy-Item (Join-Path $rx 'Full\f.trx') (Join-Path $rx4 'Full\f.trx')
+    @{ id = 'run-TX-3'; tier = '2'; group = 'TX'; startedAt = '2026-10-01T00:00:00Z'; status = 'done'; snapshot = $tr; runDir = $rx4; head = 'h'
+       legs = @(@{ step = 'leg'; name = 'Full'; kind = 'dotnet'; project = 'no-such-project'; exit = 0 }) } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $rdir 'run-TX-3.json')
+    $ex4 = ''; $xo4 = @(); try { $xo4 = @(& "$S\Export-SuiteResults.ps1" -Repo $tr -Run run-TX-3) } catch { $ex4 = ("$_" -split "`n")[0] }
+    $res4 = Get-Content -Raw (Join-Path $rdir 'run-TX-3.results.json') | ConvertFrom-Json -AsHashtable
+    $dr4 = @($res4['tests'] | Where-Object { $_['test'] -eq 'discover:Full' -and $_['outcome'] -eq 'failed' }).Count
+    Case '96 a Tier 2 leg that cannot be discovered is a failed discover: row and a DISCOVERY-FAILED line' (-not $ex4 -and $dr4 -eq 1 -and ($xo4 -join ' ') -match 'RESULTS run-TX-3 passed 1 failed 1' -and ($xo4 -join ' ') -match 'DISCOVERY-FAILED run-TX-3 Full \(') "err=$ex4 out=$($xo4 -join ' | ')"
     # A nightly-started run hands the integrator lock back when it ends.
     Remove-Item (Join-Path $tr '.streams\integrator.lock') -ErrorAction SilentlyContinue
     Get-ChildItem $rdir -Filter 'run-T1-9*.json' | Remove-Item
@@ -5423,7 +5435,7 @@ if ($args[0] -eq 'test' -and $env:STUB116_NOMATCH -eq '1') { 'No test matches th
     Case '123b with that run ended the stale lock is taken over as before' ($x123b -eq 0 -and ($o123b -join ' ') -match 'INTEGRATOR integ-new') "x=$x123b out=$($o123b -join ' | ')"
     $rx123 = Join-Path $rr123 'run-G1-8'; New-Item -ItemType Directory -Path (Join-Path $rx123 'Full') -Force | Out-Null
     Set-Content (Join-Path $rx123 'Full\f.trx') "<TestRun xmlns=`"http://microsoft.com/schemas/VisualStudio/TeamTest/2010`"><TestDefinitions><UnitTest id=`"1`"><TestMethod className=`"NS.Q`" name=`"M`" /></UnitTest></TestDefinitions><Results><UnitTestResult testId=`"1`" testName=`"M`" outcome=`"Passed`" duration=`"00:00:00.1`" /></Results></TestRun>"
-    @{ id = 'run-G1-8'; tier = '2'; group = 'G1'; startedAt = $old123; status = 'lock-lost'; snapshot = $r123; runDir = $rx123; head = 'h'
+    @{ id = 'run-G1-8'; tier = 'fixture'; group = 'G1'; startedAt = $old123; status = 'lock-lost'; snapshot = $r123; runDir = $rx123; head = 'h'
        legs = @(@{ step = 'leg'; name = 'Full'; kind = 'dotnet'; project = 'tests'; exit = 0 }, @{ step = 'leg'; name = 'Gone'; kind = 'dotnet'; project = 'tests'; exit = 5; lockLost = $true }, @{ step = 'leg'; name = 'Perf'; kind = 'dotnet'; project = 'tests'; exit = 5 }) } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $rr123 'run-G1-8.json')
     $o123c = @(& "$S\Export-SuiteResults.ps1" -Repo $r123 -Run run-G1-8)
     $res123 = Get-Content -Raw (Join-Path $rr123 'run-G1-8.results.json') | ConvertFrom-Json -AsHashtable
