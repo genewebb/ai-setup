@@ -4104,7 +4104,8 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $setP = { param($t2, $rt) @{ tier2 = $t2; retest = $rt } | ConvertTo-Json | Set-Content $ctlP -Encoding utf8 }
     $probeP = Join-Path $Scratch 'quiet-probe.json'
     $setProbe = { param($cpu, [string[]] $busy) @{ cpu = $cpu; busy = @($busy) } | ConvertTo-Json | Set-Content $probeP -Encoding utf8 }
-    $perfLeg = @{ name = 'Tests.Perf'; kind = 'dotnet'; project = 'tests'; solo = $true
+    # discover = $false: the stand-in runner has no test project to list, so the export counts only what it reports
+    $perfLeg = @{ name = 'Tests.Perf'; kind = 'dotnet'; project = 'tests'; solo = $true; discover = $false
         command = "& '$fake' -Out '{runDir}\Tests.Perf' -Mode tier2 -Control '$ctlP'"
         retestCommand = "& '$fake' -Out '{runDir}\Tests.Perf' -Mode retest -Filter '{filter}' -Control '$ctlP'" }
     New-Item -ItemType Directory -Path (Join-Path $pr '.streams\suites') -Force | Out-Null

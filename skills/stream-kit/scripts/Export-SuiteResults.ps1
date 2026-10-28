@@ -174,9 +174,16 @@ function Get-DiscoveredTests($leg) {
 $discover = $Step -eq 'leg' -and [string]$rec['tier'] -eq '2' -and $snap -and (Test-Path -LiteralPath $snap)
 $discovered = [ordered]@{}
 $discoveryFailed = [Collections.Generic.List[string]]::new()
+$notDiscovered = [Collections.Generic.List[string]]::new()
+$runDef = if ($discover -and $rec['group']) { Read-JsonFile (Join-Path $P.Suites "$($rec['group']).run.json") } else { $null }
 # Adds a 'not-run' row for every test the leg's build holds that the leg reported no result for.
 function Add-NotRunRows($leg, [string] $name, [int] $from) {
     if (-not $discover -or $leg['kind'] -notin 'dotnet', 'playwright') { return }
+    # A leg whose command runs no discoverable test project (a stand-in runner) says "discover": false; it is named on the
+    # NOT-DISCOVERED line, so a total without it is never silent.
+    # The flag is the run definition's (<group>.run.json): the run record's leg rows do not carry it.
+    $defLeg = @(@(if ($runDef) { $runDef['legs'] }) | Where-Object { $_ -and [string]$_['name'] -eq $name }) | Select-Object -First 1
+    if (($leg.Contains('discover') -and $leg['discover'] -eq $false) -or ($defLeg -and $defLeg.Contains('discover') -and $defLeg['discover'] -eq $false)) { $notDiscovered.Add($name); return }
     $d = Get-DiscoveredTests $leg
     if ($d.error) {
         $discoveryFailed.Add("$name ($($d.error))")
@@ -199,8 +206,13 @@ function Add-NotRunRows($leg, [string] $name, [int] $from) {
     # name of exactly one method that reported nothing; otherwise by its display name.
     $byMethod = @{}
     foreach ($q in @($d['fqns'])) { if ($q -and -not $reportedFqn.Contains($q)) { $m = ($q -split '\.')[-1]; $byMethod[$m] = @($byMethod[$m]) + $q | Where-Object { $_ } } }
+    # A data-driven method whose rows cannot be serialized at discovery (a [DataRow(typeof(...))]) is listed once under its
+    # bare name and expands into its rows only when it runs: that entry is covered by any reported row of the method.
+    $expanded = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($hk in $have.Keys) { $pi = $hk.IndexOf(' ('); if ($pi -gt 0) { [void]$expanded.Add($hk.Substring(0, $pi)) } }
     foreach ($k in $d.keys) {
         if ($have.ContainsKey($k) -and $have[$k] -gt 0) { $have[$k]--; continue }
+        if ($leg['kind'] -ne 'playwright' -and $k.IndexOf('(') -lt 0 -and $expanded.Contains($k)) { continue }
         if ($leg['kind'] -eq 'playwright') {
             $p = $k.Split('|')
             $rows.Add([ordered]@{ test = $p[0]; suite = $name; outcome = 'not-run'; durationMs = 0; file = $p[2]; project = [string]$leg['project']; pwProject = $p[1]; head = $rec['head'] })
@@ -280,6 +292,7 @@ if ($sk.Count) { "NOT-RUN $Run$(if ($Step -eq 'sweep') { ' sweep' }) $($c.skippe
 $nr = @($rows | Where-Object { $_.outcome -eq 'not-run' -and -not ([string]$_.test).StartsWith('leg:') } | Group-Object { $_.suite } | ForEach-Object { "$($_.Name) $($_.Count)" })
 if ($nr.Count) { "NOT-STARTED $Run $(($nr | ForEach-Object { [int]($_ -split ' ')[-1] } | Measure-Object -Sum).Sum) discovered test(s) with no result: $($nr -join ', ')" }
 if ($discoveryFailed.Count) { "DISCOVERY-FAILED $Run $($discoveryFailed -join '; ')" }
+if ($notDiscovered.Count) { "NOT-DISCOVERED $Run $($notDiscovered -join ', ') (discover: false): only what the leg reported is counted" }
 # A live proof (setup step .streams\suites\Invoke-Tier2Proof.ps1, record <runDir>\proofs\<name>.json) that failed or
 # timed out leaves its tests Inconclusive: name each one, so the NOT-RUN count says why (kit item IN-20261026151607-13e0).
 $pdir = if ($Step -eq 'leg' -and $rec['runDir']) { Join-Path ([string]$rec['runDir']) 'proofs' } else { '' }
