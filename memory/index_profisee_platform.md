@@ -31,3 +31,16 @@ Profisee, Connect, Matching, Model Import and the corp/SMVM2 environment notes. 
 
 - **[Connect: NEVER delete an entity Connect didn't create; no teardown (clean start, create, run) 10/15](feedback_connect_never_delete_entities.md)**
 - [Matching lookup 400 status 2219 = no existing record (no-match), NOT error; LookupThenCreate still creates](reference_matching_lookup_2219_is_no_match.md) · [sqlcmd needs -I for Profisee table writes; backfill Monitor start marker by direct INSERT](reference_sqlcmd_quoted_identifier_profisee.md) · [Prod step config CHUNKREF decode: STRING_AGG tTestAutoScenarioConfiguration by GroupKey; batch metrics tUnifiedMatchingApiExecution](reference_prod_chunkref_config_decode_sql.md)
+
+## Moved from MEMORY.md 2026-10-31 (lines verbatim)
+
+- [ADO 165626 direct Matching API lookup: MatchingApiRest secrets target, prelim doc in matching\UpdateToMatchingScenario](project_ado_165626_direct_matching_api_lookup.md)
+- **[REST bulk delete REMOVED 10/8 (always 404d); delete by code = DeleteRecordsAsync + RestRequestHelper.SplitRecordCodesForQuery; ClearReferencesBeforeDelete now really sent; gateway DELETE Records/bulk/{entity} WIPES whole entity](reference_restclient_bulkdelete_broken.md)**
+- [Profisee staging delete = stg.t<Entity>_Delete + stg.p<Entity>_Delete (blocks; silent no-op if running; table NOT cleared); ~1,800 rows/s vs REST ~176; no REST route, needs SQL](reference_profisee_staging_delete_procs.md) — Run Purge staging rework 10/10
+- [CORPLTR94 runs BOTH Profisee installs (26.1 + 26.2), both required](project_local_two_profisee_installs_required.md) — never suggest stopping either
+- **[Run's REAL runner = ExecutionMachine -> tServerProfile (42=SMVMTR3); env labels lie. 'Failed to get match cluster update time' = SYNTHETIC timings](reference_matching_3b_synthetic_timings_and_nsb_audit.md)**
+- [Matching processActions on 300M blocks ~6 min before queuing; gateway 500 at 100 s, CurlStep 60 s; matching still runs](reference_matching_processactions_timeout_300m.md)
+- **[UnifiedMatching code vs docs 10/16: S2=BatchLoad strategy, BatchLoad not bulk, no runtime mutation, 3B 85/15 dead, users=MaxHangfireScenarioServersCount; non-dev archify diagrams in matching\ScenarioDocumentation](reference_unified_matching_code_vs_docs_2026-10-16.md)**
+- [Profisee Monitor purges tActivity ~30d after StartedTime; rows survive in tActivity_History (ChgType 3)](reference_profisee_monitor_activity_30day_purge.md)
+- [Manual monitor marker insert: monitor.tActivity, sqlcmd -I, user 4](reference_manual_monitor_marker_insert.md)
+- [Post-run metric collection "stuck" 10/29 = SMVMTR2 DNS outage + 120 s cluster polls; ~2.5 rows/s; 10/31: 3c records matching never touches (~3%, sparse data) burn 73% of time](reference_postrun_collection_slow_dns_outage_2026-10-29.md)

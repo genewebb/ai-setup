@@ -1,0 +1,20 @@
+---
+name: reference_postrun_collection_slow_dns_outage_2026-10-29
+description: "Prod 10000267 (1M 26R3) step 42 'Post-Run Metric Collection' looked stuck = SMVMTR2 DNS outage killed job + retries; real run ~2.5 rows/s, ~80% thread time burned on 120 s cluster-time polls for never-clustered records"
+metadata:
+  node_type: memory
+  type: reference
+  originSessionId: d256beea-4a49-4898-af9e-339a91b9f233
+  modified: 2026-10-31T08:38:23.385Z
+---
+
+2026-10-29, prod run 10000267 step 42 (UnifiedMatchingPostRunCollectionScenario, source WE 11459 = step 39 3c, 100,000 rows in tUnifiedMatchingApiExecution, MetricCollectionStatus 1=Collected 2=Failed 3=Pending).
+
+- Attempt 1 (WE 11452, Hangfire job 852) started 02:54Z, wrote ~7.5k rows, then SMVMTR2 DNS died 03:56Z-~13:26Z ("No such host is known" for smvm2.corp.profisee.com AND profiseecloud.dev, SQL error 53). Hangfire retries 04:45/05:29/06:39/08:29 all failed; WE 11452 left Running forever (same "exhausted job never flips WE to Failed" defect as [[reference_snapshot_step_stuck_missing_run_profile]]).
+- Resubmit 14:55Z (WE 11484) resumes Pending rows (progress carries over). Rate ~1,000-1,500 rows/10 min.
+- Bottleneck: records with no match cluster time poll 30x4 s = 120 s each on one of 10 threads; ~40 such per 10 min = ~80% of thread time. ~3% of 3c records never get a cluster time.
+- Check progress: GROUP BY MetricCollectionStatus, 10-min buckets of $LastChgDTM for WorkloadExecution = source WE.
+- 10M run 10000265 step 42 collected 0 (Total=0, reported success): SourceWorkloadExecution=100009433 = step 39's WE pre-created 10/27 21:41. Reset at 10/28 15:19 nulled every detail's WE; step 39 later got 11475 (100009552) on demand, but `{{STEP:N}}` had already been BAKED into CustomParms at pre-create (WorkflowExecutionService.ResolveStepReferencesForDetailsAsync), and ResetExecutionAsync / ResetScenarioAsync / ResubmitFromScenarioAsync clear only the WE pointer, never re-resolve. Steps 43 (snapshot) + 44 (MatchingResults) also used 100009433. Second defect: post-run with Total=0 = success, no warning.
+- FIX BUILT 10/29 (uncommitted, speed-merchants branch bug/fix_restart_matching/genewebb): tokens kept raw at creation; resolved in memory at StartNextScenarioAsync from current step WE links (unresolved = step Failed); ResetStepsForRerunAsync (shared by ResetExecution/ResetScenario/Resubmit) un-bakes pointers via WorkflowConstants.StepPointerKeys and PRE-CREATES a fresh WE per reset step (template 10000215 has FORWARD refs: Pre snapshots 6->7, 13->16, 27->30, 36->39, so nulling links is not enough); post-run returns ExecutionStatus Failed (not throw: throw = 10 Hangfire retries + stuck Running) when source WE has 0 rows; snapshot/results throw on literal token. Unit 1479 green; integration WorkflowStepReferenceResetTests written but suite hangs at setup on CORPLTR94 (control hangs too).
+- 2026-10-31 runs 10000273 (10M, SMVMTR3, src WE 11727) + 10000274 (1M, SMVMTR2, src WE 11789): step 42 NOT stuck, steady ~7.5k rows/h, ~2.9% Failed. Config 10 threads, 30x4 s. Failed rows = records that EXIST in target (SMVMDB3 profisee) but matching NEVER touched ($LastChgDTM=$EnterDTM, Match Status/Cluster/Strategy NULL, 2,830 of 102k). Data-driven, not race: 2,829/2,830 lack IDNumber+DOB; RequestSourceKey prefix 01/02 = 0 fails, 03 ~1.2%, 04 ~0.4%, 05 ~12%. CreatedRecordCode correct = no row-generation bug. ~73% of thread time = 120 s polls on these. ROOT CAUSE (verified on SMVMDB3): strategy JSON = matching.tMatchingStrategy.Configuration (read via SqlClient, sqlcmd mangles it); 6 rule sets, every attribute BlankType=0; a record where NO rule set has all its attributes non-null is never touched by the engine (Match Status NULL, not Unique even with DoNotMakeUnique=false). Sample 590k rows: NULL status = 16,919 noRuleComplete + 1 exception; 0 matched rows were noRuleComplete. Same ~2.8% in the 10M initial load (281k NULL). Not a TestAuto bug; mutated sparse source data + strategy blank rule.
+- 10000265 can't self-heal (100009433 linked to no step): hand-edit steps 42-44 pointers to {{STEP:39}} after deploy, resubmit from 42.

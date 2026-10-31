@@ -20,3 +20,11 @@ Moved out of MEMORY.md 2026-10-01 to keep the index under its read limit; each l
 
 - **[Speedy MULTI-USER 10/12: decisions + 4-FEAT plan; FEAT-ROLES-001 DRAFT; LIBRARY-SCOPE/RUN-MULTIUSER/CLI-ACCESS next; identity conflicts amend at approval](project_speedy_multiuser_requirements_2026-10-12.md)**
 - **[Speedy MACHINES + CREDENTIALS 10/12: Gene decisions (shared+personal vault, credential wins over inline, Curator edits/Operator uses/Admin reveals), 3 FEATs MACHINES -> CREDENTIALS -> CREDENTIAL-USE](project_speedy_machines_credentials_requirements_2026-10-12.md)**
+
+## Moved from MEMORY.md 2026-10-31 (lines verbatim)
+
+- **[Requirements corpus = speedmerchants docs\requirements since 9/28; vault copy STALE; baseline 313 drift errors; authoring worktree requirements-authoring; hand-off = Gene copies files to SMVMTR1 + pathspec commit there, NEVER laptop push](reference_requirements_corpus_in_repo.md)**
+- **Speedy MULTI-USER + MACHINES/CREDENTIALS requirements 10/12 (FEAT plans, Gene decisions): see [index_speedy_requirements](index_speedy_requirements.md)**
+- Requirements: [RETIRED needs review + Gene approval](reference_speedy_retired_status_needs_review_and_approval.md) · [Gene reviews after EACH task](feedback_requirements_system_review_gate_per_task.md) · [reviews = Claude CLEAN session](feedback_reviews_by_claude_clean_session.md) · [amendments never touch live artifacts](project_speedy_requirements_amendment_protkey_2026-09-20.md) · [staged goal packet failure modes](reference_staged_goal_packet_needs_recovery_stage.md)
+- **SPEEDY 3 TRACKERS 9/25, split by folder: `Q:\Work\Work\99 Documentation\speedy\` Speedy-Requirements-Tracker.md (requirements/) · Speedy-Coding-Tracker.md (code) · Speedy-Workflow-Tracker.md (Workflow-vs-Code/); WVC MERGED into requirements 9/25 (W1); follow-up W2-W4 + WF-A** · [details](project_requirements_finish_tracker_2026-09-24.md) · [every tracker step ends with /clear + /goal copy-paste block](feedback_tracker_step_ends_with_clear_goal_block.md) · [end EVERY step with copy-paste /clear + /goal FULL path](feedback_end_step_with_clear_goal_block.md)
+- [End every tracker item with copy-paste /clear + /goal block, full path](feedback_end_items_with_clear_goal_prompt.md)

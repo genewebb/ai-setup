@@ -30,3 +30,20 @@ Moved out of MEMORY.md to keep the index under its read limit; each line keeps i
 - [Write-VaultFile: binaries need image/png or octet-stream, text/* corrupts](reference_write_vaultfile_binary_content_type.md) — hash the Q: file after every binary put
 - [Teams paste = inline-styled HTML (Edge, Ctrl+A/C) + chart PNG; confirmed 10/10](reference_teams_paste_inline_html.md)
 - [Prod speedmerchants -> local via BACPAC: D:\PowershellScripts\Restore-ProdSpeedmerchantsLocal.ps1; SqlPackage >=170.5.96, 6 traps](reference_prod_speedmerchants_to_local_bacpac.md)
+
+## Moved from MEMORY.md 2026-10-31 (lines verbatim)
+
+- [logpull.ps1 v1.2 10/26: settings window + remembered settings + SQL detect; uncommitted, GUI click-through untested](project_logpull_v12_gui_2026-10-26.md)
+- [dpall NuGet login vs dev build: different cred providers; stale saved PAT removed + provider 2.0.5 10/27; msalruntime lock = dllhost WAM surrogate](reference_nuget_dpall_login_vs_dev_build.md)
+- [Git Bash `sed -i` on D: (NAS) CRLF files strips CRs: use Edit tool](reference_sed_inplace_strips_crlf_on_d_drive.md)
+- [Profile load 11 s -> ~1 s 10/27: D: = \\SynologyDS918\devopslocal NAS; clearseq.ps1 dot-source at load cost ~10 s, now lazy clearSeq stub (ai-setup pwsh\PowerShell profile, uncommitted on main). NEVER touch NAS paths at profile load](reference_profile_load_nas_clearseq.md)
+- [ADO MCP = Microsoft @azure-devops/mcp, PAT as base64 any:pat; wit_work_item; Cursor removed 10/12](reference_ado_mcp_microsoft_pat.md)
+- [DO droplet 138.68.42.81 (SFO2, 2 GB, recreated 10/16): `addLinux` + `-Desktop`, key ~\.ssh\do_droplet_ed25519, rebuild script D:\repos\Linux\setup-droplet.sh, Royal TS doc; skill royalts](reference_do_droplet_addlinux.md)
+- [GMKtec EVO-X1 = PERSONAL home lab, not work; Proxmox 9.2 LIVE 10/26 homeai 192.168.8.210, ssh key pve_home_ed25519; 10/27 local AI DROPPED, box = Linux+Windows container prototype](project_home_lab_gmktec_evo_x1.md) · [Royal TS web conn defaults to IE engine: set plugin Chromium](reference_royalts_web_connection_ie_engine.md) · [pwsh ssh-keygen -N '""' = literal passphrase](reference_pwsh_sshkeygen_empty_passphrase.md)
+- [\\SMVMTR1\d$ Access denied from Claude = cached-logon session lost its TGT; fix `cmdkey /add:SMVMTR1 /user:corp\agenewe /pass`](reference_smvmtr1_smb_access_denied_cached_logon.md)
+- [NAS drive letters stale after reboot](reference_nas_drive_letters_stale_after_reboot.md) — `net use Q: \\SynologyDS918\obsidian /persistent:yes` FIRST · [agent types invisible if session started with Q: down](reference_foreman_agent_types_not_exposed_after_q_remap.md)
+- [AddOrUpdateMyTerminal.ps1 (D:\PowershellScripts): WT settings embedded, -Capture refresh, applies admin + desktop account; SEPARATE from stream kit](reference_addorupdatemyterminal_script.md)
+- **[SMVMTR1 S: = Azure Files; laptop 445 blocked; dp* -Package relays exes through SMVMTR1 (Publish-GeneSharedBits, SharedBits* keys); Claude blocked from key-reading run](reference_shared_bits_smvmtr1_azure_relay.md)**
+- [git push to a path another account owns = dubious ownership despite -c; use --receive-pack="git -c 'safe.directory=*' receive-pack" (fixed in prof push)](reference_git_push_local_path_receive_pack_safe_directory.md)
+- [pwsh reload: Import-Module <name> -Force works, piped Get-Module|Import-Module -Force does NOT; . $PROFILE now reimports Gene.*](reference_pwsh_module_reload_by_name.md)
+- **[ModelSource SPLIT 10/28: one DB per size (ModelSource<N>.dbo.RetailClient / ModelSourcePDATA<N>.dbo.PDATA), restore name ALWAYS ModelSource, NO compression (Gene), scripts C:\Deploy\SQLScripts\ModelSource (laptop, 1M proven e2e), other sizes await go](project_modelsource_split_per_size_dbs_2026-10-28.md)** · [SHRINKFILE never below creation size; sqlcmd -v values with , or : need embedded quotes; CORPSQL03 c$ + remoting denied](reference_sql_shrinkfile_minimumsize_and_sqlcmd_v_quoting.md)
