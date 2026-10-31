@@ -24,4 +24,4 @@ metadata:
 
 **Reconfirmed 2026-09-13 22:46** under /myloop: the lead asked whether Gene would commit at a row's close, and he said the lead does the commits as needed. The myloop skill's principle 4 ("never commit") and the global CLAUDE.md rule are both overridden by this per-repo authorization in `speedmerchants`; they still bind workers and verifiers. The commit point is after Close-Row (and the publish), before the next dispatch whose write set overlaps. Stage only the closed row's paths, never `.loop/` (gitignored) or bin/obj.
 
-Related: [[project_myfable_foreman]], [[feedback_copy_before_probe_never_git_checkout]], [[feedback_no_worktrees]], [[project_git_config]].
+Related: [[project_myfable_foreman]], [[feedback_copy_before_probe_never_git_checkout]], [[feedback_worktrees_allowed_must_integrate]], [[project_git_config]].
