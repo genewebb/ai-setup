@@ -476,6 +476,7 @@ function Set-TimedLaunch { $script:lastTimedLaunch = (Get-Date).ToUniversalTime(
 $script:ticks = 0
 $script:tickFailures = @{}
 $script:tickBusy = @{}
+$script:tickWaitSeconds = $IntervalSeconds
 $tickBusyReport = if ("$env:STREAM_TICK_BUSY_REPORT" -match '^\d+$') { [Math]::Max(1, [int]$env:STREAM_TICK_BUSY_REPORT) } else { 3 }
 function Invoke-TickStep([string] $Script, [hashtable] $ScriptArgs) {
     $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -518,7 +519,11 @@ function Invoke-StatusTick([string] $Session) {
     $inboxLine = if ($openItems.Count) { "Own inbox: $($openItems.Count) open item(s) ($((@($openItems | Select-Object -First 3 | ForEach-Object { $_.id })) -join ', ')); a status unit is launched for them." } else { 'Own inbox: no open items.' }
     $st = Invoke-TickStep 'Get-StreamStatus.ps1' @{ Repo = $Repo }; $steps.Add($st)
     foreach ($l in $st.Text) { "  $l" }
-    $pg = Invoke-TickStep 'Build-StatusPage.ps1' @{ Repo = $Repo; Session = $Session; WatchdogLine = $wdLine; InboxLine = $inboxLine; NextUpdateSeconds = $IntervalSeconds }; $steps.Add($pg)
+    # The interval counts from the tick's START (Get-TickWait), so the next page lands about -IntervalSeconds after this
+    # one, give or take how much longer the steps before the page take next time; that part of this tick is added as the
+    # allowance. Passing the bare interval stamped the page 'update overdue' for minutes of every cycle, because the wait
+    # used to count from the END of a 274-652 s tick (kit item IN-20261030194943-0d80).
+    $pg = Invoke-TickStep 'Build-StatusPage.ps1' @{ Repo = $Repo; Session = $Session; WatchdogLine = $wdLine; InboxLine = $inboxLine; NextUpdateSeconds = ($IntervalSeconds + [int]$sw.Elapsed.TotalSeconds) }; $steps.Add($pg)
     $gc = Invoke-TickStep 'Get-StreamCost.ps1' @{ Repo = $Repo }; $steps.Add($gc)
     $cp = $null
     if ($gc.Ok) { $cp = Invoke-TickStep 'Build-CostPage.ps1' @{ Repo = $Repo; Session = $Session }; $steps.Add($cp) }
@@ -577,13 +582,20 @@ function Invoke-StatusTick([string] $Session) {
         }
     }
     $script:ticks++
-    Write-TickLog "$(Get-TabNow) STATUS-TICK $Session $([int]$sw.Elapsed.TotalSeconds)s | $wdLine | $inboxLine | page: $(Get-TickNote $pg) | cost: $(Get-TickNote $cp) | priority: $(Get-TickNote $pr) | archive: $archiveNote | activation: $(if ($actNotes.Count) { $actNotes -join '; ' } else { 'none needed' }) | freshness: $(if ($freshNotes.Count) { $freshNotes -join '; ' } else { 'clean' }) | nightly: $nightlyNote | next tick at $(Get-TabAt $IntervalSeconds)"
+    $script:tickWaitSeconds = Get-TickWait $sw.Elapsed.TotalSeconds
+    Write-TickLog "$(Get-TabNow) STATUS-TICK $Session $([int]$sw.Elapsed.TotalSeconds)s | $wdLine | $inboxLine | page: $(Get-TickNote $pg) | cost: $(Get-TickNote $cp) | priority: $(Get-TickNote $pr) | archive: $archiveNote | activation: $(if ($actNotes.Count) { $actNotes -join '; ' } else { 'none needed' }) | freshness: $(if ($freshNotes.Count) { $freshNotes -join '; ' } else { 'clean' }) | nightly: $nightlyNote | next tick at $(Get-TabAt $script:tickWaitSeconds) ($($script:tickWaitSeconds) s: the $IntervalSeconds s interval counts from the tick's start)"
     $state.lastTick = Get-Now; $state.ticks = $script:ticks
-    $state.status = "ticked $(Format-LocalStamp); next tick in $IntervalSeconds s$(if ($openItems.Count) { "; $($openItems.Count) open inbox item(s): launching a unit" })"
+    $state.status = "ticked $(Format-LocalStamp); next tick in $($script:tickWaitSeconds) s$(if ($openItems.Count) { "; $($openItems.Count) open inbox item(s): launching a unit" })"
     Write-RunnerState $state
     # The open count goes through a script variable, never the pipeline: every line this function prints IS its output,
     # so a caller that assigned the call would read the heartbeat and status lines as the count (recovery case STATUS TICK).
     $script:tickOpenCount = $openItems.Count
+}
+# The status runner's wait after a tick that took $ElapsedSeconds: what is left of -IntervalSeconds counted from the tick's
+# start, at least min(60, -IntervalSeconds), so the ticks start on a fixed cadence and the page's next-update stamp holds
+# (kit item IN-20261030194943-0d80).
+function Get-TickWait([double] $ElapsedSeconds) {
+    [int][Math]::Max([Math]::Min(60, $IntervalSeconds), $IntervalSeconds - [Math]::Ceiling($ElapsedSeconds))
 }
 # The status runner's wait between ticks: -IntervalSeconds, cut short by a STOP file or a write to its inbox.
 function Wait-ForTick([int] $Seconds) {
@@ -1478,7 +1490,7 @@ while ($true) {
         $script:tickOpenCount = 0
         try { Invoke-StatusTick $stableSession } catch { Write-TickLog "$(Get-TabNow) TICK-FAILED the status tick threw: $(("$_" -split "`n")[0])" }
         $openCount = [int]$script:tickOpenCount
-        if (-not $openCount) { [void](Wait-ForTick $IntervalSeconds); continue }
+        if (-not $openCount) { [void](Wait-ForTick $script:tickWaitSeconds); continue }
         "$(Get-TabNow) GATE inbox $openCount open $skill item(s): a unit works them"
     } elseif ($timedGated) {
         $why = Get-TimedGate (Read-Tasks $P)

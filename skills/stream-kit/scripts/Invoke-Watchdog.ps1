@@ -240,6 +240,10 @@ foreach ($s in $snapAll) { $snaps[([string]$s['path']).Replace('/', '\').TrimEnd
 # Tier 2's snapshot was reaped as superseded under it (final review I5).
 $runSnaps = @{}
 if (Test-Path -LiteralPath (Join-Path $P.Suites 'runs')) {
+    # A 'running' record whose process is gone is marked abandoned on every pass (lib\Suites.ps1
+    # Resolve-RunningSuiteRuns), not only when the next run starts: run-G17-10 read 'running' on the test page for 6 h
+    # after its process died, and its record hid the last finished run (kit item IN-20261030191146-aba1).
+    foreach ($x in @(Resolve-RunningSuiteRuns $P $Session)) { if ($x -is [string]) { $acts.Add($x) } }
     foreach ($r in @(Get-SuiteRunRecords $P | Where-Object { $_['status'] -eq 'running' -and $_['snapshot'] })) {
         if (Test-SuiteRunAlive $r) { $runSnaps[([string]$r['snapshot']).Replace('/', '\').TrimEnd('\').ToLowerInvariant()] = [string]$r['id'] }
     }

@@ -494,8 +494,10 @@ function Lines([string] $f) {
 # under standing authority (kit item IN-20261004203020-5f5e). A line is an ESCALATION when it carries an escalate
 # token (ESCALATE, OWNER-DECIDES, 'owner decides', 'needs owner sign-off'), or when it carries no default: fewer than
 # four ' | ' fields and no 'applied default' / 'default applied' text. Every other line is an applied default.
+# ESCALATE counts only where the line starts with it ('- ESCALATE <task> | '): a default-applied line that says
+# 'ESCALATE only where no safe default' mid-line read as one on 2026-10-30 (kit item IN-20261030162513-6880).
 function Test-Escalation([string] $line) {
-    if ($line -cmatch '\bESCALATE\b|\bOWNER-DECIDES\b' -or $line -match '(?i)\bowner decides\b|\bneeds owner sign-off\b') { return $true }
+    if ($line -cmatch '^\s*(?:-\s+)?ESCALATE\b|\bOWNER-DECIDES\b' -or $line -match '(?i)\bowner decides\b|\bneeds owner sign-off\b') { return $true }
     if ($line -match '(?i)\bapplied default\b|\bdefault applied\b') { return $false }
     @($line -split '\s\|\s').Count -lt 4
 }

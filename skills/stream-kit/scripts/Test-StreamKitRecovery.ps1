@@ -2702,6 +2702,7 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $logST = Join-Path $rST '.streams\logs\status-tick.log'; $logTextST = if (Test-Path -LiteralPath $logST) { Get-Content -Raw -LiteralPath $logST } else { '' }
     Case 'status tick: the STATUS-TICK heartbeat is also appended to .streams\logs\status-tick.log (kit item IN-20261023131800-4894)' ($tickST.Count -eq 1 -and $logTextST.Contains($tickST[0])) "log=$(Test-Path -LiteralPath $logST) text=$($logTextST.Trim())"
     Case 'status tick: the runner header says the role is a script tick with a unit only for an inbox item' (($oST -join "`n") -match '(?m)^RUNNER runner-status-\S+ role status mode print every 1 s \(script tick; a unit only for an open inbox item\)') "$(($oST | Select-Object -First 2) -join ' | ')"
+    Case 'status tick: the next tick counts the interval from the tick''s start, so the page''s next-update stamp holds (kit item IN-20261030194943-0d80)' ($tickST.Count -eq 1 -and $tickST[0] -match '\| next tick at \S+ \(1 s: the 1 s interval counts from the tick''s start\)$') "tick=$($tickST -join ' || ')"
     # A tick whose watchdog loses the tasks.json lock race (a live holder past the wait) is BUSY: the heartbeat says so,
     # TICK-BUSY is printed, and no stream-kit bug is filed until it repeats (kit item IN-20261018192923-9972).
     $rSTB = New-Repo 'runnerSTB' ([ordered]@{ 'G1.S' = (ContentGrader 'G1.S' 'done') }); $repos += $rSTB
@@ -3120,10 +3121,13 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
         '- ESCALATE G1.A | ship the store or the host first | no default: both change the release plan | reasoning',
         'G1.A | a timed-out retry sends twice | kept TimedOut; owner decides | 5 tests assert it',
         'G1.A | the owner has to choose the store',
-        '- G1.A the owner has to choose the host')
+        '- G1.A the owner has to choose the host',
+        'G1.A | a new Q- id is asked for | reading in existing text; ESCALATE only where no safe default | planner default 2026-10-27 04:05 EDT: S1 writes ids.yaml')
     $m81 = & "$S\Get-StreamStatus.ps1" -Repo $r81 -Json | ConvertFrom-Json
     $e81 = @($m81.owner.escalations)
-    Case 'owner queue: bulleted applied defaults are not escalations; ESCALATE, owner-decides and default-less lines are' ($e81.Count -eq 4 -and @($m81.owner.questions).Count -eq 7 -and (($e81 -join "`n") -notmatch 'TrimStart|APPLIED DEFAULT|30s applied')) "escalations=$($e81.Count) questions=$(@($m81.owner.questions).Count) got=$($e81 -join ' || ')"
+    # An ESCALATE token counts only where an escalation starts with it ('- ESCALATE <task> | '): a default-applied
+    # line that names ESCALATE mid-line is an applied default (kit item IN-20261030162513-6880).
+    Case 'owner queue: bulleted applied defaults are not escalations; ESCALATE, owner-decides and default-less lines are' ($e81.Count -eq 4 -and @($m81.owner.questions).Count -eq 8 -and (($e81 -join "`n") -notmatch 'TrimStart|APPLIED DEFAULT|30s applied|new Q- id')) "escalations=$($e81.Count) questions=$(@($m81.owner.questions).Count) got=$($e81 -join ' || ')"
 
     # ---- 82. New-TaskWorktree under a busy tasks.json lock (kit item IN-20261004204921-2c98). It made the tree, then its
     # only locked write ran out of the 15 s wait, so the tree was recorded nowhere and the retry made <task>-2. Another

@@ -228,6 +228,19 @@ try {
     $w2 = & "$S\Invoke-Watchdog.ps1" -Repo $repo -Session status-1
     Case 'watchdog quiet when nothing stale' (@($w2) -contains 'QUIET') "$w2"
 
+    # A 'running' run record whose process is gone is marked abandoned on the watchdog pass, not only when the next run
+    # starts: run-G17-10 read 'running' on the test page for 6 h after its pid died (kit item IN-20261030191146-aba1).
+    # pid 999999 is never a Windows pid (they are multiples of 4); this test's own pid is a live one.
+    $runsD = Join-Path $repo '.streams\suites\runs'; New-Item -ItemType Directory -Path $runsD -Force | Out-Null
+    $rStart = (Get-Date).ToUniversalTime().AddMinutes(-30).ToString('yyyy-MM-ddTHH:mm:ssZ')
+    @{ id = 'run-G1-90'; group = 'G1'; tier = '2'; status = 'running'; startedAt = $rStart; pid = 999999 } | ConvertTo-Json | Set-Content (Join-Path $runsD 'run-G1-90.json')
+    @{ id = 'run-G1-91'; group = 'G1'; tier = '2'; status = 'running'; startedAt = $rStart; pid = $PID } | ConvertTo-Json | Set-Content (Join-Path $runsD 'run-G1-91.json')
+    $wr = & "$S\Invoke-Watchdog.ps1" -Repo $repo -Session status-1
+    $r90 = Get-Content -Raw (Join-Path $runsD 'run-G1-90.json') | ConvertFrom-Json; $r91 = Get-Content -Raw (Join-Path $runsD 'run-G1-91.json') | ConvertFrom-Json
+    Case 'watchdog marks a running suite run whose process is gone abandoned' (($wr -join ' ') -match 'ABANDONED run-G1-90 \(process 999999 is gone\)' -and $r90.status -eq 'abandoned') ($wr -join ' | ')
+    Case 'watchdog leaves a running suite run whose process lives' ($r91.status -eq 'running' -and ($wr -join ' ') -notmatch 'run-G1-91') ($wr -join ' | ')
+    Remove-Item -LiteralPath (Join-Path $runsD 'run-G1-90.json'), (Join-Path $runsD 'run-G1-91.json') -Force
+
     # Stream scratch ({ScratchRoot}\streams\<repo>): a folder nothing has written to for a day goes; a fresh one stays.
     $scr = Join-Path $env:STREAM_SCRATCH_ROOT (Split-Path -Leaf $repo)
     $oldProbe = Join-Path $scr 'G1.T9-probe'; $newProbe = Join-Path $scr 'G1.T9-skeptic'
