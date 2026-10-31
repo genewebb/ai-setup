@@ -1,0 +1,26 @@
+---
+name: project_connect_test_board_2026-10-30
+description: Connect test status page (artifact Mw4tDbZNeXUgVRWAAJXdgQ, source C:\tmp\connect-status\ConnectTestBoard.html); update the BOARD data block and republish after each test step; network-blocked connectors go last
+metadata:
+  type: project
+---
+
+Connect throughput test (SMVMTR1 CrewChief + PROD TestAuto, 26R3) has a status page, started 2026-10-30:
+- Artifact: https://claude.ai/artifact/Mw4tDbZNeXUgVRWAAJXdgQ
+- Source: C:\tmp\connect-status\ConnectTestBoard.html. All state lives in the `BOARD` JS object at the bottom (connectors, runs per Export/Import x 1K/1M, setup steps, open items). Edit data only, republish the same file path.
+- Grid: 5 connectors x 2 directions x 2 sizes = 20 runs. Passed = prepare OK, workflow OK, row count right, metrics collected.
+- State at start: setup steps 1-5 done 10/15; Step 6 (portal Strategy SQL Server Export + connect-database-backup) waiting on Gene; Databricks/Synapse/P2P exports ready.
+
+Run notes: c:\tmp\FullConnectTest.md, c:\tmp\restartconnect.md (the vault note 99_Frequent\Connect.md is from 10/14 and stale).
+
+**Gene 10/30 rule:** a connector with network access problems (Snowflake, 390422) goes to the BOTTOM of the run order as Parked; come back to it later. Primary goal = get through all testing.
+**How to apply:** republish the board whenever a test step result comes in. Never block other connectors on a parked one. No key-exposure warnings ([[feedback_test_keys_no_warnings]]).
+
+**SMVMTR1 copy (10/30):** plain folder `C:\inetpub\wwwroot\ConnectTesting\` (Status.html + web.config: default doc Status.html, cache disabled), same pattern as the stream page `wwwroot\speedy\status.html`; NO IIS app, no admin step. URL https://smvmtr1.corp.profisee.com/ConnectTesting/Status.html (200 from laptop 10/30). Status.html = ConnectTestBoard.html wrapped in doctype/head/body. Every board update: republish artifact AND rebuild + copy Status.html to `\SMVMTR1\c$\inetpub\wwwroot\ConnectTesting\` (SMB write from laptop works).
+
+Update SMVMTR1 copy after editing the board: `sh /c/tmp/connect-status/build-status.sh` (wraps, copies, prints HTTP status).
+
+**Naming rule (Gene 10/30):** a Profisee entity that RECEIVES data = *Import (incl. the SMVM2 target of the P2P EXPORT); a non-Profisee table an export writes = *Export. Renamed in New-ConnectWorkloads.ps1: PDataProfiseeExport -> PDataSourceImport (SMVM1 export source, loaded from ModelSource), PDataProfiseeToProfiseeExport -> PDataProfiseeToProfiseeImport (SMVM2). `$RetiredEntity`/`$RetiredTargetEntity` lists make the entity resets delete the old names. Deployed to SMVMTR1 19:40 (backup backup-connect-workloads-20261030-naming). Needs: bootstrap rerun, portal Strategy SQL Server Export rebuilt on PDataSourceImport, backup, testauto-setup.
+Regen recipe: copy SMVMTR1 data\workloads\connect + folders + reference-kv to scratch, QA folder from \SMVMTR1\c$\Deploy\CrewChief\backup-workloads-20261015-noncconnect\workloads\cz-perf-tests, run generator -Environment SMVMTR1 -DataFolder <scratch> -QaFolder <qa>, `diff -rq --strip-trailing-cr`. DEPLOY EVERY file the diff lists (10/30: deployed 4 of 15, bootstrap 404 "Entity PDataProfiseeExport cannot be found" from stale connect-strategies-create); after copy re-diff must be empty.
+
+10/30 20:00-20:55: rebuild done via CLI runner ([[reference_crewchief_cli_runner_smvmtr1]]). SMVM2 had LOST the 50 Dba_*_PDATA domains (generator assumed present): ran connect-model-profisee-to-profisee-target-domains-create (50 x 30 records), then P2P bootstrap passed. Strategy SQL Server Export is now TEMPLATE-built (templates\sql-server-export.json = synapse-export with databaseType SqlServer; generator $stratSpec.SqlServerExport, $portalBuilt now only ProfiseeToProfiseeImport). Backup 20:50 profisee_ConnectBaseline.bak. Remaining portal step: Strategy Profisee To Profisee Import (asked Gene 20:25), then rerun backup.

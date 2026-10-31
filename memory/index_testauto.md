@@ -21,3 +21,14 @@ Moved out of MEMORY.md to keep the index under its read limit; each line keeps i
 - [TestAuto metric run purge 10/8: backend + wizard/orphans pages BUILT, uncommitted; areas from WorkArea table](project_testauto_metric_run_purge_2026-10-07.md) — Rev 12 tree wizard + Clean up sequence (orphans, empty versions, summary; purge never removes versions) BUILT 10/10 (unit green, UI unviewed); earlier: CLOSED 10/9 after rev 9; open only on request: req doc amendment revs 5-9, integration tests unrun, 2 perf optimisations
 - [TestAuto exec metrics catalog Claude Doc 10/10 (Matching/CRUD/Connect + scorecard mockup, illustrative values)](reference_testauto_metrics_catalog_doc.md)
 - [TestAuto Monitor step COMPLETE but no row = silent NSB send fail; check nsb_log + MonitorDB catalog](reference_testauto_monitor_send_silent_fail.md) · [SMVMTR3 stuck job: read Hangfire testautojobs.State via sqlcmd (no Seq)](reference_smvmtr3_hangfire_job_diagnosis.md) · [SMVMTR2 step errors = C:\Deploy\TestAuto\web\LogFiles (not tLogging/Seq); SQL via ODBC ServerSPN](reference_smvmtr2_testauto_logs_and_sql.md)
+
+## Moved from MEMORY.md 2026-10-31 (lines verbatim)
+
+- [ADO 166723 26R3 perf regression: Josh wants Batch Record Read re-run with DOTNET_GCDynamicAdaptationMode=0 (DATAS off); 26.3 = net10 Server GC](project_ado_166723_26r3_perf_datas_gc.md)
+- **[Matching scorecard WIZARD 10/29: mockup v15 approved, BUILT uncommitted, unit tests pass, SQL 21/22 RUN on prod 10/29; port skill scorecard-wizard](project_matching_scorecard_wizard_2026-10-29.md)**
+- **[TestAuto Version Compare charts 10/21: mockup gate, decisions, Radzen 7.1.7 -> 12.1.5 upgrade chosen, offline copy C:\tmp\chart; 10/22 error rates BUILT as table columns only](project_testauto_version_compare_charts_2026-10-21.md)**
+- TestAuto metric run purge 10/10 (rev 12 BUILT, uncommitted) + metrics catalog doc: see [index_testauto](index_testauto.md)
+- [Bulk delete UI: groups (entity+reason+totals) not rows; one subject area; parent filter + tree](feedback_bulk_delete_ui_groups_not_rows.md)
+- **[METRICS schema gaps 8609 = stop sending columns (hide in detail class), NEVER add to metrics model](feedback_metric_schema_gaps_stop_sending_not_add.md)**
+- [speed-merchants integration tests HUNG on CORPLTR94 10/10 before seeding (suspect AssemblyInitialize CDP/NSB); probe with timeout 240 first](reference_speedmerchants_integration_tests_hang_corpltr94.md)
+- **[Snapshot step stuck Running = missing run-profile row (REST 207 / 8617); Hangfire retries 10x writing orphan rows; WorkloadExecution never Failed; Hangfire DB recreate kills retry](reference_snapshot_step_stuck_missing_run_profile.md)**

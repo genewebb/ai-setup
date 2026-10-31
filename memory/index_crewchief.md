@@ -32,3 +32,8 @@ metadata:
 
 - **[CrewChief connect restructure 10/13: `connect` folder, PData* entities; generator -Environment Local|SMVMTR1 (SMVMTR1 set deployed, secrets SMVMTR1_connect_crewchief.json built); prod TestAuto writes blocked on ScenarioMgt key](project_crewchief_connect_restructure_2026-10-13.md)**
 - **[CrewChief secrets -> reference data 10/15: only creds/keys/thumbprints secret; reference-kv parent folders; CrewChief folder types + configuration-bindings + builtIn/description markers + list/edit screen (uncommitted); SMVMTR1 non-connect workloads deleted (backed up); slim secrets built, import after rebuild](project_crewchief_secrets_to_reference_data_2026-10-15.md)**
+
+## Moved from MEMORY.md 2026-10-31 (lines verbatim)
+
+- **[CrewChief Configure REMOVE INSTANCE 10/21 (uncommitted): operation toggle, verify pre/post; needs LIVE test; suspected exe service-name defect](project_crewchief_configure_remove_instance_2026-10-21.md)**
+- [CrewChief CLI Runner on SMVMTR1: scheduled task as corp\speedmerchants + queue.txt, '!' wrap beats ConnEx preflight; remoting CLI = ANONYMOUS LOGON](reference_crewchief_cli_runner_smvmtr1.md)
