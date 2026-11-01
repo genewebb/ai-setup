@@ -1,6 +1,6 @@
 ---
 name: stream-author
-description: v0.12. Stream kit skill 2 of 5. It runs unattended and never prompts. Each cycle it first takes the oldest open item in its inbox (.streams\inbox\stream-author.md, to rewrite a ticket or grader, including for a ticketed task no builder has claimed), then claims released tasks from .streams\tasks.json, writes a short ticket whose acceptance clauses state WHAT must be true (with REQ/AC ids and the write set), optionally a static grader, has one skeptic subagent try to break them, and then marks the task ticketed for builders. It runs no RED check and builds nothing; the builder proves RED in its own worktree and chooses the tests. When nothing is ready it sleeps and re-checks. Use for /stream-author (run under /loop), /stream-author once, /stream-author status.
+description: v0.13. Stream kit skill 2 of 5. It runs unattended and never prompts. Each cycle it first takes the oldest open item in its inbox (.streams\inbox\stream-author.md, to rewrite a ticket or grader, including for a ticketed task no builder has claimed), then claims released tasks from .streams\tasks.json, writes a short ticket whose acceptance clauses state WHAT must be true (with REQ/AC ids and the write set), optionally a static grader, has one skeptic subagent try to break them, and then marks the task ticketed for builders. It runs no RED check and builds nothing; the builder proves RED in its own worktree and chooses the tests. When nothing is ready it sleeps and re-checks. Use for /stream-author (run under /loop), /stream-author once, /stream-author status.
 ---
 
 # stream-author
@@ -134,6 +134,13 @@ PRE-STAGED UNIT: when your command carries `packet:`, steps 0, 1 and 2 are DONE 
      where a specific existing test is the clause's evidence.
    - **Defaults taken**: any reading the author chose, with the owner-log line.
    - **Not in this task**: the nearby work that belongs to another task (by id).
+   - **Review rounds** (v0.13, kit item IN-20261031085603-1409; owner approval 2026-10-31 04:54 EDT), only on a
+     requirement review-fix row: a row whose write set holds requirement files (`docs\requirements\...`) and whose
+     work reviews them until they pass. State the ANCHORED loop of stream-build ("Requirement review-fix rows") and
+     never an unanchored "fresh clean-session review rounds until each passes": round 1 full, round N checks only the
+     round N-1 findings plus regressions in text changed since N-1, and one full fresh clean-session review with no
+     open finding is the pass gate. Name the row log (`.streams\logs\<task>.md`) and the review-log path pattern; the
+     ticket never asks for a process note (round counts, review ids, finding lists) in a requirement file.
 5. **Grader (optional).** A per-task grader is no longer the release gate: the builder writes a check that runs one
    test per acceptance clause plus the existing tests its change can break, and the integrator re-runs that check on
    main (owner ruling 2026-10-02, kit item IN-20261002160643-741d). Write a grader only for a clause no test can carry,
