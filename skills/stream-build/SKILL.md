@@ -1,6 +1,6 @@
 ---
 name: stream-build
-description: v0.15. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
+description: v0.16. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
 ---
 
 # stream-build
@@ -295,6 +295,35 @@ Build one like a mockup task, not like a code task:
 
 This is the one case where a builder writes under `.streams\graders\` or `.streams\plans\`, and only for the
 paths its own write set names.
+
+## Requirement review-fix rows: anchored review rounds
+
+v0.16, kit item IN-20261031085603-1409, owner approval 2026-10-31 04:54 EDT. A requirement review-fix row edits
+requirement files (`docs\requirements\...`) and reviews each one until it passes. Unanchored rounds, a full fresh
+clean-session review every round, did not converge: NFR-OPERABILITY-001 found 21, 26, 25; FEAT-UI-SHELL-001 21, 22, 26;
+CAP-AUTHORING-001 reached round 39. Each fresh reviewer re-reads the whole file and finds new things. So the review
+loop is ANCHORED, whatever an older ticket or note on the row says ("clean-session review rounds until each passes"
+now means this loop):
+
+1. **Round 1 is a full review**: a fresh subagent given the repo's review prompt and the file and nothing else (the
+   clean-session rule of `docs\requirements\RequirementDesign.md`, "Approval sequence"). Save its findings, numbered,
+   in the review log.
+2. **Fix** the findings in the file. Owner-only points are owner-queued with the recommended reading taken.
+3. **Round N (N > 1) is anchored**: a fresh subagent given the file, the round N-1 findings list, and the diff of the
+   file since the revision round N-1 reviewed (`reqtools` revision ids in the log). It answers two questions only:
+   is each N-1 finding closed (CLOSED / OPEN, with the quote), and does the changed text introduce a defect
+   (REGRESSION, quoting changed lines only). It never reviews unchanged text. Its OPEN and REGRESSION items are the
+   round's findings; fix them and run round N+1.
+4. **The pass gate**: when an anchored round has no OPEN and no REGRESSION item, run ONE full fresh clean-session
+   review, exactly as round 1 (the P-06 bar and every gate unchanged). No finding: the file passes, and this review
+   is the review record the file carries. Any finding: those findings anchor the next rounds (step 3), and a later
+   clean anchored round earns one more gate review.
+5. **Where things go**: round logs, finding lists, CLOSED/OPEN tables and round counts go in the row log
+   (`.streams\logs\<task>.md`) and its review logs, never in the requirement file. Only the gate review's record (a
+   clean session, the review prompt only) is written into the file's review history; anchored rounds are working
+   checks, not independent reviews.
+6. A ticket's convergence stop ("if a round finds 20+ NEW findings, stop and report") counts only full reviews (round
+   1 and gate reviews); an anchored round's count is the OPEN plus REGRESSION items.
 
 ## Mockup tasks
 
