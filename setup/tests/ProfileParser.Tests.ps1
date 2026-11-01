@@ -14,7 +14,7 @@ $region = $m.Value -replace '(?m)^Read-GeneMachineConfig\s*$', ''
 $root = New-TestRoot 'pp'
 try {
     $cfg = Join-Path $root 'p.md'
-    New-TestProfile -Path $cfg -Keys ([ordered]@{ ReposRoot = 'X:\repos'; AIWorkRoot = 'X:\corpus'; ScratchRoot = 'X:\tmp' }) -Sections ([ordered]@{
+    New-TestProfile -Path $cfg -Keys ([ordered]@{ ReposRoot = 'X:\repos'; AIWorkRoot = 'X:\corpus'; ScratchRoot = 'X:\tmp'; Role = 'personal'; StreamRepo = '' }) -Sections ([ordered]@{
             'Claude access' = "| Path | Access | Note |`n|---|---|---|`n| {ReposRoot} | read, edit | |"
             'Git policy'    = "| Repo | Commit | Push | Worktrees | Note |`n|---|---|---|---|---|`n| SpeedyRepo | yes | yes | yes | |"
         })
