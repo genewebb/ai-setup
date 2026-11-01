@@ -105,7 +105,7 @@ function Expand-AIValue {
 function Get-AIMachineProfile {
     <#
     .SYNOPSIS
-        Parses the machine profile into Keys, Resources, Access, GitPolicy and Mcp.
+        Parses the machine profile into Keys, Resources, Access, GitPolicy, Mcp and Exclude.
     .PARAMETER TestOverride
         Tests only: a hashtable of key => value applied on top of the profile (R3).
     #>
@@ -185,8 +185,14 @@ function Get-AIMachineProfile {
             Note    = [string]$r['Note']
         }
     }
+    # Optional: runtime items this machine does not install (skills\<name>, agents\<file>.md, commands\<file>.md).
+    # Wildcards (-like) allowed, e.g. skills\testauto-*. Matched against the item, i.e. the first two path segments.
+    $exclude = foreach ($r in (& $section 'Excluded runtime')) {
+        $i = ([string]$r['Item']).Trim().Trim('`') -replace '/', '\'
+        if ($i) { $i.TrimEnd('\') }
+    }
 
-    $bytes = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $Path).ProviderPath)
+    $bytes =[IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $Path).ProviderPath)
     $hash  = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
 
     [pscustomobject]@{
@@ -199,7 +205,8 @@ function Get-AIMachineProfile {
         Access    = @($access)
         GitPolicy = @($git)
         Mcp       = @($mcp)
-        Sections  = @($tables.Keys | Where-Object { $_ })
+        Exclude   = @($exclude)
+        Sections = @($tables.Keys | Where-Object { $_ })
     }
 }
 

@@ -140,6 +140,21 @@ if (-not $settingsOnly) {
             default { throw "Unknown manifest entry kind '$($e.kind)'." }
         }
     }
+    # Per-machine exclusions ("Excluded runtime" table in the machine profile). Previously installed copies of an
+    # excluded item drop out of the plan, so the normal stale-file pass removes them (with rollback).
+    $excl = @($prof.Exclude | Where-Object { $_ })
+    if ($excl.Count) {
+        $dropped = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($rel in @($plan.Keys)) {
+            $seg = $rel -split '\\'
+            if ($seg.Count -lt 2 -or $seg[0] -notin 'skills', 'agents', 'commands') { continue }
+            $item = "$($seg[0])\$($seg[1])"
+            if ($excl | Where-Object { $item -like $_ }) { $plan.Remove($rel); [void]$dropped.Add($item) }
+        }
+        $unused = @($excl | Where-Object { $p = $_; -not ($dropped | Where-Object { $_ -like $p }) })
+        Write-Host "Excluded runtime (machine profile): $($dropped.Count) items not installed." -ForegroundColor DarkGray
+        foreach ($u in $unused) { Write-Host "  Exclude pattern '$u' matched nothing." -ForegroundColor Yellow }
+    }
 }
 $hashes = [ordered]@{}
 foreach ($rel in $plan.Keys) { $hashes[$rel] = Get-Sha $plan[$rel] }
