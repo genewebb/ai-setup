@@ -35,11 +35,11 @@ worktree, deleting data outside a test's own temp folder), which stays the owner
 ## Start
 
 ```
-/loop /stream-build repo: {SpeedyRepo}
+/loop /stream-build repo: {StreamRepo}
 ```
 
 **Fresh context (preferred; owner ruling 2026-10-04).** Instead of `/loop`, run this role from a plain terminal with
-`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {SpeedyRepo} -Role build`.
+`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {StreamRepo} -Role build`.
 The runner starts a new headless Claude session for every task it builds, so nothing carries over from the last one's
 context. Each runner session gets its session id and the headless rules in its system prompt:
 - run one cycle;
@@ -84,7 +84,7 @@ model, put it on every `Agent` call, whatever step 7 says.
 **Lessons.** A runner session starts empty, so it reads `.streams\lessons\build.md` before it claims or takes work
 (in a pre-staged unit the packet holds them): one line per
 lesson from earlier units of this role. Add one only for something a later unit needs and cannot read from `.streams\`:
-`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Add-Lesson.ps1" -Repo {SpeedyRepo} -Role build -Session <id> -Task <id> -Text "<one line>"`.
+`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Add-Lesson.ps1" -Repo {StreamRepo} -Role build -Session <id> -Task <id> -Text "<one line>"`.
 Never ticket detail, never a secret.
 
 Several builder sessions can run at once. Each works in its own worktree, so there are no bin-folder locks between

@@ -11,11 +11,11 @@ committed as soon as its grader passes on main, so the main tree's history only 
 ## Start
 
 ```
-/loop /stream-integrate repo: {SpeedyRepo}
+/loop /stream-integrate repo: {StreamRepo}
 ```
 
 **Fresh context (preferred; owner ruling 2026-10-04).** Instead of `/loop`, run this role from a plain terminal with
-`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {SpeedyRepo} -Role integrate`.
+`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {StreamRepo} -Role integrate`.
 The runner launches a new headless Claude session only when its gate finds work (owner ruling 2026-10-17): an open
 inbox item, a built focus row the drain can apply (`Get-Claimable` integrate), a focus group in `integrating`, or this
 runner's own integrator lock still beating (a suite or drain in flight). Otherwise it shows an idle report (why idle,
@@ -41,7 +41,7 @@ then exits by itself. A session without that tool (a `/loop` session, `-p`) ends
 
 **Lessons.** A runner session starts empty, so it reads `.streams\lessons\integrate.md` before it claims or takes work: one line per
 lesson from earlier units of this role. Add one only for something a later unit needs and cannot read from `.streams\`:
-`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Add-Lesson.ps1" -Repo {SpeedyRepo} -Role integrate -Session <id> -Task <id> -Text "<one line>"`.
+`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Add-Lesson.ps1" -Repo {StreamRepo} -Role integrate -Session <id> -Task <id> -Text "<one line>"`.
 Never ticket detail, never a secret.
 
 **One integrator per repo.**

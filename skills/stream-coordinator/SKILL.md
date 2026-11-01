@@ -13,11 +13,11 @@ testing.
 ## Start
 
 ```
-/loop 20m /stream-coordinator repo: {SpeedyRepo}
+/loop 20m /stream-coordinator repo: {StreamRepo}
 ```
 
 **Fresh context (preferred; owner ruling 2026-10-04).** Instead of `/loop`, run this role from a plain terminal with
-`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {SpeedyRepo} -Role coordinator`.
+`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {StreamRepo} -Role coordinator`.
 The runner launches a new headless Claude session only when its gate finds work (owner ruling 2026-10-17): an open
 kit or plan inbox item with no live kit runner or planner to take it (the coordinator has no inbox of its own); free RAM under 6 GB
 (memory pressure); a change in the status flags since the last look; the first review after the runner starts; or the
@@ -40,7 +40,7 @@ then exits by itself. A session without that tool (a `/loop` session, `-p`) ends
 
 **Lessons.** A runner session starts empty, so it reads `.streams\lessons\coordinator.md` before it claims or takes work: one line per
 lesson from earlier units of this role. Add one only for something a later unit needs and cannot read from `.streams\`:
-`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Add-Lesson.ps1" -Repo {SpeedyRepo} -Role coordinator -Session <id> -Task <id> -Text "<one line>"`.
+`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Add-Lesson.ps1" -Repo {StreamRepo} -Role coordinator -Session <id> -Task <id> -Text "<one line>"`.
 Never ticket detail, never a secret.
 
 The loop runs a tick every 20 minutes, and every tick works the inboxes (steps 2 and 3), so no plan item waits longer

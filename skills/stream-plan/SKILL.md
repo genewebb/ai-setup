@@ -16,8 +16,8 @@ A plan never starts from "all the requirements". The owner states the scope, and
 
 ```
 /stream-plan
-repo:         {SpeedyRepo}
-requirements: {SpeedyRepo}\docs\requirements\     (one or more folders or files)
+repo:         {StreamRepo}
+requirements: {StreamRepo}\docs\requirements\     (one or more folders or files)
 groups:
   - G2 "Backup and Restore": FEAT-BACKUP-RESTORE-001
   - G3 "Steps": FEAT-STEPS-001 (REQ-STP-001..014 only)
@@ -70,11 +70,11 @@ Other stream skills and the owner leave work for this skill in `<repo>\.streams\
 Start it once per repo, in its own session:
 
 ```
-/loop /stream-plan inbox repo: {SpeedyRepo}
+/loop /stream-plan inbox repo: {StreamRepo}
 ```
 
 **Fresh context (preferred; owner ruling 2026-10-04).** Instead of `/loop`, run this role from a plain terminal with
-`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {SpeedyRepo} -Role plan`.
+`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {StreamRepo} -Role plan`.
 The runner launches a new headless Claude session only when `.streams\inbox\stream-plan.md` holds an actionable item
 and no other planner is live (owner ruling 2026-10-17); otherwise it shows an idle report and watches the inbox file at
 no token cost. Nothing carries over from one unit to the next. Each runner session gets its session id and the headless
@@ -95,7 +95,7 @@ then exits by itself. A session without that tool (a `/loop` session, `-p`) ends
 
 **Lessons.** A runner session starts empty, so it reads `.streams\lessons\plan.md` before it claims or takes work: one line per
 lesson from earlier units of this role. Add one only for something a later unit needs and cannot read from `.streams\`:
-`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Add-Lesson.ps1" -Repo {SpeedyRepo} -Role plan -Session <id> -Task <id> -Text "<one line>"`.
+`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Add-Lesson.ps1" -Repo {StreamRepo} -Role plan -Session <id> -Task <id> -Text "<one line>"`.
 Never ticket detail, never a secret.
 
 Each cycle:
@@ -234,8 +234,8 @@ Location: `<repo>\.streams\tasks.json`, excluded through `.git\info\exclude`.
 ```json
 {
   "version": 1,
-  "repo": "{SpeedyRepo}",
-  "requirements": ["{SpeedyRepo}\\docs\\requirements\\"],
+  "repo": "{StreamRepo}",
+  "requirements": ["{StreamRepo}\\docs\\requirements\\"],
   "groups": [
     { "id": "G2", "name": "Backup and Restore", "state": "planning|published|released|integrating|closed",
       "scope": { "include": ["FEAT-BACKUP-RESTORE-001"], "exclude": [], "clauses": ".streams\\plans\\G2.scope.md" },

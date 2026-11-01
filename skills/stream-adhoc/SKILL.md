@@ -14,10 +14,10 @@ plan includes.
 ## Start
 
 ```
-addStreamTab -Role Adhoc -Repo {SpeedyRepo}
+addStreamTab -Role Adhoc -Repo {StreamRepo}
 ```
 
-The tab runs `/stream-adhoc repo: {SpeedyRepo}`. It is a long interactive session, like Planner and Coordinator:
+The tab runs `/stream-adhoc repo: {StreamRepo}`. It is a long interactive session, like Planner and Coordinator:
 - the owner types requests in this tab, and only there; there is no ad-hoc inbox;
 - one Adhoc tab per repo;
 - the stream-compact mod compacts it as its context fills.

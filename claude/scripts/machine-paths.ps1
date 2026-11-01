@@ -14,7 +14,7 @@ try {
     $prof = Get-AIMachineProfile
     $cfg = @(Get-AIConfig)
 
-    $show = 'AIWorkRoot', 'ClaudeHome', 'ReposRoot', 'SpeedyRepo', 'SpeedMerchantsRepo', 'WorktreesRoot', 'ScratchRoot',
+    $show = 'AIWorkRoot', 'ClaudeHome', 'ReposRoot', 'StreamRepo', 'SpeedyRepo', 'SpeedMerchantsRepo', 'WorktreesRoot', 'ScratchRoot',
     'StatusPageDir', 'VaultWorkRoot', 'VaultPersonalRoot', 'VaultDocsRoot', 'PowershellScriptsDir', 'SecretsDir', 'ArchiveRoot'
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add("Machine paths ($env:COMPUTERNAME, from $($prof.Path)). {Key} in a skill means the value below; if a key is missing, run Get-AIConfig.")

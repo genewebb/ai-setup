@@ -11,12 +11,12 @@ a dead session.
 ## Start
 
 ```
-/loop 15m /stream-status repo: {SpeedyRepo}
-/loop 10m /stream-status inbox repo: {SpeedyRepo}
+/loop 15m /stream-status repo: {StreamRepo}
+/loop 10m /stream-status inbox repo: {StreamRepo}
 ```
 
 **Fresh context (preferred; owner ruling 2026-10-04).** Instead of `/loop`, run this role from a plain terminal with
-`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {SpeedyRepo} -Role status`.
+`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Start-StreamRunner.ps1" -Repo {StreamRepo} -Role status`.
 **The runner runs the tick itself, as scripts, with no model call (owner ruling 2026-10-17).** Every 15 minutes it runs
 `Invoke-Watchdog`, `Get-StreamStatus`, `Build-StatusPage`, `Get-StreamCost` + `Build-CostPage`, `Build-PriorityPage`,
 `Archive-TaskHistory` (first tick of each UTC day) and `Activate-Group` for a focus group without an activation record,
@@ -40,7 +40,7 @@ then exits by itself. A session without that tool (a `/loop` session, `-p`) ends
 
 **Lessons.** A runner session starts empty, so it reads `.streams\lessons\status.md` before it claims or takes work: one line per
 lesson from earlier units of this role. Add one only for something a later unit needs and cannot read from `.streams\`:
-`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Add-Lesson.ps1" -Repo {SpeedyRepo} -Role status -Session <id> -Task <id> -Text "<one line>"`.
+`pwsh -NoProfile -File "{ClaudeHome}\skills\stream-kit\scripts\Add-Lesson.ps1" -Repo {StreamRepo} -Role status -Session <id> -Task <id> -Text "<one line>"`.
 Never ticket detail, never a secret.
 
 Start both in the same session. The full tick works the inbox too (step 3), so the second loop is only needed when

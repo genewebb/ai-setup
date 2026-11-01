@@ -63,8 +63,8 @@ says tasks are waiting for a builder, and add an author when builders are idle a
 
 ```
 /stream-plan
-repo:         {SpeedyRepo}
-requirements: {SpeedyRepo}\docs\requirements\
+repo:         {StreamRepo}
+requirements: {StreamRepo}\docs\requirements\
 groups:
   - G2 "Backup and Restore": FEAT-BACKUP-RESTORE-001
 exclude:      (optional carve-outs)
