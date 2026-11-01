@@ -1,8 +1,11 @@
 ---
 name: index_infra_misc
-description: Index of infrastructure, container and miscellaneous reference memories
+description: "Index of infrastructure, container and miscellaneous reference memories"
 metadata:
+  node_type: memory
   type: reference
+  originSessionId: 84e74011-5b26-45c8-b2a9-b04ffd05c2ab
+  modified: 2026-11-01T14:53:06.086Z
 ---
 
 Moved out of MEMORY.md to keep the index under its read limit; each line keeps its original links.
@@ -39,7 +42,7 @@ Moved out of MEMORY.md to keep the index under its read limit; each line keeps i
 - [ADO MCP = Microsoft @azure-devops/mcp, PAT as base64 any:pat; wit_work_item; Cursor removed 10/12](reference_ado_mcp_microsoft_pat.md)
 - [DO droplet 138.68.42.81 (SFO2, 2 GB, recreated 10/16): `addLinux` + `-Desktop`, key ~\.ssh\do_droplet_ed25519, rebuild script D:\repos\Linux\setup-droplet.sh, Royal TS doc; skill royalts](reference_do_droplet_addlinux.md)
 - [GMKtec EVO-X1 = PERSONAL home lab, not work; Proxmox 9.2 LIVE 10/26 homeai 192.168.8.210, ssh key pve_home_ed25519; 10/27 local AI DROPPED, box = Linux+Windows container prototype](project_home_lab_gmktec_evo_x1.md) · [Royal TS web conn defaults to IE engine: set plugin Chromium](reference_royalts_web_connection_ie_engine.md) · [pwsh ssh-keygen -N '""' = literal passphrase](reference_pwsh_sshkeygen_empty_passphrase.md)
-- [\\SMVMTR1\d$ Access denied from Claude = cached-logon session lost its TGT; fix `cmdkey /add:SMVMTR1 /user:corp\agenewe /pass`](reference_smvmtr1_smb_access_denied_cached_logon.md)
+- [\\SMVMTR1\d$ Access denied OR WinRM 0x80090311 from Claude = cached-logon session lost its TGT; fix `cmdkey /add:SMVMTR1 /user:corp\agenewe /pass`](reference_smvmtr1_smb_access_denied_cached_logon.md)
 - [NAS drive letters stale after reboot](reference_nas_drive_letters_stale_after_reboot.md) — `net use Q: \\SynologyDS918\obsidian /persistent:yes` FIRST · [agent types invisible if session started with Q: down](reference_foreman_agent_types_not_exposed_after_q_remap.md)
 - [AddOrUpdateMyTerminal.ps1 (D:\PowershellScripts): WT settings embedded, -Capture refresh, applies admin + desktop account; SEPARATE from stream kit](reference_addorupdatemyterminal_script.md)
 - **[SMVMTR1 S: = Azure Files; laptop 445 blocked; dp* -Package relays exes through SMVMTR1 (Publish-GeneSharedBits, SharedBits* keys); Claude blocked from key-reading run](reference_shared_bits_smvmtr1_azure_relay.md)**

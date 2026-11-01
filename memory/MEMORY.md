@@ -30,3 +30,4 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [prof setup share 10/23](project_prof_share_design_2026-10-23.md) · [profile load NAS fix 10/27](reference_profile_load_nas_clearseq.md)
 - [PROD TestAuto SQL = wus2-pc-profisee-sqlserver-0 / pc-speedmr-prd-db via speedmerchants-prod-mssql MCP](reference_testauto_prod_sql_server.md)
 - **[Profisee services stay cold after recycle/restore: warm via /rest/health or Monitor drains nothing](reference_profisee_cold_service_after_recycle.md)**
+- [Portal hangs, health green: Data ShiftPartitions job holds Sch-M on t$Entity behind matching; kill = Hangfire retry](reference_partition_job_blocks_portal_during_matching.md)
