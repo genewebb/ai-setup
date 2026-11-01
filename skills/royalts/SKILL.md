@@ -1,11 +1,13 @@
 ---
 name: royalts
 description: >
-  Royal TS (Windows, V7) connection documents built and inspected from PowerShell with the official
-  RoyalDocument.PowerShell module: SSH terminals, credentials with key files, SSH Secure Gateways, and
-  RDP tunnelled through SSH to a Linux desktop (xrdp). Use when creating or fixing a Royal TS
-  connection or .rtsz document, when Royal TS keeps asking for "a complete set of credentials", says
-  access to the private key is denied, or an RDP-over-SSH (Secure Gateway) connection will not connect.
+  Royal TS (Windows, V7) connection documents built, extended and inspected from PowerShell with the
+  official RoyalDocument.PowerShell module: SSH terminals, credentials with key files, SSH Secure
+  Gateways, RDP tunnelled through SSH to a Linux desktop (xrdp), and adding entries to an existing
+  document (including the automatic entry for every new Proxmox container). Use when creating or
+  fixing a Royal TS connection or .rtsz document, adding a host to an existing document, when Royal TS
+  keeps asking for "a complete set of credentials", says access to the private key is denied, or an
+  RDP-over-SSH (Secure Gateway) connection will not connect.
 ---
 
 # Royal TS
@@ -15,8 +17,9 @@ description: >
 - **Never open Gene's existing documents** (`Connections (Gene Webb).rtsz`, `Connections (QA Automation).rtsz`).
   They hold stored credentials for every host. Create a NEW document; Gene opens it in Royal TS
   (File > Open) and adds passwords himself. Scripts here never write or print a password.
-- **Royal TS runs as `CORP\genewe`**, not `CORP\agenewe` (the account Claude runs as). Any key file Royal TS
-  uses must be readable by `genewe`. Check the owner, never assume:
+- **On the work laptop Royal TS runs as `CORP\genewe`**, not `CORP\agenewe` (the account Claude runs as). Any
+  key file Royal TS uses must be readable by `genewe`. On a personal machine both run as the same user. Check
+  the owner, never assume:
   ```powershell
   Get-CimInstance Win32_Process -Filter "Name='RoyalTS.exe'" | Invoke-CimMethod -MethodName GetOwner
   ```
@@ -41,7 +44,30 @@ Install-Module RoyalDocument.PowerShell -Scope CurrentUser -Repository PSGallery
 `New-RoyalSshTunnelDocument.ps1` refuses to overwrite. It creates: key credential, SSH terminal, and with
 `-Rdp` a username-only desktop credential, an SSH Secure Gateway and an RDP connection to `127.0.0.1`
 through it. `Show-RoyalDocument.ps1` prints hosts, ports, modes, key paths and which object each link
-points to (`MISSING <id>` = broken link); passwords appear only as `hasPassword=Yes/No`.
+points to (`MISSING <id>` = broken link); a password is shown only as `hasPassword` Yes or No.
+
+## Add entries to an existing document
+
+Documents the owner created for Claude to maintain (the home-appliance documents "Home AI Linux" and
+"Home AI Windows") may be opened and extended. The shared helpers live in `{ClaudeHome}\scripts\lib\RoyalTs.ps1`
+and use the module, never hand-written XML:
+
+```powershell
+. "{ClaudeHome}\scripts\lib\RoyalTs.ps1"
+Add-RoyalTsKeyCredential -DocumentPath $doc -Name 'HomeAI guest key (root)' -UserName root -PrivateKeyPath '<key file>'
+Add-RoyalTsSshConnection -DocumentPath $doc -Name trading-db -Uri 192.168.8.220 -Description 'Proxmox LXC 200' -CredentialName 'HomeAI guest key (root)'
+```
+
+Both are idempotent (same Name or URI = nothing added, existing ID returned) and write a `.bak-<stamp>` beside
+the document first. CLI twin: `{ClaudeHome}\scripts\Add-RoyalTsSshLink.ps1 -Name <host> -Uri <ip>`; it defaults to
+the document in profile key `RoyalTsHomeAILinux` and the credential above.
+
+Automatic: the PostToolUse hook `royalts-container-link` runs after `mcp__proxmox__create_container` and adds the
+SSH entry (static IP from the call, else the hostname). Containers created outside that tool need the CLI.
+
+Verify with `Show-RoyalDocument.ps1`; `cred=MISSING <id>` means a broken credential link. If Royal TS is running
+with the document open, tell the owner to reload it (File > Open) before saving anything there, or the next save
+in Royal TS discards the change.
 
 ## RDP to a Linux desktop through SSH
 

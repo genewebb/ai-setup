@@ -14,5 +14,9 @@ metadata:
 - SMVMTR1: `C:\Users\speedmerchants\.local\bin\cswap.exe`. Added to that user's **User** PATH via
   `[Environment]::SetEnvironmentVariable('Path', ..., 'User')` on 2026-09-29; Gene confirmed fixed.
   Registry-scoped, so it does not travel with the shared pwsh profile — repeat on SMVMTR2 if needed.
+- DADPC: `C:\Users\Gene\.local\bin\cswap.exe`. PATH was already fine; the tool simply was not installed.
+  Fixed 2026-11-01 by Gene running `uv tool install claude-swap` (v0.29.0). The auto-mode classifier
+  blocks Claude from running that install, so on a new machine hand Gene the command.
+- First check on any machine where "cswap not found": `uv tool list` — empty means install, not PATH.
 
 Related: [[claude-account-switching]], [[stream-host-smvmtr1]], [[profile-machine-config]].

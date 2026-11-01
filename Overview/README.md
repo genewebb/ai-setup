@@ -243,7 +243,7 @@ _191 skills · 12 agents · updated 2026-11-01_
 | [Markdown Code Blocks](../skills/markdown-code-blocks/SKILL.md) | Code block and documentation formatting rules for .md and .mdc files: language identifiers, one-command-per-block convention, Obsidian callout type... |
 | [Mymemory](../skills/mymemory/SKILL.md) | Slash shortcut that shows the top 10 memory consumers on this Windows machine, rolled up to where the memory is coming from (a Claude Code session... |
 | [Orchestrator Worker Loop](../skills/orchestrator-worker-loop/SKILL.md) | Interview the user to define a coding goal, then run a cost-tiered orchestrator-worker loop (reasoning tier plans+verifies, fast/balanced tier exec... |
-| [Royalts](../skills/royalts/SKILL.md) | Royal TS (Windows, V7) connection documents built and inspected from PowerShell with the official RoyalDocument.PowerShell module: SSH terminals, c... |
+| [Royalts](../skills/royalts/SKILL.md) | Royal TS (Windows, V7) connection documents built, extended and inspected from PowerShell with the official RoyalDocument.PowerShell module: SSH te... |
 | [Scorecard Wizard](../skills/scorecard-wizard/SKILL.md) | Adapts the TestAuto.Web Matching scorecard wizard (4 steps, one chart series per workload execution, two-part baseline, read-only "Your comparison"... |
 | [Slides](../skills/slides/SKILL.md) | Create strategic HTML presentations with Chart.js, design tokens, responsive layouts, copywriting formulas, and contextual slide strategies |
 | [Speedy Demo](../skills/speedy-demo/SKILL.md) | Slash command that updates the Speedy architecture documentation set: interactive Archify diagrams, the narrated MP4 walkthrough, and the click-thr... |
