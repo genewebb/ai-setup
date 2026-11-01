@@ -140,9 +140,19 @@ if (-not $settingsOnly) {
             default { throw "Unknown manifest entry kind '$($e.kind)'." }
         }
     }
-    # Per-machine exclusions ("Excluded runtime" table in the machine profile). Previously installed copies of an
+    # Scope (ai-manifest.json "scopes" + profile Role): a personal machine skips work items, a work machine (or a blank
+    # Role) skips personal items. Unlisted items are general and go everywhere.
+    $role = ([string]$prof.Keys['Role']).Trim().ToLowerInvariant()
+    if (-not $role) { $role = 'work' }
+    $skipScope = if ($role -eq 'personal') { 'work' } else { 'personal' }
+    $scopeExcl = @()
+    if ($manifest.Contains('scopes') -and $manifest.scopes.Contains($skipScope)) {
+        $scopeExcl = @($manifest.scopes[$skipScope] | Where-Object { $_ } | ForEach-Object { ($_ -replace '/', '\').TrimEnd('\') })
+    }
+    Write-Host "Role: $role (skips $skipScope-scoped items: $($scopeExcl.Count) patterns)." -ForegroundColor DarkGray
+    # Per-machine exclusions ("Excluded runtime" table in the machine profile) on top. Previously installed copies of an
     # excluded item drop out of the plan, so the normal stale-file pass removes them (with rollback).
-    $excl = @($prof.Exclude | Where-Object { $_ })
+    $excl = @($scopeExcl) + @($prof.Exclude | Where-Object { $_ })
     if ($excl.Count) {
         $dropped = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($rel in @($plan.Keys)) {
@@ -152,7 +162,7 @@ if (-not $settingsOnly) {
             if ($excl | Where-Object { $item -like $_ }) { $plan.Remove($rel); [void]$dropped.Add($item) }
         }
         $unused = @($excl | Where-Object { $p = $_; -not ($dropped | Where-Object { $_ -like $p }) })
-        Write-Host "Excluded runtime (machine profile): $($dropped.Count) items not installed." -ForegroundColor DarkGray
+        Write-Host "Excluded runtime (scope + machine profile): $($dropped.Count) items not installed." -ForegroundColor DarkGray
         foreach ($u in $unused) { Write-Host "  Exclude pattern '$u' matched nothing." -ForegroundColor Yellow }
     }
 }

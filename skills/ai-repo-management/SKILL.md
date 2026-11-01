@@ -33,6 +33,11 @@ installed COPIES; an edit made there is drift and is overwritten (and reported) 
 
 1. Create or edit `{AIWorkRoot}\skills\<name>\SKILL.md` (frontmatter `name` = folder name, `description` =
    what it is + "Use when ..."). No registration step: the manifest installs every skills folder.
+   **Scope:** a skill is general (every machine) unless `ai-manifest.json` `scopes` lists it. Add `skills/<name>`
+   (or `agents/<file>.md`) to `scopes.work` for work-only content (TestAuto, CrewChief, Speedy, Profisee, ADO,
+   work tooling) or to `scopes.personal` for home-only content. Each machine profile's `Role` row (`work` or
+   `personal`, blank = work) picks which scoped items install. Prefixes `testauto-`, `crewchief-`, `speedy-`,
+   `testdata-` and `profisee-` are already work by wildcard.
 2. Regenerate the Overview README (generated, never hand-edited):
    ```powershell
    pwsh "{AIWorkRoot}\Overview\Generate-SkillsReadme.ps1"

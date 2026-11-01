@@ -30,7 +30,7 @@ $script:AIKeys = @(
 )
 $script:RequiredKeys = @('AIWorkRoot', 'ScratchRoot', 'WorktreesRoot', 'ReposRoot')
 # Keys whose value is not a path (never tested for existence, never rendered into access rules).
-$script:NonPathKeys = @('TestedClaudeVersion', 'TranscriptRetentionDays', 'AllowTempInRepo')
+$script:NonPathKeys = @('TestedClaudeVersion', 'TranscriptRetentionDays', 'AllowTempInRepo', 'Role')
 # Get-AILocationKind's answer for a share or drive that a remote (WinRM) session cannot see.
 $script:NotCheckedRemote = 'not checked (remote session)'
 
@@ -319,6 +319,11 @@ function Test-AIMachineProfile {
     foreach ($r in $script:RequiredKeys) {
         if (-not $k.Contains($r)) { & $err "Required key '$r' is missing. Add a row to $($Profile.Path)." }
         elseif (-not $k[$r]) { & $err "Required key '$r' is blank. Set its value in $($Profile.Path)." }
+    }
+
+    # Role picks which scoped runtime items install (ai-manifest.json "scopes"). Blank = work.
+    if ($k.Contains('Role') -and $k['Role'] -and $k['Role'].Trim().ToLowerInvariant() -notin 'work', 'personal') {
+        & $err "Role '$($k['Role'])' is not 'work' or 'personal'. Fix the Role row in $($Profile.Path)."
     }
 
     # Temporary roots stay out of repos (spec 4.2).
