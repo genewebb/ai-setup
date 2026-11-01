@@ -28,3 +28,5 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [Post-run collection slow: 3c records matching never touches](reference_postrun_collection_slow_dns_outage_2026-10-29.md) · [manual monitor marker insert](reference_manual_monitor_marker_insert.md)
 - [logpull v1.2 10/26](project_logpull_v12_gui_2026-10-26.md) · [ADO 166723 DATAS GC re-run](project_ado_166723_26r3_perf_datas_gc.md) · [CrewChief remove instance 10/21](project_crewchief_configure_remove_instance_2026-10-21.md)
 - [prof setup share 10/23](project_prof_share_design_2026-10-23.md) · [profile load NAS fix 10/27](reference_profile_load_nas_clearseq.md)
+- [PROD TestAuto SQL = wus2-pc-profisee-sqlserver-0 / pc-speedmr-prd-db via speedmerchants-prod-mssql MCP](reference_testauto_prod_sql_server.md)
+- **[Profisee services stay cold after recycle/restore: warm via /rest/health or Monitor drains nothing](reference_profisee_cold_service_after_recycle.md)**

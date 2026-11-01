@@ -776,6 +776,39 @@ try {
             Assert-Match $o "> prof git new -Branch work/menu -WhatIf"
             Assert-Match $o '4\) main\s+Go to main and pull'
         }
+        Test-Case 'git: switch brings a server-only branch here, tracking it, and pulls it' {
+            git -C $other switch -q -c work/remote 2>$null; Add-Commit $other 'r.txt' 'remote'; git -C $other push -q -u origin work/remote 2>$null
+            Set-Location $work
+            Invoke-GeneProf git switch speedy -Branch 'work/remote' 6>&1 | Out-Null
+            Assert-Equal 'work/remote' ([string](git -C $work branch --show-current)).Trim()
+            Assert-True (Test-Path (Join-Path $work 'r.txt')) 'server-only branch not brought here'
+            Add-Commit $other 'r2.txt' 'again'; git -C $other push -q 2>$null
+            git -C $work switch -q main
+            Invoke-GeneProf git switch speedy -Branch 'work/remote' 6>&1 | Out-Null
+            Assert-True (Test-Path (Join-Path $work 'r2.txt')) 'existing branch not pulled after the switch'
+        }
+        Test-Case 'git: switch stops on uncommitted changes and on an unknown branch' {
+            Set-Content -LiteralPath (Join-Path $work 'dirty.txt') -Value 'dirty'
+            $err = try { Invoke-GeneProf git switch speedy -Branch 'main' 6>&1 | Out-Null; '' } catch { "$_" }
+            Assert-Match $err 'uncommitted changes; nothing was switched'
+            Assert-Equal 'work/remote' ([string](git -C $work branch --show-current)).Trim()
+            Remove-Item -LiteralPath (Join-Path $work 'dirty.txt')
+            $err = try { Invoke-GeneProf git switch speedy -Branch 'no/such' 6>&1 | Out-Null; '' } catch { "$_" }
+            Assert-Match $err "No branch called 'no/such'"
+            Assert-Equal 'work/remote' ([string](git -C $work branch --show-current)).Trim()
+        }
+        Test-Case 'git: switch asks which branch after the state check; q cancels' {
+            $o = Invoke-GeneProfGitSwitch -Repo speedy -Reader (New-Queue @('q')) 6>&1 | Out-String
+            Assert-Match $o 'Switch to which branch'
+            Assert-Match $o 'current branch'
+            Assert-Match $o 'Cancelled; nothing was switched'
+            Assert-Equal 'work/remote' ([string](git -C $work branch --show-current)).Trim()
+        }
+        Test-Case 'git menu: switch asks only the repo and the dry run' {
+            Set-Location $work
+            $o = Invoke-GeneProfMenu -Group git -Reader (New-Queue @('6', '1', 'y', 'n')) 6>&1 | Out-String
+            Assert-Match $o '> prof git switch -WhatIf'
+        }
         Test-Case 'git: -AIOnly is gone with pushrules (retired 10/24)' {
             Assert-Throws { Invoke-GeneProf git push speedy -AIOnly 6>&1 | Out-Null } '*AIOnly*'
             Assert-NoMatch ((Get-Content -LiteralPath "$mod\GitGroup.ps1" -Raw) + (Get-Content -LiteralPath "$mod\Verbs.ps1" -Raw)) 'AIOnly|pushrules'

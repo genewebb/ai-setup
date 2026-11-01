@@ -371,9 +371,15 @@ if (Get-Command "dotnet-suggest" -ErrorAction SilentlyContinue) {
 # -----------------------------
 # Seq: clear events (TestAuto.Web / local)
 # -----------------------------
-$clearSeqScript = "$($global:GeneMachine.PowershellScriptsDir)\clearseq.ps1"
-if (Test-Path -LiteralPath $clearSeqScript) {
+# Loaded on first call, not at profile load: PowershellScriptsDir can be a NAS share (D: on the laptop), where
+# Test-Path plus dot-sourcing cost ~10 s on every new shell. The dot-source defines the real clearSeq in this
+# function's scope, which shadows this stub for the call below.
+function clearSeq {
+    $clearSeqScript = Join-Path $global:GeneMachine.PowershellScriptsDir 'clearseq.ps1'
+    if (-not (Test-Path -LiteralPath $clearSeqScript)) { throw "clearSeq: $clearSeqScript not found." }
     . $clearSeqScript
+    if (${function:clearSeq}.File -ne $clearSeqScript) { throw "clearSeq: $clearSeqScript did not define clearSeq." }
+    clearSeq @args
 }
 
 

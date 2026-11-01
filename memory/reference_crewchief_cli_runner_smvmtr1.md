@@ -15,3 +15,6 @@ Fix (Gene registered 10/30): scheduled task **'CrewChief CLI Runner'** on SMVMTR
 
 TestAuto has NO HTTP endpoint or CLI to start a workflow (Blazor UI only) -> that stays Gene's manual step.
 Related: [[project_connect_test_board_2026-10-30]]
+
+**TestAuto from scripts (10/31):** TestAuto.Web on SMVMTR1 = https://smvmtr1.corp.profisee.com:8443 (NOT IIS /TestAuto), API open, camelCase JSON. Existing: POST api/Scenarios/run (one scenario config JSON), runtest CLI. NO workflow start existed (only WorkflowExecution.razor -> WorkflowOrchestrationService). Added TestAuto.Web/Controllers/WorkflowsController.cs (uncommitted, Gene builds): POST api/workflows/{workflowCode}/execute -> 202 data=executionCode; GET api/workflows/executions/{code}. Helper scratchpad ta-run.sh <workflowCode>. Connect workflows: SQL Server Export 10000199, Import 10000203.
+10/31: unknown codes now 404 (uncommitted, needs build+deploy): WorkflowExecutionService.GetRecordOrNullAsync maps REST HttpRequestException 404 -> null (gateway answers unknown record code with 404, verified in TestAuto SystemLog); new IWorkflowExecutionService.WorkflowTemplateExistsAsync; WorkflowsController execute pre-checks it. TestAuto logs: \SMVMTR1\c$\Deploy\TestAuto\web\LogFiles\SystemLog_NNN.log.

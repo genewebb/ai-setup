@@ -8,6 +8,7 @@ $script:ProfGitVerbs = [ordered]@{
     pull   = 'Bring the current branch up to date from the server (only when that needs no merge)'
     main   = 'Go to main and pull'
     new    = 'Switch to a branch by name (asks for the name; makes the branch when it does not exist yet)'
+    switch = 'Check the repo, pick a branch (here or on the server), switch to it and pull it'
 }
 $script:ProfGitDetails = @{
     status = @(
@@ -34,6 +35,12 @@ $script:ProfGitDetails = @{
         'git switch <name> when the branch exists here, else git switch -c <name> (a new branch from where you stand).',
         'Uncommitted changes come along to the branch. prof git push sends the new branch to the server.'
     )
+    switch = @(
+        'Checks the repo first (fetches, then says if it is clean, ahead or behind) and stops when there are uncommitted',
+        'changes, so they are not carried to the other branch. Then lists the branches here and on the server and asks',
+        'which one (or give -Branch). A branch only on the server is created here tracking it. Ends with',
+        'a fast-forward to the server copy (git merge --ff-only), so you work on its latest commit. An unknown name stops; prof git new makes one.'
+    )
 }
 $script:ProfGitUsage = @{
     status = 'prof git status [<repo>] [-WhatIf]'
@@ -41,6 +48,7 @@ $script:ProfGitUsage = @{
     pull   = 'prof git pull [<repo>] [-WhatIf]'
     main   = 'prof git main [<repo>] [-WhatIf]'
     new    = 'prof git new [<repo>] -Branch <name> [-WhatIf]'
+    switch = 'prof git switch [<repo>] [-Branch <name>] [-WhatIf]'
 }
 
 $script:ProfGroups['git'] = [pscustomobject]@{
@@ -193,6 +201,65 @@ function Invoke-GeneProfGitNew {
     if ($LASTEXITCODE -ne 0) { throw "git $($gitArgs -join ' ') stopped (see above)." }
 }
 
+function Get-GeneGitBranchChoices {
+    <# Every branch this repo can switch to: those here (Name, Here, Current) and those only on origin (Here = $false). #>
+    param([Parameter(Mandatory)][string]$Top)
+    $current = ([string](git -c safe.directory=* -C $Top branch --show-current 2>$null)).Trim()
+    $local = @(git -c safe.directory=* -C $Top for-each-ref --format='%(refname:short)' refs/heads | Where-Object { $_ })
+    $remote = @(git -c safe.directory=* -C $Top for-each-ref --format='%(refname:short)' refs/remotes/origin |
+            Where-Object { $_ -and $_ -ne 'origin' -and $_ -ne 'origin/HEAD' } | ForEach-Object { $_ -replace '^origin/', '' })
+    foreach ($b in $local) { [pscustomobject]@{ Name = $b; Here = $true; Current = ($b -eq $current) } }
+    foreach ($b in ($remote | Where-Object { $_ -notin $local })) { [pscustomobject]@{ Name = $b; Here = $false; Current = $false } }
+}
+
+function Invoke-GeneProfGitSwitch {
+    param([string]$Repo, [string]$Branch, [switch]$WhatIf, [scriptblock]$Reader)
+    $top = Enter-GeneGitRepo -Repo $Repo
+    # State first: nothing is asked or switched until the repo is known to be safe to leave.
+    $sync = Get-GeneGitSync $top
+    if (-not $sync.Fetched) { Write-ProfWarn 'Could not fetch from the server; the branch list below is as of the last fetch.' }
+    if ($sync.Dirty) {
+        git -c safe.directory=* -C $top status --short
+        throw 'This repo has uncommitted changes; nothing was switched. Commit them (prof git push) or put them aside, then run prof git switch again.'
+    }
+    if ($sync.Upstream -and $sync.Ahead -gt 0) { Write-ProfWarn "This branch has $($sync.Ahead) commit(s) the server does not have. They stay on it; prof git push sends them." }
+    if ($sync.Upstream -and $sync.Behind -gt 0) { Write-ProfNote "This branch is $($sync.Behind) commit(s) behind the server (prof git pull brings them)." }
+    if (-not $sync.Upstream -or ($sync.Ahead -eq 0 -and $sync.Behind -eq 0)) { Write-ProfNote 'Clean, nothing waiting to be pushed.' }
+
+    $choices = @(Get-GeneGitBranchChoices -Top $top)
+    if (-not $Branch) {
+        if (-not $Reader -and [Console]::IsInputRedirected) { throw 'prof git switch needs a branch and there is no console to ask on. Give it: prof git switch [<repo>] -Branch <name>.' }
+        $items = @($choices | ForEach-Object {
+                [pscustomobject]@{ Name = $_.Name; Description = $(if ($_.Current) { 'current branch' } elseif ($_.Here) { 'here' } else { 'on the server only' }) }
+            })
+        $pick = Select-GeneMenu -Title 'Switch to which branch?' -Items $items -Reader $Reader
+        if (-not $pick) { Write-ProfNote 'Cancelled; nothing was switched.'; return }
+        $Branch = $pick.Name
+    }
+    git check-ref-format --branch $Branch 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "'$Branch' is not a valid branch name." }
+    $hit = @($choices | Where-Object { $_.Name -eq $Branch }) | Select-Object -First 1
+    if (-not $hit) { throw "No branch called '$Branch' here or on the server. prof git new makes one." }
+
+    $gitArgs = if ($hit.Current) { @() } elseif ($hit.Here) { @('switch', $Branch) } else { @('switch', '--track', "origin/$Branch") }
+    if ($WhatIf) {
+        if ($gitArgs.Count) { Write-Host "[WhatIf] Would run: git $($gitArgs -join ' ')" -ForegroundColor Yellow }
+        Write-Host '[WhatIf] Would run: git merge --ff-only @{u}' -ForegroundColor Yellow
+        return
+    }
+    if ($gitArgs.Count) {
+        git -c safe.directory=* -C $top @gitArgs
+        if ($LASTEXITCODE -ne 0) { throw "git $($gitArgs -join ' ') stopped (see above)." }
+    }
+    else { Write-ProfNote "Already on $Branch." }
+    git -c safe.directory=* -C $top rev-parse --abbrev-ref '@{u}' 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-ProfNote "$Branch is not on the server yet, so there is nothing to pull. prof git push sends it."; return }
+    # The state check above already fetched. git pull --ff-only can see the same branch twice in FETCH_HEAD and refuse
+    # ("Cannot fast-forward to multiple branches"), so fast-forward to the server copy directly.
+    git -c safe.directory=* -C $top merge --ff-only '@{u}'
+    if ($LASTEXITCODE -ne 0) { throw 'git merge --ff-only stopped (see above). If this branch and the server both have new commits, merge or rebase by hand.' }
+}
+
 function Read-GeneGitMenuParams {
     <# The menu's questions for one git command. Returns the parameters, or $null when the user cancels. #>
     param([Parameter(Mandatory)][string]$Verb, [scriptblock]$Reader)
@@ -214,6 +281,6 @@ function Read-GeneGitMenuParams {
         $p.Branch = ([string](Read-GeneText -Reader $Reader -Prompt 'Branch name')).Trim()
         if (-not $p.Branch) { return $null }
     }
-    if ($Verb -in 'push', 'pull', 'main', 'new' -and (Read-GeneYesNo -Question 'Dry run only (-WhatIf)?' -Reader $Reader)) { $p.WhatIf = $true }
+    if ($Verb -in 'push', 'pull', 'main', 'new', 'switch' -and (Read-GeneYesNo -Question 'Dry run only (-WhatIf)?' -Reader $Reader)) { $p.WhatIf = $true }
     return $p
 }
