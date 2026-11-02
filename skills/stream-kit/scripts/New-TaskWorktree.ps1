@@ -75,6 +75,11 @@ $gone = @(Add-MainBase $Repo $wt $baseSha $mainDiff $untracked)
 $ignBase = @(Add-IgnoredWriteSetBase $Repo $wt @($t.writeSet))
 if ($ignBase.Count) { $notes.Add("BASE ignored main-tree write-set file(s) copied and staged: $($ignBase -join ', ')") }
 if ($pending) {
+    # A gitignored file the pending patch creates or changes is in none of the base steps above, so the reverse found
+    # no file to undo (G21.T115, docs/audit/ ignored; kit item IN-20261101175719-f5c6). Each such file is copied from
+    # main first; the reverse then removes a created one, and the final `git add -A` drops it from the index.
+    $ignPend = @(Add-IgnoredWriteSetBase $Repo $wt @(Get-PatchPaths $wt $pending.patch))
+    if ($ignPend.Count) { $notes.Add("BASE ignored main-tree file(s) the pending patch of $($pending.task) touches copied before its reverse: $($ignPend -join ', ')") }
     [void](Invoke-Git $wt @('apply', '-R', '--binary', '--whitespace=nowarn', $pending.patch))
     if ((Get-MainTreeLockHolder $P) -ne $pending.holder) { throw "main-grader.lock busy for 0s: main moved while this base was read beside the grade of $($pending.task) (held by $(Get-MainTreeLockHolder $P)); no worktree made for $Task" }
     $notes.Add("BASE read beside the main grade of $($pending.task): its patch $(Split-Path -Leaf $pending.patch) reversed out of this base")

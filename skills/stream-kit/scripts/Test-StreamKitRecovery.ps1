@@ -2537,6 +2537,37 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $wt66j = Join-Path $Scratch 'wt66j\G1.A'
     Case '66j a grade-only holder does not stop the base: the tree is made beside it with the graded patch reversed out' ((-not $err66j) -and ((Get-Content -Raw (Join-Path $wt66j 'pend66.txt')) -match '^before\s*$') -and -not (Test-Path (Join-Path $wt66j 'new66j.txt')) -and (($o66j -join ' ') -match 'BASE read beside the main grade of G1\.X')) "err='$err66j' out=$($o66j -join ' | ')"
     Case '66j the main tree keeps the graded patch' (((Get-Content -Raw (Join-Path $r66j 'pend66.txt')) -match 'graded patch') -and (Test-Path (Join-Path $r66j 'new66j.txt'))) "main pend66=$(Get-Content -Raw (Join-Path $r66j 'pend66.txt'))"
+    # 66k. THE GRADED PATCH TOUCHES GITIGNORED FILES. G21.T115.patch created docs/audit/evidence/ENV-REVERSE-PROXY.md
+    # under /docs/audit/ (.gitignore:98): neither the dirty diff nor ls-files --others carries an ignored file, so the
+    # reverse died "No such file or directory" and three builder pre-stages were lost (kit item IN-20261101175719-f5c6).
+    # Every ignored path the pending patch touches is copied from main before the reverse.
+    $r66k = New-Repo 'r66k' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok') }); $repos += $r66k
+    Set-Content (Join-Path $r66k '.gitignore') '/ign66/'
+    New-Item -ItemType Directory (Join-Path $r66k 'ign66') -Force | Out-Null
+    Set-Content (Join-Path $r66k 'ign66\old66k.md') 'before'
+    & git -C $r66k add .gitignore; & git -C $r66k add -f ign66/old66k.md; & git -C $r66k commit -q -m ign66 | Out-Null
+    Set-Content (Join-Path $r66k 'ign66\old66k.md') 'graded patch'
+    Set-Content (Join-Path $r66k 'ign66\new66k.md') 'created by the graded patch'
+    & git -C $r66k add -N -f ign66/new66k.md
+    $p66k = Join-Path $Scratch 'pend66k.patch'
+    & git -C $r66k diff --binary "--output=$p66k"
+    & git -C $r66k reset -q -- ign66/new66k.md
+    Set-Content (Join-Path $r66k '.streams\main-pending.json') (@{ task = 'G1.X'; patch = $p66k; at = '2026-10-24T00:00:00Z' } | ConvertTo-Json)
+    [void](& "$S\Claim-Task.ps1" -Repo $r66k -Role build -Session build-66k)
+    $held66k = [IO.FileStream]::new((Join-Path $r66k '.streams\main-grader.lock'), [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::Read, 4096, [IO.FileOptions]::DeleteOnClose)
+    $b66k = [Text.Encoding]::UTF8.GetBytes('G1.X main pid 1 at 2026-10-24T00:00:00Z'); $held66k.Write($b66k, 0, $b66k.Length); $held66k.Flush()
+    $prevWait66k = $env:STREAM_MAIN_LOCK_WAIT_SECONDS; $env:STREAM_MAIN_LOCK_WAIT_SECONDS = '1'
+    $err66k = ''; $o66k = @()
+    try { $o66k = @(& "$S\New-TaskWorktree.ps1" -Repo $r66k -Task G1.A -Session build-66k -WorktreeRoot (Join-Path $Scratch 'wt66k') 2>&1) } catch { $err66k = ("$_" -split "`n")[0].Trim() }
+    finally {
+        $held66k.Dispose()
+        if ($null -eq $prevWait66k) { Remove-Item Env:\STREAM_MAIN_LOCK_WAIT_SECONDS -ErrorAction SilentlyContinue } else { $env:STREAM_MAIN_LOCK_WAIT_SECONDS = $prevWait66k }
+    }
+    $wt66k = Join-Path $Scratch 'wt66k\G1.A'
+    $ls66k = (@(& git -C $wt66k ls-files -- ign66 2>&1) -join ',')
+    Case '66k a graded patch that creates an ignored file is reversed out: the tree is made without it' ((-not $err66k) -and -not (Test-Path (Join-Path $wt66k 'ign66\new66k.md')) -and ($ls66k -notmatch 'new66k') -and (($o66k -join ' ') -match 'BASE read beside the main grade of G1\.X')) "err='$err66k' ls=$ls66k out=$($o66k -join ' | ')"
+    Case '66k a tracked file the graded patch changes under an ignored path is back to its pre-patch text' ((-not $err66k) -and (Test-Path (Join-Path $wt66k 'ign66\old66k.md')) -and ((Get-Content -Raw (Join-Path $wt66k 'ign66\old66k.md')) -match '^before\s*$')) "err='$err66k'"
+    Case '66k the main tree keeps the graded ignored file' ((Test-Path (Join-Path $r66k 'ign66\new66k.md'))) "main new66k exists=$(Test-Path (Join-Path $r66k 'ign66\new66k.md'))"
     # ---- 66i. A BUILT DEPENDENCY WHOSE OWN DEPENDENCY IS NO LONGER BUILT IS NOT A BASE. A is building again (bounced),
     # B is built on A's old patch, C depends on B. C's base would stack B.patch without A's, so C is not claimable;
     # once A is integrated it is (kit item IN-20261017100037-aa62, G9.T026 over G9.T011 over G9.T010).
