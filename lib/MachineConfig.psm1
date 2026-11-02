@@ -175,6 +175,9 @@ function Get-AIMachineProfile {
             # Optional column: the owner's own push (the pwsh profile's pushStreams). git-guard never reads it, so a
             # row can give the owner push while Claude sessions keep Push = no. Blank or absent = same as Push.
             OwnerPush = ([string]$r['Owner push']).Trim().ToLowerInvariant()
+            # Optional column: where the stream scripts push a commit. 'branch' (or blank) = the branch the repo has
+            # checked out, which the owner merges to main by PR; anything else is a branch name or a refs/... ref.
+            PushRef   = ([string]$r['Push ref']).Trim().Trim('`')
             Note      = [string]$r['Note']
         }
     }
@@ -452,6 +455,8 @@ function Get-AIGitPolicy {
         Commit    = [bool]($row -and $row.Commit -eq 'yes')
         Push      = [bool]($row -and $row.Push -eq 'yes')
         Worktrees = [bool]($row -and $row.Worktrees -eq 'yes' -and $row.Commit -eq 'yes')
+        # Where stream scripts push (the Push ref column); blank = the checked-out branch.
+        PushRef   = $(if ($row -and $row.PSObject.Properties['PushRef']) { [string]$row.PushRef } else { '' })
         # The owner's push (pushStreams): the Owner push column when it is set, else Push.
         OwnerPush = [bool]($row -and $(
                 $own = if ($row.PSObject.Properties['OwnerPush']) { $row.OwnerPush } else { '' }

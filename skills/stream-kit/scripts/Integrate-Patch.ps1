@@ -15,7 +15,8 @@
 # Picks the first built code/docs task whose dependencies are integrated or done (dependency order keeps each base
 # true); mockup tasks move to integrated with no tree change. Prints one outcome line, or NONE.
 # -NoCommit leaves the integrated patch uncommitted (the owner commits by hand).
-# After a commit the ref -PushRef (default refs/heads/users/agenewe/stream-sync, or STREAM_PUSH_REF; empty disables)
+# After a commit the ref -PushRef (default: the machine profile's Git policy 'Push ref' for the repo, blank or 'branch' = the main tree's checked-out branch,
+# which the owner merges to main by PR; STREAM_PUSH_REF overrides; empty disables)
 # is pushed to origin. A push failure is reported and never blocks integration; no origin remote means no push.
 # The commit and the push each also need the machine profile's '## Git policy' row for this repo (Commit = yes,
 # Push = yes; read through MachineConfig.psm1, the same source git-guard uses). git-guard sees only command text, so
@@ -28,7 +29,7 @@ param(
     [Parameter(Mandatory)] [string] $Repo,
     [Parameter(Mandatory)] [string] $Session,
     [string] $Task = '',
-    [string] $PushRef = $(if ($null -ne $env:STREAM_PUSH_REF) { $env:STREAM_PUSH_REF } else { 'refs/heads/users/agenewe/stream-sync' }),
+    [string] $PushRef = $(if ($null -ne $env:STREAM_PUSH_REF) { $env:STREAM_PUSH_REF } else { '<profile>' }),
     [switch] $NoCommit
 )
 . "$PSScriptRoot\lib\Streams.ps1"
@@ -48,9 +49,9 @@ function Get-IntegrateGitPolicy([string] $Repo) {
         $prof = Get-AIMachineProfile
         $pol = Get-AIGitPolicy -Path $Repo -Profile $prof
         $why = if ($pol.Row) { "Git policy row for $($pol.RepoRoot) in $($prof.Path)" } else { "no Git policy row for $Repo in $($prof.Path)" }
-        [pscustomobject]@{ Commit = $pol.Commit; Push = $pol.Push; Why = $why }
+        [pscustomobject]@{ Commit = $pol.Commit; Push = $pol.Push; PushRef = $pol.PushRef; Why = $why }
     } catch {
-        [pscustomobject]@{ Commit = $false; Push = $false; Why = "machine profile could not be read: $(("$_" -split "`n")[0])" }
+        [pscustomobject]@{ Commit = $false; Push = $false; PushRef = ''; Why = "machine profile could not be read: $(("$_" -split "`n")[0])" }
     }
 }
 # ONE Integrate-Patch process per repo, held for the whole run and taken BEFORE the board is read. The integrator lock
@@ -317,6 +318,7 @@ if ($gcode -eq 0) {
     "INTEGRATED $($t.id)"
     if ($NoCommit) { exit 0 }
     $gitPolicy = Get-IntegrateGitPolicy $Repo
+    if ($PushRef -eq '<profile>') { $PushRef = Resolve-StreamPushRef $Repo $gitPolicy.PushRef }
     if (-not $gitPolicy.Commit) {
         Add-Decision $P $Session "commit of $($t.id) skipped, left uncommitted: Commit is not allowed ($($gitPolicy.Why))"
         "COMMIT SKIPPED $($t.id) (git policy: $($gitPolicy.Why))"; exit 0

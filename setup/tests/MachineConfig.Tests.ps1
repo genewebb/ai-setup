@@ -99,6 +99,18 @@ try {
         Assert-True (-not (Get-AIGitPolicy -Path $a -Profile (Get-AIMachineProfile -Path $cfg)).OwnerPush) 'no row = no owner push'
     }
 
+    Test-Case 'Push ref column: optional, carried as written, blank when absent' {
+        $c7 = Join-Path $root 'p7.md'
+        $a = Join-Path $repos 'pr-a'; $b = Join-Path $repos 'pr-b'
+        foreach ($r in $a, $b) { if (-not (Test-Path $r)) { git init -q $r } }
+        New-TestProfile -Path $c7 -Keys $base -Sections @{ 'Git policy' = "| Repo | Commit | Push | Worktrees | Push ref | Note |`n|---|---|---|---|---|---|`n| {ReposRoot}\pr-a | yes | yes | no | branch | |`n| {ReposRoot}\pr-b | yes | yes | no | | |" }
+        $p = Get-AIMachineProfile -Path $c7
+        Assert-Equal 'branch' (Get-AIGitPolicy -Path $a -Profile $p).PushRef
+        Assert-Equal '' (Get-AIGitPolicy -Path $b -Profile $p).PushRef
+        Assert-Equal '' (Get-AIGitPolicy -Path $a -Profile (Get-AIMachineProfile -Path $cfg)).PushRef 'no row = no push ref'
+        Assert-True (@(Test-AIMachineProfile -Profile $p | Where-Object Level -eq 'error').Count -eq 0)
+    }
+
     Test-Case 'access rows: {Key} expansion, blank key skipped and reported' {
         $p = Get-AIMachineProfile -Path $cfg
         Assert-Equal $repos ($p.Access | Where-Object PathSpec -eq '{ReposRoot}').Path

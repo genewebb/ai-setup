@@ -245,6 +245,26 @@ function Add-IgnoredWriteSetBase([string] $Repo, [string] $Wt, [string[]] $Write
     }
     $copied.ToArray()
 }
+# Every path a patch touches (both sides of a rename), from `git apply --numstat -z` run in $Dir. Used beside a main
+# grade: the pending patch may create or change a gitignored file (G21.T115 created docs/audit/evidence/*.md under
+# /docs/audit/), which no base step copies, so its reverse died "No such file or directory" (kit item
+# IN-20261101175719-f5c6). The caller passes these paths to Add-IgnoredWriteSetBase, which copies only the ignored ones.
+function Get-PatchPaths([string] $Dir, [string] $Patch) {
+    $enc = [Console]::OutputEncoding
+    try {
+        [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+        $raw = (& git -C $Dir -c core.quotePath=false apply --numstat -z -- $Patch) -join "`n"
+        if ($LASTEXITCODE -ne 0) { throw "git apply --numstat $Patch failed in $Dir" }
+    } finally { [Console]::OutputEncoding = $enc }
+    $out = [Collections.Generic.List[string]]::new()
+    $f = @($raw -split "`0" | ForEach-Object { $_.Trim("`n") })
+    for ($i = 0; $i -lt $f.Count; $i++) {
+        if ($f[$i] -notmatch '^(?:\d+|-)\t(?:\d+|-)\t(.*)$') { continue }
+        if ($Matches[1]) { $out.Add($Matches[1]) }
+        elseif ($i + 2 -lt $f.Count) { $out.Add($f[$i + 1]); $out.Add($f[$i + 2]); $i += 2 }
+    }
+    $out.ToArray()
+}
 
 # SUITE SNAPSHOTS (New-SuiteSnapshot.ps1). One record per snapshot in .streams\suites\<name>.json. The watchdog keeps
 # the NEWEST ready snapshot while its session holds a live integrator lock and reaps every other one.
@@ -1943,4 +1963,16 @@ function Get-WakeSeen($P, [string] $Role, [string] $RunnerId) {
     $m = 0L
     foreach ($f in @(Get-WakeFiles $P $Role $RunnerId)) { if (Test-Path -LiteralPath $f) { $t = (Get-Item -LiteralPath $f).LastWriteTimeUtc.Ticks; if ($t -gt $m) { $m = $t } } }
     $m
+}
+
+# Where a stream script pushes a commit: the machine profile's Git policy 'Push ref' for the repo. Blank or 'branch'
+# means the branch the main tree has checked out (the owner merges it to main by PR); a bare name means
+# refs/heads/<name>; a refs/... value is used as it is. A detached main tree pushes nowhere ('' disables the push).
+# Owner 2026-11-02: the old fixed default refs/heads/users/agenewe/stream-sync was a mistake; work merges to main.
+function Resolve-StreamPushRef([string] $Repo, [string] $Configured) {
+    $c = ([string]$Configured).Trim()
+    if ($c -and $c -ne 'branch') { if ($c -like 'refs/*') { return $c } else { return "refs/heads/$c" } }
+    $branch = & git -C $Repo symbolic-ref -q --short HEAD 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $branch) { return '' }
+    return "refs/heads/$($branch.Trim())"
 }

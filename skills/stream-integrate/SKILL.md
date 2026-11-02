@@ -293,8 +293,9 @@ There is no clock check: the nightly is the scheduled task's, not yours. When ev
 - Commits and pushes only as the machine profile's `## Git policy` row for the repo allows (`Commit`, `Push`).
   `Integrate-Patch.ps1` reads that row itself, because git-guard sees only command text and never the git a script
   runs. A missing row, a `no`, or an unreadable profile prints `COMMIT SKIPPED` or `PUSH SKIPPED`, logs it in
-  `decisions.md`, and never blocks integration. A push goes to the one stream ref (`-PushRef`, default
-  `refs/heads/users/agenewe/stream-sync`).
+  `decisions.md`, and never blocks integration. A push goes to the repo's push ref (`-PushRef`; default
+  the machine profile's Git policy `Push ref` column, blank or `branch` = the main tree's checked-out branch, which
+  the owner merges to main by PR; `STREAM_PUSH_REF` overrides).
 - Commits only an integrated patch's own paths (step A3). Never amends, never force-pushes, never branches, never stashes,
   never removes a worktree.
 

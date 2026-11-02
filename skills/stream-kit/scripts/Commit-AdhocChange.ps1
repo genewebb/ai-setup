@@ -25,7 +25,7 @@ param(
     [Parameter(Mandatory)] [string] $TestFilter,
     [string] $Solution = '',
     [int] $WaitSeconds = 1800,
-    [string] $PushRef = $(if ($null -ne $env:STREAM_PUSH_REF) { $env:STREAM_PUSH_REF } else { 'refs/heads/users/agenewe/stream-sync' }),
+    [string] $PushRef = $(if ($null -ne $env:STREAM_PUSH_REF) { $env:STREAM_PUSH_REF } else { '<profile>' }),
     [switch] $NoCommit
 )
 . "$PSScriptRoot\lib\Streams.ps1"
@@ -47,9 +47,9 @@ function Get-AdhocGitPolicy([string] $Repo) {
         $prof = Get-AIMachineProfile
         $pol = Get-AIGitPolicy -Path $Repo -Profile $prof
         $why = if ($pol.Row) { "Git policy row for $($pol.RepoRoot) in $($prof.Path)" } else { "no Git policy row for $Repo in $($prof.Path)" }
-        [pscustomobject]@{ Commit = $pol.Commit; Push = $pol.Push; Why = $why }
+        [pscustomobject]@{ Commit = $pol.Commit; Push = $pol.Push; PushRef = $pol.PushRef; Why = $why }
     } catch {
-        [pscustomobject]@{ Commit = $false; Push = $false; Why = "machine profile could not be read: $(("$_" -split "`n")[0])" }
+        [pscustomobject]@{ Commit = $false; Push = $false; PushRef = ''; Why = "machine profile could not be read: $(("$_" -split "`n")[0])" }
     }
 }
 
@@ -118,6 +118,7 @@ try {
     # 5. Commit exactly the patch's paths; other dirty or staged files stay out.
     if ($NoCommit) { $applied = $false; "APPLIED $Id (build and test PASS; left uncommitted, -NoCommit)"; exit 0 }
     $gitPolicy = Get-AdhocGitPolicy $Repo
+    if ($PushRef -eq '<profile>') { $PushRef = Resolve-StreamPushRef $Repo $gitPolicy.PushRef }
     if (-not $gitPolicy.Commit) {
         $applied = $false
         Add-Decision $P $Session "adhoc $Id applied on main, commit skipped: Commit is not allowed ($($gitPolicy.Why))"
