@@ -235,7 +235,10 @@ PRE-STAGED UNIT: when your command carries `packet:`, steps 0, 1 and 2 are DONE 
      (auto-accepted, logged to `decisions.md`; owner ruling 2026-10-17, after 234 of 291 author blocks were leaks).
      Only a `WRITESET-OVERLAP` refusal (exit 7: the file belongs to another open, unordered task) blocks the task,
      with the overlapping task named in the history;
-   - a test the ticket names that is not atomic or uses fixtures from outside the repo.
+   - a test the ticket names that is not atomic or uses fixtures from outside the repo;
+   - on speedmerchants, a ticket clause that asks for a comment the repo's `AGENTS.md` forbids (section "Comments and
+     source-text tests" below), such as a `///` on a private member, a task id in a comment or a long rationale block,
+     or a grader that asserts a source-text count.
 
    The author fixes each finding or records why it is not one. There is one skeptic round. A finding that still
    stands after it marks the task `blocked` with that finding in the task's history.
@@ -273,8 +276,11 @@ never asks for a comment they forbid, and a grader never asserts a source-text c
   defaults, thread safety, preconditions.
 - No task or inbox ids in comments (REQ-MAINTAIN-039).
 - No doc comment that only restates the name (REQ-MAINTAIN-040).
-- No history wording.
-- No `///` on private or internal members.
+- No history wording; a census caps the narrow forms per project (REQ-MAINTAIN-045).
+- No `///` on private or internal members; a census caps them per project (REQ-MAINTAIN-044).
+- No perishable stamps ("currently", "for now", "~20 min") and no commented-out code.
+- Rationale over 3 lines goes to `docs/decisions/`; a census caps `//` blocks of 6 or more lines (REQ-MAINTAIN-046).
+- Try a better name, a smaller function or a type before a comment; length follows content.
 - Requirement ids are welcome, with their prose.
 - A tool-made comment cleanup passes `QualityTool verify` (REQ-MAINTAIN-041).
 - A test reads a src file as text only when `tests/CENSUS-INVENTORY.md` lists it (REQ-ENGPRAC-010).

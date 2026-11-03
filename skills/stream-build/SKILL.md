@@ -229,7 +229,11 @@ do the held item's work (an item). Never run them again.
    - a test a wrong change could pass;
    - an existing test that was weakened, skipped or deleted;
    - an impact list that misses an obvious caller or test of a changed file, or a fix row's sweep impact (step 4b);
-   - a RED that did not fail for the clause's stated reason.
+   - a RED that did not fail for the clause's stated reason;
+   - on speedmerchants, an ADDED comment line that breaks the repo's `AGENTS.md` comment rules (section "Comments and
+     source-text tests" below): a new `///` on a private or internal member, history wording, a task or inbox id, a new
+     `//` block of 6 or more lines, commented-out code, or a perishable stamp ("currently", "for now", "~20 min"). The
+     verdict quotes the added line. Existing comments the patch does not touch are not findings.
    Its verdict goes to `.streams\verdicts\<task>.md`, auto-accepted decisions listed in it.
    - **Run the verifier in the FOREGROUND: an Agent call without `run_in_background`, and no Monitor, sleep loop or
      polling to wait for it.** The call returns with the verdict, and that one result is the only turn it costs. A
@@ -369,8 +373,11 @@ Every patch on speedmerchants follows these rules from the repo's `AGENTS.md` (A
   defaults, thread safety, preconditions.
 - No task or inbox ids in comments (REQ-MAINTAIN-039).
 - No doc comment that only restates the name (REQ-MAINTAIN-040).
-- No history wording.
-- No `///` on private or internal members.
+- No history wording; a census caps the narrow forms per project (REQ-MAINTAIN-045).
+- No `///` on private or internal members; a census caps them per project (REQ-MAINTAIN-044).
+- No perishable stamps ("currently", "for now", "~20 min") and no commented-out code.
+- Rationale over 3 lines goes to `docs/decisions/`; a census caps `//` blocks of 6 or more lines (REQ-MAINTAIN-046).
+- Try a better name, a smaller function or a type before a comment; length follows content.
 - Requirement ids are welcome, with their prose.
 - A tool-made comment cleanup passes `QualityTool verify` (REQ-MAINTAIN-041).
 - A test reads a src file as text only when `tests/CENSUS-INVENTORY.md` lists it (REQ-ENGPRAC-010).
