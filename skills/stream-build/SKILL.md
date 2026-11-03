@@ -362,6 +362,22 @@ A build failure that blames the host is checked against the host before it is be
   the old worktree listed for the owner, and starts a new worktree named `<task>-2`.
 - A session that finds its claim taken over stops that task. It leaves its worktree in place and claims another.
 
+## Comments and source-text tests (speedmerchants AGENTS.md)
+
+Every patch on speedmerchants follows these rules from the repo's `AGENTS.md` (ADHOC-20261102-17).
+- Comments say why, never what. Keep contracts the signature does not show: null, throws, units, formats, ordering,
+  defaults, thread safety, preconditions.
+- No task or inbox ids in comments (REQ-MAINTAIN-039).
+- No doc comment that only restates the name (REQ-MAINTAIN-040).
+- No history wording.
+- No `///` on private or internal members.
+- Requirement ids are welcome, with their prose.
+- A tool-made comment cleanup passes `QualityTool verify` (REQ-MAINTAIN-041).
+- A test reads a src file as text only when `tests/CENSUS-INVENTORY.md` lists it (REQ-ENGPRAC-010).
+- Removing such a read, its file or its row needs a Tests.Architecture syntax-tree, semantic-model or reflection check
+  that fails on the same condition, or an owner rule-retirement. A mutation score is not evidence (REQ-ENGPRAC-098).
+- Never assert that an identifier appears N times in source.
+
 ## Rules
 
 - Writes ONLY:

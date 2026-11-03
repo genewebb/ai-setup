@@ -265,6 +265,23 @@ PRE-STAGED UNIT: when your command carries `packet:`, steps 0, 1 and 2 are DONE 
   task's history and the old session's partial ticket is overwritten.
 - A session that finds its own claim gone (taken over) stops that task and claims another.
 
+## Comments and source-text tests (speedmerchants AGENTS.md)
+
+Tickets and graders on speedmerchants follow these rules from the repo's `AGENTS.md` (ADHOC-20261102-17): a ticket
+never asks for a comment they forbid, and a grader never asserts a source-text count.
+- Comments say why, never what. Keep contracts the signature does not show: null, throws, units, formats, ordering,
+  defaults, thread safety, preconditions.
+- No task or inbox ids in comments (REQ-MAINTAIN-039).
+- No doc comment that only restates the name (REQ-MAINTAIN-040).
+- No history wording.
+- No `///` on private or internal members.
+- Requirement ids are welcome, with their prose.
+- A tool-made comment cleanup passes `QualityTool verify` (REQ-MAINTAIN-041).
+- A test reads a src file as text only when `tests/CENSUS-INVENTORY.md` lists it (REQ-ENGPRAC-010).
+- Removing such a read, its file or its row needs a Tests.Architecture syntax-tree, semantic-model or reflection check
+  that fails on the same condition, or an owner rule-retirement. A mutation score is not evidence (REQ-ENGPRAC-098).
+- Never assert that an identifier appears N times in source.
+
 ## Rules
 
 - Writes ONLY `.streams\tickets\`, `.streams\graders\`, `.streams\owner\questions.md`, appended lines in
