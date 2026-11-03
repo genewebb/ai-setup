@@ -1,7 +1,7 @@
 
 # Authoring reference map
 
-Resolve these relative to `{VaultDocsRoot}\speedy\requirements\`, or the same vault-relative root through Obsidian. Read current contents; do not cache the standard inside this skill.
+Resolve these relative to the requirements root (SKILL.md, "Load the current authority"): `{SpeedyRepo}\docs\requirements\` when `VaultDocsRoot` is blank, otherwise `{VaultDocsRoot}\speedy\requirements\` or the same vault-relative root through Obsidian. Read current contents; do not cache the standard inside this skill.
 
 | Need | Read |
 |---|---|
@@ -34,7 +34,9 @@ Run `validate` from any directory; pass the requirements root as a Windows path.
 
 ## Vault writes
 
-Every write into `{VaultWorkRoot}\...` goes through Obsidian's Local REST API so its index sees the change:
+Only when `VaultDocsRoot` is set. With it blank the root is the repo copy: edit files directly in your worktree and skip this section.
+
+Every write into `{VaultDocsRoot}\...` goes through Obsidian's Local REST API so its index sees the change:
 
 ```text
 pwsh "{ClaudeHome}\bin\Write-AIFile.ps1" -Path "{VaultDocsRoot}\speedy\requirements\<relative path>" -Source <local staging file>

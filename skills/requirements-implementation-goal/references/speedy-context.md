@@ -5,8 +5,8 @@ Verify these sources on each use. This is operating context, not product decisio
 
 | Purpose | Location |
 |---|---|
-| Requirements root | `{VaultDocsRoot}\speedy\requirements` |
-| Obsidian relative root | `99 Documentation/speedy/requirements/` |
+| Requirements root | `{SpeedyRepo}\docs\requirements` when `VaultDocsRoot` is blank (stream host, no vault); otherwise `{VaultDocsRoot}\speedy\requirements` |
+| Obsidian relative root | `99 Documentation/speedy/requirements/` (vault machines only) |
 | Authority | `RequirementDesign.md`, `manifest.yaml`, matching templates/schemas and `schemas/canonical-form.md` under that root |
 | Implementation | `{SpeedyRepo}` |
 | Read-only donor applications | `{SpeedMerchantsRepo}` |
@@ -25,7 +25,7 @@ Preserve exact approved contents in a bundle or outside live discovery so duplic
 
 Use the named tool and canonical form on a local snapshot; inspect supported commands rather than inventing an area-release subcommand. Do not change application code, tooling or .loop orchestration merely to prepare a handoff.
 
-Vault writes use Obsidian's Local REST API so its index sees them. An existing authenticated connector/API or this helper is suitable:
+With `VaultDocsRoot` blank, requirement and evidence files are ordinary repo files: edit them in the worktree and commit them with the work. With it set, vault writes use Obsidian's Local REST API so its index sees them. An existing authenticated connector/API or this helper is suitable:
 
 ```text
 pwsh "{ClaudeHome}\bin\Write-AIFile.ps1" -Path "{VaultDocsRoot}\speedy\requirements\<relative-path>" -Source <local-file>

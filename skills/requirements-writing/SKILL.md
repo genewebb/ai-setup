@@ -18,13 +18,18 @@ Create clear, reviewable requirement definitions with evidence, explicit decisio
 
 ## Load the current authority
 
-The shared source is `{VaultDocsRoot}\speedy\requirements\`. In Obsidian's Work vault its relative path is `99 Documentation/speedy/requirements/`. Read with the filesystem or the Obsidian connector; **write every vault file through Obsidian's Local REST API**, never with a direct file write, because Obsidian's index over the SMB share is blind to direct writes:
+The **requirements root** depends on the machine's `VaultDocsRoot` (Machine paths table; `Get-AIConfig` if it is missing):
 
-```text
-pwsh "{ClaudeHome}\bin\Write-AIFile.ps1" -Path "{VaultDocsRoot}\speedy\requirements\<path>" -Source <local file>
-```
+- **`VaultDocsRoot` is blank** (a stream host such as SMVMTR1, which has no Obsidian vault): the root is `docs\requirements` in `{SpeedyRepo}`, the repo copy. Edit it as ordinary repo files, in your own worktree when the task makes one (stream-adhoc, stream-build), and the change is committed with the work. No Obsidian API, no `Write-AIFile.ps1`.
+- **`VaultDocsRoot` is set**: the root is `{VaultDocsRoot}\speedy\requirements\`; in Obsidian's Work vault its relative path is `99 Documentation/speedy/requirements/`. Read with the filesystem or the Obsidian connector; **write every vault file through Obsidian's Local REST API**, never with a direct file write, because Obsidian's index over the SMB share is blind to direct writes:
 
-Never embed credentials in this skill or ask the user to paste a token into chat; the script reads the key itself.
+  ```text
+  pwsh "{ClaudeHome}\bin\Write-AIFile.ps1" -Path "{VaultDocsRoot}\speedy\requirements\<path>" -Source <local file>
+  ```
+
+  Never embed credentials in this skill or ask the user to paste a token into chat; the script reads the key itself.
+
+Every `<requirements root>` below means the root chosen here.
 
 Read `RequirementDesign.md` at the start of an authoring task, then the matching template in `templates/` and the relevant sample under `RequirementDocumentExample/` (its `README.md` says which sample shows what). Read `schemas/canonical-form.md` when hashing and the schema for the artifact type when checking structure. These files own the rules; this skill is an operating guide, not a second standard.
 
@@ -38,10 +43,10 @@ For the reference locations, the artifact selection guide, and the tooling comma
 
 ```text
 python tools\requirements\reqtools.py digest --write <artifact.yaml>
-python tools\requirements\reqtools.py validate "{VaultDocsRoot}\speedy\requirements"
+python tools\requirements\reqtools.py validate "<requirements root>"
 python tools\requirements\reqtools.py render <feature.yaml> <view.md>
-python tools\requirements\reqtools.py backlog "{VaultDocsRoot}\speedy\requirements"
-python tools\requirements\reqtools.py build-examples "{VaultDocsRoot}\speedy\requirements"
+python tools\requirements\reqtools.py backlog "<requirements root>"
+python tools\requirements\reqtools.py build-examples "<requirements root>"
 ```
 
 Run `validate` after every edit and before every hand-off; zero errors is the floor, and the report lists which semantic checks ran. `digest --write` is the only way a `revision` is set. `render` regenerates a read-only Markdown view; never edit a view. `build-examples` derives the sample variants from the base sample; run it only when editing the sample package. If Python, PyYAML, `jsonschema` or `referencing` are missing, say so and stop short of any claim that needs them.
@@ -79,6 +84,6 @@ Separate structural checks, implemented semantic checks, human judgment, and app
 
 Independent review is by Gene, or by Claude Code in a clean session (a fresh session given the review prompt and nothing else, never the authoring session); Claude is the only tool reviewer, recorded as `tool: Claude`. The review record's `given` line must say "clean session"; the validator rejects a tool review by any other tool on a live artifact, and a Claude review whose `given` does not say clean session. Approval belongs to Gene or an explicitly scoped delegate. Leave new or changed records `DRAFT`/`REVIEW` until the applicable gates and actual approvals are met; a later material edit changes the digest and the validator reports the approval stale.
 
-Before saving, re-read the affected files and reconcile unexpected edits; another author or tool may have written concurrently. Write through the Obsidian API and verify saved contents by hash. Edit authoritative YAML and regenerate read-only views with accurate provenance; do not answer questions in generated Markdown. Keep archive, examples, and templates out of live discovery and readiness counts.
+Before saving, re-read the affected files and reconcile unexpected edits; another author or tool may have written concurrently. In the vault, write through the Obsidian API and verify saved contents by hash; in the repo copy, the worktree diff is the record. Edit authoritative YAML and regenerate read-only views with accurate provenance; do not answer questions in generated Markdown. Keep archive, examples, and templates out of live discovery and readiness counts.
 
 Finish with links to the changed artifacts, remaining questions, the validator's result, checks actually performed by hand, and the next required review. Do not assign priority, run application or `.loop` work, change app code, or commit merely because requirements were requested.
