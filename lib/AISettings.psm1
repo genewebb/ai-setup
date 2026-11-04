@@ -132,7 +132,16 @@ function New-AISettings {
             if (-not $rule) { continue }
             $rendered = ConvertTo-AIRules -Rule $rule -Keys $keys
             if (-not $rendered.Count) {
-                & $note $(if ($tier -eq 'deny') { 'warning' } else { 'info' }) "permissions.yaml $tier rule '$rule' skipped: its key is blank or missing on this machine, or its path has no rule form."
+                # A deny over a key the profile declares blank guards a folder this machine does not have, so it is
+                # info; a missing key or a path with no rule form leaves a folder that may exist unguarded.
+                $tokens = @([regex]::Matches($rule, '\{([A-Za-z][A-Za-z0-9]*)\}') | ForEach-Object { $_.Groups[1].Value })
+                $blank = @($tokens | Where-Object { $keys.Contains($_) -and -not $keys[$_] })
+                $missing = @($tokens | Where-Object { -not $keys.Contains($_) })
+                if ($blank.Count -and -not $missing.Count) {
+                    & $note 'info' "permissions.yaml $tier rule '$rule' skipped: {$($blank -join '}, {')} is blank in the profile (not on this machine)."
+                } else {
+                    & $note $(if ($tier -eq 'deny') { 'warning' } else { 'info' }) "permissions.yaml $tier rule '$rule' skipped: its key is missing on this machine, or its path has no rule form."
+                }
                 continue
             }
             foreach ($r in $rendered) { & $addU $target $r }
