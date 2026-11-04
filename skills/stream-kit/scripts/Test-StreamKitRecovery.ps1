@@ -5297,6 +5297,32 @@ if ($args[0] -eq 'test' -and $env:STUB116_NOMATCH -eq '1') { 'No test matches th
     # CR stripped: a host with core.autocrlf=true (SMVMTR1's system config) checks the applied file out as CRLF.
     $got116 = [IO.File]::ReadAllText((Join-Path $r116 'dash116.txt'), $u8).Replace("`r", '')
     Case '116g adhoc: a non-ASCII deletion and addition land byte for byte under a non-UTF-8 console' ($x116g -eq 0 -and ($o116g -join ' ') -match '^COMMITTED ADHOC-20261012-7 ' -and $got116 -eq "keep$em this`nadd $ar116 that`n" -and -not ((git -C $r116 status --porcelain) -match 'dash116')) "exit=$x116g out=$($o116g -join ' | ') file=$got116"
+
+    # 116h/116i: the repo census (config "census") runs on main after the targeted test, as Invoke-Grader runs it for a
+    # task patch. A new census FAIL reverses the change; a FAIL id main already carries (census-baseline.json) does not.
+    $cfg116 = Join-Path $r116 '.streams\config.json'
+    $cfgText116 = if (Test-Path -LiteralPath $cfg116) { Get-Content -LiteralPath $cfg116 -Raw } else { $null }
+    $cfgObj116 = if ($cfgText116) { $cfgText116 | ConvertFrom-Json -AsHashtable } else { @{} }
+    $census116 = Join-Path $Scratch 'census116.ps1'
+    Set-Content -LiteralPath $census116 -Encoding utf8 -Value @'
+param([string] $Root = '')
+if ($env:STUB116_CENSUS -eq 'red') { 'FAIL CENSUS-CommentCensusTests: NoProjectExceedsItsCommentBaseline'; exit 1 }
+'PASS CENSUS-CommentCensusTests'; exit 0
+'@
+    $cfgObj116['census'] = @{ script = $census116; paths = '^h116' }
+    $cfgObj116 | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $cfg116 -Encoding utf8
+    $head116h = git -C $r116 rev-parse HEAD
+    $w116h = Wt116 'w116h' @{ 'h116.txt' = 'adhoc h' }
+    $env:STUB116_CENSUS = 'red'
+    $o116h = @(& "$S\Commit-AdhocChange.ps1" -Repo $r116 -Session adhoc-116 -Id ADHOC-20261104-8 -Worktree $w116h -Title 'census red' -TestProject t.csproj -TestFilter 'T116'); $x116h = $LASTEXITCODE
+    Case '116h adhoc: a new repo-census FAIL reverses the change and commits nothing' ($x116h -eq 1 -and ($o116h -join ' ') -match '^REVERSED ADHOC-20261104-8 \(census failed \(CENSUS-CommentCensusTests\)' -and (git -C $r116 rev-parse HEAD) -eq $head116h -and -not (Test-Path (Join-Path $r116 'h116.txt'))) "exit=$x116h out=$($o116h -join ' | ')"
+    New-Item -ItemType Directory -Force -Path (Join-Path $r116 '.streams\suites') | Out-Null
+    Set-Content -LiteralPath (Join-Path $r116 '.streams\suites\census-baseline.json') -Encoding utf8 -Value '{ "fails": [ "CENSUS-CommentCensusTests" ] }'
+    $o116i = @(& "$S\Commit-AdhocChange.ps1" -Repo $r116 -Session adhoc-116 -Id ADHOC-20261104-9 -Worktree $w116h -Title 'census baseline' -TestProject t.csproj -TestFilter 'T116'); $x116i = $LASTEXITCODE
+    Remove-Item Env:\STUB116_CENSUS
+    Case '116i adhoc: a census FAIL main already carries (census-baseline.json) does not block the change' ($x116i -eq 0 -and ($o116i -join ' ') -match '^COMMITTED ADHOC-20261104-9 ') "exit=$x116i out=$($o116i -join ' | ')"
+    Remove-Item -LiteralPath (Join-Path $r116 '.streams\suites\census-baseline.json') -Force
+    if ($cfgText116) { Set-Content -LiteralPath $cfg116 -Value $cfgText116 -NoNewline -Encoding utf8 } else { Remove-Item -LiteralPath $cfg116 -Force }
     Remove-Item Env:\STREAM_ADHOC_DOTNET -ErrorAction SilentlyContinue
     $o116f = @(& "$S\Add-Lesson.ps1" -Repo $r116 -Role adhoc -Session adhoc-116 -Task ADHOC-20261011-1 -Text 'run the bUnit test from the worktree'); $x116f = $LASTEXITCODE
     Case '116f adhoc: the ad-hoc role keeps a lessons file' ($x116f -eq 0 -and (Test-Path (Join-Path $r116 '.streams\lessons\adhoc.md'))) "exit=$x116f out=$($o116f -join ' | ')"
