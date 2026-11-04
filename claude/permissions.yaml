@@ -12,6 +12,8 @@
 # because any Read() deny rule makes Claude Code prompt on every 'cd <dir> && git ...' compound.
 allow:
 - Bash(*)
+# CrewChief CLI Runner queue on the SMVMTR boxes (Gene, 11/03): auto mode's classifier blocked it on a box with a live test.
+- Bash(bash /d/PowershellScripts/CrewChiefConnect/run-cc-host.sh:*)
 - PowerShell(*)
 - mcp__filesystem
 - mcp__memory

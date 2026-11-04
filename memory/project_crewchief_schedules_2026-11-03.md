@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 4dd36d8c-694d-4696-be28-10c24d7ba30b
-  modified: 2026-11-03T20:22:56.354Z
+  modified: 2026-11-03T21:33:15.182Z
 ---
 
 Decided 2026-11-03 with Gene (Connect throughput testing context, see [[project_connect_test_board_2026-10-30]]):
@@ -44,6 +44,18 @@ Decided 2026-11-03 with Gene (Connect throughput testing context, see [[project_
   Task Scheduler COM, folder \CrewChief\). Unit 4442 green; real Task Scheduler integration test passes (elevated).
   Gotchas: dynamic COM throws FileNotFoundException (check HResult 0x80070002), and XML LogonType "ServiceAccount" is
   rejected (0x80041318), so SYSTEM tasks omit LogonType. Re-attach after reboot = CrewChief marker per TestAuto URL+workflow in <data>/testauto-active-runs (TestAuto executions have no template link, so no TestAuto endpoint possible without a model change; Gene chose marker). Apply re-enables a disabled task (Gene). Design: Q:\Work\Work\99 Documentation\speed-merchants\planning\2026-11-03-crewchief-testauto-and-schedule-steps-design.md.
+- **8.1.0 deployed 11/03 15:51 (commit e0d373de).** Then 16:00-16:40 (uncommitted): `waitOnly` on TestAutoWorkflowStep
+  (guard first in each `-run`: a -run resets the DB before its TestAuto step, so plain re-attach can't protect an
+  in-flight run). 8.1.0 IGNORES waitOnly and would START the run, so CrewChief with waitOnly must deploy BEFORE the
+  -run workloads. Generator reorg built (Get-LayoutFolder, providers\<p>\<size>\t4|t8|t12, names unchanged) + 54 -run,
+  10 -all, 10 schedule-connect-<size>-<p>; staged in scratchpad regen8, not deployed. Workflow codes = PROD repo's
+  (Gene). Run-as = CORP\speedmerchants (verified via SID of the CLI Runner task) + secret Scheduler:RunAsPassword (Gene adds).
 
 **Why:** Gene wants daily/weekly unattended Connect runs owned by CrewChief, not bash on the laptop.
 **How to apply:** design new work against this; speed-merchants = no commits by Claude (git-guard), Gene commits.
+- 11/03 ~17:00: Gene chose guard = wait on ANY run: waitOnly + blank workflowCode waits for every marker at the TestAuto (new ITestAutoActiveRunStore.FindAll). -run guards now blank. Schedule defaults stay Sat 02:00 with an overlap warning in notes. Unit 4456 green; regen8 rebuilt, 831 steps deserialize clean.
+- 11/03 16:49 CrewChief 8.1.1 deployed (commit 0ec01a1b, waitOnly + FindAll; web + CLI verified). 17:00 reorg DEPLOYED to SMVMTR1 (Gene: now, adds before deletes): backup \\SMVMTR1\c$\Deploy\CrewChief\backup-connect-20261103-reorg; 158 copied, 84 old copies + 3 empty dirs removed, catalogue replaced; live = staged (194 files, 0 mismatch); no shadows. Secret Scheduler:RunAsPassword added by Gene. Test Apply schedule-connect-1k-sql-server OK (task \CrewChief\schedule-connect-1k-sql-server, CORP\speedmerchants, Sat 02:00, target connect-1k-sql-server-all) then DISABLED via schtasks. Re-running Apply re-enables it. cli-runner still in use by tonight's round; remove after with Gene's OK.
+- 11/03 19:40 (Gene): schedule workloads moved to connect\schedule\1k|1m\schedule-connect-<size>-<provider> (generator Get-LayoutFolder + keep-list + checks; backup .bak-20261103-schedulefolder). Deployed: 10 moved, live = staged (194, 0 mismatch), catalogue has connect/schedule, /1k, /1m. Windows task \CrewChief\schedule-connect-1k-sql-server unaffected (it runs the -all by name).
+- 11/03 20:30 (Gene) 26R2 on SMVMTR2: generator Environment SMVMTR2. Rules: 26R2 Main has Windows service 'Profisee 26.2.0 (<instance>)', stop it BEFORE IIS stop/recycle/restore and start AFTER IIS (26R3+ none; nothing older than 26R2 tested). TestAuto workflows keep identical names across versions; version + Main machine are TAGS (26R3,SMVM1 / 26R2,SMVM2), no version in Description; identity = name + exact tags; only TR1 adopts untagged ones. Two passes: TR2 -run/-all/schedule only after its PROD workflow codes exist. Never run TR1 and TR2 connect tests at once (shared remote targets). Details in C:\tmp\ConnectTestingInProgress.md.
+- TODO (Gene 11/03): Connect source should use ONLY ModelSource.dbo.PDATA, size = which ModelSource<size> DB is restored (see [[project_modelsource_split_per_size_dbs_2026-10-28]]); today SourceTableName PDATA1K/PDATA1M copies exist on SMVMDB1 + SMVMDB2. Do for both versions after the 26R2 runs.
+- 11/03 21:35: SQL logins for Connect SQL service configs = standard SQL admin ProfAdmin via {{$config:UserCredentials:SqlAdminUser}} / SqlAdminPassword (Gene: standard on all our machines). CLI Runner now also on SMVMTR2 (TODO SMVMTR3). TR2 26R2 workflow codes 10000263-10000316.

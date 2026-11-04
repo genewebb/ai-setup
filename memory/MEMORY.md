@@ -31,5 +31,6 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [logpull v1.2 10/26](project_logpull_v12_gui_2026-10-26.md) · [ADO 166723 DATAS GC re-run](project_ado_166723_26r3_perf_datas_gc.md) · [CrewChief remove instance 10/21](project_crewchief_configure_remove_instance_2026-10-21.md)
 - [prof setup share 10/23](project_prof_share_design_2026-10-23.md) · [profile load NAS fix 10/27](reference_profile_load_nas_clearseq.md)
 - [PROD TestAuto SQL = wus2-pc-profisee-sqlserver-0 / pc-speedmr-prd-db via speedmerchants-prod-mssql MCP](reference_testauto_prod_sql_server.md)
+- **[TestAuto restart mid-run orphans the Poll job: run stays Running forever, metrics lost](reference_testauto_restart_orphans_running_scenario.md)**
 - **[Profisee services stay cold after recycle/restore: warm via /rest/health or Monitor drains nothing](reference_profisee_cold_service_after_recycle.md)**
 - [Portal hangs, health green: Data ShiftPartitions job holds Sch-M on t$Entity behind matching; kill = Hangfire retry](reference_partition_job_blocks_portal_during_matching.md)
