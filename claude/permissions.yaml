@@ -5,7 +5,7 @@
 # profile's '## Claude access' table (machine path allows). One owner per rule (R12).
 #
 # {Key} = a machine path from ProfileMachineConfig.md. In Read/Edit/Write rules it renders as //c/... ;
-# in Bash/PowerShell command rules it renders literally, once with '\' and once with '/'.
+# in Bash/PowerShell command rules it renders literally, once with '\' and once with '/'; a Bash rule also as /c/... .
 # A rule whose {Key} is blank on a machine is skipped (a skipped deny is reported).
 #
 # The vault credentials folder: Edit is denied here; Read is blocked by the credentials-guard hook,
@@ -13,7 +13,7 @@
 allow:
 - Bash(*)
 # CrewChief CLI Runner queue on the SMVMTR boxes (Gene, 11/03): auto mode's classifier blocked it on a box with a live test.
-- Bash(bash /d/PowershellScripts/CrewChiefConnect/run-cc-host.sh:*)
+- Bash(bash {PowershellScriptsDir}/CrewChiefConnect/run-cc-host.sh:*)
 - PowerShell(*)
 - mcp__filesystem
 - mcp__memory

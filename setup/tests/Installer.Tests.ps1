@@ -91,6 +91,15 @@ try {
         Assert-Equal (Join-Path $root 'scratch') $s.env.CLAUDE_CODE_TMPDIR
         Assert-Equal (Join-Path $root 'scratch\temp') $s.env.TEMP
     }
+    Test-Case 'a {Key} command rule renders with \ and /; a Bash rule also in the Git Bash /d/ form' {
+        $k = @{ PS = 'D:\PowershellScripts'; Unc = '\\srv\share' }
+        $bash = @(ConvertTo-AIRules -Rule 'Bash(bash {PS}/cc/run.sh:*)' -Keys $k | ForEach-Object { $_ })
+        Assert-Equal 'Bash(bash D:\PowershellScripts/cc/run.sh:*)|Bash(bash D:/PowershellScripts/cc/run.sh:*)|Bash(bash /d/PowershellScripts/cc/run.sh:*)' ($bash -join '|')
+        $ps = @(ConvertTo-AIRules -Rule 'PowerShell({PS}\x.ps1)' -Keys $k | ForEach-Object { $_ })
+        Assert-Equal 'PowerShell(D:\PowershellScripts\x.ps1)|PowerShell(D:/PowershellScripts/x.ps1)' ($ps -join '|')
+        $unc = @(ConvertTo-AIRules -Rule 'Bash(ls {Unc}\a)' -Keys $k | ForEach-Object { $_ })
+        Assert-Equal 'Bash(ls \\srv\share\a)|Bash(ls //srv/share/a)' ($unc -join '|')
+    }
     # ---- 5.18 read-only ----
     Test-Case 'a read-only row renders Read allow plus Edit deny' {
         $s = Settings; $rp = ConvertTo-AIRulePath $ro

@@ -55,5 +55,36 @@ Test-Case 'Git Bash drive paths are flagged' {
     $r = Invoke-Gate (New-Corpus @{ 'a.sh' = @('cd /c/devops/repos/x') })
     Assert-Equal 1 $r.Hits.Count
 }
+Test-Case 'a trailing example-path marker exempts a comment line; an unmarked comment is still flagged' {
+    $r = Invoke-Gate (New-Corpus @{ 'a.ps1' = @('# PowerShell keeps it literal ("C:\x\" ends there).  # example-path', '# PATH="/c/a:/c/b" is a list  # example-path', '# old home was C:\devops\repos\x') })
+    Assert-Equal 1 $r.Hits.Count; Assert-Equal 'C:\devops\repos\x' $r.Hits[0].Path
+}
+Test-Case 'a regex literal that looks like a UNC path is not a path; real, JSON-escaped and admin-share UNC paths are' {
+    $r = Invoke-Gate (New-Corpus @{ 'a.ps1' = @(
+                '@{ Re = ''\\hiberfil\.sys$''; Hint = ''x'' }'
+                '@{ Re = ''\\Windows\\WinSxS\\''; Hint = ''x'' }'
+                'copy to \\server\share\drop'
+                '"dest": "\\\\server\\share\\drop"'
+                'net use \\server\c$'
+            ) })
+    Assert-Equal 3 $r.Hits.Count ($r.Hits | ForEach-Object { "$($_.Line) $($_.Path)" } | Out-String)
+    Assert-Equal '3,4,5' (($r.Hits | ForEach-Object Line) -join ',')
+}
+Test-Case 'an untracked git-ignored file is skipped; a tracked or unignored file in the same tree is checked' {
+    $root = New-Corpus @{
+        '.remember\.gitignore' = @('*')
+        '.remember\today.md'   = @('worked in D:\devops\repos\x')
+        '.remember\forced.md'  = @('worked in D:\devops\repos\y')
+        'a.md'                 = @('see D:\devops\repos\z')
+    }
+    & git -C $root init -q
+    & git -C $root add -f .remember/forced.md a.md
+    $r = Invoke-Gate $root
+    Assert-Equal '.remember\forced.md|a.md' (($r.Hits | ForEach-Object File | Sort-Object) -join '|')
+}
+Test-Case 'outside a git work tree an ignore-shaped file is still checked' {
+    $r = Invoke-Gate (New-Corpus @{ '.remember\.gitignore' = @('*'); '.remember\today.md' = @('worked in D:\devops\repos\x') })
+    Assert-Equal 1 $r.Hits.Count
+}
 foreach ($r in $script:Roots) { Remove-Item -LiteralPath $r -Recurse -Force -ErrorAction SilentlyContinue }
 Complete-Tests

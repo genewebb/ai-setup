@@ -12,7 +12,10 @@
         fixture, or a product's default install location (not this machine's layout);
       - a fenced code block whose fence directly follows a '<!-- example-paths -->' line (same meaning, whole block);
       - files and folders matched by setup\hardpaths-allowlist.txt (glob per line, '#' comments);
-      - .bak* files, .git, the synced\ vendor skill folders.
+      - .bak* files, .git, the synced\ vendor skill folders;
+      - untracked files git ignores when -Root is in a work tree: they are never published;
+      - a regex literal that only looks like a UNC path: two leading backslashes (not four) and then a doubled '\\'
+        separator ('\\Windows\\WinSxS\\') or a '\.' escape with a closing '$' ('\\hiberfil\.sys$').
     Prints file:line: path. Exit 0 = clean.
 #>
 param(
@@ -36,12 +39,26 @@ $drive = '(?<![A-Za-z0-9_$%\\])[A-Za-z]:(?:\\|/(?!/))[^\s"''`<>|*?,;)\]]*'
 $unc = '(?<![\\A-Za-z0-9%}])\\\\(?:\\\\)?[A-Za-z0-9][A-Za-z0-9._-]+(?:\\\\?|/)[A-Za-z0-9$._-]{2,}[^\s"''`<>|*?,;)\]]*'
 $bash = '(?<=^|[\s"''(=:])/(?:[a-zA-Z])/(?:Users|devops|tmp|Tmp|repos|Deploy|Work|Personal|PowershellScripts|Secrets|Documentation|devopslocal|inetpub|Program Files)\b[^\s"''`<>|*?,;)\]]*'
 $rx = [regex]::new("$drive|$unc|$bash", 'Compiled')
+$regexLiteral = [regex]::new('^\\\\(?!\\)[^\\]+\\\\|^\\\\(?!\\).*\\\..*\$$', 'Compiled')
+
+# One git call lists every ignored untracked file under -Root; outside a work tree (or without git) nothing is skipped.
+$ignored = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+if (Get-Command git -CommandType Application -ErrorAction SilentlyContinue) {
+    $inTree = & git -C $Root rev-parse --is-inside-work-tree 2>$null
+    if ($LASTEXITCODE -eq 0 -and $inTree -eq 'true') {
+        $list = (& git -C $Root ls-files -z --others --ignored --exclude-standard) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "git ls-files failed under $Root (exit $LASTEXITCODE)." }
+        foreach ($p in $list -split "`0") { if ($p) { [void]$ignored.Add($p.Replace('/', '\')) } }
+    }
+    $global:LASTEXITCODE = 0
+}
 
 $hits = [System.Collections.Generic.List[object]]::new()
 foreach ($file in Get-ChildItem -LiteralPath $Root -Recurse -File -Force) {
     if ($textExt -notcontains $file.Extension.ToLowerInvariant()) { continue }
     $rel = $file.FullName.Substring($Root.Length + 1)
     if ($allowGlobs | Where-Object { $rel -like $_ }) { continue }
+    if ($ignored.Contains($rel)) { continue }
     $n = 0
     $blockArmed = $false; $inBlock = $false
     foreach ($line in [IO.File]::ReadLines($file.FullName)) {
@@ -55,6 +72,7 @@ foreach ($file in Get-ChildItem -LiteralPath $Root -Recurse -File -Force) {
             $v = $m.Value.TrimEnd('.', ':', "'", '"')
             if ($v -eq $ConfigConvention -or $line.Contains($ConfigConvention) -and $ConfigConvention.StartsWith($v)) { continue }
             if ($v.Length -lt 4) { continue }   # 'C:\' alone, or a regex fragment
+            if ($regexLiteral.IsMatch($m.Value)) { continue }
             $hits.Add([pscustomobject]@{ File = $rel; Line = $n; Path = $v })
         }
     }
