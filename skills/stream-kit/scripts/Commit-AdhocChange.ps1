@@ -7,11 +7,12 @@
 #   2. takes .streams\integrate-patch.lock, so no Integrate-Patch run is between its own apply and commit, then
 #      .streams\main-grader.lock, so no grader compiles main while it is rewritten (both waited for, -WaitSeconds);
 #   3. refuses when a path the patch touches is already dirty on main, or the patch does not apply (rebase first);
-#   4. applies it, builds the solution, runs `dotnet test <TestProject> --no-build --filter <TestFilter>`;
+#   4. applies it, builds the solution, runs `dotnet test <TestProject> --no-build --filter <TestFilter>`, then the
+#      repo census (.streams\config.json "census") when the patch touches its paths;
 #   5. PASS: commits exactly the patch's paths as "<Id>: <Title>" and pushes like Integrate-Patch (git policy rows
 #      from the machine profile, fail closed); FAIL: reverses the patch, so main never keeps an unproven change.
 # A filter that matches no test is a FAIL: a change with no test of its own is not proven.
-# Outcome line (one of): COMMITTED <Id> <sha> | REVERSED <Id> (build|test failed; log <path>) | REBASE <Id> |
+# Outcome line (one of): COMMITTED <Id> <sha> | REVERSED <Id> (build|test|census failed; log <path>) | REBASE <Id> |
 # DIRTY <Id> <paths> | NOTHING <Id> | ADHOC-BUSY <Id> (<lock> held by <holder>) | COMMIT SKIPPED <Id> (git policy).
 # Exit 0 committed (or -NoCommit applied), 1 reversed, 2 nothing to land, 3 refused (rebase / dirty), 4 busy.
 # STREAM_ADHOC_DOTNET replaces the dotnet executable (the self-test's stub).
@@ -106,6 +107,31 @@ try {
         $testText = Get-Content -LiteralPath $testLog -Raw
         if ($testExit -ne 0) { $failed = "test failed; log $testLog" }
         elseif ($testText -match 'No test matches the given testcase filter|No test is available') { $failed = "test failed: the filter '$TestFilter' matched no test; log $testLog" }
+    }
+    # 4b. The repo census (.streams\config.json "census", the script Invoke-Grader runs for every task patch) runs on
+    # main when the patch touches its paths, so an ad-hoc change meets the same repo-wide rules as a built one instead
+    # of reaching them only at the nightly suite. A FAIL id in .streams\suites\census-baseline.json is main's own red.
+    $censusCfg = (Get-StreamConfig $P)['census']
+    if (-not $failed -and $censusCfg -is [Collections.IDictionary] -and $censusCfg['script']) {
+        $cs = [string]$censusCfg['script']
+        if (-not [IO.Path]::IsPathRooted($cs)) { $cs = Join-Path $Repo $cs }
+        $rx = if ($censusCfg['paths']) { [string]$censusCfg['paths'] } else { '.' }
+        if ((Test-Path -LiteralPath $cs) -and @($paths | Where-Object { ($_ -replace '\\', '/') -match $rx }).Count) {
+            $censusLog = Join-Path $logDir "$Id.census.txt"
+            & pwsh -NoProfile -NonInteractive -File $cs -Root $Repo 2>&1 | Set-Content -LiteralPath $censusLog -Encoding utf8
+            $censusExit = $LASTEXITCODE
+            if ($censusExit -ne 0) {
+                $known = @()
+                $bf = Join-Path $P.Root 'suites\census-baseline.json'
+                if (Test-Path -LiteralPath $bf) { try { $known = @((Get-Content -LiteralPath $bf -Raw | ConvertFrom-Json -AsHashtable)['fails']) } catch { $known = @() } }
+                $lines = @(Get-Content -LiteralPath $censusLog)
+                $newFail = @($lines | Where-Object { $_ -match '^FAIL\s+([^\s:]+)' -and $known -notcontains $Matches[1] } | ForEach-Object { ($_ -split '[\s:]+')[1] })
+                $anyFail = @($lines | Where-Object { $_ -match '^FAIL\s+\S' })
+                if ($newFail.Count -or -not $anyFail.Count) {
+                    $failed = "census failed ($(if ($newFail.Count) { $newFail -join ', ' } else { "exit $censusExit" })); log $censusLog"
+                }
+            }
+        }
     }
     if ($failed) {
         [void](Invoke-Git $Repo @('apply', '-R', '--binary', '--whitespace=nowarn', $patch))

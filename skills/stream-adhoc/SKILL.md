@@ -112,13 +112,14 @@ file `.streams\adhoc\<Id>.md` from the first step to the last:
    ```
 
    The script exports the change, waits for the integrator's locks, applies the change to main, builds the solution,
-   and runs the targeted test there. It commits only the change's own paths, then pushes the commit as the integrator
-   does. Run it in the foreground. It can wait up to 30 minutes for the locks, so pass a long tool timeout.
+   and runs the targeted test there. When the repo names a census in `.streams\config.json` and the change touches its
+   paths, the census runs next, as it does for a built patch. It commits only the change's own paths, then pushes the
+   commit as the integrator does. Run it in the foreground. It can wait up to 30 minutes for the locks, so pass a long tool timeout.
 
    | Outcome | Meaning and next step |
    |---|---|
    | `COMMITTED <Id> <sha>` | Landed. Go to step 9. |
-   | `REVERSED <Id> (build\|test failed ...)` | Main is unchanged. Read the log it names, fix the code in the worktree, re-run step 7, then run this step again. |
+   | `REVERSED <Id> (build\|test\|census failed ...)` | Main is unchanged. Read the log it names, fix the code in the worktree, re-run step 7, then run this step again. |
    | `REBASE <Id>` | Main moved under the change. In the worktree: `git stash push --include-untracked`, `git switch --detach <main HEAD sha>`, `git stash pop`. Resolve any conflict, re-run step 7, then run this step again. |
    | `DIRTY <Id> <paths>` | Another change to those paths is uncommitted on main. If the integrator is mid-apply, wait 5 minutes and retry. If the paths stay dirty, ask the owner. |
    | `ADHOC-BUSY <Id> ...` | The integrator held a lock for 30 minutes (a suite run). Tell the owner and offer to retry. |
