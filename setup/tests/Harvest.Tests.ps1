@@ -59,8 +59,8 @@ try {
         Assert-Equal 'accepted' (ItemOf 'Bash(pwsh -File X:\repos\r1\run.ps1)').status
     }
 
-    # Simulate the apply: the generated set and the live settings now carry both rendered forms.
-    $gen.allow += @('Bash(pwsh -File X:\repos\r1\run.ps1)', 'Bash(pwsh -File X:/repos/r1/run.ps1)')
+    # Simulate the apply: the generated set and the live settings now carry every rendered form (a Bash rule has three).
+    $gen.allow += @('Bash(pwsh -File X:\repos\r1\run.ps1)', 'Bash(pwsh -File X:/repos/r1/run.ps1)', 'Bash(pwsh -File /x/repos/r1/run.ps1)')
     (@{ identity = 'test2'; lastSettings = $gen } | ConvertTo-Json -Depth 10) | Set-Content (Join-Path $home1 'machine-config.state.json')
     (@{ permissions = $gen } | ConvertTo-Json -Depth 10) | Set-Content (Join-Path $home1 'settings.json')
     [void](Invoke-Harvest -More @('-Action', 'finalize'))

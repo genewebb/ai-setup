@@ -192,7 +192,7 @@ function Test-PathAssignment([string] $Before) {
 # Candidate path tokens of a shell command: quoted strings first, then bare tokens split on shell separators.
 # -Posix (the Bash tool): a double-quoted string ends only at an unescaped quote, as bash reads it. '\"' inside one
 # split the sed script "s/^.*-c\", '//; s/'..." so its fragment '//; s/' read as a root target and held a builder on a
-# prompt nobody could answer (kit item IN-20261025234510-db78). PowerShell keeps '\' literal ("C:\x\" ends there).
+# prompt nobody could answer (kit item IN-20261025234510-db78). PowerShell keeps '\' literal ("C:\x\" ends there).  # example-path
 function Get-CommandPathTokens([string] $cmd, [switch] $Posix) {
     $tokens = New-Object System.Collections.Generic.List[string]
     $qRx    = if ($Posix) { '"((?:[^"\\]|\\.)*)"|''([^'']*)''' } else { '"([^"]*)"|''([^'']*)''' }
@@ -200,12 +200,12 @@ function Get-CommandPathTokens([string] $cmd, [switch] $Posix) {
     $masked = [regex]::Replace($cmd, $qRx, { param($q) 'Q' * $q.Length })
     foreach ($m in $quoted) {
         if (Test-ScriptOperand $masked $m.Index) { continue }
-        # The value assigned to PATH (PATH="/c/a:/c/b", export PATH='...', $env:PATH = '...') is a search list, not
+        # The value assigned to PATH (PATH="/c/a:/c/b", export PATH='...', $env:PATH = '...') is a search list, not  # example-path
         # an operand: it read as one POSIX absolute and stalled a builder on 2026-10-23 (kit item IN-20261023161132-1e65).
         if (Test-PathAssignment $masked.Substring(0, $m.Index)) { continue }
         $v = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
         # A call's argument is data: never a nested command, and a POSIX-form value ('/c', '/>') is no path; a drive,
-        # UNC or home value is still checked ([IO.Path]::Combine('C:\x', ...)).
+        # UNC or home value is still checked ([IO.Path]::Combine('C:\x', ...)).  # example-path
         if (Test-CallArgument $masked $m.Index) {
             if ($v -and $v -notmatch '^/') { $tokens.Add($v) }
             continue
@@ -265,7 +265,7 @@ function Find-OutsideScopeToken($Tokens, $Roots) {
         # "https:" + POSIX "//host" and stopped three runners on 2026-10-20 (kit item IN-20261020133758-c46f).
         # A file: URL is a path and is still checked.
         if ($p -match '^[A-Za-z][A-Za-z0-9+.-]+://' -and $p -notmatch '^file:') { continue }
-        # A bare PATH=/c/a:/c/b (also after export) is a search list, as its quoted form (kit item IN-20261023161132-1e65).
+        # A bare PATH=/c/a:/c/b (also after export) is a search list, as its quoted form (kit item IN-20261023161132-1e65).  # example-path
         if ($p -cmatch '^PATH=') { continue }
         # example-path: the optional prefix is lazy (??) so "C:/x" is read as a drive path first, not as prefix "C:" + POSIX "/x".
         # The prefix holds no whitespace, quote or comma: an option name is one word, and a nested command's

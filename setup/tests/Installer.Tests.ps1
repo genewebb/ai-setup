@@ -91,6 +91,27 @@ try {
         Assert-Equal (Join-Path $root 'scratch') $s.env.CLAUDE_CODE_TMPDIR
         Assert-Equal (Join-Path $root 'scratch\temp') $s.env.TEMP
     }
+    Test-Case 'a {Key} command rule renders with \ and /; a Bash rule also in the Git Bash /d/ form' {
+        $k = @{ PS = 'D:\PowershellScripts'; Unc = '\\srv\share' }
+        $bash = @(ConvertTo-AIRules -Rule 'Bash(bash {PS}/cc/run.sh:*)' -Keys $k | ForEach-Object { $_ })
+        Assert-Equal 'Bash(bash D:\PowershellScripts/cc/run.sh:*)|Bash(bash D:/PowershellScripts/cc/run.sh:*)|Bash(bash /d/PowershellScripts/cc/run.sh:*)' ($bash -join '|')
+        $ps = @(ConvertTo-AIRules -Rule 'PowerShell({PS}\x.ps1)' -Keys $k | ForEach-Object { $_ })
+        Assert-Equal 'PowerShell(D:\PowershellScripts\x.ps1)|PowerShell(D:/PowershellScripts/x.ps1)' ($ps -join '|')
+        $unc = @(ConvertTo-AIRules -Rule 'Bash(ls {Unc}\a)' -Keys $k | ForEach-Object { $_ })
+        Assert-Equal 'Bash(ls \\srv\share\a)|Bash(ls //srv/share/a)' ($unc -join '|')
+    }
+    Test-Case 'a deny rule over a profile-blank key is info; over a missing key it is a warning' {
+        $yaml = Join-Path $root 'deny-perm.yaml'
+        "allow: []`nask: []`ndeny:`n- Edit({Vault}\c\**)`n- Edit({Gone}\c\**)`n" | Set-Content $yaml -NoNewline
+        Import-Module (Join-Path $CorpusRoot 'lib\MachineConfig.psm1') -Force -DisableNameChecking
+        $keys = [ordered]@{}; $real = (Get-AIMachineProfile -Path $cfg).Keys
+        foreach ($k in $real.Keys) { $keys[$k] = $real[$k] }
+        $keys['Vault'] = ''
+        $prof = [pscustomobject]@{ Keys = $keys; Access = @() }
+        $rep = (New-AISettings -Profile $prof -TemplatePath (Join-Path $mc 'claude\settings.template.json') -PermissionsPath $yaml).Report
+        Assert-Equal 1 @($rep | Where-Object { $_.Level -eq 'info' -and $_.Message -like '*{Vault}*blank in the profile*' }).Count ($rep.Message -join ' | ')
+        Assert-Equal 1 @($rep | Where-Object { $_.Level -eq 'warning' -and $_.Message -like '*{Gone}*missing*' }).Count ($rep.Message -join ' | ')
+    }
     # ---- 5.18 read-only ----
     Test-Case 'a read-only row renders Read allow plus Edit deny' {
         $s = Settings; $rp = ConvertTo-AIRulePath $ro

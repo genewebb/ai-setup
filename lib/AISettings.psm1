@@ -38,7 +38,8 @@ function Expand-AITokens {
 }
 
 function ConvertTo-AIRules {
-    <# One permissions.yaml rule -> zero, one or two rendered rules. #>
+    <# One permissions.yaml rule -> zero to three rendered rules. A Bash rule also gets the Git Bash form (/c/x) of
+       each drive-letter {Key}, because a bash command line names the path that way. #>
     param([string]$Rule, [System.Collections.IDictionary]$Keys)
     if ($Rule -notmatch '\{[A-Za-z][A-Za-z0-9]*\}' -and $Rule -notmatch '%[A-Za-z_]+%') { return , @($Rule) }
     if ($Rule -match '^([A-Za-z]+)\((.*)\)$') {
@@ -51,8 +52,18 @@ function ConvertTo-AIRules {
             return , @("$tool($rp)")
         }
         $a = "$tool($exp)"; $b = "$tool($($exp -replace '\\', '/'))"
-        if ($a -ceq $b) { return , @($a) }
-        return , @($a, $b)
+        $out = [System.Collections.Generic.List[string]]::new(); $out.Add($a)
+        if ($b -cne $a) { $out.Add($b) }
+        if ($tool -eq 'Bash') {
+            $posixKeys = @{}
+            foreach ($k in $Keys.Keys) {
+                $v = [string]$Keys[$k]
+                $posixKeys[$k] = if ($v -match '^([A-Za-z]):\\?(.*)$') { "/$($Matches[1].ToLowerInvariant())/$($Matches[2].TrimEnd('\'))".TrimEnd('/') } else { $v }
+            }
+            $c = "$tool($((Expand-AITokens -Text $arg -Keys $posixKeys) -replace '\\', '/'))"
+            if ($c -cnotin $out) { $out.Add($c) }
+        }
+        return , @($out)
     }
     $e = Expand-AITokens -Text $Rule -Keys $Keys
     if ($null -eq $e) { return , @() }
@@ -121,7 +132,16 @@ function New-AISettings {
             if (-not $rule) { continue }
             $rendered = ConvertTo-AIRules -Rule $rule -Keys $keys
             if (-not $rendered.Count) {
-                & $note $(if ($tier -eq 'deny') { 'warning' } else { 'info' }) "permissions.yaml $tier rule '$rule' skipped: its key is blank or missing on this machine, or its path has no rule form."
+                # A deny over a key the profile declares blank guards a folder this machine does not have, so it is
+                # info; a missing key or a path with no rule form leaves a folder that may exist unguarded.
+                $tokens = @([regex]::Matches($rule, '\{([A-Za-z][A-Za-z0-9]*)\}') | ForEach-Object { $_.Groups[1].Value })
+                $blank = @($tokens | Where-Object { $keys.Contains($_) -and -not $keys[$_] })
+                $missing = @($tokens | Where-Object { -not $keys.Contains($_) })
+                if ($blank.Count -and -not $missing.Count) {
+                    & $note 'info' "permissions.yaml $tier rule '$rule' skipped: {$($blank -join '}, {')} is blank in the profile (not on this machine)."
+                } else {
+                    & $note $(if ($tier -eq 'deny') { 'warning' } else { 'info' }) "permissions.yaml $tier rule '$rule' skipped: its key is missing on this machine, or its path has no rule form."
+                }
                 continue
             }
             foreach ($r in $rendered) { & $addU $target $r }
