@@ -18,3 +18,5 @@ State 11/04 17:57: Tasks 1-11 committed+pushed by Gene. Task 12 LIVE on SMVMTR2:
 
 **Why:** box-neutral pack, person edits only reference data.
 **How to apply:** next = Task 12 on SMVMTR2 after Gene deploys (no run active): restore pack zip with Replace into a clean data folder, preflight, setup, preflight, then 26R2 queue. Task 13 TR1 retrofit gated by Gene. Related: [[project-connect-empty-model-bootstrap-2026-11-04]].
+
+- 11/05 11:55: run/board know-how captured in skill `crewchief-connect-test-rounds`; tweak recipes added to `crewchief-workload-packs` (ai-setup clone, installed locally, NOT published).

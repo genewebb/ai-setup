@@ -84,6 +84,20 @@ rerun `matching-1k-testauto-create` if a TestAuto spec changed (upsert updates i
 7. `MatchingStrategyName` must be in the UnifiedMatchingScenario CustomParms for ScenarioTable mode (the mutator
    reads the strategy's fields); PROD's Scenario 2 config lacks it.
 
+## Proof a run measured something
+
+Activity Monitor (`monitor.tActivity`) must show Matching "Clustering & Survivorship" rows between the scenario's
+Start and End markers. No Matching rows there = the strategy was disabled or continuous matching off; the run's
+numbers are useless, rerun the whole workload (it restores its start backup).
+A rematch that leaves a record in its cluster does not change its `Match DateTime`.
+
+## Run history (1K, CORPLTR94, 26R3T)
+
+| Scenario | Good execution | Notes |
+|---|---|---|
+| 1 | 10000401 (10000400 also valid) | 976 matched, 200 golden, 24 sparse unmatched |
+| 2 | 10000404 | 10000403 invalid (strategy disabled); 5 new matched |
+
 ## Where things are
 
 - ScenarioMgt REST `https://profiseecloud.dev/speedmerchantstest/rest/` writes the PROD TestAuto DB
