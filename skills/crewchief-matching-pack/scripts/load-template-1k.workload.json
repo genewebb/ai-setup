@@ -1,0 +1,307 @@
+{
+  "name": "matching-1k-scenario1-load",
+  "description": "What: Set the standard API key, load the 1K Scenario 1 table into the empty RetailClient entity through Connect, check every Code arrived, and back up the 'loaded' checkpoint. Why: Scenario 1 starts from this backup; Scenario 2, 3b and 3c update records by these Codes. When: once per clean install or empty baseline, before the first Scenario 1 run of this size. Needs: the model, the RetailClient matching strategy and the Connect strategy {{StrategyName}} in place; the machine's API user exists in Profisee. Success: every step Succeeded. If it fails: the failed step's description says what to fix; rerun from a restored empty baseline.",
+  "tags": [
+    "matching",
+    "1k",
+    "scenario1",
+    "load"
+  ],
+  "globalParameters": {
+    "ApiKeyUserName": "{{$config:ConnectRuntime:ApiKeyUserName}}",
+    "ProfiseeApiKey": "{{$config:RestKeys:ProfiseeRestKey}}",
+    "ConnExApiKey": "{{$config:RestClients:Connect:ApiKey}}",
+    "DatabaseServerName": "{{$ref:matching/machines:DatabaseServerName}}",
+    "ProfiseeDatabaseName": "{{$ref:matching/databases:ProfiseeDatabaseName}}",
+    "ModelSourceDB": "{{$ref:matching/databases:ModelSourceDB}}",
+    "ProfiseeBaseUrl": "https://{{$ref:matching/machines:ApplicationServerNameFQDN}}/{{$ref:matching/instances:ProfiseeInstanceName}}/rest",
+    "ConnExBaseUrl": "https://{{$ref:matching/machines:ApplicationServerNameFQDN}}/{{$ref:matching/instances:ProfiseeInstanceName}}/rest/",
+    "MainHealthUrl": "https://{{$ref:matching/machines:ApplicationServerNameFQDN}}/{{$ref:matching/instances:ProfiseeInstanceName}}/rest/health",
+    "StrategyName": "RetailClientImport",
+    "SourceTableName": "RetailClient1KScenario1",
+    "RecordCount": "1000",
+    "SizeLabel": "1K",
+    "ApplicationServerName": "{{$ref:matching/machines:ApplicationServerName}}",
+    "ProfiseeInstanceName": "{{$ref:matching/instances:ProfiseeInstanceName}}"
+  },
+  "globalParametersNotes": "",
+  "credentialUserId": "",
+  "credentialPassword": "",
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "notes": "",
+        "username": "{{ApiKeyUserName}}",
+        "key": "{{ProfiseeApiKey}}",
+        "serverName": "{{DatabaseServerName}}",
+        "databaseName": "{{ProfiseeDatabaseName}}",
+        "authMode": "Windows",
+        "credentialUserId": "",
+        "credentialPassword": "",
+        "sqlDestinationConnectionSecretName": "",
+        "stripHyphens": true,
+        "type": "SetApiKeyStep",
+        "description": "What: Write the standard API key for the machine's API user (ConnectRuntime:ApiKeyUserName) into meta.tUser, as the Connect pack does. Why: a clean install issues its own key; every later REST and Connect call uses the standard one. Success: the user row is updated. If it fails: the user is missing from meta.tUser; add it in Profisee as a super administrator."
+      },
+      "label": "Set API Key"
+    },
+    {
+      "inline": {
+        "appPoolNames": [
+          "{{ProfiseeInstanceName}}-auth",
+          "{{ProfiseeInstanceName}}-rest",
+          "{{ProfiseeInstanceName}}-connex"
+        ],
+        "action": "Recycle",
+        "staggerSeconds": null,
+        "targetComputer": "{{ApplicationServerName}}",
+        "credentialSecretName": null,
+        "credentialUserId": "{{$config:UserCredentials:AdminUser}}",
+        "credentialPassword": "{{$config:UserCredentials:AdminPassword}}",
+        "remoteAuthentication": "CredSSP",
+        "type": "AppPoolStep",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Recycle the auth, gateway and Connect pools of this instance. Why: they cache API clients, so a key written to meta.tUser is rejected (invalid_client) until they restart; only this instance's pools are touched because other instances may share IIS. Success: every named pool recycles. If it fails: a pool that does not exist fails the step; check matching/instances:ProfiseeInstanceName against IIS Manager.",
+        "notes": ""
+      },
+      "label": "Recycle Auth, Gateway And Connect Pools"
+    },
+    {
+      "inline": {
+        "parameters": {},
+        "timeoutSeconds": 900,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "notes": "",
+        "executionPolicy": "Bypass",
+        "preferWindowsPowerShell": false,
+        "runAsAdministrator": false,
+        "captureVerbose": false,
+        "captureDebug": false,
+        "treatStderrAsError": true,
+        "scriptContent": "$url = '{{MainHealthUrl}}'\r\n$deadline = (Get-Date).AddMinutes(10)\r\ndo {\r\n    $down = @()\r\n    try {\r\n        $r = Invoke-WebRequest -Uri $url -SkipCertificateCheck -SkipHttpErrorCheck -TimeoutSec 120\r\n        $checks = ($r.Content | ConvertFrom-Json).healthChecks\r\n        $down = @($checks.PSObject.Properties | Where-Object { $_.Value.status -ne 'Healthy' } | ForEach-Object { $_.Name })\r\n        if (-not $checks) { $down = @(\"no healthChecks in HTTP $([int]$r.StatusCode) response\") }\r\n    }\r\n    catch { $down = @($_.Exception.Message) }\r\n    if (-not $down) { \"All $(@($checks.PSObject.Properties).Count) health checks Healthy at $url.\"; return }\r\n    \"Not healthy yet: $($down -join ', ')\"\r\n    Start-Sleep -Seconds 15\r\n} while ((Get-Date) -lt $deadline)\r\nthrow \"Services still not healthy after 10 minutes at ${url}: $($down -join ', ')\"",
+        "type": "PowerShellStep",
+        "description": "What: Wait until every health check is Healthy. Why: services stay cold after a restore or install. Success: all checks Healthy within 10 minutes. If it fails: open the health URL and fix the service it names."
+      },
+      "label": "Start Every Service"
+    },
+    {
+      "inline": {
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": true,
+        "maxRetries": 4,
+        "retryDelaySeconds": 30,
+        "workingDirectory": null,
+        "notes": "",
+        "url": "{{ProfiseeBaseUrl}}/v1/Entities",
+        "method": "GET",
+        "headers": {
+          "x-api-key": "{{ProfiseeApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "description": "What: Call the gateway with the standard key. Why: proves the key took before Connect uses it. Success: HTTP 200. If it fails: 401 means the key did not take; recycle the instance's application pools and rerun."
+      },
+      "label": "Verify API Key Through Gateway"
+    },
+    {
+      "inline": {
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "notes": "",
+        "sqlSourceConnectionSecretName": "Server={{DatabaseServerName}};Database={{ProfiseeDatabaseName}};Integrated Security=True;TrustServerCertificate=True",
+        "sqlDestinationConnectionSecretName": "Server={{DatabaseServerName}};Database={{ProfiseeDatabaseName}};Integrated Security=True;TrustServerCertificate=True",
+        "sqlCommandTimeoutSeconds": 300,
+        "sqlAllowNonTransactionalBatches": false,
+        "useTransaction": false,
+        "captureScalarResult": false,
+        "sqlScript": "DECLARE @actual nvarchar(256) = (SELECT JSON_VALUE([Configuration], '$.RemoteObjectName')\r\n                                 FROM connex.tIntegrationStrategyConfiguration WHERE [Name] = N'{{StrategyName}}');\r\nIF @actual IS NULL THROW 50002, 'Connect strategy {{StrategyName}} is missing on {{ProfiseeDatabaseName}}.', 1;\r\nIF @actual <> N'{{SourceTableName}}'\r\nBEGIN\r\n    DECLARE @msg nvarchar(2048) = CONCAT(N'{{StrategyName}} reads ', @actual, N' but this run loads {{SourceTableName}}.');\r\n    THROW 50003, @msg, 1;\r\nEND\r\nPRINT CONCAT(N'{{StrategyName}} reads ', @actual, N'.');",
+        "autoWrapPassFailCode": true,
+        "dryRun": false,
+        "sqlDropConnections": false,
+        "type": "SqlStep",
+        "description": "What: Confirm the Connect strategy reads this size's Scenario 1 table. Why: a strategy pointed at another size loads the wrong rows silently. Success: RemoteObjectName = {{SourceTableName}}. If it fails: point the strategy at {{SourceTableName}} or create it."
+      },
+      "label": "Check Strategy Source Table"
+    },
+    {
+      "inline": {
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "notes": "",
+        "sqlSourceConnectionSecretName": "Server={{DatabaseServerName}};Database={{ProfiseeDatabaseName}};Integrated Security=True;TrustServerCertificate=True",
+        "sqlDestinationConnectionSecretName": "Server={{DatabaseServerName}};Database={{ProfiseeDatabaseName}};Integrated Security=True;TrustServerCertificate=True",
+        "sqlCommandTimeoutSeconds": 300,
+        "sqlAllowNonTransactionalBatches": false,
+        "useTransaction": false,
+        "captureScalarResult": false,
+        "sqlScript": "DECLARE @n bigint = (SELECT COUNT_BIG(*) FROM data.tRetailClient);\r\nIF @n <> 0\r\nBEGIN\r\n    DECLARE @msg nvarchar(400) = CONCAT(N'RetailClient already holds ', @n, N' rows; Scenario 1 loads into an empty entity. Restore the empty baseline first.');\r\n    THROW 50004, @msg, 1;\r\nEND\r\nPRINT N'RetailClient is empty.';",
+        "autoWrapPassFailCode": true,
+        "dryRun": false,
+        "sqlDropConnections": false,
+        "type": "SqlStep",
+        "description": "What: Refuse to load into a non-empty RetailClient. Why: Scenario 1 measures matching of exactly the loaded rows. Success: 0 rows. If it fails: restore the empty baseline and rerun."
+      },
+      "label": "Check RetailClient Is Empty"
+    },
+    {
+      "inline": {
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "notes": "",
+        "artifactFile": "",
+        "artifactJson": "",
+        "resourceType": "IntegrationStrategy",
+        "operation": "Execute",
+        "baseUrl": "{{ConnExBaseUrl}}",
+        "apiKey": "{{ConnExApiKey}}",
+        "returnResult": true,
+        "expectedStatusCodes": [
+          200,
+          201,
+          204
+        ],
+        "resourceId": "{{StrategyName}}",
+        "outputFile": "",
+        "dryRun": false,
+        "skipFileWrite": false,
+        "pollIntervalSeconds": 30,
+        "maxWaitMinutes": 720,
+        "pollFailureLimit": 3,
+        "batchCode": "",
+        "type": "ConnExStep",
+        "description": "What: Start a Connect batch of {{StrategyName}}. Why: Scenario 1 data enters Profisee through Connect. Success: Connect accepts the call. If it fails: check the Connect address and the API key step above."
+      },
+      "label": "Run Scenario 1 Load"
+    },
+    {
+      "inline": {
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "notes": "",
+        "artifactFile": "",
+        "artifactJson": "",
+        "resourceType": "",
+        "operation": "WaitForBatch",
+        "baseUrl": "{{ConnExBaseUrl}}",
+        "apiKey": "{{ConnExApiKey}}",
+        "returnResult": true,
+        "expectedStatusCodes": [
+          200,
+          201,
+          204
+        ],
+        "resourceId": "{{StrategyName}}",
+        "outputFile": "",
+        "dryRun": false,
+        "skipFileWrite": false,
+        "pollIntervalSeconds": 30,
+        "maxWaitMinutes": 720,
+        "pollFailureLimit": 3,
+        "batchCode": "",
+        "type": "ConnExStep",
+        "description": "What: Wait for the {{StrategyName}} batch to finish. Why: the checks below need the finished load. Success: the batch reaches a successful terminal state. If it fails: read the batch errors in Connect."
+      },
+      "label": "Wait For Scenario 1 Load"
+    },
+    {
+      "inline": {
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "notes": "",
+        "sqlSourceConnectionSecretName": "Server={{DatabaseServerName}};Database={{ProfiseeDatabaseName}};Integrated Security=True;TrustServerCertificate=True",
+        "sqlDestinationConnectionSecretName": "Server={{DatabaseServerName}};Database={{ProfiseeDatabaseName}};Integrated Security=True;TrustServerCertificate=True",
+        "sqlCommandTimeoutSeconds": 300,
+        "sqlAllowNonTransactionalBatches": false,
+        "useTransaction": false,
+        "captureScalarResult": false,
+        "sqlScript": "DECLARE @n bigint = (SELECT COUNT_BIG(*) FROM data.tRetailClient);\r\nDECLARE @missing bigint = (SELECT COUNT_BIG(*) FROM [{{ModelSourceDB}}].dbo.[{{SourceTableName}}] s\r\n                           WHERE NOT EXISTS (SELECT 1 FROM data.tRetailClient r WHERE r.Code = s.Code));\r\nIF @n <> {{RecordCount}} OR @missing <> 0\r\nBEGIN\r\n    DECLARE @msg nvarchar(400) = CONCAT(N'RetailClient holds ', @n, N' rows (expected {{RecordCount}}); ', @missing, N' source Codes are missing. Updates by Code need the source Codes kept.');\r\n    THROW 50005, @msg, 1;\r\nEND\r\nPRINT CONCAT(N'RetailClient holds ', @n, N' rows; every source Code is present.');",
+        "autoWrapPassFailCode": true,
+        "dryRun": false,
+        "sqlDropConnections": false,
+        "type": "SqlStep",
+        "description": "What: Confirm the load kept every row and its Code. Why: Scenario 2, 3b and 3c update records by Code. Success: {{RecordCount}} rows, 0 missing Codes. If it fails: check the strategy maps Code to Code and read the batch errors."
+      },
+      "label": "Check Loaded Rows And Codes"
+    },
+    {
+      "inline": {
+        "parameters": {
+          "BackupSuffix": "loaded"
+        },
+        "timeoutSeconds": 3700,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "notes": "",
+        "sqlSourceConnectionSecretName": "Server={{DatabaseServerName}};Database=master;Integrated Security=True;TrustServerCertificate=True",
+        "sqlDestinationConnectionSecretName": "Server={{DatabaseServerName}};Database=master;Integrated Security=True;TrustServerCertificate=True",
+        "sqlCommandTimeoutSeconds": 3600,
+        "sqlAllowNonTransactionalBatches": false,
+        "useTransaction": false,
+        "captureScalarResult": false,
+        "sqlScript": "DECLARE @bak nvarchar(500) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400)) + N'\\profisee_Matching_{{SizeLabel}}_{{BackupSuffix}}.bak';\r\nDECLARE @sql nvarchar(max) = N'BACKUP DATABASE ' + QUOTENAME(N'{{ProfiseeDatabaseName}}') + N' TO DISK = N''' + REPLACE(@bak, N'''', N'''''') + N''' WITH INIT, COMPRESSION, CHECKSUM';\r\nEXEC (@sql);\r\nSET @sql = N'RESTORE VERIFYONLY FROM DISK = N''' + REPLACE(@bak, N'''', N'''''') + N''' WITH CHECKSUM';\r\nEXEC (@sql);\r\nPRINT CONCAT(N'Backed up {{ProfiseeDatabaseName}} to ', @bak, N' and verified it.');",
+        "autoWrapPassFailCode": true,
+        "dryRun": false,
+        "sqlDropConnections": false,
+        "type": "SqlStep",
+        "description": "What: Back up the Profisee database as the 'loaded' checkpoint (the start of Scenario 1). Why: every Scenario 1 run restores it. Success: backup written and verified. If it fails: check disk space in the SQL Server default backup folder."
+      },
+      "label": "Back Up Loaded"
+    }
+  ]
+}

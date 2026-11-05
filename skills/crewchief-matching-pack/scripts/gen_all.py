@@ -1,22 +1,25 @@
-"""Adds Matching scenarios 2, 3a, 3b, 3c (1K) to the matching pack, on top of gen_s1.py's output.
+"""Adds Matching scenarios 2, 3a, 3b, 3c of one size to the matching pack, on top of gen_s1.py's output.
 
 TestAuto step configs are PROD workflow 10000215 steps 12-44 (read 11/05 into wf10000215/NN.json), copied verbatim
 and patched only where the rewrite requires: box/version from reference data, size 1K, run profiles per scenario,
 {{STEP:n}} renumbered, stale WorkloadExecution blanked, and (2/3b/3c) the ScenarioTable record source from the
 Scenario 2 mutation plan. TestAuto runtime tokens are written as {%...%} (see gen_s1.py).
-Usage: python gen_all.py <packRoot> <connectUpsertBody.ps1>
+Usage: python gen_all.py <packRoot> <connectUpsertBody.ps1> <SizeLabel: 1K|10K|100K|1M>
 """
 import copy, json, os, subprocess, sys
 
 root, upsert_path = sys.argv[1], sys.argv[2]
+SIZE_LABEL = sys.argv[3] if len(sys.argv) > 3 else '1K'
+SIZE_RECORDS = {'1K': 1000, '10K': 10000, '100K': 100000, '1M': 1000000}[SIZE_LABEL]
+SLICE = SIZE_RECORDS // 10   # Scenario1 count; every later scenario = 10% (N/10)
+LOW = SIZE_LABEL.lower()
 here = os.path.dirname(os.path.abspath(__file__))
-subprocess.run([sys.executable, os.path.join(here, 'gen_s1.py'), root, upsert_path], check=True)
+subprocess.run([sys.executable, os.path.join(here, 'gen_s1.py'), root, upsert_path, SIZE_LABEL], check=True)
 
-wl_dir = os.path.join(root, 'workloads', 'matching', 'internal', '1k')
+wl_dir = os.path.join(root, 'workloads', 'matching', 'internal', LOW)
 ref_dir = os.path.join(root, 'reference-kv', 'matching')
 src = os.path.join(here, 'wf10000215')
 VER = "{{$ref:matching/environment:ProfiseeVersionCode}}"
-SIZE_RECORDS, SIZE_LABEL, SLICE = 1000, '1K', 100   # Scenario1 count; every later scenario = 10% (N/10)
 TRANSFORM_SEED = 350
 MUTATION = {  # plan 2026-11-04-matching-scenario2-mutation-plan.md, D5 with NoChange 3 (Gene 11/05)
     "MaxAttributeChanges": 2,
@@ -155,7 +158,7 @@ T3C = f"RetailClient{SIZE_LABEL}Scenario3c"
 workflows = {}
 # Scenario 2: idle, start, counts, run (4), wait, end, counts, timing
 s, e = markers('2', 12, 18)
-workflows['matching-1k-scenario2'] = ('2', "Matching Scenario 2 (operational batch: New, Changed with mutated match fields, NoChange) from table " + T2, [
+workflows[f'matching-{LOW}-scenario2'] = ('2', "Matching Scenario 2 (operational batch: New, Changed with mutated match fields, NoChange) from table " + T2, [
     s,
     step(13, "Capture Matching Status Counts for Start of Scenario 2", "Match status counts before the batch.", snapshot_patch('2', 4)),
     enable_run(15, "2"),
@@ -166,14 +169,14 @@ workflows['matching-1k-scenario2'] = ('2', "Matching Scenario 2 (operational bat
 ])
 # Scenario 3a: idle, start, lookups, end (no counts, no timing: the lookup scenario records its own metrics)
 s, e = markers('3a', 21, 25)
-workflows['matching-1k-scenario3a'] = ('3a', "Matching Scenario 3a (lookups of matched records, creates nothing)", [
+workflows[f'matching-{LOW}-scenario3a'] = ('3a', "Matching Scenario 3a (lookups of matched records, creates nothing)", [
     s, enable_run(23, "3a"),
     step(24, "Matching Scenario 3a Lookup Before Create", f"Looks up {SLICE} existing AutoApproved records through the matching lookup; creates nothing.", lookup_patch('3a')),
     e,
 ])
 # Scenario 3b: idle, start, counts, run (4), wait, end, counts, timing
 s, e = markers('3b', 26, 32)
-workflows['matching-1k-scenario3b'] = ('3b', "Matching Scenario 3b (lookup, then create on a miss) from table " + T3B, [
+workflows[f'matching-{LOW}-scenario3b'] = ('3b', "Matching Scenario 3b (lookup, then create on a miss) from table " + T3B, [
     s,
     step(27, "Capture Matching Status Counts for Start of Scenario 3b", "Match status counts before the run.", snapshot_patch('3b', 4)),
     enable_run(29, "3b"),
@@ -190,7 +193,7 @@ def postrun_patch(cfg):
     custom(cfg)["SourceWorkloadExecution"] = "{{STEP:4}}"
 
 
-workflows['matching-1k-scenario3c'] = ('3c', "Matching Scenario 3c (creates with continuous matching) from table " + T3C, [
+workflows[f'matching-{LOW}-scenario3c'] = ('3c', "Matching Scenario 3c (creates with continuous matching) from table " + T3C, [
     s,
     step(36, "Capture Matching Status Counts for Start of Scenario 3c", "Match status counts before the run.", snapshot_patch('3c', 4)),
     enable_run(38, "3c"),
@@ -213,7 +216,7 @@ with open(wf_ref_path, 'w', encoding='utf-8') as f:
     json.dump(wf_ref, f, indent=2)
 
 # ---- create workload: run profiles for every scenario + one upsert step per workflow
-create_path = os.path.join(wl_dir, 'matching-1k-testauto-create.workload.json')
+create_path = os.path.join(wl_dir, f'matching-{LOW}-testauto-create.workload.json')
 with open(create_path, encoding='utf-8') as f:
     create = json.load(f)
 s1_upsert = create['steps'][2]['inline']['scriptContent']
@@ -263,13 +266,13 @@ for key, (scn, what, details) in workflows.items():
                                    "If it fails: two workflows with the same tag must be untagged by hand first.")
     create['steps'].append(st)
 create['description'] = create['description'].replace(
-    "Create or update the 1K Matching run profile and the TestAuto workflow 'Matching 1K Scenario 1'",
-    "Create or update the 1K Matching run profiles and the TestAuto workflows for Scenarios 1, 2, 3a, 3b and 3c")
+    f"Create or update the {SIZE_LABEL} Matching run profile and the TestAuto workflow 'Matching {SIZE_LABEL} Scenario 1'",
+    f"Create or update the {SIZE_LABEL} Matching run profiles and the TestAuto workflows for Scenarios 1, 2, 3a, 3b and 3c")
 with open(create_path, 'w', encoding='utf-8') as f:
     json.dump(create, f, indent=2)
 
 # ---- scenario workloads, cloned from matching-1k-scenario1
-with open(os.path.join(wl_dir, 'matching-1k-scenario1.workload.json'), encoding='utf-8') as f:
+with open(os.path.join(wl_dir, f'matching-{LOW}-scenario1.workload.json'), encoding='utf-8') as f:
     s1 = json.load(f)
 
 cm_script = "\r\n".join([
@@ -319,7 +322,7 @@ def created_since(scn):
 
 
 checks = {
-    'matching-1k-scenario2': ("Check Scenario 2 Landed", "\r\n".join([
+    f'matching-{LOW}-scenario2': ("Check Scenario 2 Landed", "\r\n".join([
         GOLDEN.rstrip(),
         f"DECLARE @updates bigint = (SELECT COUNT_BIG(*) FROM [{{{{ModelSourceDB}}}}].dbo.{T2} WHERE RecordAction <> N'New');",
         f"DECLARE @present bigint = {present(T2)};",
@@ -336,7 +339,7 @@ checks = {
         f"What: Confirm the batch landed: every Changed/NoChange row of {T2} is in RetailClient, the New rows added records, and continuous matching matched new rows. "
         f"Why: Scenario 3a starts from this state, and an unmatched batch means the strategy was not running. Success: the counts line prints. "
         "If it fails: open the TestAuto run log; zero new rows matched = check the strategy is enabled with continuous matching on."),
-    'matching-1k-scenario3a': ("Check Scenario 3a Created Nothing", "\r\n".join([
+    f'matching-{LOW}-scenario3a': ("Check Scenario 3a Created Nothing", "\r\n".join([
         GOLDEN.rstrip(),
         f"DECLARE @new bigint = (SELECT COUNT_BIG(*) FROM [{{{{ModelSourceDB}}}}].dbo.{T2} WHERE RecordAction = N'New');",
         f"IF @loaded <> {SIZE_RECORDS} + @new",
@@ -347,7 +350,7 @@ checks = {
         "PRINT CONCAT(N'After Scenario 3a: ', @loaded, N' loaded rows, unchanged by the lookups; ', @golden, N' golden records.');"]),
         "What: Confirm the lookups created no records. Why: 3a is lookups only. Success: the loaded row count is unchanged from Scenario 2. "
         "If it fails: the lookup scenario created records; check its OperationType in TestAuto."),
-    'matching-1k-scenario3b': ("Check Scenario 3b Ran", "\r\n".join([
+    f'matching-{LOW}-scenario3b': ("Check Scenario 3b Ran", "\r\n".join([
         created_since('3b'),
         f"IF @created = 0 OR @created > {SLICE}",
         "BEGIN",
@@ -358,7 +361,7 @@ checks = {
         f"What: Confirm the run created records for the rows whose lookup found no match. Why: 3b is lookup, then create on a miss. "
         f"Created records get a Profisee-assigned Code, so they are counted as non-golden records entered after the Scenario 3b start marker. "
         f"Success: 1 to {SLICE} created; the count is printed. If it fails: open the TestAuto run log."),
-    'matching-1k-scenario3c': ("Check Scenario 3c Created Every Row", "\r\n".join([
+    f'matching-{LOW}-scenario3c': ("Check Scenario 3c Created Every Row", "\r\n".join([
         created_since('3c'),
         f"IF @created <> {SLICE}",
         "BEGIN",
@@ -369,18 +372,18 @@ checks = {
         f"What: Confirm every {T3C} row was created. Why: 3c is create only. Created records get a Profisee-assigned Code, so they are "
         f"counted as non-golden records entered after the Scenario 3c start marker. Success: {SLICE} created. If it fails: open the TestAuto run log."),
 }
-chain = {'matching-1k-scenario2': ('after-1', 'after-2'), 'matching-1k-scenario3a': ('after-2', 'after-3a'),
-         'matching-1k-scenario3b': ('after-3a', 'after-3b'), 'matching-1k-scenario3c': ('after-3b', 'after-3c')}
-whats = {'matching-1k-scenario2': "Scenario 2 (operational batch from " + T2 + ")",
-         'matching-1k-scenario3a': "Scenario 3a (lookups only)",
-         'matching-1k-scenario3b': "Scenario 3b (lookup, then create, from " + T3B + ")",
-         'matching-1k-scenario3c': "Scenario 3c (creates from " + T3C + ")"}
+chain = {f'matching-{LOW}-scenario2': ('after-1', 'after-2'), f'matching-{LOW}-scenario3a': ('after-2', 'after-3a'),
+         f'matching-{LOW}-scenario3b': ('after-3a', 'after-3b'), f'matching-{LOW}-scenario3c': ('after-3b', 'after-3c')}
+whats = {f'matching-{LOW}-scenario2': "Scenario 2 (operational batch from " + T2 + ")",
+         f'matching-{LOW}-scenario3a': "Scenario 3a (lookups only)",
+         f'matching-{LOW}-scenario3b': "Scenario 3b (lookup, then create, from " + T3B + ")",
+         f'matching-{LOW}-scenario3c': "Scenario 3c (creates from " + T3C + ")"}
 
 for key, (start, end) in chain.items():
     w = copy.deepcopy(s1)
     scn = workflows[key][0]
     w['name'] = key
-    w['tags'] = ["matching", "1k", "scenario" + scn, "test"]
+    w['tags'] = ["matching", LOW, "scenario" + scn, "test"]
     w['globalParameters'].update({
         "ModelSourceDB": "{{$ref:matching/databases:ModelSourceDB}}",
         "ProfiseeBaseUrl": "https://{{$ref:matching/machines:ApplicationServerNameFQDN}}/{{$ref:matching/instances:ProfiseeInstanceName}}/rest",
@@ -389,7 +392,7 @@ for key, (start, end) in chain.items():
     w['description'] = (f"What: Restore the {SIZE_LABEL} '{start}' checkpoint, warm the instance, turn continuous matching on, run the TestAuto "
                         f"workflow 'Matching {SIZE_LABEL} Scenario {scn}', check the result and back up '{end}'. Why: measures {whats[key]}; "
                         f"the next scenario starts from '{end}'. When: whenever Scenario {scn} is measured; a rerun restores its own start. "
-                        f"Needs: the '{start}' backup (the previous scenario workload) and matching-1k-testauto-create on this box. "
+                        f"Needs: the '{start}' backup (the previous scenario workload) and matching-{LOW}-testauto-create on this box. "
                         "Success: every step Succeeded. If it fails: the failed step's description says what to fix; rerun the whole workload.")
     steps = []
     for st in w['steps']:
@@ -400,11 +403,11 @@ for key, (start, end) in chain.items():
             inl['backupFileName'] = f"profisee_Matching_{{{{SizeLabel}}}}_{start}.bak"
             inl['description'] = inl['description'].replace("the 'loaded' checkpoint", f"the '{start}' checkpoint") \
                 .replace("every Scenario 1 run starts from the same loaded, unmatched state", f"every Scenario {scn} run starts from the same state") \
-                .replace("(run matching-1k-scenario1-load)", "(run the previous scenario workload)")
-        if lab == 'Run Matching 1K Scenario 1':
+                .replace(f"(run matching-{LOW}-scenario1-load)", "(run the previous scenario workload)")
+        if lab == f'Run Matching {SIZE_LABEL} Scenario 1':
             st['label'] = f"Run Matching {SIZE_LABEL} Scenario {scn}"
-            inl['workflowTag'] = inl['workflowTag'].replace('matching-1k-scenario1', key)
-            inl['description'] = inl['description'].replace('Matching 1K Scenario 1', f"Matching {SIZE_LABEL} Scenario {scn}")
+            inl['workflowTag'] = inl['workflowTag'].replace(f'matching-{LOW}-scenario1', key)
+            inl['description'] = inl['description'].replace(f'Matching {SIZE_LABEL} Scenario 1', f"Matching {SIZE_LABEL} Scenario {scn}")
         if lab == 'Check Matching Ran':
             label, sql, desc = checks[key]
             st['label'] = label

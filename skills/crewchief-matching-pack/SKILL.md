@@ -8,19 +8,40 @@ description: The CrewChief Matching workload pack (CrewChief/packs/matching) tha
 Repo: speed-merchants, `CrewChief/packs/matching` (Gene commits). Built 11/05/2026 on the Connect pack pattern
 (`crewchief-workload-packs`). Results log: `Q:\Work\Work\99 Documentation\Connect\Matching Rewrite Results.md`.
 
-## What runs, in order (1K)
+## Layout (Connect-pack style, sizes 1K, 10K, 100K, 1M)
+
+| Folder | Workload | Does |
+|---|---|---|
+| `start/` | `matching-setup` | runs `matching-<size>-testauto-create` for every size |
+| `tests/` | `matching-test-<size>` | what a person starts: load, then Scenarios 1, 2, 3a, 3b, 3c (RunWorkloadStep chain) |
+| `schedule/<size>/` | `schedule-matching-<size>` | ScheduleTaskStep Apply: `\CrewChief\schedule-matching-<size>` runs `matching-<size>-all` (needs secret `Scheduler:RunAsPassword`) |
+| `internal/<size>/` | `matching-<size>-all` + the workloads below | the same chain, for the schedule |
+
+Every scheduled size restores the same Profisee database: set each StartTime from the measured chain duration so
+they never overlap (also with Connect tests on the box).
+
+## What runs, in order (per size; N = size, slice = N/10)
 
 | Workload | Restores | Does | Backs up |
 |---|---|---|---|
-| `matching-1k-scenario1-load` | (empty model) | SetApiKey, recycle -auth/-rest/-connex, health, Connect strategy `RetailClientImport` loads `ModelSource.dbo.RetailClient1KScenario1` | `loaded` |
-| `matching-1k-testauto-create` | - | 5 run profiles + 5 tagged TestAuto workflows in the TestAuto repository | - |
-| `matching-1k-scenario1` | `loaded` | recycle all pools, health, monitor quiet, run workflow, check | `after-1` |
-| `matching-1k-scenario2` | `after-1` | + Turn Continuous Matching On (before monitor quiet) | `after-2` |
-| `matching-1k-scenario3a` | `after-2` | same | `after-3a` |
-| `matching-1k-scenario3b` | `after-3a` | same | `after-3b` |
-| `matching-1k-scenario3c` | `after-3b` | same | `after-3c` |
+| `matching-<size>-scenario1-load` | `profisee_Matching_empty.bak` | SetApiKey, recycle all pools, health, check the Connect run-as user, delete + import + enable Connect strategy `RetailClientImport` reading `ModelSource.dbo.RetailClient<size>Scenario1`, load, check | `loaded` |
+| `matching-<size>-testauto-create` | - | 5 run profiles + 5 tagged TestAuto workflows in the TestAuto repository | - |
+| `matching-<size>-scenario1` | `loaded` | recycle all pools, health, monitor quiet, run workflow, check | `after-1` |
+| `matching-<size>-scenario2` | `after-1` | + Turn Continuous Matching On (before monitor quiet) | `after-2` |
+| `matching-<size>-scenario3a` | `after-2` | same | `after-3a` |
+| `matching-<size>-scenario3b` | `after-3a` | same | `after-3b` |
+| `matching-<size>-scenario3c` | `after-3b` | same | `after-3c` |
 
-Backups: `profisee_Matching_<SizeLabel>_<suffix>.bak` in the SQL Server default backup folder.
+Backups: `profisee_Matching_<SizeLabel>_<suffix>.bak` in the SQL Server default backup folder. The empty baseline
+`profisee_Matching_empty.bak` (size-free: model, RetailClient matching strategy, ModelSource service configuration,
+the API user `corp\speedmerchants` as super administrator, no records) is made by hand once per box and release.
+
+**Connect strategy repoint** (one strategy serves every size): `scripts/retailclientimport-artifact.json` is the
+gateway export (GET `v1/Connect/Strategies/<uid>`) wrapped as an `IntegrationStrategyArtifact` (`$type`,
+artifactVersion 1.7.1.0, integrationStrategyRecord{Id, Name, Type, Configuration with its `$type`}), with
+`{{SourceTableName}}` and `{{RunAsUser}}` tokens. Import fails "duplicated Id" when the strategy exists, so the load
+deletes it first (DELETE `v1/Connect/Strategies?IntegrationStrategyUids=<uid>`); an imported strategy starts
+Disabled, so a ConnExStep Enable follows. The id is kept, so it must match the empty baseline's strategy.
 
 **Rule (Gene): a rerun always restores the scenario's start backup.** Rerun the whole workload; never rerun only the
 TestAuto workflow or continue on a dirty DB, or the monitor markers and timings are useless.
@@ -51,11 +72,15 @@ The TestAuto step configs live as JSON strings inside PowerShell here-strings in
 `matching-1k-testauto-create.workload.json`; do not hand-edit them. Edit and rerun the generator:
 
 ```powershell
-python <skill>\scripts\gen_all.py C:\devops\repos\speed-merchants\CrewChief\packs\matching <skill>\scripts\connect_upsert_body.ps1
+python <skill>\scripts\gen_sizes.py C:\devops\repos\speed-merchants\CrewChief\packs\matching <skill>\scripts\connect_upsert_body.ps1
 ```
 
-- `scripts/gen_s1.py`: reference sets, Scenario 1 workflow, `matching-1k-testauto-create`, `matching-1k-scenario1`.
-  `gen_all.py` runs it first, then adds 2/3a/3b/3c (workflows, run profiles, workloads, reference keys).
+- `scripts/gen_sizes.py`: the entry point. Empties `matching/workflows`, runs `gen_all.py <size>` for every size, then
+  writes each size's load workload (from `load-template-1k.workload.json` + `retailclientimport-artifact.json`),
+  `-all`, `tests/`, `schedule/` and `start/matching-setup`. Sizes and default schedule times are at its top.
+- `scripts/gen_s1.py <root> <upsert> <size>`: reference sets, Scenario 1 workflow, `matching-<size>-testauto-create`,
+  `matching-<size>-scenario1` (health script from `health.ps1`). `gen_all.py <root> <upsert> <size>` runs it first,
+  then adds 2/3a/3b/3c (workflows, run profiles, workloads, reference keys).
 - `scripts/wf10000215/NN.json`: PROD workflow 10000215 step configs (read 11/05, CHUNKREF reassembled by `seq`).
   2/3a/3b/3c steps are these, patched only for: box/version tokens, size, run profile, `{{STEP:n}}`, blank
   `WorkloadExecution`, and ScenarioTable mode.
@@ -110,8 +135,10 @@ A rematch that leaves a record in its cluster does not change its `Match DateTim
 | Scenario | Good execution | Notes |
 |---|---|---|
 | 1 | 10000401 (10000400 also valid) | 976 matched, 200 golden, 24 sparse unmatched |
-| 2 | (rerun 11/05 12:18) | 10000403 invalid (strategy disabled); 10000404 passed but enable + run ran before the start marker |
-| 3a | - | 10000405 cancelled (distribution sized for 100K) |
+| 2 | 10000406 | production order; 10000403 invalid (strategy disabled); 10000404 superseded (enable + run before the start marker) |
+| 3a | 10000407 | 100 lookups, all hits, 263 ms average; 10000405 cancelled (distribution sized for 100K) |
+| 3b | 10000409 | 89 created with matching times (9.0 s average), 11 lookup hits; 10000408 workflow fine, check wrong |
+| 3c | 10000410 | 100 created, all with matching (15.5 s) and survivorship (4.4 s) times |
 
 ## Status board
 

@@ -1,4 +1,5 @@
-"""Adds the TestAuto create + Scenario 1 run workloads (1K) to the matching pack.
+"""Adds the TestAuto create + Scenario 1 run workloads of one size to the matching pack.
+Usage: python gen_s1.py <packRoot> <connectUpsertBody.ps1> <SizeLabel: 1K|10K|100K|1M>
 
 Source of the TestAuto step configs: PROD workflow 10000215 steps 5-11 (read 11/05), with
 {{STEP:7}} -> {{STEP:3}}, sizes/run profile/version/environment moved to reference data.
@@ -6,8 +7,13 @@ Source of the TestAuto step configs: PROD workflow 10000215 steps 5-11 (read 11/
 import json, os, sys
 
 root = sys.argv[1]
+SIZE_LABEL = sys.argv[3] if len(sys.argv) > 3 else '1K'
+SIZES = {'1K': 1000, '10K': 10000, '100K': 100000, '1M': 1000000}
+N = SIZES[SIZE_LABEL]
+LOW = SIZE_LABEL.lower()
 ref = os.path.join(root, 'reference-kv', 'matching')
-wl = os.path.join(root, 'workloads', 'matching', 'internal', '1k')
+wl = os.path.join(root, 'workloads', 'matching', 'internal', LOW)
+os.makedirs(wl, exist_ok=True)
 upsert_code = open(sys.argv[2], encoding='utf-8').read()  # Connect pack upsert body (after the spec)
 
 
@@ -38,13 +44,13 @@ save('environment', {"description": "Matching pack: what differs between Profise
                          "MainMachineTag": "Plain tag naming the machine the runs measure.",
                          "MainServiceName": "Profisee Windows service on the application server, stopped around a restore. Blank on releases with no Windows service; the stop and start steps then report Skipped."},
                      "keyBlankAllowed": {"MainServiceName": True}})
-save('workflows', {"description": "Matching pack: the measured TestAuto workflows (key = automation tag suffix, value = display name).",
-                   "includeInReplacements": True,
-                   "entries": {"matching-1k-scenario1": "Matching 1K Scenario 1"},
-                   "keyDescriptions": {"matching-1k-scenario1": "Display name of the TestAuto workflow for Matching Scenario 1 (match the full load), 1K. Its automation tag is AUTO:<this box>:<ProfiseeVersionCode>:matching-1k-scenario1; the name is free text and only for people."}})
+wfr = load('workflows')  # the driver (gen_sizes.py) empties the entries once; each size adds its own
+wfr['entries'][f"matching-{LOW}-scenario1"] = f"Matching {SIZE_LABEL} Scenario 1"
+wfr['keyDescriptions'][f"matching-{LOW}-scenario1"] = f"Display name of the TestAuto workflow for Matching Scenario 1 (match the full load), {SIZE_LABEL}. Its automation tag is AUTO:<this box>:<ProfiseeVersionCode>:matching-{LOW}-scenario1; the name is free text and only for people."
+save('workflows', wfr)
 
 VER = "{{$ref:matching/environment:ProfiseeVersionCode}}"
-RUN_PROFILE = VER + "-RetailClient-Scenario 1-1000-0"
+RUN_PROFILE = VER + f"-RetailClient-Scenario 1-{N}-0"
 
 empty_rest = {"RestUrlBase": "", "RestApiKey": ""}
 empty_cs = {"ConnectionString": ""}
@@ -89,7 +95,7 @@ def monitor(message, activity, desc):
 
 def snapshot(step):
     return {"MatchingScenarioName": "Scenario 1", "MatchingStrategyName": "RetailClient", "ScenarioStep": step,
-            "TargetEntityName": "RetailClient", "SourceRecords": 1000, "MatchStatusColumnName": "Match Status",
+            "TargetEntityName": "RetailClient", "SourceRecords": N, "MatchStatusColumnName": "Match Status",
             "MatchStatusEntityName": "MatchStatus", "GoldenRecordColumnName": "Golden Record",
             "UnifiedMatchingScenarioWorkloadExecution": "{%STEP:3%}",
             "UnifiedMatchingApiExecutionRunProfile": RUN_PROFILE}
@@ -139,15 +145,15 @@ details = [
               query={"SelectAttributes": "", "SortAttributes": "Code", "Filter": "", "QueryParameters": {"ignoreConstraintRules": "true"}})),
 ]
 
-KEY = "matching-1k-scenario1"
+KEY = f"matching-{LOW}-scenario1"
 spec = {"Key": KEY, "Name": "{{$ref:matching/workflows:" + KEY + "}}", "Category": "Matching",
-        "PlainTags": "Matching," + VER + ",{{$ref:matching/environment:MainMachineTag}},1K,Scenario 1",
-        "Description": "Automation ID: <AUTOMATION_ID>. CrewChief finds this workflow by that tag alone (reference key matching/workflows:" + KEY + "); do not edit or remove the tag, and to experiment copy the workflow and remove the tag from the copy. Measures: Matching Scenario 1 (match and survive the full load), 1000 records, RetailClient strategy, on the Profisee version in matching/environment:ProfiseeVersionCode. Run by the CrewChief workload 'matching-1k-scenario1', which restores the loaded checkpoint first; running it alone measures nothing useful.",
+        "PlainTags": "Matching," + VER + ",{{$ref:matching/environment:MainMachineTag}}," + SIZE_LABEL + ",Scenario 1",
+        "Description": "Automation ID: <AUTOMATION_ID>. CrewChief finds this workflow by that tag alone (reference key matching/workflows:" + KEY + "); do not edit or remove the tag, and to experiment copy the workflow and remove the tag from the copy. Measures: Matching Scenario 1 (match and survive the full load), " + str(N) + " records, RetailClient strategy, on the Profisee version in matching/environment:ProfiseeVersionCode. Run by the CrewChief workload '" + KEY + "', which restores the loaded checkpoint first; running it alone measures nothing useful.",
         "Details": [{"Name": n, "Description": d, "ExecutionOrder": i + 1, "ProfiseeVersion": VER, "ScenarioConfiguration": c}
                     for i, (n, d, c) in enumerate(details)]}
 
 upsert_code = upsert_code.replace('connect/environment:ProfiseeVersionCode', 'matching/environment:ProfiseeVersionCode') \
-                         .replace('run connect-setup again', 'run matching-1k-testauto-create again') \
+                         .replace('run connect-setup again', f'run matching-{LOW}-testauto-create again') \
                          .replace('$spec = $specJson | ConvertFrom-Json',
                                   "# TestAuto resolves its own step tokens at run time; the spec writes their braces as {% %} so CrewChief leaves them alone.\r\n"
                                   "$specJson = $specJson.Replace('{%', '{{').Replace('%}', '}}')\r\n"
@@ -168,16 +174,16 @@ run_profile_script = "\r\n".join([
     "$rows = if ($v -is [array]) { $v } else { @($v.data) }",
     "if (-not $rows) { throw \"TestAuto version '$version' does not exist in the repository; create it (data.tProfiseeVersion) before running this workload.\" }",
     "$profile = [ordered]@{ Code = '" + RUN_PROFILE + "'; ProfiseeVersion = $version; Scenario = 'UnifiedMatchingScenario'",
-    "    MatchingStrategy = 'RetailClient'; MatchingScenarioName = 'Scenario 1'; SourceRecordCount = 1000",
+    "    MatchingStrategy = 'RetailClient'; MatchingScenarioName = 'Scenario 1'; SourceRecordCount = " + str(N) + "",
     "    AttributeCount = 42; DBACount = 5; FreeformCount = 37; IncrementalVolumeCount = 0; RuleCount = 0 }",
     "Invoke-RestMethod -Method Patch -Uri \"${base}v1/Records/UnifiedMatchingApiExecutionRunProfile?IsUpsert=true\" -Headers $headers -ContentType 'application/json' -Body (ConvertTo-Json -Depth 5 -InputObject @($profile)) | Out-Null",
     "\"Run profile $($profile.Code) upserted.\"",
 ])
 
 create = {
-    "name": "matching-1k-testauto-create",
-    "description": "What: Create or update the 1K Matching run profile and the TestAuto workflow 'Matching 1K Scenario 1' in the TestAuto repository. Why: the scenario workloads find the workflow by its automation tag and the timing steps record under the run profile. When: once per box and Profisee version, and after any change to the workflow spec; reruns update in place. Needs: the TestAuto version in matching/environment:ProfiseeVersionCode exists in the repository; local TestAuto answers on port 8443. Success: every step Succeeded. If it fails: the failed step's description says what to fix.",
-    "tags": ["matching", "1k", "testauto", "setup"],
+    "name": f"matching-{LOW}-testauto-create",
+    "description": f"What: Create or update the {SIZE_LABEL} Matching run profile and the TestAuto workflow 'Matching {SIZE_LABEL} Scenario 1' in the TestAuto repository. Why: the scenario workloads find the workflow by its automation tag and the timing steps record under the run profile. When: once per box and Profisee version, and after any change to the workflow spec; reruns update in place. Needs: the TestAuto version in matching/environment:ProfiseeVersionCode exists in the repository; local TestAuto answers on port 8443. Success: every step Succeeded. If it fails: the failed step's description says what to fix.",
+    "tags": ["matching", LOW, "testauto", "setup"],
     "globalParameters": {
         "ScenarioMgtBaseUrl": "{{$ref:matching/urls:ScenarioMgtBaseUrl}}",
         "ScenarioMgtApiKey": "{{$config:RestClients:ScenarioMgt:ApiKey}}",
@@ -257,9 +263,8 @@ check_matched = "\r\n".join([
 pools = ["", "-api", "-attachments", "-workflows", "-auth", "-rest", "-mcp", "-governance", "-connex", "-monitor", "-matching",
          "-bulkscoring", "-data", "-modeling", "-chatbot", "-analytics", "-scriptrunner", "-portalartifacts", "-proflow", "-taskman"]
 health = None
-with open(os.path.join(wl, 'matching-1k-scenario1-load.workload.json'), encoding='utf-8') as f:
-    load_wl = json.load(f)
-health = next(s['inline']['scriptContent'] for s in load_wl['steps'] if s['label'] == 'Start Every Service')
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'health.ps1'), encoding='utf-8', newline='') as f:
+    health = f.read()
 
 
 def dbop(operation, file_name, desc):
@@ -279,9 +284,9 @@ def service(action, desc):
 SERVICE_FAIL = " If it fails: check the service name exists on the application server (services.msc) and the admin credential (UserCredentials secrets) can manage services there over CredSSP. Skipped when: matching/environment:MainServiceName is blank, normal on releases with no Profisee Windows service."
 
 s1 = {
-    "name": "matching-1k-scenario1",
-    "description": "What: Restore the 1K 'loaded' checkpoint, warm the instance, run the TestAuto workflow 'Matching 1K Scenario 1' (markers, counts, enable and run the RetailClient strategy, wait, timing), check every record got a match status, and back up 'after-1'. Why: Scenario 1 measures matching of the full load, and Scenario 2 starts from 'after-1'. When: whenever Scenario 1 is measured; a rerun restores its own start. Needs: matching-1k-scenario1-load ran once (the 'loaded' backup exists) and matching-1k-testauto-create ran on this box. Success: every step Succeeded. If it fails: the failed step's description says what to fix; rerun the whole workload.",
-    "tags": ["matching", "1k", "scenario1", "test"],
+    "name": KEY,
+    "description": f"What: Restore the {SIZE_LABEL} 'loaded' checkpoint, warm the instance, run the TestAuto workflow 'Matching {SIZE_LABEL} Scenario 1' (markers, counts, enable and run the RetailClient strategy, wait, timing), check every record got a match status, and back up 'after-1'. Why: Scenario 1 measures matching of the full load, and Scenario 2 starts from 'after-1'. When: whenever Scenario 1 is measured; a rerun restores its own start. Needs: matching-{LOW}-scenario1-load ran once (the 'loaded' backup exists) and matching-{LOW}-testauto-create ran on this box. Success: every step Succeeded. If it fails: the failed step's description says what to fix; rerun the whole workload.",
+    "tags": ["matching", LOW, "scenario1", "test"],
     "globalParameters": {
         "DatabaseServerName": "{{$ref:matching/machines:DatabaseServerName}}",
         "ProfiseeDatabaseName": "{{$ref:matching/databases:ProfiseeDatabaseName}}",
@@ -289,7 +294,7 @@ s1 = {
         "ProfiseeInstanceName": "{{$ref:matching/instances:ProfiseeInstanceName}}",
         "MainHealthUrl": "https://{{$ref:matching/machines:ApplicationServerNameFQDN}}/{{$ref:matching/instances:ProfiseeInstanceName}}/rest/health",
         "TestAutoBaseUrl": "https://{{$ref:matching/machines:TestServerNameFQDN}}:8443",
-        "RecordCount": "1000", "SizeLabel": "1K", "QuietSeconds": "60"},
+        "RecordCount": str(N), "SizeLabel": SIZE_LABEL, "QuietSeconds": "60"},
     "globalParametersNotes": "", "credentialUserId": "", "credentialPassword": "", "credentialNotes": "",
     "steps": [
         {"label": "Wait For Interrupted Runs", "inline": {**base, "baseUrl": "{{TestAutoBaseUrl}}", "workflowCode": "", "executionCode": "",
@@ -298,7 +303,7 @@ s1 = {
             "description": "What: Wait for any TestAuto run already in progress. Why: a restore under a running workflow corrupts both. Success: no run is active. If it fails: TestAuto is unreachable on port 8443."}},
         {"label": "Stop Profisee Service", "inline": service("Stop", "What: Stop the Profisee Windows service before the restore. Why: it holds connections and caches from before the restore. Success: the service is stopped." + SERVICE_FAIL)},
         {"label": "Restore Loaded", "inline": dbop("RestoreDatabase", "profisee_Matching_{{SizeLabel}}_loaded.bak",
-            "What: Restore the 'loaded' checkpoint over the Profisee database WITH REPLACE. The executor takes the database OFFLINE WITH ROLLBACK IMMEDIATE first and brings it back ONLINE if the restore fails. Why: every Scenario 1 run starts from the same loaded, unmatched state. Success: restored. If it fails: the backup is missing from the SQL Server default backup folder (run matching-1k-scenario1-load), or the CrewChief account is not sysadmin there.")},
+            "What: Restore the 'loaded' checkpoint over the Profisee database WITH REPLACE. The executor takes the database OFFLINE WITH ROLLBACK IMMEDIATE first and brings it back ONLINE if the restore fails. Why: every Scenario 1 run starts from the same loaded, unmatched state. Success: restored. If it fails: the backup is missing from the SQL Server default backup folder (run matching-" + LOW + "-scenario1-load), or the CrewChief account is not sysadmin there.")},
         {"label": "Recycle Instance Pools", "inline": {**base, "appPoolNames": ["{{ProfiseeInstanceName}}" + p for p in pools], "action": "Recycle",
             "staggerSeconds": None, "targetComputer": "{{ApplicationServerName}}", "credentialSecretName": None,
             "credentialUserId": "{{$config:UserCredentials:AdminUser}}", "credentialPassword": "{{$config:UserCredentials:AdminPassword}}",
@@ -314,11 +319,11 @@ s1 = {
             "monitor tasks; the workflow's start marker must come after them so the scenario window holds only the scenario's own work. "
             "Success: the monitor is quiet. If it fails: after 30 minutes a task is still outstanding; the error names it, check it "
             "in the portal's Activity Monitor.", timeout=1900)},
-        {"label": "Run Matching 1K Scenario 1", "inline": {**base, "baseUrl": "{{TestAutoBaseUrl}}", "workflowCode": "",
+        {"label": f"Run Matching {SIZE_LABEL} Scenario 1", "inline": {**base, "baseUrl": "{{TestAutoBaseUrl}}", "workflowCode": "",
             "workflowTag": "AUTO:{{$env:COMPUTERNAME}}:{{$ref:matching/environment:ProfiseeVersionCode}}:" + KEY, "executionCode": "",
             "attachToActiveRun": True, "waitOnly": False, "pollIntervalSeconds": 60, "waitIndefinitely": True, "maxConsecutivePollFailures": 30,
             "ignoreSslErrors": True, "type": "TestAutoWorkflowStep",
-            "description": "What: Run the TestAuto workflow tagged for Matching 1K Scenario 1 and wait for it. Why: TestAuto measures the scenario. Success: the workflow run Succeeded. If it fails: open the run in TestAuto; no workflow with the tag means matching-1k-testauto-create has not run on this box."}},
+            "description": f"What: Run the TestAuto workflow tagged for Matching {SIZE_LABEL} Scenario 1 and wait for it. Why: TestAuto measures the scenario. Success: the workflow run Succeeded. If it fails: open the run in TestAuto; no workflow with the tag means matching-{LOW}-testauto-create has not run on this box."}},
         {"label": "Check Matching Ran", "inline": sql(H, check_matched,
             "What: Confirm matching ran over the load: {{RecordCount}} loaded rows, some with a match status and some golden records. Records with too few match fields stay without a match status by design; their count is printed. Why: Scenario 2 needs a matched starting point. Success: the counts line prints. If it fails: matching did not run or did not finish; check the RetailClient strategy and the matching service.")},
         {"label": "Back Up After Scenario 1", "inline": dbop("BackupDatabase", "profisee_Matching_{{SizeLabel}}_after-1.bak",

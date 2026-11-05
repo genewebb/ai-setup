@@ -98,6 +98,9 @@ Row counts while a source load runs (read-only):
   notes: `C:\tmp\ConnectTestingInProgress.md` (one line appended per refresh).
 - Published page: https://smvmtr1.corp.profisee.com/ConnectTesting/Status.html (refreshes itself every 15 min).
 - Data lives in `const BOARD = {...}` inside `<script>`: `asOf`, `lastRun`, `running: "<KEY>|<cell>"` (or `""`),
+  `runningSince` (start time; add "measured TestAuto workflow since ~HH:MM" once the prepare step is done) and
+  `runningEta` (expected finish plus what the guess is based on); both are shown on the running card, and are
+  updated whenever `running` changes,
   `eta {made, big[], rows[], note}`, `states`, `sizes` (`1K`, `1M`, `1K 8T`, ...), `connectors`
   (keys SQLSERVER, DATABRICKS, SYNAPSE, SNOWFLAKE, PROFISEE), and `runs`:
   `"<KEY>|<Export|Import> <size>[ 8T|12T]": { s: "pass|fail|run|wait|na", why: "<date> <start>-<end>: workflow <m> min <s> s (<sec> s), execution <code>" }`.
