@@ -117,8 +117,17 @@ def scenario_table_patch(scn, table, iteration_limit):
 
 def lookup_patch(scn):
     def p(cfg):
-        custom(cfg).update({"UnifiedMatchingApiExecutionRunProfile": run_profile(scn), "IterationLimit": SLICE})
+        c = custom(cfg)
+        c.update({"UnifiedMatchingApiExecutionRunProfile": run_profile(scn), "IterationLimit": SLICE})
         cfg['ScenarioTesting']['TestRecordLimit'] = SLICE
+        # TestAuto rejects every batch when the distribution does not sum to TestRecordLimit; PROD's is sized for 100K.
+        dist = c.get('SourceSystemDistribution')
+        if dist:
+            total = sum(dist.values())
+            scaled = {k: v * SLICE // total for k, v in dist.items()}
+            first = next(iter(scaled))
+            scaled[first] += SLICE - sum(scaled.values())
+            c['SourceSystemDistribution'] = scaled
     return p
 
 
@@ -133,6 +142,12 @@ def markers(scn, start_n, end_n):
     return step(start_n, *s), step(end_n, *e)
 
 
+
+def enable_run(n, scn):
+    return step(n, "Enable RetailClient Matching Strategy Then Run",
+                f"Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, "
+                f"inside the Scenario {scn} markers as the production workflow does.")
+
 T2 = f"RetailClient{SIZE_LABEL}Scenario2"
 T3B = f"RetailClient{SIZE_LABEL}Scenario3b"
 T3C = f"RetailClient{SIZE_LABEL}Scenario3c"
@@ -141,8 +156,9 @@ workflows = {}
 # Scenario 2: idle, start, counts, run (4), wait, end, counts, timing
 s, e = markers('2', 12, 18)
 workflows['matching-1k-scenario2'] = ('2', "Matching Scenario 2 (operational batch: New, Changed with mutated match fields, NoChange) from table " + T2, [
-    polling(17, True), s,
+    s,
     step(13, "Capture Matching Status Counts for Start of Scenario 2", "Match status counts before the batch.", snapshot_patch('2', 4)),
+    enable_run(15, "2"),
     step(16, "Matching Scenario 2 Incremental Batch Load", f"Sends every row of {T2} as a batch load: New rows create, Changed rows are mutated on their strategy fields and PATCHed by Code, NoChange rows are PATCHed as they are.", scenario_table_patch('2', T2, 0)),
     polling(17, False), e,
     step(19, "Capture Matching Status Counts for End of Scenario 2", "Match status counts after matching finished.", snapshot_patch('2', 4)),
@@ -151,15 +167,16 @@ workflows['matching-1k-scenario2'] = ('2', "Matching Scenario 2 (operational bat
 # Scenario 3a: idle, start, lookups, end (no counts, no timing: the lookup scenario records its own metrics)
 s, e = markers('3a', 21, 25)
 workflows['matching-1k-scenario3a'] = ('3a', "Matching Scenario 3a (lookups of matched records, creates nothing)", [
-    polling(17, True), s,
+    s, enable_run(23, "3a"),
     step(24, "Matching Scenario 3a Lookup Before Create", f"Looks up {SLICE} existing AutoApproved records through the matching lookup; creates nothing.", lookup_patch('3a')),
     e,
 ])
 # Scenario 3b: idle, start, counts, run (4), wait, end, counts, timing
 s, e = markers('3b', 26, 32)
 workflows['matching-1k-scenario3b'] = ('3b', "Matching Scenario 3b (lookup, then create on a miss) from table " + T3B, [
-    polling(31, True), s,
+    s,
     step(27, "Capture Matching Status Counts for Start of Scenario 3b", "Match status counts before the run.", snapshot_patch('3b', 4)),
+    enable_run(29, "3b"),
     step(30, "Matching Scenario 3b Continuous Matching", f"Sends every row of {T3B}: a timed lookup, then a create when nothing matches.", scenario_table_patch('3b', T3B, SLICE)),
     polling(31, False), e,
     step(33, "Capture Matching Status Counts for End of Scenario 3b", "Match status counts after matching finished.", snapshot_patch('3b', 4)),
@@ -174,8 +191,9 @@ def postrun_patch(cfg):
 
 
 workflows['matching-1k-scenario3c'] = ('3c', "Matching Scenario 3c (creates with continuous matching) from table " + T3C, [
-    polling(40, True), s,
+    s,
     step(36, "Capture Matching Status Counts for Start of Scenario 3c", "Match status counts before the run.", snapshot_patch('3c', 4)),
+    enable_run(38, "3c"),
     step(39, "Matching Scenario 3c Continuous Matching", f"Creates every row of {T3C} one record per call with continuous matching on.", scenario_table_patch('3c', T3C, SLICE)),
     polling(40, False), e,
     step(42, "Matching Scenario 3c Post-Run Metric Collection", "Collects golden record times for the records the run created.", postrun_patch),
@@ -268,21 +286,17 @@ cm_script = "\r\n".join([
     "Invoke-RestMethod -Method Put -Uri \"$base/v1/Matching/strategies\" -Headers $headers -ContentType 'application/json' -SkipCertificateCheck -Body (ConvertTo-Json -Depth 30 -InputObject @($body)) | Out-Null",
     "$after = @((Invoke-RestMethod -Uri $uri -Headers $headers -SkipCertificateCheck).data)[0]",
     "if ([int]$after.autoMatch -ne 1 -or [int]$after.autoSurvive -ne 1) { throw \"Continuous matching is still off for '{{MatchingStrategyName}}' (autoMatch=$($after.autoMatch), autoSurvive=$($after.autoSurvive)).\" }",
-    "# Saving the strategy disables it (status 0). Enable it and run it with survivorship, as the production Matching workflow does",
-    "# right after its continuous-matching step; the TestAuto workflow then waits for idle before its start marker.",
-    "$strategyUri = \"$base/v1/Matching/$([uri]::EscapeDataString('{{MatchingStrategyName}}'))\"",
-    "Invoke-RestMethod -Method Patch -Uri $strategyUri -Headers $headers -ContentType 'application/json-patch+json' -SkipCertificateCheck -Body '{ \"status\": 1 }' | Out-Null",
-    "Invoke-RestMethod -Method Post -Uri \"$strategyUri/processActions\" -Headers $headers -ContentType 'application/json-patch+json' -SkipCertificateCheck -Body '{ \"actions\": [ \"IncludeSurvivorship\" ] }' | Out-Null",
-    "$after = @((Invoke-RestMethod -Uri $uri -Headers $headers -SkipCertificateCheck).data)[0]",
-    "if ([int]$after.status -ne 1) { throw \"Strategy '{{MatchingStrategyName}}' is not enabled after the enable call (status=$($after.status)).\" }",
-    "\"Continuous matching on for '{{MatchingStrategyName}}' (autoMatch and autoSurvive = 1), strategy enabled and run with survivorship.\"",
+    "# Saving the strategy leaves it disabled (status 0). The TestAuto workflow enables and runs it right after its start marker,",
+    "# as the production Matching workflow does, so that activity falls inside the scenario.",
+    "\"Continuous matching on for '{{MatchingStrategyName}}' (autoMatch and autoSurvive = 1); the workflow enables and runs it.\""
 ])
 cm_step = {"label": "Turn Continuous Matching On", "inline": {
     **{k: v for k, v in s1['steps'][5]['inline'].items() if k not in ('scriptContent', 'description')},
     "timeoutSeconds": 300, "scriptContent": cm_script,
-    "description": ("What: Turn continuous matching on for the RetailClient strategy (read it, set autoMatch and autoSurvive, PUT it back), "
-                    "then enable it and run it with survivorship, because saving a strategy disables it. Why: Scenarios 2, 3a, 3b and 3c measure records matched as they arrive; the checkpoint "
-                    "from Scenario 1 has it off, and setup belongs outside the measured window. Success: the strategy reads back with both on and enabled (status 1). "
+    "description": ("What: Turn continuous matching on for the RetailClient strategy (read it, set autoMatch and autoSurvive, PUT it back). "
+                    "Why: Scenarios 2, 3a, 3b and 3c measure records matched as they arrive; the checkpoint from Scenario 1 has it off. Saving the "
+                    "strategy disables it; the TestAuto workflow enables and runs it after its start marker, so that work is measured. "
+                    "Success: the strategy reads back with autoMatch and autoSurvive on. "
                     "If it fails: 401 = the API key; 404 = the strategy name in this workload's MatchingStrategyName.")}}
 
 GOLDEN = ("DECLARE @golden bigint = (SELECT COUNT_BIG(*) FROM data.tRetailClient r JOIN data.tMatchStatus s ON s.ID = r.[Match Status] WHERE s.Code = N'10');\r\n"
@@ -292,6 +306,16 @@ GOLDEN = ("DECLARE @golden bigint = (SELECT COUNT_BIG(*) FROM data.tRetailClient
 def present(table, action=None):
     w = f" WHERE t.RecordAction = N'{action}'" if action else ""
     return (f"(SELECT COUNT_BIG(*) FROM [{{{{ModelSourceDB}}}}].dbo.{table} t JOIN data.tRetailClient r ON r.Code = t.Code{w})")
+
+
+def created_since(scn):
+    # Records a scenario creates get a Profisee-assigned Code, so count non-golden records entered after its start marker (both UTC).
+    return "\r\n".join([
+        f"DECLARE @start datetime2 = (SELECT MAX(StartedTime) FROM monitor.tActivity WHERE Name = N'Start of Scenario {scn} for Retail Client');",
+        f"IF @start IS NULL THROW 50012, N'Scenario {scn} start marker not found in monitor.tActivity.', 1;",
+        "DECLARE @created bigint, @createdMatched bigint;",
+        "SELECT @created = COUNT_BIG(*), @createdMatched = COUNT_BIG(s.Code) FROM data.tRetailClient r LEFT JOIN data.tMatchStatus s ON s.ID = r.[Match Status] "
+        "WHERE r.[$EnterDTM] >= @start AND (s.Code IS NULL OR s.Code <> N'10');"])
 
 
 checks = {
@@ -324,21 +348,26 @@ checks = {
         "What: Confirm the lookups created no records. Why: 3a is lookups only. Success: the loaded row count is unchanged from Scenario 2. "
         "If it fails: the lookup scenario created records; check its OperationType in TestAuto."),
     'matching-1k-scenario3b': ("Check Scenario 3b Ran", "\r\n".join([
-        f"DECLARE @created bigint = {present(T3B)};",
-        "IF @created = 0",
-        f"    THROW 50009, N'After Scenario 3b: no {T3B} code reached RetailClient; the lookup-then-create run created nothing.', 1;",
-        f"PRINT CONCAT(N'After Scenario 3b: ', @created, N' of {SLICE} {T3B} rows created; the rest matched an existing record at lookup and were not created.');"]),
+        created_since('3b'),
+        f"IF @created = 0 OR @created > {SLICE}",
+        "BEGIN",
+        f"    DECLARE @msg nvarchar(400) = CONCAT(N'After Scenario 3b: ', @created, N' records created since the start marker (expected 1 to {SLICE}); the lookup-then-create run must create the rows whose lookup missed.');",
+        "    THROW 50009, @msg, 1;",
+        "END",
+        f"PRINT CONCAT(N'After Scenario 3b: ', @created, N' of {SLICE} {T3B} rows created (', @createdMatched, N' matched); the rest found an existing record at lookup.');"]),
         f"What: Confirm the run created records for the rows whose lookup found no match. Why: 3b is lookup, then create on a miss. "
-        f"Success: at least one {T3B} code is in RetailClient; the count is printed. If it fails: open the TestAuto run log."),
+        f"Created records get a Profisee-assigned Code, so they are counted as non-golden records entered after the Scenario 3b start marker. "
+        f"Success: 1 to {SLICE} created; the count is printed. If it fails: open the TestAuto run log."),
     'matching-1k-scenario3c': ("Check Scenario 3c Created Every Row", "\r\n".join([
-        f"DECLARE @created bigint = {present(T3C)};",
+        created_since('3c'),
         f"IF @created <> {SLICE}",
         "BEGIN",
-        f"    DECLARE @msg nvarchar(400) = CONCAT(N'After Scenario 3c: ', @created, N' of {SLICE} {T3C} rows created.');",
+        f"    DECLARE @msg nvarchar(400) = CONCAT(N'After Scenario 3c: ', @created, N' of {SLICE} {T3C} rows created since the start marker.');",
         "    THROW 50010, @msg, 1;",
         "END",
-        f"PRINT N'After Scenario 3c: all {SLICE} {T3C} rows created.';"]),
-        f"What: Confirm every {T3C} row was created. Why: 3c is create only. Success: {SLICE} codes present. If it fails: open the TestAuto run log."),
+        f"PRINT CONCAT(N'After Scenario 3c: all {SLICE} {T3C} rows created (', @createdMatched, N' matched).');"]),
+        f"What: Confirm every {T3C} row was created. Why: 3c is create only. Created records get a Profisee-assigned Code, so they are "
+        f"counted as non-golden records entered after the Scenario 3c start marker. Success: {SLICE} created. If it fails: open the TestAuto run log."),
 }
 chain = {'matching-1k-scenario2': ('after-1', 'after-2'), 'matching-1k-scenario3a': ('after-2', 'after-3a'),
          'matching-1k-scenario3b': ('after-3a', 'after-3b'), 'matching-1k-scenario3c': ('after-3b', 'after-3c')}

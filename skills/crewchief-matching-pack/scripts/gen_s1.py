@@ -238,6 +238,8 @@ backup = "\r\n".join([
     "EXEC (@sql);",
     "PRINT CONCAT(N'Backed up {{ProfiseeDatabaseName}} to ', @bak, N' and verified it.');",
 ])
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'monitor_quiet.sql'), encoding='utf-8') as _f:
+    MONITOR_QUIET_SQL = _f.read().replace(chr(10), chr(13) + chr(10))
 check_matched = "\r\n".join([
     "-- Golden records (match status code 10) are created by survivorship; every other row is a loaded record.",
     "DECLARE @golden bigint = (SELECT COUNT_BIG(*) FROM data.tRetailClient r JOIN data.tMatchStatus s ON s.ID = r.[Match Status] WHERE s.Code = N'10');",
@@ -287,7 +289,7 @@ s1 = {
         "ProfiseeInstanceName": "{{$ref:matching/instances:ProfiseeInstanceName}}",
         "MainHealthUrl": "https://{{$ref:matching/machines:ApplicationServerNameFQDN}}/{{$ref:matching/instances:ProfiseeInstanceName}}/rest/health",
         "TestAutoBaseUrl": "https://{{$ref:matching/machines:TestServerNameFQDN}}:8443",
-        "RecordCount": "1000", "SizeLabel": "1K"},
+        "RecordCount": "1000", "SizeLabel": "1K", "QuietSeconds": "60"},
     "globalParametersNotes": "", "credentialUserId": "", "credentialPassword": "", "credentialNotes": "",
     "steps": [
         {"label": "Wait For Interrupted Runs", "inline": {**base, "baseUrl": "{{TestAutoBaseUrl}}", "workflowCode": "", "executionCode": "",
@@ -306,6 +308,12 @@ s1 = {
         {"label": "Start Every Service", "inline": {**base, "executionPolicy": "Bypass", "preferWindowsPowerShell": False, "runAsAdministrator": False,
             "captureVerbose": False, "captureDebug": False, "treatStderrAsError": True, "scriptContent": health, "type": "PowerShellStep", "timeoutSeconds": 900,
             "description": "What: Wait until every health check is Healthy. Why: services stay cold after a restore and recycle. Success: all checks Healthy within 10 minutes. If it fails: open the health URL and fix the service it names."}},
+        {"label": "Wait For Monitor Quiet", "inline": sql(H, MONITOR_QUIET_SQL,
+            "What: Wait until the Activity Monitor has no outstanding task (every monitor.tActivity row in a finished status) and no "
+            "new task has started for {{QuietSeconds}} seconds. Why: setup (restore, pool recycle, continuous matching on) can start "
+            "monitor tasks; the workflow's start marker must come after them so the scenario window holds only the scenario's own work. "
+            "Success: the monitor is quiet. If it fails: after 30 minutes a task is still outstanding; the error names it, check it "
+            "in the portal's Activity Monitor.", timeout=1900)},
         {"label": "Run Matching 1K Scenario 1", "inline": {**base, "baseUrl": "{{TestAutoBaseUrl}}", "workflowCode": "",
             "workflowTag": "AUTO:{{$env:COMPUTERNAME}}:{{$ref:matching/environment:ProfiseeVersionCode}}:" + KEY, "executionCode": "",
             "attachToActiveRun": True, "waitOnly": False, "pollIntervalSeconds": 60, "waitIndefinitely": True, "maxConsecutivePollFailures": 30,

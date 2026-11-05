@@ -14,8 +14,8 @@ Repo: speed-merchants, `CrewChief/packs/matching` (Gene commits). Built 11/05/20
 |---|---|---|---|
 | `matching-1k-scenario1-load` | (empty model) | SetApiKey, recycle -auth/-rest/-connex, health, Connect strategy `RetailClientImport` loads `ModelSource.dbo.RetailClient1KScenario1` | `loaded` |
 | `matching-1k-testauto-create` | - | 5 run profiles + 5 tagged TestAuto workflows in the TestAuto repository | - |
-| `matching-1k-scenario1` | `loaded` | recycle all pools, health, run workflow, check | `after-1` |
-| `matching-1k-scenario2` | `after-1` | + Turn Continuous Matching On | `after-2` |
+| `matching-1k-scenario1` | `loaded` | recycle all pools, health, monitor quiet, run workflow, check | `after-1` |
+| `matching-1k-scenario2` | `after-1` | + Turn Continuous Matching On (before monitor quiet) | `after-2` |
 | `matching-1k-scenario3a` | `after-2` | same | `after-3a` |
 | `matching-1k-scenario3b` | `after-3a` | same | `after-3b` |
 | `matching-1k-scenario3c` | `after-3b` | same | `after-3c` |
@@ -28,17 +28,20 @@ TestAuto workflow or continue on a dirty DB, or the monitor markers and timings 
 Scenario workload steps: Wait For Interrupted Runs, Stop Profisee Service (Skipped when
 `matching/environment:MainServiceName` is blank, 26R3+), Restore (DatabaseOperationsStep, takes the DB OFFLINE, back
 ONLINE on failure), Recycle all 20 instance pools, Start service, health wait, [2+: Turn Continuous Matching On],
-run the workflow by tag `AUTO:<box>:<ProfiseeVersionCode>:matching-1k-scenario<x>`, check, backup.
+Wait For Monitor Quiet (`scripts/monitor_quiet.sql`: no `monitor.tActivity` row outstanding and none started for
+`QuietSeconds` = 60 s, 30-minute limit), run the workflow by tag `AUTO:<box>:<ProfiseeVersionCode>:matching-1k-scenario<x>`, check, backup.
 
-TestAuto workflows (steps copied from PROD 10000215; setup that must not be measured comes before the start marker):
+TestAuto workflows (steps copied from PROD 10000215, in PROD order: enable + run sits inside the markers, so its
+Activity Monitor rows fall inside the scenario, decided by Gene 11/05; the run step is always order 4 for
+`{{STEP:4}}`, except Scenario 1 which uses `{{STEP:3}}`):
 
 | Workflow | Steps |
 |---|---|
 | Scenario 1 | start marker, counts Pre, enable + run strategy (IncludeSurvivorship), wait idle, end marker, counts Post, timing (`{{STEP:3}}`) |
-| Scenario 2 | wait idle, start, counts, BatchLoad from `RetailClient1KScenario2` (step 4), wait, end, counts, timing |
-| Scenario 3a | wait idle, start, LookupOnly / ExistingMatchedOnly (100 lookups), end (no counts, no timing) |
-| Scenario 3b | wait idle, start, counts, LookupThenCreate from `RetailClient1KScenario3b`, wait, end, counts, timing |
-| Scenario 3c | wait idle, start, counts, CreateOnly from `RetailClient1KScenario3c`, wait, end, post-run collection, counts, timing |
+| Scenario 2 | start, counts, enable + run, BatchLoad from `RetailClient1KScenario2` (step 4), wait, end, counts, timing |
+| Scenario 3a | start, enable + run, LookupOnly / ExistingMatchedOnly (100 lookups), end (no counts, no timing) |
+| Scenario 3b | start, counts, enable + run, LookupThenCreate from `RetailClient1KScenario3b`, wait, end, counts, timing |
+| Scenario 3c | start, counts, enable + run, CreateOnly from `RetailClient1KScenario3c`, wait, end, post-run collection, counts, timing |
 
 Run profiles: `<ProfiseeVersionCode>-RetailClient-Scenario <x>-1000-0` (IncrementalVolumeCount 100 for 2/3b/3c).
 
@@ -72,17 +75,28 @@ rerun `matching-1k-testauto-create` if a TestAuto spec changed (upsert updates i
    a success response. Generators compact long configs and assert <= 4000; wizard-only keys (`ModelSourceDefaults`,
    `SelectedLookupAttributeCodes`, `SelectedScenarioTemplate`) are dropped in ScenarioTable configs.
 3. **Saving the strategy disables it**: the continuous-matching PUT (`v1/Matching/strategies`, read-modify-write,
-   autoMatch/autoSurvive true) leaves `status = 0`. The setup step must then PATCH `v1/Matching/RetailClient`
-   `{"status":1}` and POST `processActions` `IncludeSurvivorship`, and verify status 1. Without it Scenario 2 ran,
-   matched nothing, and the Activity Monitor showed no Matching rows between the markers.
+   autoMatch/autoSurvive true) leaves `status = 0`. Something must then PATCH `v1/Matching/RetailClient`
+   `{"status":1}` and POST `processActions` `IncludeSurvivorship`: PROD's "Enable RetailClient Matching Strategy
+   Then Run" step, kept in each TestAuto workflow right after the start marker (and counts). Without it Scenario 2
+   ran, matched nothing, and the Activity Monitor showed no Matching rows between the markers. Doing it in CrewChief
+   instead put its activity before the start marker (Gene: setup activity belongs inside the markers).
 4. **Restore with SINGLE_USER deadlocks** against reconnecting Profisee services and left the DB SINGLE_USER. Use
    DatabaseOperationsStep RestoreDatabase (OFFLINE) as Connect does.
 5. **Row counts**: survivorship adds golden records (match status code 10, source system 7); sparse records (too
    few match fields) never get a match status. Count loaded rows as non-golden. New rows of a BatchLoad are created
    without their source Code (Profisee assigns one), so find them as loaded rows outside the Scenario 1 table.
+   Same for 3b/3c creates: their checks count non-golden records entered (`$EnterDTM`, UTC) at or after the
+   scenario's start marker (`monitor.tActivity.StartedTime`, UTC). 3b run 1 (10000408) created 97 and matched 94 but
+   failed a check that looked for source Codes. In 3b a few lookups hit twins created moments earlier in the same run;
+   that is expected.
 6. **Pool recycle time**: recycling all 20 pools takes about 2 minutes per run; the health wait follows.
 7. `MatchingStrategyName` must be in the UnifiedMatchingScenario CustomParms for ScenarioTable mode (the mutator
    reads the strategy's fields); PROD's Scenario 2 config lacks it.
+8. **SourceSystemDistribution must sum to TestRecordLimit**: PROD's 3a config carries Seed/Apple/Credibly
+   33334/33333/33333 (100K). At 1K every lookup batch job threw `SourceSystemDistribution sum (100,000) does not equal
+   TestRecordLimit (100)` and Hangfire retried 10 times with back-off (hours); the step sat Running. `lookup_patch`
+   scales it to the size. Cancel a stuck execution by setting its `ExecutionStatus` to `Cancelled` (same as the UI
+   Cancel); CrewChief's workflow step then fails and the run stops before its backup.
 
 ## Proof a run measured something
 
@@ -96,7 +110,15 @@ A rematch that leaves a record in its cluster does not change its `Match DateTim
 | Scenario | Good execution | Notes |
 |---|---|---|
 | 1 | 10000401 (10000400 also valid) | 976 matched, 200 golden, 24 sparse unmatched |
-| 2 | 10000404 | 10000403 invalid (strategy disabled); 5 new matched |
+| 2 | (rerun 11/05 12:18) | 10000403 invalid (strategy disabled); 10000404 passed but enable + run ran before the start marker |
+| 3a | - | 10000405 cancelled (distribution sized for 100K) |
+
+## Status board
+
+https://smvmtr1.corp.profisee.com/MatchingTesting/Status.html, beside the Connect board. Source
+`C:\tmp\matching-status\MatchingTestBoard.html` (edit only the `BOARD` data block), publish with
+`sh /c/tmp/matching-status/build-status.sh`. Republish after every scenario result. TestAuto times are UTC; the
+board shows EST.
 
 ## Where things are
 
