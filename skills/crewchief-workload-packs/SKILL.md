@@ -42,8 +42,12 @@ Design: `Q:\Work\Work\99 Documentation\speed-merchants\planning\2026-11-04-crewc
   workflows whose comma-split Tags contain that whole entry (trimmed, case-insensitive; `...:x` never matches
   `...:x-8t`). Exactly one must match. Setup creates or updates by the same lookup; an upgrade (new version in
   reference data) makes setup create a NEW set and leaves the old version's workflows and history alone.
-- **Restore by folder** (Backup page "Restore whole folders" or `crewchief restore <zip> --folder workloads/<family>
-  --folder reference-kv/<family> --replace`): Replace zips each existing folder to
+- **Finding them in TestAuto**: the Workloads page switch **Automation Only** shows only workflows with an `AUTO:`
+  tag (`WorkflowTagMatcher.HasAutomationTag`, choice remembered in localStorage `workflows-filter-automation-only`).
+  It needs the TestAuto build from 11/05.
+- **Restore by folder** (Backup page "Restore whole folders" or on the box `crewchief restore <zip> --folder
+  workloads/<family> [--folder reference-kv/<family>] --replace --data-folder C:\Deploy\CrewChief\web\data`;
+  always pass `--data-folder` = the folder the Web app and the CLI runner use): Replace zips each existing folder to
   `crewchief-backup-<time>-before-restore-<folder>.zip` in the backup location first, then removes it, then
   restores. Add mode leaves files the pack no longer has. Undo = restore the safety zip with Replace.
 
@@ -87,6 +91,25 @@ Design: `Q:\Work\Work\99 Documentation\speed-merchants\planning\2026-11-04-crewc
 4. `pwsh CrewChief/packs/tools/New-PackBackup.ps1 -PackRoot ... -Destination <backup location>` builds
    `crewchief-backup-<time>-pack-<family>.zip`; restore it on each box with Replace for `workloads/<family>` ONLY
    (restoring `reference-kv/<family>` with Replace overwrites that box's values; do it only on a new box).
+
+## Tweak recipes (where each kind of change goes)
+
+Running and recording a round (runner, queue, board, run times): [[crewchief-connect-test-rounds]].
+
+| Change | Edit | Then |
+|---|---|---|
+| A box value (server, database, URL, version, service, pool) | Reference Data page on that box only, never the pack | `<family>-preflight` |
+| Profisee upgrade on a box | `<family>/environment`: `ProfiseeVersionCode`, service names (blank on 26R3+), analytics pools | preflight, `<family>-setup` (creates a NEW tagged workflow set, keeps the old one) |
+| New reference key | `reference-kv/<family>/<set>.json`: value, `keyDescriptions` entry, `keyBlankAllowed` only if a release lacks it | lint; on boxes add the key by hand (restoring reference-kv with Replace wipes box values) |
+| A step every run shares (reset, source load, row check) | The one child under `internal/shared/**` or `internal/<size>/` that owns it; `-run` files only call children | lint, zip, restore `workloads/<family>` with Replace, one 1K `-run` to prove it |
+| One provider's prepare | `internal/providers/<p>/` (`connect-<p>-<dir>-prepare`, strategies-create, service-configuration-refresh, credentials-refresh) | as above, run that provider's 1K pair |
+| TestAuto workflow shape (steps, run profile) | Upsert steps in `internal/<size>/testauto/*-workflows-create` and `*-run-profiles-create` (matched by AUTO tag, re-run updates in place) | lint, restore, `<family>-setup` (or just the testauto-setup child) |
+| New thread count or size | New `-run`/prepare workloads under `internal/providers/<p>/<size>/t<n>/`, upsert steps, `<family>/workflows` keys `<family>-<size>-<p>-<dir>-<n>t`, the `tests/` masters, the `<size>-all` parents | lint enforces run-step tags = upsert keys = workflow keys; setup creates the workflows |
+| New provider | Copy a provider folder whose shape matches (remote table: databricks/snowflake/synapse; database: sql-server), its keys, secrets entries | same, plus a credentials refresh on each box |
+| Description wording | The workload or step `description` (parts listed in step 2 of "Changing a pack") | lint |
+
+Never hand-edit pack workloads on a box: the next Replace restore wipes the edit, and the boxes drift apart.
+A copied workflow in TestAuto that keeps its AUTO tag makes the run step stop (two matches): remove the tag from the copy.
 
 ## Hard safety rules
 
