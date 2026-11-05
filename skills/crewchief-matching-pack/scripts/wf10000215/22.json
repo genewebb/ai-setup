@@ -1,0 +1,132 @@
+{
+  "ScenarioName": "MultiStepUtilityScenario",
+  "MaxHangfireScenarioServersCount": 1,
+  "ScenarioTables": {
+    "SourceEntityName": "RetailClient",
+    "TargetEntityName": "RetailClient"
+  },
+  "ScenarioDataShape": {
+    "FreeformAttributes": 0,
+    "DomainAttributes": 0
+  },
+  "ScenarioRuntime": {
+    "NumberOfGeneratedTestRecordsPerBatch": 1,
+    "BatchSize": 1,
+    "PageNumber": 1,
+    "MaxHangfireScenarioServersCount": 1,
+    "MaxConcurrentBatchesPerHangfireScenarioServer": 1,
+    "CustomParms": {
+      "GlobalParameters": {
+        "StrategyName": "RetailClient",
+        "ApiVersion": "v1"
+      },
+      "Steps": [
+        {
+          "url": "{{$config:RestClients:Profisee:BaseUrl}}v1/Matching/strategies",
+          "method": "PUT",
+          "headers": {
+            "Content-Type": "application/json-patch+json",
+            "x-api-key": "{{$config:RestClients:Profisee:ApiKey}}"
+          },
+          "body": "[\r\n  {\r\n    \"name\": \"RetailClient\",\r\n    \"code\": \"c3089630-96c1-433b-b182-6d533db02d4e\",\r\n    \"entity\": {\r\n      \"id\": \"50a2eb6b-e7d9-49b9-abdf-0ccdfb806241\",\r\n      \"name\": \"RetailClient\"\r\n    },\r\n    \"status\": true,\r\n    \"statusID\": 98,\r\n    \"lockStatus\": 0,\r\n    \"includeMatching\": true,\r\n    \"autoMatch\": true,\r\n    \"includeSurvivorship\": true,\r\n    \"autoSurvive\": true,\r\n    \"clearCriteria\": \"\",\r\n    \"attributeSets\": [\r\n      {\r\n        \"id\": \"7a72e6e6-69a9-474b-87f7-e88eb5227173\",\r\n        \"sequence\": 0,\r\n        \"name\": \"SSAN and DOB Fuzzy\",\r\n        \"threshold\": 1,\r\n        \"setCriteriaExpression\": \"\",\r\n        \"attributes\": [\r\n          {\r\n            \"id\": \"ec725497-df3e-475a-ac25-42ad988610f3\",\r\n            \"attribute\": {\r\n              \"id\": \"ff8cf158-f263-423b-b524-1264cbba14c9\",\r\n              \"name\": \"IDNumber\"\r\n            },\r\n            \"sequence\": 0,\r\n            \"matchType\": 2,\r\n            \"threshold\": 1,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"ad59dd8e-0442-4659-9fa7-572ee053ff74\",\r\n              \"name\": \"SSAN\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"4533fa4f-99c8-4fd0-8f5a-5a3a9f49fb9e\",\r\n            \"attribute\": {\r\n              \"id\": \"8fba92ec-9e78-4437-952a-9fb8c65457be\",\r\n              \"name\": \"DateOfBirth\"\r\n            },\r\n            \"sequence\": 1,\r\n            \"matchType\": 0,\r\n            \"threshold\": 0.9,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          }\r\n        ]\r\n      },\r\n      {\r\n        \"id\": \"0cf7f1fc-c372-4b5d-86cd-f922d6814f6b\",\r\n        \"sequence\": 1,\r\n        \"name\": \"DOB and SSAN Fuzzy\",\r\n        \"threshold\": 1,\r\n        \"setCriteriaExpression\": \"\",\r\n        \"attributes\": [\r\n          {\r\n            \"id\": \"f0f516ae-7cc6-4458-9986-4f5576eb30fc\",\r\n            \"attribute\": {\r\n              \"id\": \"8fba92ec-9e78-4437-952a-9fb8c65457be\",\r\n              \"name\": \"DateOfBirth\"\r\n            },\r\n            \"sequence\": 0,\r\n            \"matchType\": 2,\r\n            \"threshold\": 1,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"0947f741-7119-4382-a73f-d38bf58b8c61\",\r\n            \"attribute\": {\r\n              \"id\": \"ff8cf158-f263-423b-b524-1264cbba14c9\",\r\n              \"name\": \"IDNumber\"\r\n            },\r\n            \"sequence\": 1,\r\n\"matchType\": 2,\r\n            \"threshold\": 1,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"ad59dd8e-0442-4659-9fa7-572ee053ff74\",\r\n              \"name\": \"SSAN\"\r\n            }\r\n          }\r\n        ]\r\n      },\r\n      {\r\n        \"id\": \"1ff887c1-1324-4fc7-85c8-cfa96bfe663b\",\r\n        \"sequence\": 2,\r\n        \"name\": \"SSAN and Name\",\r\n        \"threshold\": 0.95,\r\n        \"setCriteriaExpression\": \"\",\r\n        \"attributes\": [\r\n          {\r\n            \"id\": \"d8a7d5d8-a759-433a-953a-5ab359025eed\",\r\n            \"attribute\": {\r\n              \"id\": \"ff8cf158-f263-423b-b524-1264cbba14c9\",\r\n              \"name\": \"IDNumber\"\r\n            },\r\n            \"sequence\": 0,\r\n            \"matchType\": 2,\r\n            \"threshold\": 1,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"ad59dd8e-0442-4659-9fa7-572ee053ff74\",\r\n              \"name\": \"SSAN\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"37d8ddd6-e5e4-4194-bcf1-ae267e513760\",\r\n            \"attribute\": {\r\n              \"id\": \"af242fe5-e955-48a7-8c0c-2a515586f4a8\",\r\n              \"name\": \"FirstName\"\r\n            },\r\n            \"sequence\": 1,\r\n            \"matchType\": 0,\r\n            \"threshold\": 0.85,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"11b6f8c5-a2db-4aa3-8227-9eafc5a920d6\",\r\n            \"attribute\": {\r\n              \"id\": \"afed2f28-bb1a-4bd6-be2e-ac96df494835\",\r\n              \"name\": \"LastName\"\r\n            },\r\n            \"sequence\": 2,\r\n            \"matchType\": 0,\r\n            \"threshold\": 0.85,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          }\r\n        ]\r\n      },\r\n      {\r\n        \"id\": \"741ce6be-91af-4147-aae4-e0ea159212e1\",\r\n        \"sequence\": 3,\r\n        \"name\": \"Name and Address\",\r\n        \"threshold\": 0.75,\r\n        \"setCriteriaExpression\": \"\",\r\n        \"attributes\": [\r\n          {\r\n            \"id\": \"5420e8a5-adc0-46ca-99e7-75fde2e375d1\",\r\n            \"attribute\": {\r\n              \"id\": \"8fba92ec-9e78-4437-952a-9fb8c65457be\",\r\n              \"name\": \"DateOfBirth\"\r\n            },\r\n            \"sequence\": 0,\r\n            \"matchType\": 0,\r\n            \"threshold\": 0.85,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"aa8165ba-5c66-4bfe-b51f-c57ace3a3594\",\r\n            \"attribute\": {\r\n              \"id\": \"9250cfc4-854f-412f-a66b-388424940e15\",\r\n              \"name\": \"AddressLine1\"\r\n            },\r\n            \"sequence\": 1,\r\n            \"matchType\": 0,\r\n            \"threshold\": 0.85,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"0b685e50-bdd7-4727-bd17-e0eeab926f4b\",\r\n            \"attribute\": {\r\n              \"id\": \"afed2f28-bb1a-4bd6-be2e-ac96df494835\",\r\n              \"name\": \"LastName\"\r\n            },\r\n            \"sequence\": 2,\r\n            \"matchType\": 0,\r\n            \"threshold\": 0.85,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"41510ab7-a819-415d-9bfa-455a0fbf6b5b\",\r\n            \"attribute\": {\r\n              \"id\": \"3e01a03b-2643-4e8f-8189-f608b57ab5fd\",\r\n              \"name\": \"PostalCode\"\r\n            },\r\n            \"sequence\": 3,\r\n            \"matchType\": 0,\r\n            \"threshold\": 0.85,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"3437dfc1-732c-4a3d-86b1-fe523465d513\",\r\n            \"attribute\": {\r\n              \"id\": \"af242fe5-e955-48a7-8c0c-2a515586f4a8\",\r\n              \"name\": \"FirstName\"\r\n            },\r\n            \"sequence\": 4,\r\n            \"matchType\": 0,\r\n            \"threshold\": 0.7,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          }\r\n        ]\r\n      },\r\n      {\r\n        \"id\": \"084794d5-f93c-463e-9db4-8c861582188e\",\r\n        \"sequence\": 4,\r\n        \"name\": \"Phone First and Last\",\r\n        \"threshold\": 0.75,\r\n        \"setCriteriaExpression\": \"\",\r\n        \"attributes\": [\r\n          {\r\n            \"id\": \"00124f67-76e9-4b1e-b6f8-518e03eb793d\",\r\n            \"attribute\": {\r\n              \"id\": \"c40c6fb1-3e52-4e71-869f-52b0c9dc12ed\",\r\n              \"name\": \"Phone Number\"\r\n            },\r\n            \"sequence\": 0,\r\n            \"matchType\": 2,\r\n            \"threshold\": 1,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"b80e81bf-5225-4658-9754-a5a30040112c\",\r\n            \"attribute\": {\r\n              \"id\": \"af242fe5-e955-48a7-8c0c-2a515586f4a8\",\r\n              \"name\": \"FirstName\"\r\n            },\r\n            \"sequence\": 1,\r\n            \"matchType\": 0,\r\n            \"threshold\": 0.7,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"858fe15c-8775-49e4-9afa-d395b12e5ca1\",\r\n            \"attribute\": {\r\n              \"id\": \"afed2f28-bb1a-4bd6-be2e-ac96df494835\",\r\n              \"name\": \"LastName\"\r\n            },\r\n            \"sequence\": 2,\r\n            \"matchType\": 0,\r\n            \"threshold\": 0.7,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"8e42239e-83d7-485a-9fa2-f2c60ef5b227\",\r\n            \"attribute\": {\r\n              \"id\": \"ff8cf158-f263-423b-b524-1264cbba14c9\",\r\n              \"name\": \"IDNumber\"\r\n            },\r\n            \"sequence\": 3,\r\n            \"matchType\": 2,\r\n            \"threshold\": 1,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"ad59dd8e-0442-4659-9fa7-572ee053ff74\",\r\n              \"name\": \"SSAN\"\r\n            }\r\n          }\r\n        ]\r\n      },\r\n      {\r\n        \"id\": \"70abd9c4-c0b9-40bd-b7b6-7796c2d5c857\",\r\n\"sequence\": 5,\r\n        \"name\": \"Email First and Last\",\r\n        \"threshold\": 0.8,\r\n        \"setCriteriaExpression\": \"\",\r\n        \"attributes\": [\r\n          {\r\n            \"id\": \"057378ed-5184-4856-9fdf-26a8b24377be\",\r\n            \"attribute\": {\r\n              \"id\": \"ff5815cf-2e69-42a0-8217-395de717a599\",\r\n              \"name\": \"HomeEmail\"\r\n            },\r\n            \"sequence\": 0,\r\n            \"matchType\": 0,\r\n            \"threshold\": 0.8,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"a6ebc8bc-6051-42b2-a85f-db3f8e622ce5\",\r\n            \"attribute\": {\r\n              \"id\": \"af242fe5-e955-48a7-8c0c-2a515586f4a8\",\r\n              \"name\": \"FirstName\"\r\n            },\r\n            \"sequence\": 1,\r\n            \"matchType\": 0,\r\n            \"threshold\": 0.7,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"039a4a8f-ad68-46a7-af17-83357e71ed95\",\r\n            \"attribute\": {\r\n              \"id\": \"afed2f28-bb1a-4bd6-be2e-ac96df494835\",\r\n              \"name\": \"LastName\"\r\n            },\r\n            \"sequence\": 2,\r\n            \"matchType\": 0,\r\n            \"threshold\": 0.7,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"5014f57e-1970-4717-8bad-7e90bdfb5a9e\",\r\n              \"name\": \"MaestroDefault\"\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"4f93f724-e516-4a1d-8110-e4ed567cbc62\",\r\n            \"attribute\": {\r\n              \"id\": \"ff8cf158-f263-423b-b524-1264cbba14c9\",\r\n              \"name\": \"IDNumber\"\r\n            },\r\n            \"sequence\": 3,\r\n            \"matchType\": 2,\r\n            \"threshold\": 1,\r\n            \"blankType\": 0,\r\n            \"synonymListId\": {\r\n              \"id\": \"ad59dd8e-0442-4659-9fa7-572ee053ff74\",\r\n              \"name\": \"SSAN\"\r\n            }\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"survivorshipStrategyDetailSets\": [\r\n      {\r\n        \"id\": \"ce770604-8a1f-45c1-8fd3-2f53111e396f\",\r\n        \"sequence\": 0,\r\n        \"name\": \"Name\",\r\n        \"masteringActionPolicy\": 3,\r\n        \"masteringConditionFilter\": \"\",\r\n        \"harmonizationActionPolicy\": null,\r\n        \"harmonizationConditionFilter\": \"\",\r\n        \"sortColumns\": [],\r\n        \"survivorshipStrategyDetails\": [\r\n          {\r\n            \"id\": \"3882f595-bb11-43b0-90ce-37daa1a1005e\",\r\n            \"sequence\": 0,\r\n            \"attribute\": {\r\n              \"id\": \"af242fe5-e955-48a7-8c0c-2a515586f4a8\",\r\n              \"name\": \"FirstName\"\r\n            },\r\n            \"applyNulls\": false\r\n          },\r\n          {\r\n            \"id\": \"2f71c769-f793-42f1-988f-49e9a798aaa6\",\r\n            \"sequence\": 1,\r\n            \"attribute\": {\r\n              \"id\": \"afed2f28-bb1a-4bd6-be2e-ac96df494835\",\r\n              \"name\": \"LastName\"\r\n            },\r\n            \"applyNulls\": false\r\n          },\r\n          {\r\n            \"id\": \"e07f5777-c7bf-4080-aec9-57cc3a9616af\",\r\n            \"sequence\": 2,\r\n            \"attribute\": {\r\n              \"id\": \"2c4ad459-37a9-4c0b-ae9f-bf47946c2442\",\r\n              \"name\": \"FullName\"\r\n            },\r\n            \"applyNulls\": false\r\n          }\r\n        ],\r\n        \"masteringCriteriaValueFilter\": \"\",\r\n        \"masteringCriteriaValueRecordCompleteness\": false,\r\n        \"masteringCriteriaValueOccurrence\": false,\r\n        \"masteringCriteriaValueRecordRecency\": 0\r\n      }\r\n    ],\r\n    \"matchGroupAttributeIdentifier\": {\r\n      \"id\": \"aec2d17a-f51e-4e0f-ab38-8cc690fd207c\",\r\n      \"name\": \"Match Cluster\"\r\n    },\r\n    \"matchScoreAttributeIdentifier\": {\r\n      \"id\": \"1b247302-d9bf-4604-a59d-ae7ee42db1b7\",\r\n      \"name\": \"Model Confidence\"\r\n    },\r\n    \"matchStatusAttributeIdentifier\": {\r\n      \"id\": \"bba5e38c-67a7-4401-bb0c-b67b78a9fcde\",\r\n      \"name\": \"Match Status\"\r\n    },\r\n    \"matchSourceAttributeIdentifier\": {\r\n      \"id\": \"35931977-436a-4648-adb2-a84ecc397ecf\",\r\n      \"name\": \"Source System\"\r\n    },\r\n    \"matchMemberAttributeIdentifier\": {\r\n      \"id\": \"1da42db6-1716-4f16-8542-7e67b96d4591\",\r\n      \"name\": \"Match Member\"\r\n    },\r\n    \"matchIdentifierAttributeIdentifier\": {\r\n      \"id\": \"ee63a647-be97-4ad9-a4dc-056d6b41e16f\",\r\n      \"name\": \"Match Strategy\"\r\n    },\r\n    \"matchDateTimeAttributeIdentifier\": {\r\n      \"id\": \"8275802b-e814-481b-9de7-187573e6d67a\",\r\n      \"name\": \"Match DateTime\"\r\n    },\r\n    \"matchUserAttributeIdentifier\": {\r\n      \"id\": \"28627409-fe21-4836-b11a-d59a82856bbb\",\r\n      \"name\": \"Match MultiGroup\"\r\n    },\r\n    \"matchFromCriteriaExpression\": \"\",\r\n    \"matchToCriteriaExpression\": \"\",\r\n    \"doNotMakeUnique\": false,\r\n    \"matchPriority\": 1,\r\n    \"matchMasterAttributeIdentifier\": {\r\n      \"id\": \"ddedda45-a47c-48c4-9a6b-de45e9228289\",\r\n      \"name\": \"Golden Record\"\r\n    },\r\n    \"matchApprovedCountAttributeIdentifier\": {\r\n      \"id\": \"9f002535-7864-449f-b86a-80a65f3d11ca\",\r\n      \"name\": \"Approved Count\"\r\n    },\r\n    \"matchProposedCountAttributeIdentifier\": {\r\n      \"id\": \"479e3767-10b1-4636-9e6d-e2b6bfa3ad4c\",\r\n      \"name\": \"Proposed Count\"\r\n    },\r\n    \"doCreateMastersForUniques\": false,\r\n    \"onlyUpdateClustersChangedSinceLastRun\": false,\r\n    \"matchMasterRecordPrefix\": \"GoldenRec-\",\r\n    \"stewardshipOptions\": {\r\n      \"allowApproveReject\": true,\r\n      \"allowManualSurvivorship\": true,\r\n      \"allowManualPromote\": true,\r\n      \"allowPromoteAll\": true,\r\n      \"allowManualHarmonize\": true,\r\n      \"allowHarmonizeAll\": true,\r\n      \"allowViewMatchDetails\": true,\r\n      \"allowMerge\": false,\r\n      \"orphanedMasterBehavior\": 1,\r\n      \"presentationViewId\": null,\r\n      \"openEditFormId\": null\r\n    },\r\n    \"lookupOptions\": {\r\n      \"lookupScope\": 0,\r\n      \"lookupResultsPresentationViewId\": null,\r\n      \"lookupBeforeCreateColumns\": [\r\n        {\r\n          \"displayOrder\": 1,\r\n          \"attributeIdentifier\": {\r\n            \"id\": \"9250cfc4-854f-412f-a66b-388424940e15\",\r\n            \"name\": \"AddressLine1\"\r\n          },\r\n          \"attributeAlias\": \"AddressLine1\"\r\n        },\r\n        {\r\n          \"displayOrder\": 2,\r\n          \"attributeIdentifier\": {\r\n            \"id\": \"8fba92ec-9e78-4437-952a-9fb8c65457be\",\r\n            \"name\": \"DateOfBirth\"\r\n          },\r\n          \"attributeAlias\": \"DateOfBirth\"\r\n        },\r\n        {\r\n          \"displayOrder\": 3,\r\n          \"attributeIdentifier\": {\r\n            \"id\": \"af242fe5-e955-48a7-8c0c-2a515586f4a8\",\r\n            \"name\": \"FirstName\"\r\n          },\r\n          \"attributeAlias\": \"FirstName\"\r\n        },\r\n        {\r\n          \"displayOrder\": 4,\r\n          \"attributeIdentifier\": {\r\n            \"id\": \"ff5815cf-2e69-42a0-8217-395de717a599\",\r\n            \"name\": \"HomeEmail\"\r\n          },\r\n          \"attributeAlias\": \"HomeEmail\"\r\n        },\r\n        {\r\n          \"displayOrder\": 5,\r\n          \"attributeIdentifier\": {\r\n            \"id\": \"ff8cf158-f263-423b-b524-1264cbba14c9\",\r\n            \"name\": \"IDNumber\"\r\n          },\r\n          \"attributeAlias\": \"IDNumber\"\r\n        },\r\n        {\r\n          \"displayOrder\": 6,\r\n          \"attributeIdentifier\": {\r\n            \"id\": \"afed2f28-bb1a-4bd6-be2e-ac96df494835\",\r\n            \"name\": \"LastName\"\r\n          },\r\n          \"attributeAlias\": \"LastName\"\r\n        },\r\n        {\r\n          \"displayOrder\": 7,\r\n          \"attributeIdentifier\": {\r\n            \"id\": \"c40c6fb1-3e52-4e71-869f-52b0c9dc12ed\",\r\n            \"name\": \"Phone Number\"\r\n          },\r\n          \"attributeAlias\": \"Phone Number\"\r\n        },\r\n        {\r\n          \"displayOrder\": 8,\r\n          \"attributeIdentifier\": {\r\n            \"id\": \"3e01a03b-2643-4e8f-8189-f608b57ab5fd\",\r\n            \"name\": \"PostalCode\"\r\n          },\r\n          \"attributeAlias\": \"PostalCode\"\r\n        }\r\n      ]\r\n    },\r\n    \"mergeOptions\": {\r\n      \"mergeParentAttributeIdentifier\": null,\r\n      \"mergeOutputAttributes\": []\r\n    },\r\n    \"auditInfo\": {\r\n      \"createdUserId\": {\r\n        \"name\": \"corp\\\\agenewe\"\r\n      },\r\n      \"createdDateTime\": \"2026-03-19T11:18:00.927Z\",\r\n      \"updatedUserId\": {\r\n        \"name\": \"corp\\\\agenewe\"\r\n      },\r\n      \"updatedDateTime\": \"2026-03-19T11:18:00.927Z\"\r\n    }\r\n  }\r\n]\r\n",
+          "outputFile": null,
+          "expectedStatusCodes": [
+            200,
+            201,
+            204
+          ],
+          "followRedirects": true,
+          "verifySsl": false,
+          "maxTimeSeconds": null,
+          "customCurlArgs": null,
+          "useRestMethod": true,
+          "type": "Http",
+          "scriptKey": null,
+          "parameters": {
+            "StrategyName": "RetailClient",
+            "ApiVersion": "v1"
+          },
+          "timeoutSeconds": 60,
+          "continueOnError": false,
+          "workingDirectory": null,
+          "description": "Update Retail Client Continuous Matching On"
+        }
+      ]
+    }
+  },
+  "ScenarioTesting": {
+    "TestRecordLimit": 1,
+    "TestOverrideQueueName": ""
+  },
+  "ScenarioQuery": {
+    "SelectAttributes": "",
+    "SortAttributes": "",
+    "Filter": "",
+    "QueryParameters": {}
+  },
+  "ScenarioRestTarget": {
+    "RestUrlBase": null,
+    "RestApiKey": null,
+    "SubjectAreaOverrides": {
+      "Profisee": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Metrics": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Connect": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Portal": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Matching": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      }
+    }
+  },
+  "ScenarioDatabaseConnectionStrings": {
+    "ConnectionString": null,
+    "SubjectAreaOverrides": {
+      "Profisee": {
+        "ConnectionString": ""
+      },
+      "Metrics": {
+        "ConnectionString": ""
+      },
+      "Matching": {
+        "ConnectionString": ""
+      },
+      "Connect": {
+        "ConnectionString": ""
+      },
+      "Portal": {
+        "ConnectionString": ""
+      },
+      "Data": {
+        "ConnectionString": ""
+      },
+      "TestAuto": {
+        "ConnectionString": ""
+      }
+    }
+  },
+  "ScenarioEnvironment": {
+    "DqRuleCount": 0,
+    "TargetEnvironment": "IaaS",
+    "TargetEnvironmentName": "SMVM2",
+    "TargetMetricEntity": "Not Used",
+    "WorkloadExecution": "",
+    "ProfiseeVersion": "26R3",
+    "TargetApplicationServer": "SMVM2",
+    "TargetDatabaseServer": "SMVMDB2",
+    "ExecutionMode": "B",
+    "HangfireJob": 0,
+    "SimulatedUserThreadId": 1
+  }
+}

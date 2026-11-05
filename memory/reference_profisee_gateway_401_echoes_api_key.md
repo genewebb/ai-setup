@@ -17,3 +17,5 @@ transcript. speedmerchants' ProbeTarget/Hide-Secret exist for exactly this reaso
 **How to apply:** when probing a Profisee REST endpoint with a key, print only the status code and the error code
 (e.g. 2070 / invalid_client), never `$response.Content`, or mask the key in it before printing. invalid_client = the
 key matches no user's client ID on that instance (or the auth service cannot validate it).
+
+**Gene 11/05/2026:** the echo is the gateway's problem, not ours. Do not propose changing TestAuto/CrewChief logging (PowerShellRestExecutor/CurlExecutor) to hide it; just never print the key myself (redact in my own output).

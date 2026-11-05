@@ -1,0 +1,103 @@
+{
+  "ScenarioName": "UnifiedMatchingPostRunCollectionScenario",
+  "MaxHangfireScenarioServersCount": 1,
+  "ScenarioTables": {
+    "SourceEntityName": "RetailClient",
+    "TargetEntityName": "RetailClient"
+  },
+  "ScenarioDataShape": {
+    "FreeformAttributes": 0,
+    "DomainAttributes": 0
+  },
+  "ScenarioRuntime": {
+    "NumberOfGeneratedTestRecordsPerBatch": 1,
+    "BatchSize": 500,
+    "PageNumber": 1,
+    "MaxHangfireScenarioServersCount": 1,
+    "MaxConcurrentBatchesPerHangfireScenarioServer": 1,
+    "CustomParms": {
+      "SourceWorkloadExecution": "{{STEP:39}}",
+      "ConcurrentThreads": 10,
+      "MaxGoldenRecordAttempts": 30,
+      "WaitTimeBetweenGoldenRecordAttemptsMs": 4000,
+      "GoldenRecordColumnName": "Golden Record"
+    }
+  },
+  "ScenarioTesting": {
+    "TestRecordLimit": 0,
+    "TestOverrideQueueName": ""
+  },
+  "ScenarioQuery": {
+    "SelectAttributes": "",
+    "SortAttributes": "Code",
+    "Filter": "",
+    "QueryParameters": {
+      "ignoreConstraintRules": "true"
+    }
+  },
+  "ScenarioRestTarget": {
+    "RestUrlBase": null,
+    "RestApiKey": null,
+    "SubjectAreaOverrides": {
+      "Profisee": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Metrics": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Connect": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Portal": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Matching": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      }
+    }
+  },
+  "ScenarioDatabaseConnectionStrings": {
+    "ConnectionString": null,
+    "SubjectAreaOverrides": {
+      "Profisee": {
+        "ConnectionString": ""
+      },
+      "Metrics": {
+        "ConnectionString": ""
+      },
+      "Matching": {
+        "ConnectionString": ""
+      },
+      "Connect": {
+        "ConnectionString": ""
+      },
+      "Portal": {
+        "ConnectionString": ""
+      },
+      "Data": {
+        "ConnectionString": ""
+      },
+      "TestAuto": {
+        "ConnectionString": ""
+      }
+    }
+  },
+  "ScenarioEnvironment": {
+    "DqRuleCount": 0,
+    "TargetEnvironment": "IaaS",
+    "TargetEnvironmentName": "SMVM2",
+    "TargetMetricEntity": "UnifiedMatchingApiExecution",
+    "WorkloadExecution": "",
+    "ProfiseeVersion": "26R3",
+    "TargetApplicationServer": "SMVM2",
+    "TargetDatabaseServer": "SMVMDB2",
+    "ExecutionMode": "B",
+    "HangfireJob": 0,
+    "SimulatedUserThreadId": 1
+  }
+}

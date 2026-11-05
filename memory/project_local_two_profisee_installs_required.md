@@ -1,21 +1,22 @@
 ---
 name: project_local_two_profisee_installs_required
-description: "CORPLTR94 runs two Profisee installs (26.1.0 speedmerchants, 26.2.0 Profisee) side by side; both are required, never suggest stopping either"
-metadata: 
+description: "CORPLTR94 local Profisee instances: /Profisee = 26R3 GA (Matching rewrite target, Gene 11/05), /ProfiseeImport 26.3.0, /MyDevProfisee (master source build); Gene decides which run, never stop/start them myself"
+metadata:
   node_type: memory
   type: project
-  originSessionId: 2df56e31-55f7-426a-928f-23de05d43c74
-  modified: 2026-09-28T02:51:41.494Z
+  modified: 2026-11-05T14:35:04.678Z
+  originSessionId: 8ecc9a58-e238-47c7-875f-417dfa1ed23f
 ---
 
-Local box CORPLTR94 hosts two full Profisee installs at once, each ~5 GB RAM:
-- `Profisee 26.1.0 (speedmerchants)` service + 19 `speedmerchants-*` IIS app pools
-- `Profisee 26.2.0 (Profisee)` service + 19 `Profisee-*` IIS app pools
+Local box CORPLTR94 Profisee instances (11/04/2026):
+- `/Profisee` 26.2.0 + Windows service `Profisee 26.2.0 (Profisee)`, DB `Profisee`
+- `/ProfiseeImport` 26.3.0, no service, DB `ProfiseeConnectImports`
+- `/MyDevProfisee` source build of `C:\devops\repos\platform` master (IIS paths into the repo), no service, DB `MyDevProfisee`. Had issues 11/04; NOT the Matching Main.
+(The old 26.1.0 `speedmerchants` install from 09/2026 is gone.)
 
-All pools `startMode=AlwaysRunning`, `idleTimeout=00:00:00`; out-of-process ones (proflow, connex, auth, taskman, scriptrunner, attachments) spawn a `dotnet` child that holds the real memory.
+**11/05 (Gene confirmed): https://corpltr94.corp.profisee.com/profisee is 26R3 GA and is the target for the Matching rewrite 1K runs.**
 
-**Why:** Gene stated 2026-09-13 during a memory-reduction review: "I need both of the profisee installs so those have to stay."
+Gene does not want three running at once. 11/04 19:42: MyDevProfisee had issues; Gene is upgrading /Profisee to 26R3 and it becomes the Matching rewrite Main. Version label **26R3T** (not 26R3): T = test runs that will all be deleted later. Gene decides which others run.
 
-**Exception, 2026-09-27 22:46 EDT (Gene):** "We can stop the profisee service if they are not needed for coding or planning". During stream-kit coding/planning runs that nothing hits Profisee for (check the `.streams` graders and tickets first), stopping them is allowed. All 38 pools were stopped that night; the restart command is in `speedmerchants\.streams\overnight-log.md`. Restart them before any real-platform or matching work.
-
-**How to apply:** When reducing memory/CPU on this box, treat both installs as fixed load (except under the exception above). Do not propose stopping either install or toggling between them. Look elsewhere (Claude sessions/MCP servers, browsers, build servers, SQL cap — set to 16384 MB same day).
+**Why:** Gene owns which instances run (RAM; other local tests use them).
+**How to apply:** Never start, stop, recycle or delete the non-target instances or their DBs. If one is running when work needs the box, ask (AskUserQuestion). Related: [[project_matching_rewrite_local_1k_2026-11-04]].

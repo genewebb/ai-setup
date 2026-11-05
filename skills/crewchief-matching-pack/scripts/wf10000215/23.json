@@ -1,0 +1,164 @@
+{
+  "ScenarioName": "MultiStepUtilityScenario",
+  "MaxHangfireScenarioServersCount": 1,
+  "ScenarioTables": {
+    "SourceEntityName": "RetailClient",
+    "TargetEntityName": "RetailClient"
+  },
+  "ScenarioDataShape": {
+    "FreeformAttributes": 0,
+    "DomainAttributes": 0
+  },
+  "ScenarioRuntime": {
+    "NumberOfGeneratedTestRecordsPerBatch": 1,
+    "BatchSize": 1,
+    "PageNumber": 1,
+    "MaxHangfireScenarioServersCount": 1,
+    "MaxConcurrentBatchesPerHangfireScenarioServer": 1,
+    "CustomParms": {
+      "GlobalParameters": {
+        "StrategyName": "RetailClient",
+        "ApiVersion": "v1"
+      },
+      "Steps": [
+        {
+          "url": "{{$config:RestClients:Profisee:BaseUrl}}v1/Matching/RetailClient",
+          "method": "PATCH",
+          "headers": {
+            "Content-Type": "application/json-patch+json",
+            "x-api-key": "{{$config:RestClients:Profisee:ApiKey}}"
+          },
+          "body": "{\n  \"status\": 1\n}",
+          "bodyFilePath": null,
+          "outputFile": null,
+          "expectedStatusCodes": [
+            200,
+            201,
+            204
+          ],
+          "followRedirects": true,
+          "verifySsl": false,
+          "maxTimeSeconds": null,
+          "customCurlArgs": null,
+          "useRestMethod": true,
+          "type": "CurlStep",
+          "scriptKey": null,
+          "parameters": {
+            "StrategyName": "RetailClient",
+            "ApiVersion": "v1"
+          },
+          "timeoutSeconds": 60,
+          "continueOnError": false,
+          "workingDirectory": null,
+          "description": "Enable RetailClient Matching Strategy"
+        },
+        {
+          "url": "{{$config:RestClients:Profisee:BaseUrl}}v1/Matching/RetailClient/processActions",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json-patch+json",
+            "x-api-key": "{{$config:RestClients:Profisee:ApiKey}}"
+          },
+          "body": "{\n  \"actions\": [\n    \"IncludeSurvivorship\"\n  ]\n}",
+          "bodyFilePath": null,
+          "outputFile": null,
+          "expectedStatusCodes": [
+            200,
+            201,
+            204
+          ],
+          "followRedirects": true,
+          "verifySsl": false,
+          "maxTimeSeconds": null,
+          "customCurlArgs": null,
+          "useRestMethod": true,
+          "type": "CurlStep",
+          "scriptKey": null,
+          "parameters": {
+            "StrategyName": "RetailClient",
+            "ApiVersion": "v1"
+          },
+          "timeoutSeconds": 60,
+          "continueOnError": false,
+          "workingDirectory": null,
+          "description": "Run RetailClient Matching Strategy"
+        }
+      ]
+    }
+  },
+  "ScenarioTesting": {
+    "TestRecordLimit": 1,
+    "TestOverrideQueueName": ""
+  },
+  "ScenarioQuery": {
+    "SelectAttributes": "",
+    "SortAttributes": "",
+    "Filter": "",
+    "QueryParameters": {}
+  },
+  "ScenarioRestTarget": {
+    "RestUrlBase": null,
+    "RestApiKey": null,
+    "SubjectAreaOverrides": {
+      "Profisee": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Metrics": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Connect": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Portal": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Matching": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      }
+    }
+  },
+  "ScenarioDatabaseConnectionStrings": {
+    "ConnectionString": null,
+    "SubjectAreaOverrides": {
+      "Profisee": {
+        "ConnectionString": ""
+      },
+      "Metrics": {
+        "ConnectionString": ""
+      },
+      "Matching": {
+        "ConnectionString": ""
+      },
+      "Connect": {
+        "ConnectionString": ""
+      },
+      "Portal": {
+        "ConnectionString": ""
+      },
+      "Data": {
+        "ConnectionString": ""
+      },
+      "TestAuto": {
+        "ConnectionString": ""
+      }
+    }
+  },
+  "ScenarioEnvironment": {
+    "DqRuleCount": 0,
+    "TargetEnvironment": "IaaS",
+    "TargetEnvironmentName": "SMVM2",
+    "TargetMetricEntity": "Not Used",
+    "WorkloadExecution": "100002857",
+    "ProfiseeVersion": "26R3",
+    "TargetApplicationServer": "SMVM2",
+    "TargetDatabaseServer": "SMVMDB2",
+    "ExecutionMode": "B",
+    "HangfireJob": 0,
+    "SimulatedUserThreadId": 1
+  }
+}

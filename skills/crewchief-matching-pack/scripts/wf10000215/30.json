@@ -1,0 +1,220 @@
+{
+  "ScenarioName": "UnifiedMatchingScenario",
+  "MaxHangfireScenarioServersCount": 1,
+  "ScenarioTables": {
+    "SourceEntityName": "RetailClient",
+    "TargetEntityName": "RetailClient"
+  },
+  "ScenarioDataShape": {
+    "FreeformAttributes": 0,
+    "DomainAttributes": 0
+  },
+  "ScenarioRuntime": {
+    "NumberOfGeneratedTestRecordsPerBatch": 1,
+    "BatchSize": 1,
+    "PageNumber": 1,
+    "MaxHangfireScenarioServersCount": 20,
+    "MaxConcurrentBatchesPerHangfireScenarioServer": 1,
+    "CustomParms": {
+      "OperationType": "LookupThenCreate",
+      "RecordSource": "NewValuesOnly",
+      "RecordMixEnabled": true,
+      "ChangedPercent": 0,
+      "NewPercent": 100,
+      "NoChangePercent": 0,
+      "LubcMixEnabled": false,
+      "CreatePercent": 100,
+      "UpdatePercent": 0,
+      "ConcurrentThreads": 20,
+      "RecordExhaustionBehavior": "WarnAndStop",
+      "WaitForMatching": true,
+      "MatchingScenarioName": "Scenario 3b",
+      "UnifiedMatchingApiExecutionRunProfile": "26R3-RetailClient-Scenario 3b-1000000-0",
+      "CollectMetricsPostTest": false,
+      "NewRecordStartingOffset": 310000,
+      "ChangedRecordStartingOffset": 0,
+      "ExpectEmptyModel": false,
+      "ExpectIndexedModel": true,
+      "NewRecordSourceSystem": "Apple",
+      "UpdateRecordSourceSystem": "Intuit",
+      "SourceSystemDistribution": {
+        "Seed": 20000,
+        "Apple": 20000,
+        "Credibly": 20000,
+        "Intuit": 20000,
+        "Walmart": 20000
+      },
+      "ModelSourceDefaults": {
+        "RetailClient": {
+          "1": {
+            "Name": "Template Records",
+            "Count": 3000000
+          },
+          "2": {
+            "Name": "NPPES",
+            "Count": 6881257
+          },
+          "3": {
+            "Name": "Generated Records",
+            "Count": 40118743
+          }
+        },
+        "RetailClientCloned": {
+          "20": {
+            "Name": "Dynamics",
+            "Count": 50000000
+          },
+          "30": {
+            "Name": "JDE",
+            "Count": 50000000
+          },
+          "40": {
+            "Name": "SalesForce",
+            "Count": 50000000
+          }
+        }
+      },
+      "MatchStatusFilter": [
+        20,
+        30,
+        40,
+        50
+      ],
+      "HoldoutStartAfterRow": 0,
+      "MatchStatusAttribute": "Match Status",
+      "MatchClusterColumnName": "Match Cluster",
+      "GoldenRecordColumnName": "Golden Record",
+      "MatchingStrategyName": "RetailClient",
+      "MaxGoldenRecordAttempts": 30,
+      "WaitTimeBetweenGoldenRecordAttemptsMs": 4000,
+      "SelectedLookupAttributeCodes": [
+        "AddressLine1",
+        "DateOfBirth",
+        "FirstName",
+        "HomeEmail",
+        "IDNumber",
+        "LastName",
+        "PostalCode"
+      ],
+      "LookupRequestAttributeCodes": [
+        "AddressLine1",
+        "DateOfBirth",
+        "FirstName",
+        "HomeEmail",
+        "IDNumber",
+        "LastName",
+        "PostalCode"
+      ],
+      "LubcRequestAttributes": [
+        "AddressLine1",
+        "DateOfBirth",
+        "FirstName",
+        "HomeEmail",
+        "IDNumber",
+        "LastName",
+        "PostalCode"
+      ],
+      "TimeLimit": "01:00:00",
+      "IterationLimit": 100000,
+      "SleepMinMs": 1,
+      "SleepMaxMs": 1,
+      "TransformSeed": 0,
+      "LubcRequestProcessAllAttributeSets": true,
+      "LubcResponseGoldenRecordAttribute": "Golden Record",
+      "UpdateVariationLevel": 3,
+      "SelectedScenarioTemplate": "Scenario 3B: Lookup + Create",
+      "SelectedNewSourceCodes": [
+        "Seed",
+        "Apple",
+        "Credibly",
+        "Intuit",
+        "Walmart"
+      ],
+      "SelectedChangedSourceCodes": [],
+      "SourceSystemNewOffsets": {
+        "Seed": 80000,
+        "Apple": 80000,
+        "Credibly": 80000,
+        "Intuit": 80000,
+        "Walmart": 80000
+      }
+    }
+  },
+  "ScenarioTesting": {
+    "TestRecordLimit": 100000,
+    "TestOverrideQueueName": ""
+  },
+  "ScenarioQuery": {
+    "SelectAttributes": "",
+    "SortAttributes": "Code",
+    "Filter": "",
+    "QueryParameters": {
+      "ignoreConstraintRules": "true"
+    }
+  },
+  "ScenarioRestTarget": {
+    "RestUrlBase": null,
+    "RestApiKey": null,
+    "SubjectAreaOverrides": {
+      "Profisee": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Metrics": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Connect": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Portal": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      },
+      "Matching": {
+        "RestUrlBase": "",
+        "RestApiKey": ""
+      }
+    }
+  },
+  "ScenarioDatabaseConnectionStrings": {
+    "ConnectionString": null,
+    "SubjectAreaOverrides": {
+      "Profisee": {
+        "ConnectionString": ""
+      },
+      "Metrics": {
+        "ConnectionString": ""
+      },
+      "Matching": {
+        "ConnectionString": ""
+      },
+      "Connect": {
+        "ConnectionString": ""
+      },
+      "Portal": {
+        "ConnectionString": ""
+      },
+      "Data": {
+        "ConnectionString": ""
+      },
+      "TestAuto": {
+        "ConnectionString": ""
+      }
+    }
+  },
+  "ScenarioEnvironment": {
+    "DqRuleCount": 0,
+    "TargetEnvironment": "IaaS",
+    "TargetEnvironmentName": "SMVM2",
+    "TargetMetricEntity": "UnifiedMatchingApiExecution",
+    "WorkloadExecution": "",
+    "ProfiseeVersion": "26R3",
+    "TargetApplicationServer": "SMVM2",
+    "TargetDatabaseServer": "SMVMDB2",
+    "ExecutionMode": "B",
+    "HangfireJob": 0,
+    "SimulatedUserThreadId": 1
+  }
+}
