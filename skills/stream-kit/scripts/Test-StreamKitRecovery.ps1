@@ -4110,6 +4110,16 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $res4 = Get-Content -Raw (Join-Path $rdir 'run-TX-3.results.json') | ConvertFrom-Json -AsHashtable
     $dr4 = @($res4['tests'] | Where-Object { $_['test'] -eq 'discover:Full' -and $_['outcome'] -eq 'failed' }).Count
     Case '96 a Tier 2 leg that cannot be discovered is a failed discover: row and a DISCOVERY-FAILED line' (-not $ex4 -and $dr4 -eq 1 -and ($xo4 -join ' ') -match 'RESULTS run-TX-3 passed 1 failed 1' -and ($xo4 -join ' ') -match 'DISCOVERY-FAILED run-TX-3 Full \(') "err=$ex4 out=$($xo4 -join ' | ')"
+    Case '96 a discovery failure is kept in the results file as discoveryErrors' ($res4['discoveryErrors'] -and ([string]$res4['discoveryErrors']['Full']) -match 'no-such-project') ($res4['discoveryErrors'] | ConvertTo-Json -Compress)
+    # A leg the run never started (not-measured perf leg) ran no test: its listing failure is 'not-run', never a failed
+    # row a fix must own (run-G17-17 filed discover:Playwright.Perf as an unowned failure; kit item IN-20261106122133-be19).
+    $rx5 = Join-Path $rdir 'run-TX-4'; New-Item -ItemType Directory -Path $rx5 -Force | Out-Null
+    @{ id = 'run-TX-4'; tier = '2'; group = 'TX'; startedAt = '2026-10-01T00:00:00Z'; status = 'done'; snapshot = $tr; runDir = $rx5; head = 'h'
+       legs = @(@{ step = 'leg'; name = 'Perf'; kind = 'dotnet'; project = 'no-such-project'; exit = 0; notMeasured = $true; command = '' }) } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $rdir 'run-TX-4.json')
+    $ex5 = ''; $xo5 = @(); try { $xo5 = @(& "$S\Export-SuiteResults.ps1" -Repo $tr -Run run-TX-4) } catch { $ex5 = ("$_" -split "`n")[0] }
+    $res5 = Get-Content -Raw (Join-Path $rdir 'run-TX-4.results.json') | ConvertFrom-Json -AsHashtable
+    $dr5 = @($res5['tests'] | Where-Object { $_['test'] -eq 'discover:Perf' })
+    Case '96 a never-started leg whose discovery fails is a not-run discover: row, not a failure' (-not $ex5 -and $dr5.Count -eq 1 -and $dr5[0]['outcome'] -eq 'not-run' -and -not @($res5['tests'] | Where-Object { $_['outcome'] -eq 'failed' }).Count -and ($xo5 -join ' ') -match 'DISCOVERY-FAILED run-TX-4 Perf \(') "err=$ex5 out=$($xo5 -join ' | ') rows=$($res5['tests'] | ConvertTo-Json -Compress)"
     # A nightly-started run hands the integrator lock back when it ends.
     Remove-Item (Join-Path $tr '.streams\integrator.lock') -ErrorAction SilentlyContinue
     Get-ChildItem $rdir -Filter 'run-T1-9*.json' | Remove-Item
@@ -4806,6 +4816,16 @@ if ($Mode -eq 'retest') { exit 0 } else { exit 1 }
     $flaky105 = @($res105 | Where-Object { $_.outcome -eq 'flaky' }).Count
     Case '105a a long Playwright re-run is split into batches, each command under the limit' ($l105.Count -gt 1 -and -not @($l105 | Where-Object { ([string]$_.command).Length -gt 1500 -or $_.exit -ne 0 }).Count -and @($l105 | Select-Object -ExpandProperty name -Unique).Count -eq 1) "legs=$($l105.Count) lengths=$((@($l105 | ForEach-Object { ([string]$_.command).Length })) -join ',') exits=$((@($l105 | ForEach-Object { $_.exit })) -join ',') run=$($s105 -join ' | ')"
     Case '105b every title of every batch is read back, so all 40 re-run passes count' ($flaky105 -eq 40) "flaky=$flaky105 of $($res105.Count)"
+    # 105e (kit item IN-20261106101234-3b7d): discovery runs the real npx.cmd in this snapshot, which has no node_modules;
+    # npx waited on its install prompt for ever. With '--no' and a closed stdin it ends and the leg is a failed discover: row.
+    Case '105e Playwright discovery in a tree without node_modules ends as a failed discover: row' (@($res105 | Where-Object { $_.test -eq 'discover:PW' -and $_.outcome -eq 'failed' }).Count -eq 1) "discover=$(@($res105 | Where-Object { $_.test -like 'discover:*' } | ConvertTo-Json -Compress)) run=$($s105 -join ' | ')"
+    # 105f: a --list that never ends is ended at STREAM_PW_LIST_TIMEOUT_SECONDS. A fake npx.cmd first on PATH sleeps 60 s.
+    $bin105f = Join-Path $Scratch 'npx105f'; New-Item -ItemType Directory -Path $bin105f -Force | Out-Null
+    Set-Content -Path (Join-Path $bin105f 'npx.cmd') -Encoding ascii -Value "@echo off`r`nping -n 60 127.0.0.1 >NUL`r`n"
+    $path105f = $env:PATH; $env:PATH = "$bin105f;$path105f"; $env:STREAM_PW_LIST_TIMEOUT_SECONDS = '3'; $sw105f = [Diagnostics.Stopwatch]::StartNew()
+    try { $x105f = @(& "$S\Export-SuiteResults.ps1" -Repo $pr -Run run-P1-1 2>&1) } finally { $env:PATH = $path105f; Remove-Item Env:\STREAM_PW_LIST_TIMEOUT_SECONDS -ErrorAction SilentlyContinue }
+    $sec105f = [int]$sw105f.Elapsed.TotalSeconds
+    Case '105f a Playwright --list that never ends times out and is reported, not waited on' ($sec105f -lt 40 -and ($x105f -join ' ') -match 'playwright --list timed out after 3 s') "sec=$sec105f out=$($x105f -join ' | ')"
 
     # 105c (kit item IN-20261026151817-80e7, G17.T122): a test reported under a teardown Playwright project
     # (fleet-stopping) re-run by --grep runs alone, without its dependency chain, and failed 'REFUSED: no CLI

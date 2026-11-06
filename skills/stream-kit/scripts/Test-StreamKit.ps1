@@ -1631,6 +1631,38 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $seI2 = @(& "$S\Integrate-Patch.ps1" -Repo $seR -Session integ-se -Task S1.Q)
     $seMoved = @(Get-ChildItem -Recurse -File (Join-Path $seR '.streams\stray') -Filter pn.txt -ErrorAction SilentlyContinue)
     Case 'STRAY-EMPTY: an empty untracked file at a created path is moved aside; a non-empty one still REBASEs' ($seI1[0] -eq 'STRAY-EMPTY S1.P pn.txt' -and $seI1 -contains 'INTEGRATED S1.P' -and (T $seR 'S1.P').state -eq 'integrated' -and (Get-Content -Raw (Join-Path $seR 'pn.txt')).Trim() -eq 'new file' -and $seMoved.Count -eq 1 -and $seI2[-1] -eq 'REBASE S1.Q' -and (Get-Content -Raw (Join-Path $seR 'qn.txt')).Trim() -eq 'not empty') (($seI1 -join ' | ') + ' :: ' + ($seI2 -join ' | '))
+    # INTENT-TO-ADD (kit item IN-20261106113700-53f1): a grader that reads the index sees the patch's new file on main,
+    # and a reversed patch leaves no intent-to-add entry behind.
+    $iaR = Join-Path $Scratch 'iarepo'; New-Item -ItemType Directory -Path $iaR -Force | Out-Null
+    git -C $iaR init -q -b main; git -C $iaR config user.email t@t; git -C $iaR config user.name t; Grant-GitPolicy $iaR
+    foreach ($f in 'p', 'q') { Set-Content (Join-Path $iaR "$f.txt") "$f base" }
+    git -C $iaR add -A; git -C $iaR commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $iaR | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $iaR '.streams\graders') -Force | Out-Null
+    Set-Content -Encoding utf8 (Join-Path $iaR '.streams\graders\I1.P.ps1') "param([string]`$Root)`nif (@(git -C `$Root ls-files --cached -- pn.txt).Count) { 'PASS C1'; exit 0 } else { 'FAIL C1: pn.txt not in the index'; exit 1 }"
+    Set-Content -Encoding utf8 (Join-Path $iaR '.streams\graders\I1.Q.ps1') "param([string]`$Root)`n'FAIL C1: always red'; exit 1"
+    $iaPlan = @{
+        groups = @(@{ id = 'I1'; name = 'ia'; state = 'released'; scope = @{ include = @('F-IA') }; origin = 'plan' })
+        tasks  = @(
+            @{ id = 'I1.P'; group = 'I1'; title = 'P'; why = @('AC-P'); kind = 'code'; writeSet = @('p.txt', 'pn.txt'); dependsOn = @(); estMinutes = 10; artifacts = @{ ticket = '.streams\tickets\I1.P.md'; grader = '.streams\graders\I1.P.ps1' } }
+            @{ id = 'I1.Q'; group = 'I1'; title = 'Q'; why = @('AC-Q'); kind = 'code'; writeSet = @('q.txt', 'qn.txt'); dependsOn = @(); estMinutes = 10; artifacts = @{ ticket = '.streams\tickets\I1.Q.md'; grader = '.streams\graders\I1.Q.ps1' } }
+        ) }
+    $iaPf = Join-Path $Scratch 'iaplan.json'; $iaPlan | ConvertTo-Json -Depth 10 | Set-Content $iaPf
+    & "$S\Add-Tasks.ps1" -Repo $iaR -Role plan -Session plan-ia -File $iaPf | Out-Null
+    foreach ($iaId in 'I1.P', 'I1.Q') {
+        & "$S\Claim-Task.ps1" -Repo $iaR -Role build -Session "build-$iaId" -Task $iaId | Out-Null
+        $iaWt = & "$S\New-TaskWorktree.ps1" -Repo $iaR -Task $iaId -Session "build-$iaId" -WorktreeRoot $wtRoot | Select-Object -Last 1
+        $iaL = $iaId.Substring(3).ToLower()
+        Set-Content (Join-Path $iaWt "$iaL.txt") "$iaL changed"; Set-Content (Join-Path $iaWt "${iaL}n.txt") 'new file'
+        & "$S\Export-TaskPatch.ps1" -Repo $iaR -Task $iaId -Worktree $iaWt | Out-Null
+        & "$S\Update-Task.ps1" -Repo $iaR -Task $iaId -Role build -Session "build-$iaId" -To built -Release -Artifacts @{ patch = ".streams\patches\$iaId.patch" } | Out-Null
+    }
+    & "$S\Enter-Integrator.ps1" -Repo $iaR -Session integ-ia | Out-Null
+    $iaI1 = @(& "$S\Integrate-Patch.ps1" -Repo $iaR -Session integ-ia -Task I1.P)
+    $iaI2 = @(& "$S\Integrate-Patch.ps1" -Repo $iaR -Session integ-ia -Task I1.Q)
+    $iaHeadP = @(git -C $iaR ls-tree --name-only HEAD -- pn.txt)
+    $iaIdxQ = @(git -C $iaR ls-files --cached -- qn.txt); $iaStQ = @(git -C $iaR status --porcelain -- qn.txt q.txt)
+    Case 'INTENT-TO-ADD: a new file is in the index for the main grade; a reversed one leaves no index entry' ($iaI1 -contains 'INTEGRATED I1.P' -and $iaHeadP.Count -eq 1 -and @($iaI2 | Where-Object { $_ -like 'REVERSED I1.Q*' }).Count -eq 1 -and -not $iaIdxQ.Count -and -not $iaStQ.Count -and -not (Test-Path (Join-Path $iaR 'qn.txt'))) (($iaI1 -join ' | ') + ' :: ' + ($iaI2 -join ' | ') + " :: idxQ=$($iaIdxQ -join ',') st=$($iaStQ -join ',')")
     # ALREADY-ON-MAIN (kit item IN-20261019062723-9b6e): a built patch main already holds is graded in place and
     # committed (uncommitted on main), or integrated with nothing to do (already in HEAD), never REBASE-looped.
     $amR = Join-Path $Scratch 'amrepo'; New-Item -ItemType Directory -Path $amR -Force | Out-Null
@@ -1660,9 +1692,21 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     git -C $amR apply --binary (Join-Path $amR '.streams\patches\A1.P.patch')
     git -C $amR apply --binary (Join-Path $amR '.streams\patches\A1.Q.patch'); git -C $amR add -A -- q.txt; git -C $amR commit -q -m 'Q by hand' -- q.txt
     & "$S\Enter-Integrator.ps1" -Repo $amR -Session integ-am | Out-Null
+    # a 0-byte index.lock left by a git killed mid-write (kit item IN-20261106091627-076d) is cleared before the commit
+    $amLock = Join-Path $amR '.git\index.lock'; New-Item -ItemType File -Path $amLock -Force | Out-Null; (Get-Item $amLock).LastWriteTime = (Get-Date).AddMinutes(-20)
     $amI1 = @(& "$S\Integrate-Patch.ps1" -Repo $amR -Session integ-am -Task A1.P)
+    $amStale = @($amI1 | Where-Object { $_ -like 'STALE-INDEX-LOCK removed *' })
+    $amI1 = @($amI1 | Where-Object { $_ -notlike 'STALE-INDEX-LOCK*' })
     $amC1 = @(git -C $amR show --name-only --format='%s' HEAD) | Where-Object { $_ }
     Case 'ALREADY-ON-MAIN: a patch held uncommitted on main is graded in place and committed, not REBASEd' ($amI1[0] -eq 'ALREADY-APPLIED A1.P' -and $amI1[1] -eq 'INTEGRATED A1.P' -and $amI1[2] -like 'COMMITTED A1.P *' -and (T $amR 'A1.P').state -eq 'integrated' -and $amC1[0] -like 'A1.P:*' -and ((@($amC1 | Select-Object -Skip 1) | Sort-Object) -join ',') -eq 'p.txt,pn.txt' -and (Get-Content -Raw (Join-Path $amR 'p.txt')).Trim() -eq 'p DONE-P') (($amI1 -join ' | ') + ' :: ' + ($amC1 -join ','))
+    Case 'STALE-INDEX-LOCK: an empty index.lock older than 10 min with no older git running is removed and the commit lands' ($amStale.Count -eq 1 -and -not (Test-Path $amLock) -and $amI1[2] -like 'COMMITTED A1.P *' -and (Select-String -Path (Join-Path $amR '.streams\decisions.md') -Pattern 'removed stale .*index\.lock' -Quiet)) (($amStale -join ' | ') + ' :: ' + ($amI1 -join ' | '))
+    # a fresh empty lock, or an old one with content, may belong to a live git: never removed
+    $silCall = ". '$S\lib\Streams.ps1'; `$P = Get-StreamPaths '$amR'; Clear-StaleGitIndexLock `$P kit-test '$amR'"
+    New-Item -ItemType File -Path $amLock -Force | Out-Null
+    $silFresh = @(pwsh -NoProfile -Command $silCall); $silFreshKept = Test-Path $amLock
+    Set-Content $amLock 'x'; (Get-Item $amLock).LastWriteTime = (Get-Date).AddMinutes(-20)
+    $silFull = @(pwsh -NoProfile -Command $silCall); $silFullKept = Test-Path $amLock; Remove-Item $amLock -Force
+    Case 'STALE-INDEX-LOCK: a fresh empty lock or an old non-empty lock is left in place' (-not ($silFresh -join '') -and $silFreshKept -and -not ($silFull -join '') -and $silFullKept) "fresh=$($silFresh -join ',') kept=$silFreshKept full=$($silFull -join ',') kept=$silFullKept"
     $amHead = git -C $amR rev-parse HEAD
     $amI2 = @(& "$S\Integrate-Patch.ps1" -Repo $amR -Session integ-am -Task A1.Q)
     Case 'ALREADY-ON-MAIN: a patch already committed on HEAD is integrated with nothing applied or committed' ($amI2[0] -eq 'INTEGRATED A1.Q (already in HEAD)' -and (T $amR 'A1.Q').state -eq 'integrated' -and (git -C $amR rev-parse HEAD) -eq $amHead -and -not (git -C $amR status --porcelain -- q.txt)) ($amI2 -join ' | ')
