@@ -30,11 +30,13 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [Seq events also in SQL: logging.tSystemLog (Profisee DB + PROD speedmerchants)](reference_systemlog_table.md)
 
 ## Active work (newest first; full status in each file)
+- **[Each pack own ModelSource<Pack> DB, name only from <family>/databases:ModelSourceDB (SQL, service configs, TestAuto)](feedback_pack_own_source_database.md)**
 - **[Tags used on workflows (incl. AUTO: IDs) must exist in TestAutoTags](feedback_tags_must_exist_in_testautotags.md)**
 - [Speedy posts direct to DW with real SQL types; Profisee metrics store raw seconds](project_speedy_posts_direct_to_dw.md)
 - [Matching test board: SMVMTR1 /MatchingTesting/Status.html, BOARD data + build-status.sh](project_matching_test_board_2026-11-05.md)
 - [CrewChief workload packs 11/04: committed; TR2 live on pack 17:56, Task 13 TR1 gated](project_crewchief_workload_packs_2026-11-04.md)
-- [Pack tags 11/05: 1K/1M 4T/8T/12T + TestAutoTags ensure; TR2 restore pending](project_crewchief_workload_packs_2026-11-05_tags.md)
+- [Pack tags 11/05: 1K/1M 4T/8T/12T + TestAutoTags ensure; reaches next box with its restore](project_crewchief_workload_packs_2026-11-05_tags.md)
+- **[Pack docs = CrewChief in-app help 'Packs' only; Connect = blueprint for Matching/CRUD; runner checked in 11/06](project_pack_docs_in_app_help_2026-11-06.md)**
 - [Connect empty-model bootstrap: paused 11/04 for clean install, resume prompt inside](project_connect_empty_model_bootstrap_2026-11-04.md)
 - [CrewChief Schedules + RunTestAutoWorkflow step + connect folder layout decided 11/03](project_crewchief_schedules_2026-11-03.md)
 - [Matching scorecard wizard 10/29: built, uncommitted](project_matching_scorecard_wizard_2026-10-29.md) · [Connect test board + 11/02 shared/1k/1m layout](project_connect_test_board_2026-10-30.md) · [ModelSource split per size 10/28](project_modelsource_split_per_size_dbs_2026-10-28.md)

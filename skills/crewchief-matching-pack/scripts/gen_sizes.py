@@ -15,6 +15,7 @@ SIZES = {'1K': 1000, '10K': 10000, '100K': 100000, '1M': 1000000}
 # Weekly start times (Sunday); each size's chain must finish before the next starts on the same Profisee database.
 SCHEDULE = {'1K': ('2026-11-08', '00:30', 'Sun'), '10K': ('2026-11-08', '02:00', 'Sun'),
             '100K': ('2026-11-08', '05:00', 'Sun'), '1M': ('2026-11-08', '12:00', 'Sun')}
+SERVICE_CONFIG_ID = '320e7ed1-3430-484a-87ce-7a2ee72be085'  # 'ModelSource' service configuration the strategy reads through
 STRATEGY_ID = 'c810734f-51a5-4416-aa8b-a6380f5e2a22'  # RetailClientImport in the empty baseline (Connect keeps the id on import)
 wl_root = os.path.join(root, 'workloads', 'matching')
 ref_dir = os.path.join(root, 'reference-kv', 'matching')
@@ -50,6 +51,30 @@ assert cfg['remoteObjectName'] == '{{SourceTableName}}'
 cfg['runAsUser'] = '{{RunAsUser}}'
 artifact = json.dumps(art, separators=(',', ':'), ensure_ascii=False)
 assert artifact.count('{{SourceTableName}}') >= 1 and '\\\\' not in artifact.replace('{{RunAsUser}}', '')
+
+# ---- the 'ModelSource' service configuration: the Connect pack's SQL Server one (same provider, same settings), so its
+# server and database come from reference data (matching/machines:DatabaseServerName, matching/databases:ModelSourceDB)
+# and not from whatever the empty baseline was made with.
+with open(os.path.join(here, 'modelsource-serviceconfig-artifact.json'), encoding='utf-8') as f:
+    sc_artifact = f.read()
+assert '{{DatabaseName}}' in sc_artifact and '{{DbServer}}' in sc_artifact and '{{ServiceConfigId}}' in sc_artifact
+sc_parameters = {"AuthenticationScheme": "SqlLogon", "CommandTimeout": "120", "ConnectionTimeout": "60",
+                 "DatabaseName": "{{ModelSourceDB}}", "DbPassword": "{{$config:UserCredentials:SqlAdminPassword}}",
+                 "DbServer": "{{DatabaseServerName}}", "DbUsername": "{{$config:UserCredentials:SqlAdminUser}}",
+                 "EncryptEnhanced": "Optional", "ServiceConfigId": SERVICE_CONFIG_ID, "ServiceConfigName": "ModelSource",
+                 "ServiceProviderId": "77d91447-e344-4fc1-a49f-1c089210a40a",
+                 "ServiceProviderName": "SQL Server Service Provider", "TrustServerCertificate": "True"}
+sc_delete_script = "\r\n".join([
+    "$ErrorActionPreference = 'Stop'",
+    "$connect = '{{ConnExBaseUrl}}'.TrimEnd('/') + '/'",
+    "$headers = @{ 'x-api-key' = '{{ConnExApiKey}}'; accept = 'application/json' }",
+    "# A Connect import of an id that already exists fails, so the service configuration is removed first (after the strategy that uses it).",
+    "$r = Invoke-WebRequest -Method Delete -Uri \"${connect}v1/Connect/Configurations?ConfigurationUids=%s\" -Headers $headers -SkipHttpErrorCheck -TimeoutSec 300" % SERVICE_CONFIG_ID,
+    "$code = [int]$r.StatusCode",
+    "# A 401 body echoes the API key, so no response body is ever printed.",
+    "if ($code -notin 200, 204, 404) { throw \"Deleting the ModelSource service configuration returned HTTP $code.\" }",
+    "\"ModelSource service configuration: delete returned HTTP $code (404 = it was not there).\"",
+])
 
 template = read(os.path.join(here, 'load-template-1k.workload.json'))
 tsteps = {s['label']: s for s in template['steps']}
@@ -94,14 +119,14 @@ for label, n in SIZES.items():
     # ---- load: empty baseline, point RetailClientImport at this size's table, load, back up 'loaded'
     load = copy.deepcopy(template)
     load['name'] = f'matching-{low}-scenario1-load'
-    load['tags'] = ["matching", low, "scenario1", "load"]
+    load['tags'] = ["matching", label, "scenario1", "load"]
     load['description'] = (
         f"What: Restore the empty baseline, set the standard API key, warm the instance, point the Connect strategy "
         f"RetailClientImport at {{{{SourceTableName}}}}, load its {n} rows into the empty RetailClient entity, check every Code "
         f"arrived, and back up the {label} 'loaded' checkpoint. Why: Scenario 1 of this size starts from this backup; Scenario 2, 3b and 3c "
         "update records by these Codes. When: once per box and Profisee version for each size, and whenever the empty baseline "
         "changes; a rerun restores the baseline itself. Needs: profisee_Matching_empty.bak (the model, the RetailClient matching "
-        "strategy and the ModelSource service configuration, no records) in the SQL Server default backup folder; the machine's "
+        "strategy, no records; the load re-creates the ModelSource service configuration) in the SQL Server default backup folder; the machine's "
         "API user exists in Profisee. Success: every step Succeeded. If it fails: the failed step's description says what to fix; rerun the whole workload.")
     g = load['globalParameters']
     g.update({"SourceTableName": f"RetailClient{label}Scenario1", "RecordCount": str(n), "SizeLabel": label,
@@ -145,9 +170,24 @@ for label, n in SIZES.items():
                             "that already exists fails; the import below brings it back pointed at this size's table. Touches nothing else. "
                             "Success: HTTP 200, 204 or 404. If it fails: check the Connect API key (RestClients:Connect:ApiKey) and that "
                             "the gateway answers.")}},
+        {"label": "Remove ModelSource Service Configuration", "inline": {
+            **base, "executionPolicy": "Bypass", "preferWindowsPowerShell": False, "runAsAdministrator": False,
+            "captureVerbose": False, "captureDebug": False, "treatStderrAsError": True, "scriptContent": sc_delete_script,
+            "type": "PowerShellStep",
+            "description": ("What: Delete the Connect service configuration 'ModelSource' when present. Why: the import below "
+                            "brings it back pointed at matching/databases:ModelSourceDB on matching/machines:DatabaseServerName; "
+                            "a Connect import of an existing id fails. Touches nothing else. Success: HTTP 200, 204 or 404. "
+                            "If it fails: check the Connect API key (RestClients:Connect:ApiKey) and that the gateway answers.")}},
+        {"label": "Import ModelSource Service Configuration", "inline": connex(
+            "Import",
+            ("What: Import the Connect service configuration 'ModelSource' for database {{ModelSourceDB}} on "
+             "{{DatabaseServerName}}, signing in with UserCredentials:SqlAdminUser. Why: the source database name and server "
+             "come from this box's reference data, not from the empty baseline. Success: Connect accepts the import. "
+             "If it fails: 400 'duplicated Id' = the delete above did not remove it; a sign-in error = the UserCredentials secrets."),
+            resourceType="ServiceConfiguration", artifactJson=sc_artifact, parameters=sc_parameters)},
         {"label": "Import RetailClientImport", "inline": connex(
             "Import",
-            ("What: Import the Connect strategy {{StrategyName}} reading ModelSource.dbo.{{SourceTableName}} through the ModelSource "
+            ("What: Import the Connect strategy {{StrategyName}} reading {{ModelSourceDB}}.dbo.{{SourceTableName}} through the ModelSource "
              "service configuration, running as {{RunAsUser}}. Why: one strategy serves every size; only its source table changes. "
              "Success: Connect accepts the import. If it fails: 400 'duplicated Id' = the delete above did not remove it; 'could not "
              "be converted' = the artifact does not fit this Profisee release (export the strategy again)."),
@@ -180,7 +220,7 @@ for label, n in SIZES.items():
                         "steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe "
                         f"only when its own Needs are met. Needs: matching-setup ran on this box; workloads it runs: {needs}. "
                         "Success: Every step Succeeded or Skipped. If it fails: open the first failed step, whose If it fails text names what to check."),
-        "tags": ["matching", low, "all"], "globalParameters": {},
+        "tags": ["matching", label, "all"], "globalParameters": {},
         "globalParametersNotes": "Each child owns its run; a failed run stops the chain.",
         "credentialUserId": None, "credentialPassword": None, "credentialNotes": "", "steps": chain_steps()})
 
@@ -192,7 +232,7 @@ for label, n in SIZES.items():
                         "as another test on the same Profisee database. Needs: matching-setup; the matching/* reference sets filled in. "
                         "Success: Every run ends Succeeded; each TestAuto execution holds its metrics. If it fails: It stops at the first "
                         "failed run: open that run's output."),
-        "tags": ["matching", "tests", low], "globalParameters": {}, "globalParametersNotes": "",
+        "tags": ["matching", "tests", label], "globalParameters": {}, "globalParametersNotes": "",
         "credentialUserId": None, "credentialPassword": None, "credentialNotes": "", "steps": chain_steps()})
 
     date, time, day = SCHEDULE[label]
@@ -205,7 +245,7 @@ for label, n in SIZES.items():
                         "a person. When: Run it once to create or update the Windows scheduled task, and again after changing a schedule "
                         "global. Needs: nothing beyond the box's secrets. Success: Every step Succeeded or Skipped. If it fails: open the "
                         "first failed step, whose If it fails text names what to check."),
-        "tags": ["matching", "schedule", low],
+        "tags": ["matching", "schedule", label],
         "globalParameters": {"TaskName": task, "TargetWorkload": f"matching-{low}-all",
                              "CliPath": "C:\\Deploy\\CrewChief\\cli\\crewchief.exe", "DataFolder": "C:\\Deploy\\CrewChief\\web\\data",
                              "StartDate": date, "StartTime": time, "Recurrence": "Weekly", "Interval": "1", "DaysOfWeek": day,
@@ -240,3 +280,6 @@ dump(os.path.join(wl_root, 'start', 'matching-setup.workload.json'), {
     "tags": ["matching", "setup"], "globalParameters": {}, "globalParametersNotes": "",
     "credentialUserId": None, "credentialPassword": None, "credentialNotes": "", "steps": setup_steps})
 print('sizes written:', ', '.join(SIZES))
+
+# ---- start/matching-preflight: checks only (gen_preflight.py)
+subprocess.run([sys.executable, os.path.join(here, 'gen_preflight.py'), root], check=True)

@@ -114,7 +114,7 @@ def scenario_table_patch(scn, table, iteration_limit):
         c.update({"RecordSource": "ScenarioTable", "UnifiedMatchingApiExecutionRunProfile": run_profile(scn),
                   "NewRecordStartingOffset": 0, "ChangedRecordStartingOffset": 0, "TransformSeed": TRANSFORM_SEED,
                   "MatchFieldMutationSettings": MUTATION, "IterationLimit": iteration_limit,
-                  "MatchingStrategyName": "RetailClient"})
+                  "MatchingStrategyName": "RetailClient", "SourceDatabaseName": "{{TestAutoSourceDatabase}}"})
         cfg['ScenarioTables']['SourceEntityName'] = table
         cfg['ScenarioTesting']['TestRecordLimit'] = SLICE
     return p
@@ -123,7 +123,10 @@ def scenario_table_patch(scn, table, iteration_limit):
 def lookup_patch(scn):
     def p(cfg):
         c = custom(cfg)
-        c.update({"UnifiedMatchingApiExecutionRunProfile": run_profile(scn), "IterationLimit": SLICE})
+        # SourceDatabaseName: the record pool's database (matching/databases:ModelSourceDB, via the
+        # testauto-create global TestAutoSourceDatabase); TestAuto defaults to ModelSource when it is missing.
+        c.update({"UnifiedMatchingApiExecutionRunProfile": run_profile(scn), "IterationLimit": SLICE,
+                  "SourceDatabaseName": "{{TestAutoSourceDatabase}}"})
         cfg['ScenarioTesting']['TestRecordLimit'] = SLICE
         # TestAuto rejects every batch when the distribution does not sum to TestRecordLimit; PROD's is sized for 100K.
         dist = c.get('SourceSystemDistribution')
@@ -385,7 +388,9 @@ for key, (start, end) in chain.items():
     w = copy.deepcopy(s1)
     scn = workflows[key][0]
     w['name'] = key
-    w['tags'] = ["matching", LOW, "scenario" + scn, "test"]
+    # Size tags are upper case (1K, 10K, 100K, 1M). 3a, 3b and 3c run 20 simulated users (their steps, copied from
+    # PROD 10000215, set MaxHangfireScenarioServersCount 20), so they carry the user-count tag 20U.
+    w['tags'] = ["matching", SIZE_LABEL, "scenario" + scn, "test"] + (["20U"] if scn in ("3a", "3b", "3c") else [])
     w['globalParameters'].update({
         "ModelSourceDB": "{{$ref:matching/databases:ModelSourceDB}}",
         "ProfiseeBaseUrl": "https://{{$ref:matching/machines:ApplicationServerNameFQDN}}/{{$ref:matching/instances:ProfiseeInstanceName}}/rest",

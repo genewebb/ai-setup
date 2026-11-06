@@ -22,3 +22,7 @@ Matching Run Flow artifact 5DhG1kbvYw2Ui7cuW2S5wC as the live status view; that 
 
 **How to apply:** republish whenever a Matching scenario run ends (pass, fail or void). Same pattern as
 [[project_connect_test_board_2026-10-30]]; pack details in [[project_crewchief_workload_packs_2026-11-04]].
+
+**11/05 21:40 state:** 1K/10K/100K chains all passed on the old Timings collection (100K: S2 39 min, 3b 77, 3c 101). Activities build deployed 21:20, pack workflows pushed 21:25 (timing steps -> UnifiedMatchingApiExecutionActivities). 1K phase-2 test chain started 21:27. Board republished 21:40.
+
+- 11/06 09:10: 1K chain PASS with new Activities collection (run 2, 23:03); Activities tab + Workloads page checked OK. Purged WE 100010281 (orphan) and 100010409 (failed run 1) via Run Purge UI, then Rebuild summaries (summary rebuild DOES run CreateMatchActivitySummary, SqlMatchingStore.cs:170; dialog text omits it). Board asOf 11/06 09:10. Next: 10K/100K with Activities.

@@ -26,6 +26,16 @@ function Get-StepCode([string]$Seed) {
     $md5 = [Security.Cryptography.MD5]::Create()
     try { [guid]::new($md5.ComputeHash([Text.Encoding]::UTF8.GetBytes($Seed))).ToString() } finally { $md5.Dispose() }
 }
+# Every tag on the workflow must exist in the TestAutoTags entity: TestAuto's tag picker and tag filters list
+# only those. Add the missing ones (Code = Name = the tag text); never change or delete an existing tag.
+foreach ($t in @($tags -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)) {
+    $tagFilter = [uri]::EscapeDataString("[Code] eq '$($t.Replace("'", "''"))'")
+    $hit = @(Get-Rows (Invoke-RestMethod -Uri "${base}v1/Records/TestAutoTags?Filter=$tagFilter" -Headers $headers))
+    if ($hit.Count -eq 0) {
+        Invoke-RestMethod -Method Post -Uri "${base}v1/Records/TestAutoTags" -Headers $headers -ContentType 'application/json' -Body (ConvertTo-Json -Depth 3 -InputObject @([ordered]@{ Code = $t; Name = $t })) | Out-Null
+        "Added tag '$t' to TestAutoTags"
+    }
+}
 $header = [ordered]@{ Name = $spec.Name; Description = $description; Category = $spec.Category; Tags = $tags; Active = 'Y' }
 if ($found.Count -eq 0) {
     $created = Invoke-RestMethod -Method Post -Uri "${base}v1/Records/TestAutoWorkflow" -Headers $headers -ContentType 'application/json' -Body (ConvertTo-Json -Depth 5 -InputObject @($header))

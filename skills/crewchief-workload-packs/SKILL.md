@@ -17,6 +17,32 @@ Repo: speed-merchants. Pack source: `CrewChief/packs/<family>/` (`workloads/<fam
 tools in `CrewChief/packs/tools/`. Family notes: `CrewChief/packs/<family>/CLAUDE.md` (Connect: `packs/connect/CLAUDE.md`).
 Design: `Q:\Work\Work\99 Documentation\speed-merchants\planning\2026-11-04-crewchief-workload-packs-design.md`.
 
+**People docs = CrewChief in-app help, category `Packs` (Gene 11/06: the one source; the vault Connect docs are pointers).**
+Sources in `CrewChief/CrewChief.Web/Documentation/`: `60_PacksOverview.md` (model, tools, changing a pack, and the
+**BLUEPRINT checklist** a new pack (Matching, CRUD) must meet) and per pack four pages in a fixed shape: overview,
+move to a new machine, check before a run, run manually (Connect: `61`-`64_PackConnect*.md`, orders 10-13; Matching
+takes 20-23, CRUD 30-33). The move / check / run pages are for a tester new to CrewChief: numbered steps with
+**Do / Check / If it fails**. A new category value must be added to `ApprovedCategories` in
+`CrewChief.Tests.Unit/Web/DocsCatalogTests.cs` (`Packs` is there). Every pack also ships `start/<family>-preflight`
+(changes nothing), `start/<family>-setup`, `rounds/*.txt` for `tools/runner/run-queue.sh`, and a `README.md`.
+When a pack changes in a way a person would notice, update its help pages in the same change.
+
+**Database names (rule 8 of 60_PacksOverview; Gene 11/06, after Connect and Matching both used `ModelSource`).**
+Packs share a box and its SQL Server (one pack runs at a time), so each pack has its OWN source database,
+`ModelSource<Pack>` (`ModelSourceConnect`, `ModelSourceMatching`, `ModelSourceCRUD`), in
+`<family>/databases:ModelSourceDB`. A database name hides in three places; all three must come from that key:
+
+| Place | Do | Found 11/06 |
+|---|---|---|
+| Step SQL / PowerShell | `[{{$ref:<family>/databases:ModelSourceDB}}].dbo.<t>`, `RESTORE DATABASE [{{$ref:...}}]`, `DB_ID(N'{{$ref:...}}')` | Connect `connect-source-data-load` had `ModelSource` 9 times while the key existed |
+| Profisee Connect service configuration | setup/load deletes and imports it with `DbServer`/`DatabaseName` parameters from reference data (Connect: `connect-service-configurations-create`; Matching: load steps "Remove/Import ModelSource Service Configuration") | Matching's lived only inside `profisee_Matching_empty.bak` |
+| TestAuto scenario code + workflow CustomParms | a CustomParm with the name, written by `<family>-setup` from the key; the code defaults to the old name | `MatchingRecordLoader` had `DatabaseName = "ModelSource"`; fixed with CustomParm `SourceDatabaseName` |
+
+`Test-Pack.ps1` refuses a literal database name in `sqlScript`/`scriptContent` (`x.dbo.`, `[x].dbo.`, `ALTER|RESTORE|
+BACKUP|CREATE|DROP|USE DATABASE x`, `USE x;`, `DB_ID('x')`; `master`, `msdb`, `tempdb`, `model` allowed). It cannot
+see service configurations or TestAuto code: for a new pack also run
+`grep -rnw ModelSource CrewChief/packs/<family> TestAuto.<Area>` and fix every hit that names a database.
+
 ## The model (read before diagnosing)
 
 - **Workload files hold no environment values.** Machine names, databases, URLs, the Profisee version, the
@@ -94,7 +120,8 @@ Design: `Q:\Work\Work\99 Documentation\speed-merchants\planning\2026-11-04-crewc
 2. Every workload and step description keeps its parts (workload: `What: Why: When: Needs: Success: If it fails:`;
    step: `What: Why: Success: If it fails:` plus `Skipped when:` with a runWhen). Name things by reference key,
    never by box, version, code, date or person.
-3. `pwsh CrewChief/packs/tools/Test-Pack.ps1 -PackRoot CrewChief/packs/<family>` must PASS.
+3. `pwsh CrewChief/packs/tools/Test-Pack.ps1 -PackRoot CrewChief/packs/<family> -Family <family>` must PASS
+   (`-Family` defaults to `connect`: pass it for any other pack).
 4. `pwsh CrewChief/packs/tools/New-PackBackup.ps1 -PackRoot ... -Destination <backup location>` builds
    `crewchief-backup-<time>-pack-<family>.zip`; restore it on each box with Replace for `workloads/<family>` ONLY
    (restoring `reference-kv/<family>` with Replace overwrites that box's values; do it only on a new box).
@@ -107,6 +134,7 @@ Running and recording a round (runner, queue, board, run times): [[crewchief-con
 |---|---|---|
 | A box value (server, database, URL, version, service, pool) | Reference Data page on that box only, never the pack | `<family>-preflight` |
 | Profisee upgrade on a box | `<family>/environment`: `ProfiseeVersionCode`, service names (blank on 26R3+), analytics pools | preflight, `<family>-setup` (creates a NEW tagged workflow set, keeps the old one) |
+| A database the pack reads or writes | A key in `<family>/databases` (own name per pack, e.g. `ModelSource<Pack>`); every SQL, service configuration and TestAuto CustomParm uses it | lint (refuses literal names), the grep above |
 | New reference key | `reference-kv/<family>/<set>.json`: value, `keyDescriptions` entry, `keyBlankAllowed` only if a release lacks it | lint; on boxes add the key by hand (restoring reference-kv with Replace wipes box values) |
 | A step every run shares (reset, source load, row check) | The one child under `internal/shared/**` or `internal/<size>/` that owns it; `-run` files only call children | lint, zip, restore `workloads/<family>` with Replace, one 1K `-run` to prove it |
 | One provider's prepare | `internal/providers/<p>/` (`connect-<p>-<dir>-prepare`, strategies-create, service-configuration-refresh, credentials-refresh) | as above, run that provider's 1K pair |

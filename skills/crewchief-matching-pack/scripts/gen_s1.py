@@ -183,14 +183,15 @@ run_profile_script = "\r\n".join([
 create = {
     "name": f"matching-{LOW}-testauto-create",
     "description": f"What: Create or update the {SIZE_LABEL} Matching run profile and the TestAuto workflow 'Matching {SIZE_LABEL} Scenario 1' in the TestAuto repository. Why: the scenario workloads find the workflow by its automation tag and the timing steps record under the run profile. When: once per box and Profisee version, and after any change to the workflow spec; reruns update in place. Needs: the TestAuto version in matching/environment:ProfiseeVersionCode exists in the repository; local TestAuto answers on port 8443. Success: every step Succeeded. If it fails: the failed step's description says what to fix.",
-    "tags": ["matching", LOW, "testauto", "setup"],
+    "tags": ["matching", SIZE_LABEL, "testauto", "setup"],
     "globalParameters": {
         "ScenarioMgtBaseUrl": "{{$ref:matching/urls:ScenarioMgtBaseUrl}}",
         "ScenarioMgtApiKey": "{{$config:RestClients:ScenarioMgt:ApiKey}}",
         "TestAutoBaseUrl": "https://{{$ref:matching/machines:TestServerNameFQDN}}:8443",
         "TestAutoEnvironmentName": "{{$ref:matching/machines:TestServerName}}",
         "TestAutoApplicationServer": "{{$ref:matching/machines:ApplicationServerName}}",
-        "TestAutoDatabaseServer": "{{$ref:matching/machines:DatabaseServerName}}"},
+        "TestAutoDatabaseServer": "{{$ref:matching/machines:DatabaseServerName}}",
+        "TestAutoSourceDatabase": "{{$ref:matching/databases:ModelSourceDB}}"},
     "globalParametersNotes": "", "credentialUserId": "", "credentialPassword": "", "credentialNotes": "",
     "steps": [
         {"label": "ScenarioMgt Check", "inline": {**base, "url": "{{ScenarioMgtBaseUrl}}v1/Records/TestAutoWorkflow?PageSize=1", "method": "GET",
@@ -286,7 +287,7 @@ SERVICE_FAIL = " If it fails: check the service name exists on the application s
 s1 = {
     "name": KEY,
     "description": f"What: Restore the {SIZE_LABEL} 'loaded' checkpoint, warm the instance, run the TestAuto workflow 'Matching {SIZE_LABEL} Scenario 1' (markers, counts, enable and run the RetailClient strategy, wait, timing), check every record got a match status, and back up 'after-1'. Why: Scenario 1 measures matching of the full load, and Scenario 2 starts from 'after-1'. When: whenever Scenario 1 is measured; a rerun restores its own start. Needs: matching-{LOW}-scenario1-load ran once (the 'loaded' backup exists) and matching-{LOW}-testauto-create ran on this box. Success: every step Succeeded. If it fails: the failed step's description says what to fix; rerun the whole workload.",
-    "tags": ["matching", LOW, "scenario1", "test"],
+    "tags": ["matching", SIZE_LABEL, "scenario1", "test"],
     "globalParameters": {
         "DatabaseServerName": "{{$ref:matching/machines:DatabaseServerName}}",
         "ProfiseeDatabaseName": "{{$ref:matching/databases:ProfiseeDatabaseName}}",

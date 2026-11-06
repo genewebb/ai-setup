@@ -1,0 +1,92 @@
+{
+  "$type": "Profisee.Platform.ConnEx.Contracts.Administration.ServiceConfigurationArtifact, Profisee.Platform.ConnEx",
+  "artifactVersion": "1.7.1.0",
+  "serviceConfigurationRecord": {
+    "$type": "Profisee.Platform.ConnEx.Contracts.Administration.ServiceConfigurationRecord, Profisee.Platform.ConnEx",
+    "Configuration": {
+      "$type": "Profisee.Platform.ConnEx.Contracts.Administration.DatabaseServiceConfiguration, Profisee.Platform.ConnEx",
+      "description": null,
+      "serviceProviderId": {
+        "$type": "Profisee.Platform.Cdp.Contracts.Identifier, Profisee.Platform.Cdp",
+        "id": "{{ServiceProviderId}}",
+        "name": "{{ServiceProviderName}}"
+      },
+      "databaseType": "SqlServer",
+      "settings": {
+        "$type": "System.Collections.Generic.Dictionary`2[[System.String, System.Private.CoreLib],[Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx]], System.Private.CoreLib",
+        "AuthenticationScheme": {
+          "$type": "Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx",
+          "assignmentType": "Literal",
+          "value": "{{AuthenticationScheme}}",
+          "dataType": 8
+        },
+        "UsernameVault": {
+          "$type": "Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx",
+          "assignmentType": "Credential",
+          "dataType": 1,
+          "name": "UsernameVault",
+          "value": {
+            "name": "UsernameVault Credential",
+            "providerType": "LocalVault",
+            "configuration": {
+              "value": "{{DbUsername}}"
+            }
+          }
+        },
+        "PasswordVault": {
+          "$type": "Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx",
+          "assignmentType": "Credential",
+          "dataType": 1,
+          "name": "PasswordVault",
+          "value": {
+            "name": "PasswordVault Credential",
+            "providerType": "LocalVault",
+            "configuration": {
+              "value": "{{DbPassword}}"
+            }
+          }
+        },
+        "ServerName": {
+          "$type": "Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx",
+          "assignmentType": "Literal",
+          "value": "{{DbServer}}",
+          "dataType": 8
+        },
+        "Database": {
+          "$type": "Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx",
+          "assignmentType": "Literal",
+          "value": "{{DatabaseName}}",
+          "dataType": 8
+        },
+        "EncryptEnhanced": {
+          "$type": "Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx",
+          "assignmentType": "Literal",
+          "value": "{{EncryptEnhanced}}",
+          "dataType": 8
+        },
+        "TrustServerCertificate": {
+          "$type": "Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx",
+          "assignmentType": "Literal",
+          "value": "{{TrustServerCertificate}}",
+          "dataType": 9
+        },
+        "ConnectionTimeout": {
+          "$type": "Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx",
+          "assignmentType": "Literal",
+          "value": "{{ConnectionTimeout}}",
+          "dataType": 6
+        },
+        "CommandTimeout": {
+          "$type": "Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx",
+          "assignmentType": "Literal",
+          "value": "{{CommandTimeout}}",
+          "dataType": 6
+        }
+      },
+      "artifactVersion": "1.7.1.0"
+    },
+    "Id": "{{ServiceConfigId}}",
+    "Name": "{{ServiceConfigName}}",
+    "Type": "Database"
+  }
+}
