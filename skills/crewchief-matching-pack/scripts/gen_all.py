@@ -100,7 +100,9 @@ def snapshot_patch(scn, link):
 def timing_patch(scn, link):
     def p(cfg):
         custom(cfg).update({"UnifiedMatchingScenarioWorkloadExecution": "{{STEP:%d}}" % link,
-                            "UnifiedMatchingApiExecutionRunProfile": run_profile(scn)})
+                            "UnifiedMatchingApiExecutionRunProfile": run_profile(scn), "ActivityDetailTopN": 10})
+        # Timing rows go to the Activities entity (phase 2, 2026-11-05); the Timings entity is kept but no longer written.
+        cfg['ScenarioEnvironment']['TargetMetricEntity'] = "UnifiedMatchingApiExecutionActivities"
     return p
 
 

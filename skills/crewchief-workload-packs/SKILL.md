@@ -42,6 +42,13 @@ Design: `Q:\Work\Work\99 Documentation\speed-merchants\planning\2026-11-04-crewc
   workflows whose comma-split Tags contain that whole entry (trimmed, case-insensitive; `...:x` never matches
   `...:x-8t`). Exactly one must match. Setup creates or updates by the same lookup; an upgrade (new version in
   reference data) makes setup create a NEW set and leaves the old version's workflows and history alone.
+- **Tags (decided by Gene 11/05)**: CrewChief workload tags = family (`connect`), folder words, size `1K`/`1M`
+  (upper case, matching TestAuto) and threads `4T`/`8T`/`12T`. A workload that runs every thread count (tests
+  masters, provider `-all` parents, schedules) carries all three. A workload that serves every size (shared,
+  provider-level, start) carries none. TestAuto workflow Tags = `AUTO:...`, family, version, Main machine, size,
+  threads. **Every TestAuto tag must exist in the PROD `TestAutoTags` entity** (TestAuto's tag picker and filters list
+  only those). Each upsert step adds the missing ones (Code = Name = tag text; existing tags are never changed).
+  Check: `SELECT Code FROM data.vTestAutoTags` on PROD (speedmerchants-prod-mssql).
 - **Finding them in TestAuto**: the Workloads page switch **Automation Only** shows only workflows with an `AUTO:`
   tag (`WorkflowTagMatcher.HasAutomationTag`, choice remembered in localStorage `workflows-filter-automation-only`).
   It needs the TestAuto build from 11/05.

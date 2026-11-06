@@ -140,8 +140,8 @@ details = [
      scenario("MatchingResultsScenario",
               {"StartMarkerText": start_text, "EndMarkerText": end_text, "MatchingStrategyName": "RetailClient",
                "MatchingScenarioName": "Scenario 1", "UnifiedMatchingScenarioWorkloadExecution": "{%STEP:3%}",
-               "UnifiedMatchingApiExecutionRunProfile": RUN_PROFILE},
-              tme="UnifiedMatchingApiExecutionTimings", source="Not Used", tid=0,
+               "UnifiedMatchingApiExecutionRunProfile": RUN_PROFILE, "ActivityDetailTopN": 10},
+              tme="UnifiedMatchingApiExecutionActivities", source="Not Used", tid=0,
               query={"SelectAttributes": "", "SortAttributes": "Code", "Filter": "", "QueryParameters": {"ignoreConstraintRules": "true"}})),
 ]
 
