@@ -1936,6 +1936,30 @@ function Invoke-Git([string] $Dir, [string[]] $GitArgs) {
     $out
 }
 
+# A git process ended mid-write (a runner unit killed at its wall-clock limit while it committed) leaves an empty
+# index.lock, and every later add or commit in that tree fails until someone deletes it (kit item
+# IN-20261106091627-076d: the third such stall). The lock is removed only when it is empty, older than $MinAgeSeconds
+# (STREAM_STALE_INDEX_LOCK_SECONDS, default 600) and no git process that started before it was written still runs: a
+# git started later cannot own it. Logs the removal to decisions.md and returns the removed path; otherwise $null.
+function Clear-StaleGitIndexLock($P, [string] $Session, [string] $Dir, [int] $MinAgeSeconds = -1) {
+    if ($MinAgeSeconds -lt 0) { $MinAgeSeconds = if ($env:STREAM_STALE_INDEX_LOCK_SECONDS) { [int]$env:STREAM_STALE_INDEX_LOCK_SECONDS } else { 600 } }
+    $gitDir = @(& git -C $Dir rev-parse --absolute-git-dir 2>$null) | Select-Object -First 1
+    if ($LASTEXITCODE -ne 0 -or -not $gitDir) { return $null }
+    $lock = Join-Path $gitDir 'index.lock'
+    $item = Get-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue
+    if (-not $item -or $item.Length -ne 0) { return $null }
+    $written = $item.LastWriteTime
+    $age = ([datetime]::Now - $written).TotalSeconds
+    if ($age -lt $MinAgeSeconds) { return $null }
+    foreach ($g in @(Get-Process -Name git -ErrorAction SilentlyContinue)) {
+        $started = try { $g.StartTime } catch { $null }
+        if (-not $started -or $started -le $written.AddSeconds(5)) { return $null }
+    }
+    try { Remove-Item -LiteralPath $lock -Force -ErrorAction Stop } catch { return $null }
+    Add-Decision $P $Session "removed stale $lock (0 bytes, $([int]$age) s old, no git process older than it)"
+    $lock
+}
+
 # OWNER WAKE FILES (kit item IN-20261020102535-b7f2), beside the STOP files: .streams\runners\WAKE (every runner),
 # WAKE-<role> and WAKE-<runner id>. A wake is never deleted when seen: each runner keeps the newest write time it has
 # acted on ($Seen, ticks), so one touch wakes every runner of the role. A runner starts with $Seen at the newest file

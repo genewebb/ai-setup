@@ -150,6 +150,7 @@ try {
         Add-Decision $P $Session "adhoc $Id applied on main, commit skipped: Commit is not allowed ($($gitPolicy.Why))"
         "COMMIT SKIPPED $Id (git policy: $($gitPolicy.Why))"; exit 0
     }
+    $staleLock = Clear-StaleGitIndexLock $P $Session $Repo; if ($staleLock) { "STALE-INDEX-LOCK removed $staleLock" }
     [void](Invoke-Git $Repo (@('add', '-A', '--') + $paths))
     [void](Invoke-Git $Repo (@('commit', '-q', '-m', "${Id}: $Title", '-m', "Committed by stream-adhoc ($Session); build and targeted test ($TestFilter) PASS on main.", '-m', 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>', '--') + $paths))
     $applied = $false

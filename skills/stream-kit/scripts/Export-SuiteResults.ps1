@@ -115,6 +115,12 @@ function Test-KeyPrefix([string[]] $Keys, [string] $Text) {
 # $Reported: the leg's reported display keys, sorted ordinal; they tell a data row's own indented line from a new entry.
 function Get-DiscoveredTests($leg, [string[]] $Reported = @()) {
     $cmd = [string]$leg['command']
+    # A leg the run never started (not-measured, lock-lost) has no command on its record row; its tests are the ones its
+    # run definition's command would have run.
+    if (-not $cmd.Trim() -and $runDef) {
+        $dl = @(@($runDef['legs']) | Where-Object { $_ -and [string]$_['name'] -eq [string]$leg['name'] }) | Select-Object -First 1
+        if ($dl) { $cmd = [string]$dl['command'] }
+    }
     $proj = if ($leg['project']) { Join-Path $snap $leg['project'] } else { $snap }
     try {
         if ($leg['kind'] -eq 'dotnet') {
@@ -176,12 +182,35 @@ function Get-DiscoveredTests($leg, [string[]] $Reported = @()) {
             $a.Add('--list'); $a.Add('--reporter=json')
             $saved = $env:PLAYWRIGHT_JSON_OUTPUT_NAME; $env:PLAYWRIGHT_JSON_OUTPUT_NAME = $null
             Push-Location -LiteralPath $proj
-            # npx.cmd, not npx.ps1: the PowerShell shim would run under this script's preferences
-            $enc = [Console]::OutputEncoding; [Console]::OutputEncoding = [Text.Encoding]::UTF8
-            try { $o = @(& npx.cmd @a 2>$null) } finally { Pop-Location; $env:PLAYWRIGHT_JSON_OUTPUT_NAME = $saved; [Console]::OutputEncoding = $enc }
-            $text = $o -join "`n"; $at = $text.IndexOf('{')
-            if ($at -lt 0) { return @{ keys = @(); error = "playwright --list wrote no json (exit $LASTEXITCODE)" } }
-            $j = $text.Substring($at) | ConvertFrom-Json -AsHashtable -Depth 60
+            # npx.cmd, not npx.ps1: the PowerShell shim would run under this script's preferences. '--no' refuses an install
+            # and stdin is closed, so a tree without node_modules ends at once instead of waiting on npx's install prompt;
+            # STREAM_PW_LIST_TIMEOUT_SECONDS (600) bounds anything else that never ends.
+            $limit = 600; if ([int]::TryParse([string]$env:STREAM_PW_LIST_TIMEOUT_SECONDS, [ref]$limit) -and $limit -le 0) { $limit = 600 }
+            $psi = [Diagnostics.ProcessStartInfo]::new('npx.cmd')
+            $psi.ArgumentList.Add('--no'); foreach ($x in $a) { $psi.ArgumentList.Add($x) }
+            $psi.UseShellExecute = $false; $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+            $psi.StandardOutputEncoding = [Text.Encoding]::UTF8; $psi.WorkingDirectory = (Get-Location).ProviderPath
+            # A listing that writes no json, or json that does not parse, is tried once more: run-G17-17 lost both of its
+            # Playwright legs to one failed listing that a re-run in the same snapshot listed cleanly.
+            $j = $null; $why = ''
+            try {
+                for ($try = 1; $try -le 2 -and -not $j; $try++) {
+                    $timedOut = $false; $code = -1; $errText = ''
+                    $pr = [Diagnostics.Process]::Start($psi); $pr.StandardInput.Close()
+                    $outTask = $pr.StandardOutput.ReadToEndAsync(); $errTask = $pr.StandardError.ReadToEndAsync()
+                    if (-not $pr.WaitForExit($limit * 1000)) { $timedOut = $true; try { $pr.Kill($true) } catch { } ; $null = $pr.WaitForExit(10000) }
+                    else { $pr.WaitForExit(); $code = $pr.ExitCode }
+                    $o = @(if ($outTask.Wait(10000)) { $outTask.Result -split "`r?`n" })
+                    if ($errTask.Wait(10000)) { $errText = (@($errTask.Result -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -Last 1) }
+                    if ($timedOut) { return @{ keys = @(); error = "playwright --list timed out after $limit s" } }
+                    $text = $o -join "`n"; $at = $text.IndexOf('{')
+                    $tail = if ($errText) { ": $errText" } else { '' }
+                    if ($at -lt 0) { $why = "playwright --list wrote no json (exit $code, try $try)$tail"; continue }
+                    try { $j = $text.Substring($at) | ConvertFrom-Json -AsHashtable -Depth 60 }
+                    catch { $why = "playwright --list json did not parse (exit $code, try $try): $(("$_" -split "`n")[0])$tail" }
+                }
+            } finally { Pop-Location; $env:PLAYWRIGHT_JSON_OUTPUT_NAME = $saved }
+            if (-not $j) { return @{ keys = @(); error = $why } }
             $keys = @((Get-PlaywrightRows $j $leg ([string]$leg['name'])) | ForEach-Object { "$($_.test)|$($_.pwProject)|$($_.file)" })
             return @{ keys = $keys; error = '' }
         }
@@ -192,6 +221,7 @@ function Get-DiscoveredTests($leg, [string[]] $Reported = @()) {
 $discover = $Step -eq 'leg' -and [string]$rec['tier'] -eq '2' -and $snap -and (Test-Path -LiteralPath $snap)
 $discovered = [ordered]@{}
 $discoveryFailed = [Collections.Generic.List[string]]::new()
+$discoveryErrors = [ordered]@{}
 $notDiscovered = [Collections.Generic.List[string]]::new()
 $runDef = if ($discover -and $rec['group']) { Read-JsonFile (Join-Path $P.Suites "$($rec['group']).run.json") } else { $null }
 # Adds a 'not-run' row for every test the leg's build holds that the leg reported no result for.
@@ -217,7 +247,11 @@ function Add-NotRunRows($leg, [string] $name, [int] $from) {
     $d = Get-DiscoveredTests $leg $sorted
     if ($d.error) {
         $discoveryFailed.Add("$name ($($d.error))")
-        $rows.Add([ordered]@{ test = "discover:$name"; suite = $name; outcome = 'failed'; durationMs = 0; file = ''; project = [string]$leg['project']; head = $rec['head'] })
+        $discoveryErrors[$name] = [string]$d.error
+        # A leg the run never started (not-measured, lock-lost) ran no test that could fail: its listing failure is
+        # 'not-run', so it files no fix row and never holds a close on its own.
+        $never = [bool]$leg['notMeasured'] -or [bool]$leg['lockLost'] -or ([string]$rec['status'] -eq 'lock-lost' -and [int]$leg['exit'] -eq 5)
+        $rows.Add([ordered]@{ test = "discover:$name"; suite = $name; outcome = $(if ($never) { 'not-run' } else { 'failed' }); durationMs = 0; file = ''; project = [string]$leg['project']; head = $rec['head']; error = [string]$d.error })
         return
     }
     $discovered[$name] = $d.keys.Count
@@ -317,6 +351,8 @@ foreach ($g in @(if ($Step -eq 'leg') { $rec['graders'] })) {
 $outName = if ($Step -eq 'sweep') { "$Run.sweep.results.json" } else { "$Run.results.json" }
 $doc = [ordered]@{ run = $Run; group = $rec['group']; head = $rec['head']; tests = @($rows) }
 if ($discover) { $doc['discovered'] = $discovered }
+# The DISCOVERY-FAILED line goes to a detached run's stdout, which nothing keeps: the reason stays with the results.
+if ($discoveryErrors.Count) { $doc['discoveryErrors'] = $discoveryErrors }
 Write-JsonFile (Join-Path $rd $outName) $doc
 $c = @{ passed = 0; failed = 0; skipped = 0 }; foreach ($r in $rows) { $c[$r.outcome]++ }
 "RESULTS $Run$(if ($Step -eq 'sweep') { ' sweep' }) passed $($c.passed) failed $($c.failed) skipped $($c.skipped)$(if ($c['not-measured']) { " not-measured $($c['not-measured'])" })$(if ($c['not-run']) { " not-run $($c['not-run'])" })"

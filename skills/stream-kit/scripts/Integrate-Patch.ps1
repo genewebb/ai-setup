@@ -75,7 +75,7 @@ try {
 # break), and the catch at the end reverses an applied patch on ANY throw.
 $prevTasksWait = $env:STREAM_TASKS_LOCK_WAIT_SECONDS
 if (-not $prevTasksWait) { $env:STREAM_TASKS_LOCK_WAIT_SECONDS = '90' }
-$script:appliedPatch = $null; $script:appliedTask = $null
+$script:appliedPatch = $null; $script:appliedTask = $null; $script:intentPaths = @()
 # The lock must be this session's before anything touches the main tree: a watchdog can break it under a long grader
 # run, and a second integrator on one tree is the failure this guards (kit item IN-20260929001947-2b20).
 $lockState = Assert-IntegratorLock $P $Session
@@ -279,6 +279,21 @@ if ($censusCfg -is [Collections.IDictionary] -and $censusCfg['script'] -and -not
 }
 if (-not $alreadyOnMain) { [void](Invoke-Git $Repo @('apply', '--binary', '--whitespace=nowarn', $patch)) }
 $script:appliedPatch = $patch; $script:appliedTask = $t.id
+# INTENT-TO-ADD (kit item IN-20261106113700-53f1): a check that reads the index (a census over `git ls-files --cached`)
+# sees a file the patch creates in the builder's worktree, where Export-TaskPatch staged it, but not on main, where the
+# apply leaves it untracked; G21.T115 and G17.T114 bounced on that alone. The new paths that are untracked here are
+# marked intent-to-add for the grade; the drain's finally drops the mark again for any such path the patch no longer
+# holds (reversed), so a bounce leaves the index as it found it.
+$newPaths = @(Get-Content -LiteralPath $patch | ForEach-Object -Begin { $cur = $null } -Process {
+        if ($_ -match '^diff --git a/(.+?) b/(.+)$') { $cur = $Matches[2] } elseif ($cur -and $_ -match '^new file mode') { $cur } })
+if ($newPaths.Count) {
+    $script:intentPaths = @(& git -C $Repo ls-files --others -- @newPaths 2>$null)
+    # Best effort: a held index.lock (cleared later, before the commit) only costs the grade its index view.
+    if ($script:intentPaths.Count) {
+        & git -C $Repo add -N -f -- @($script:intentPaths) 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { Add-Decision $P $Session "$($t.id): could not mark new file(s) intent-to-add before the main grade: $($script:intentPaths -join ', ')"; $script:intentPaths = @() }
+    }
+}
 # GRADE-PENDING (kit item IN-20261024221200-772a): while this patch sits on main for its grader, the grader holds
 # main-grader.lock for the whole run (27 min for G23.T074) and every builder pre-stage starved behind it. The grade
 # writes nothing tracked, so main is read-stable under it: this marker names the patch, and New-TaskWorktree lays a
@@ -329,6 +344,7 @@ if ($gcode -eq 0) {
     # exact file paths are named, so nothing else ignored is ever added.
     $paths = @(Get-Content -LiteralPath $patch | ForEach-Object { if ($_ -match '^diff --git a/(.+) b/(.+)$') { $Matches[1]; $Matches[2] } } | Sort-Object -Unique)
     try {
+        $staleLock = Clear-StaleGitIndexLock $P $Session $Repo; if ($staleLock) { "STALE-INDEX-LOCK removed $staleLock" }
         [void](Invoke-Git $Repo (@('add', '-A', '-f', '--') + $paths))
         $msg = "$($t.id): $($t.title)"
         [void](Invoke-Git $Repo (@('commit', '-q', '-m', $msg, '-m', "Integrated by stream-integrate ($Session); grader PASS on main.", '-m', 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>', '--') + $paths))
@@ -453,6 +469,8 @@ if ($gcode -eq 0) {
     "RETRY $($script:appliedTask) (a step after the apply threw; patch reversed, still built): $err"; exit 0
 } finally {
     Remove-Item -LiteralPath (Join-Path $P.Root 'main-pending.json') -Force -ErrorAction SilentlyContinue
+    $gone = @($script:intentPaths | Where-Object { $_ -and -not (Test-Path -LiteralPath (Join-Path $Repo $_)) })
+    if ($gone.Count) { & git -C $Repo rm --cached -q --ignore-unmatch -- @gone 2>&1 | Out-Null }
     $script:drainLock.Dispose()
     if (-not $prevTasksWait) { Remove-Item Env:\STREAM_TASKS_LOCK_WAIT_SECONDS -ErrorAction SilentlyContinue }
 }
