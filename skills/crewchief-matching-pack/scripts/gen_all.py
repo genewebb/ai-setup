@@ -4,13 +4,13 @@ TestAuto step configs are PROD workflow 10000215 steps 12-44 (read 11/05 into wf
 and patched only where the rewrite requires: box/version from reference data, size 1K, run profiles per scenario,
 {{STEP:n}} renumbered, stale WorkloadExecution blanked, and (2/3b/3c) the ScenarioTable record source from the
 Scenario 2 mutation plan. TestAuto runtime tokens are written as {%...%} (see gen_s1.py).
-Usage: python gen_all.py <packRoot> <connectUpsertBody.ps1> <SizeLabel: 1K|10K|100K|1M>
+Usage: python gen_all.py <packRoot> <connectUpsertBody.ps1> <SizeLabel: 1K|10K|100K|1M|100M>
 """
 import copy, json, os, subprocess, sys
 
 root, upsert_path = sys.argv[1], sys.argv[2]
 SIZE_LABEL = sys.argv[3] if len(sys.argv) > 3 else '1K'
-SIZE_RECORDS = {'1K': 1000, '10K': 10000, '100K': 100000, '1M': 1000000}[SIZE_LABEL]
+SIZE_RECORDS = {'1K': 1000, '10K': 10000, '100K': 100000, '1M': 1000000, '100M': 100000000}[SIZE_LABEL]
 SLICE = SIZE_RECORDS // 10   # Scenario1 count; every later scenario = 10% (N/10)
 LOW = SIZE_LABEL.lower()
 here = os.path.dirname(os.path.abspath(__file__))
@@ -123,6 +123,10 @@ def scenario_table_patch(scn, table, iteration_limit):
 def lookup_patch(scn):
     def p(cfg):
         c = custom(cfg)
+        # Wizard-only keys (TestAuto.Web's editor state, not read at run time) are dropped as in ScenarioTable configs;
+        # without this the 100M config is over the 4000-character limit.
+        for k in ("ModelSourceDefaults", "SelectedLookupAttributeCodes", "SelectedScenarioTemplate"):
+            c.pop(k, None)
         # SourceDatabaseName: the record pool's database (matching/databases:ModelSourceDB, via the
         # testauto-create global TestAutoSourceDatabase); TestAuto defaults to ModelSource when it is missing.
         c.update({"UnifiedMatchingApiExecutionRunProfile": run_profile(scn), "IterationLimit": SLICE,

@@ -11,10 +11,13 @@ import copy, json, os, subprocess, sys
 
 root, upsert_path = sys.argv[1], sys.argv[2]
 here = os.path.dirname(os.path.abspath(__file__))
-SIZES = {'1K': 1000, '10K': 10000, '100K': 100000, '1M': 1000000}
+SIZES = {'1K': 1000, '10K': 10000, '100K': 100000, '1M': 1000000, '100M': 100000000}
 # Weekly start times (Sunday); each size's chain must finish before the next starts on the same Profisee database.
 SCHEDULE = {'1K': ('2026-11-08', '00:30', 'Sun'), '10K': ('2026-11-08', '02:00', 'Sun'),
-            '100K': ('2026-11-08', '05:00', 'Sun'), '1M': ('2026-11-08', '12:00', 'Sun')}
+            '100K': ('2026-11-08', '05:00', 'Sun'), '1M': ('2026-11-08', '12:00', 'Sun'),
+            # 100M (Gene 11/06: in the pack, data built only where the test server has room) is not measured yet;
+            # Saturday keeps it apart from the Sunday sizes. Set the real time once one 100M run is timed.
+            '100M': ('2026-11-07', '00:30', 'Sat')}
 SERVICE_CONFIG_ID = '320e7ed1-3430-484a-87ce-7a2ee72be085'  # 'ModelSource' service configuration the strategy reads through
 STRATEGY_ID = 'c810734f-51a5-4416-aa8b-a6380f5e2a22'  # RetailClientImport in the empty baseline (Connect keeps the id on import)
 wl_root = os.path.join(root, 'workloads', 'matching')
@@ -272,7 +275,7 @@ for label, n in SIZES.items():
 
 dump(os.path.join(wl_root, 'start', 'matching-setup.workload.json'), {
     "name": "matching-setup",
-    "description": ("What: Create or update the Matching run profiles and the tagged TestAuto workflows of every size (1K, 10K, 100K, 1M) "
+    "description": ("What: Create or update the Matching run profiles and the tagged TestAuto workflows of every size (1K, 10K, 100K, 1M, 100M) "
                     "in the TestAuto repository. Why: every scenario workload finds its workflow by automation tag and the timing steps "
                     "record under the run profiles. When: once per box and Profisee version, and after any change to a workflow spec; "
                     "reruns update in place. Needs: the TestAuto version in matching/environment:ProfiseeVersionCode exists in the "

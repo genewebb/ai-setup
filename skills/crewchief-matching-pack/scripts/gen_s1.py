@@ -1,5 +1,5 @@
 """Adds the TestAuto create + Scenario 1 run workloads of one size to the matching pack.
-Usage: python gen_s1.py <packRoot> <connectUpsertBody.ps1> <SizeLabel: 1K|10K|100K|1M>
+Usage: python gen_s1.py <packRoot> <connectUpsertBody.ps1> <SizeLabel: 1K|10K|100K|1M|100M>
 
 Source of the TestAuto step configs: PROD workflow 10000215 steps 5-11 (read 11/05), with
 {{STEP:7}} -> {{STEP:3}}, sizes/run profile/version/environment moved to reference data.
@@ -8,7 +8,7 @@ import json, os, sys
 
 root = sys.argv[1]
 SIZE_LABEL = sys.argv[3] if len(sys.argv) > 3 else '1K'
-SIZES = {'1K': 1000, '10K': 10000, '100K': 100000, '1M': 1000000}
+SIZES = {'1K': 1000, '10K': 10000, '100K': 100000, '1M': 1000000, '100M': 100000000}
 N = SIZES[SIZE_LABEL]
 LOW = SIZE_LABEL.lower()
 ref = os.path.join(root, 'reference-kv', 'matching')

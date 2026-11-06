@@ -75,7 +75,23 @@ tag missing from PROD `TestAutoTags` (Code = Name; never changes an existing one
 Backups: `profisee_Matching_<SizeLabel>_<suffix>.bak` in the SQL Server default backup folder. The empty baseline
 `profisee_Matching_empty.bak` (size-free: model, RetailClient matching strategy, the API user `corp\speedmerchants`
 as super administrator, no records) is made by hand once per box and release. Whatever `ModelSource` service
-configuration it holds is replaced by the load (below).
+configuration it holds is replaced by the load (below). **New box (Gene 11/06):** restore the laptop's baseline on
+the new instance (same Profisee build, e.g. 26.3.0.1), run Profisee Configuration for that machine, then take a
+clean `profisee_Matching_empty.bak` there; never use a baseline that was not configured on its own machine.
+`ModelSourceMatching` needs only `RetailClient<size>Scenario{1,2,3b,3c}` (1K-1M), `SourceSystem` (all 5 rows
+target `RetailClient`) and `RetailClient` (15M, the build source); no `RetailClientCloned`, no 10M tables.
+
+**100M (Gene 11/06: in the pack, data later).** Fifth size in `SIZES` of `gen_sizes.py`/`gen_all.py`/`gen_s1.py`/
+`gen_preflight.py` (preflight states missing 1M/100M tables, never fails), `rounds/100m-round.txt`, schedule Sat 00:30
+(placeholder until timed). Its data is NOT on the laptop: `C:\Deploy\SQLScripts\ModelSource\Build-MatchingScenarioTables.ps1
+-Sizes 100M` needs 24.1M rows per source system (0.241 N), so `-SourceTable` must name a base of about 121M rows
+(~80 GB); the four 100M tables are ~86 GB more; the Profisee backups are unmeasured (100K after-3c = 2.9 GB). Build it
+only on a box with room, after 1M has run once. Adding 100M pushed Scenario 3a over the 4000-character limit, so
+`lookup_patch` now drops the wizard-only keys too; `Test-Pack.ps1` no longer treats `10000000` (the 100M slice) as a
+workflow code. New `matching/workflows` keys need `reference-kv/matching` restored (new box) or added by hand.
+100M runs ONLY on the big server (Gene 11/06). Its checkpoint backups may have to be striped across that server's
+data drives (SQL Server BACKUP/RESTORE to several files); today every backup and restore step uses one file in the
+default backup folder, so striping is a pack change to make once the real sizes are known.
 
 **Own source database (11/06).** Matching's source data lives in `ModelSourceMatching` (Connect: `ModelSourceConnect`,
 CRUD: `ModelSourceCRUD`), named only in `matching/databases:ModelSourceDB`. It reaches:

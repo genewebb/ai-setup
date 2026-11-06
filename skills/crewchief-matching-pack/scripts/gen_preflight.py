@@ -9,8 +9,11 @@ Usage: python gen_preflight.py <packRoot>     (gen_sizes.py runs it last)
 import json, os, sys
 
 root = sys.argv[1]
-SIZES = ['1K', '10K', '100K', '1M']
-GA_ONLY = {'1M'}  # Test plan (Gene 11/06): 1K-100K every release mid-point and GA; 1M at GA only.
+SIZES = ['1K', '10K', '100K', '1M', '100M']
+# Test plan (Gene 11/06): 1K-100K every release mid-point and GA; 1M at GA only. 100M is in the pack, but its
+# tables (about 86 GB plus a 120M-row base) are built only on a box with room. Missing tables of these sizes are
+# stated, not failed.
+GA_ONLY = {'1M', '100M'}
 SCENARIO_TABLES = ['Scenario1', 'Scenario2', 'Scenario3b', 'Scenario3c']
 BACKUP_SUFFIXES = ['loaded', 'after-1', 'after-2', 'after-3a', 'after-3b', 'after-3c']
 POOL_SUFFIXES = ['', '-api', '-attachments', '-workflows', '-auth', '-rest', '-mcp', '-governance', '-connex', '-monitor',
@@ -108,14 +111,14 @@ for size in SIZES:
             f"ELSE BEGIN SELECT @n = SUM(p.rows) FROM sys.partitions p WHERE p.object_id = OBJECT_ID(N'dbo.{name}') AND p.index_id IN (0, 1); "
             f"PRINT CONCAT(N'{name}: ', @n, N' rows'); END")
 table_lines += [
-    "IF @gaOnly <> N'' PRINT CONCAT(N'1M tables missing (1M runs at GA only; needed before a 1M run): ', @gaOnly);",
+    "IF @gaOnly <> N'' PRINT CONCAT(N'1M or 100M tables missing (1M runs at GA only; 100M only where the box has room; needed before a run of that size): ', @gaOnly);",
     "IF @missing <> N'' BEGIN DECLARE @msg nvarchar(2048) = CONCAT(N'Source tables missing in {{ModelSourceDB}}: ', @missing, N'. Build them with Build-MatchingScenarioTables.ps1 (see the Matching help pages).'); THROW 50011, @msg, 1; END",
 ]
 steps.append(sql_step(
     "Source Tables Exist",
     ("Check the database matching/databases:ModelSourceDB holds the source tables every size loads and changes: "
-     "RetailClient<size>Scenario1, Scenario2, Scenario3b and Scenario3c for 1K, 10K, 100K and 1M, and print each row count. "
-     "1M is run at GA only, so a missing 1M table is stated, not failed."),
+     "RetailClient<size>Scenario1, Scenario2, Scenario3b and Scenario3c for 1K, 10K, 100K, 1M and 100M, and print each row count. "
+     "1M is run at GA only and 100M only where the box has room, so a missing 1M or 100M table is stated, not failed."),
     "\n".join(table_lines),
     "Server={{DatabaseServerName}};Database={{ModelSourceDB}};Integrated Security=True;TrustServerCertificate=True",
     "Success: Every 1K, 10K and 100K table exists; the output gives each table's row count."))
