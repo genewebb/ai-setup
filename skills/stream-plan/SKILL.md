@@ -1,6 +1,6 @@
 ---
 name: stream-plan
-description: v0.17. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
+description: v0.18. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
 ---
 
 # stream-plan
@@ -118,6 +118,15 @@ Each cycle:
    to the integrator as a fix. A `live-stack` flag goes to the owner queue once per row; a `stale-pin` flag goes back
    to an author (`Revise-Task.ps1 -Release planned`). Review each `EDGE no-shared-file` line: drop an edge that orders
    nothing real.
+   Then run `Find-UnnamedClauses.ps1 -Repo <repo> -Session <id> -Apply` (v0.18, kit item IN-20261107230646-ea2e,
+   owner 2026-11-07 17:58 EST), every cycle, a runner planner too. It reads `leftToPlan.unnamedIds` from
+   `Get-StreamStatus.ps1 -Json` and, when a CLOSED group holds READY clauses no row names (the only cause of `left to
+   plan unknown`), cuts ONE docs audit row in the focus group that names every such id, so the status tile reads a
+   number again in this cycle. `CLEAN` needs nothing; `CUT <id> ...` gets the decision line; `REFUSED` (exit 2) goes to
+   the owner queue. A second run finds the ids named, so the step is safe every cycle.
+   When a requirements row (write set under `docs\requirements\`) reaches `built` or `integrated`, read the `AC-IDS`
+   line of its report (`.streams\logs\<task>.md`, see stream-build "Clause ids in the report") and name every added
+   or renamed id on the build row that implements it, or on an audit row, in the same cycle.
 4. A decision that only the owner can make goes to the owner queue (`.streams\owner\questions.md`) with the default
    applied, the same as the auto-approve rule, as `<task> | question | default applied | why`. Only a decision with NO
    safe default is an escalation, written `ESCALATE <task> | question | why no default`. The status board counts

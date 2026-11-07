@@ -1255,6 +1255,20 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     [void](& "$S\Build-StatusPage.ps1" -Repo $pr -Session status-p -Out $ppg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
     $pph2 = Get-Content -Raw $ppg
     Case 'a closed group with a clause no row names makes left to plan unknown, with the reason, never a number' (-not $pj2.known -and $null -eq $pj2.total -and $pj2.reason -match 'closed group.*P1 1 of 3' -and ($pst2 | Where-Object { $_ -like 'tasks:*' }) -match '\| left to plan unknown: no row names every clause of a closed group' -and $pph2 -match '<a class="tile stall" href="#left-to-plan" title="[^"]*P1 1 of 3[^"]*"><b>\?</b>') "$($pj2 | ConvertTo-Json -Compress -Depth 6) | $($pst2 -join ' / ')"
+    # Find-UnnamedClauses.ps1 (kit item IN-20261107230646-ea2e): a dry run lists the closed group's unnamed clause, -Apply
+    # cuts one audit row in the open group naming it, the tile reads a number again, and a second run is CLEAN. A copy of
+    # the repo, so the cases below keep their closed-group state.
+    $pr5 = Join-Path $Scratch 'planrepo-unnamed'
+    Copy-Item -Recurse -Force $pr $pr5
+    $pDoc5 = Get-Content -Raw (Join-Path $pr5 '.streams\tasks.json') | ConvertFrom-Json -AsHashtable
+    $pDoc5.groups += @{ id = 'P2'; name = 'next'; state = 'released'; origin = 'plan'; scope = @{ include = @() } }
+    $pDoc5 | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $pr5 '.streams\tasks.json') -Encoding utf8
+    $fu1 = @(& "$S\Find-UnnamedClauses.ps1" -Repo $pr5); $fux1 = $LASTEXITCODE
+    $fu2 = @(& "$S\Find-UnnamedClauses.ps1" -Repo $pr5 -Session plan-u -Apply); $fux2 = $LASTEXITCODE
+    $fuRow = @((Get-Content -Raw (Join-Path $pr5 '.streams\tasks.json') | ConvertFrom-Json -AsHashtable).tasks | Where-Object { $_.id -eq 'P2.T001' })
+    $fuj = (& "$S\Get-StreamStatus.ps1" -Repo $pr5 -Json | ConvertFrom-Json).leftToPlan
+    $fu3 = @(& "$S\Find-UnnamedClauses.ps1" -Repo $pr5 -Session plan-u -Apply); $fux3 = $LASTEXITCODE
+    Case 'Find-UnnamedClauses lists, then cuts one audit row for a closed group''s unnamed clauses; the count is known again and a rerun is CLEAN' ($fux1 -eq 0 -and ($fu1 -join ' ') -match 'UNNAMED P1 1: AC-A-003' -and ($fu1 -join ' ') -match 'DRY 1 clause' -and ($fu1 -join ' ') -notmatch 'none' -and $fux2 -eq 0 -and ($fu2 -join ' ') -match 'CUT P2\.T001 1 clause\(s\) in P2' -and $fuRow.Count -eq 1 -and (@($fuRow[0].why) -join ',') -eq 'AC-A-003' -and $fuRow[0].state -eq 'planned' -and (@($fuRow[0].writeSet) -join ',') -eq 'docs/audit/P2.T001-UNNAMED-CLAUSES.md' -and $fuj.known -and $fux3 -eq 0 -and ($fu3 -join ' ') -match 'CLEAN') "dry=$($fu1 -join ' | ') apply=$($fu2 -join ' | ') rerun=$($fu3 -join ' | ') ltp=$($fuj | ConvertTo-Json -Compress -Depth 4)"
     # A clause stream-adhoc built in a closed group has no row; its request file names it, and it counts as planned only
     # once a commit '<Id>: ...' is on HEAD (kit item IN-20261012012612-8ef6).
     New-Item -ItemType Directory -Path (Join-Path $pr '.streams\adhoc') -Force | Out-Null

@@ -1,6 +1,6 @@
 ---
 name: stream-build
-description: v0.16. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
+description: v0.17. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
 ---
 
 # stream-build
@@ -328,6 +328,11 @@ now means this loop):
    checks, not independent reviews.
 6. A ticket's convergence stop ("if a round finds 20+ NEW findings, stop and report") counts only full reviews (round
    1 and gate reviews); an anchored round's count is the OPEN plus REGRESSION items.
+7. **Clause ids in the report** (v0.17, kit item IN-20261107230646-ea2e, owner 2026-11-07 17:58 EST). Any row whose
+   patch edits requirement files, a review-fix row or not, ends its report (`.streams\logs\<task>.md`) and its `built`
+   note with one line `AC-IDS added: <ids> renamed: <old> -> <new>, ...` (`none` for an empty part), listing every
+   acceptance clause id the change added or renumbered. The planner names those ids on a build or audit row at close;
+   an id no row names makes the status tile read `left to plan unknown` once its group is closed.
 
 ## Mockup tasks
 
