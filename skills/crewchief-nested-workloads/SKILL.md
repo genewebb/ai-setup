@@ -38,6 +38,28 @@ merge has *already* been done by `UtilityOrchestrator` **before any executor run
 Re-merging them inside the executor is the natural mistake and it doubles the layer. Take
 `Parameters` as already-merged and layer only the child's own values over it.
 
+**Declared inputs (Gene 2026-11-06, "red is red").** Because the child's globals win, a child can NOT carry a
+default for a value its parent passes (it would override the parent's 1M/12T value). Such a value goes in the child's
+`inputs` list instead (`WorkloadFile.Inputs` -> `WorkloadInput {name, description}`, JSON `"inputs"`, not written
+when empty; `WorkloadDefinition.Inputs` = names). It supplies nothing. It only changes judging:
+- `ParameterReconciler.ReconcileWorkload(workload, resolveWorkload)`: unresolved plain tokens that are declared inputs are
+  set aside (`SetAsideDeclaredInputs`); if nothing else is wrong the verdict is the new `ReconciliationState.FromCaller`
+  (blue `input` glyph, "Needs from caller: X", Workloads filter **Needs caller**, CLI label `INPUTS`, exit 0). The enum
+  value 4 was APPENDED: rank through `ReconciliationVerdict.Severity` (Green < FromCaller < Amber < Red), never `>` on
+  the enum.
+- With the optional sync lookup (`WorkloadDefinitionMapper.CreateLookup(list)` on the Workloads page,
+  `CreateLookup(store.Get)` on Activity and `crewchief validate`), each `RunWorkloadStep` is checked: every child input
+  must be in parent globals merged under the step's parameters, defined by the child's own globals, or be one of the
+  parent's inputs (pass-through -> parent is FromCaller). Otherwise the parent is Red: "workload 'x' needs Y".
+- Capability: `PreflightGate.StepBodies(WorkloadFile)` passes the names into `WorkloadStepMaterializer.ForEvaluationAll`,
+  which sets the `[JsonIgnore] UtilityStepBase.CallerInputs` hint on the evaluation copy; `BuildConnExParameterReport`
+  puts such tokens in `CallerTokens`, and `ConnExParametersProber` returns NotProbed (never blocks) when they are the only
+  gap (also two hops: a step parameter whose value leaves only inputs, e.g. Connect `RemoteTableName = {{SourceTableName}}`,
+  reported as `{{RemoteTableName}} (from {{SourceTableName}})`; missed at first, found on SMVMTR1 11/06). Consequence, accepted: a DIRECT run of the building block is not preflight-blocked for them; it fails at the
+  first step using the token, as SQL steps always did.
+- `WorkloadMerger` unions inputs (minus names a merged global supplies). Tests: `WorkloadInputsReconcileTests`,
+  `WorkloadInputsCapabilityTests`, `WorkloadInputsFileTests`. Help: `51_StepGuideRunWorkload.md` "Declared inputs".
+
 ## 2. `Func<IWorkloadEngine>`, not `IWorkloadEngine` — and do not "simplify" it
 
 The executor takes a **factory**, purely to break a DI construction cycle:

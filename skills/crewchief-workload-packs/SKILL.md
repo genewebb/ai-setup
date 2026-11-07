@@ -27,6 +27,15 @@ takes 20-23, CRUD 30-33). The move / check / run pages are for a tester new to C
 (changes nothing), `start/<family>-setup`, `rounds/*.txt` for `tools/runner/run-queue.sh`, and a `README.md`.
 When a pack changes in a way a person would notice, update its help pages in the same change.
 
+**Declared inputs (rule 9 of 60_PacksOverview; Gene 11/06).** A building block that uses a value only its parent passes
+(`SourceTableName`, `RecordCount`, `ModelSourceSize`, `WorkerThreadCount`) lists it in the workload's `inputs`
+(`{name, description}`), never as a child global (child globals beat parent globals). A workload that only hands it on
+to its own child declares it too (Connect `connect-objects-reset` -> `connect-strategies-create`, found by the new parent
+check). Connect: 16 workloads declare inputs. `Test-Pack.ps1` refuses a plain `{{Token}}` that is neither defined
+(globals, step parameters) nor declared, an input without description or shadowed by a global, and a Run Workload step
+that does not supply a child's input. Needs a CrewChief build with inputs (11/06); an older build keeps `inputs` in
+the open ExtraParms bag and still shows those 16 red. Engine detail: `crewchief-nested-workloads`.
+
 **Database names (rule 8 of 60_PacksOverview; Gene 11/06, after Connect and Matching both used `ModelSource`).**
 Packs share a box and its SQL Server (one pack runs at a time), so each pack has its OWN source database,
 `ModelSource<Pack>` (`ModelSourceConnect`, `ModelSourceMatching`, `ModelSourceCRUD`), in
