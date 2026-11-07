@@ -641,7 +641,7 @@ dump(os.path.join(wl_root, 'tests', 'crud-test-proof.workload.json'), workload(
     "crud-test-proof",
     ("What: Proves every CRUD form works at the smallest size: the 1K core run with and without business rules, stewardship "
      "by count (10 iterations per step) with and without, and stewardship by time (1 minute per step) with and without, each "
-     "from a fresh restore of the CRUD base; about 90 minutes. Why: a change to the pack or to TestAuto must be shown to work "
+     "from a fresh restore of the CRUD base; about 160 minutes (measured 11/07). Why: a change to the pack or to TestAuto must be shown to work "
      "for every form without paying for the 1M or 60-minute runs. When: after crud-setup on a new box or version, or after a "
      "pack or TestAuto change. Needs: crud-setup; crud-preflight green. Success: Every run ends Succeeded. If it fails: It "
      "stops at the first failed run: open that run's output."),
@@ -794,7 +794,7 @@ with open(os.path.join(rounds, 'smoke.txt'), 'w', encoding='utf-8', newline='\n'
     f.write("# Smoke test: 1K core with business rules, then 1-minute stewardship without (about 50 minutes). Use it after a move to a new machine or an upgrade.\n"
             + RUN.format(f='smoke.txt') + "crud-test-smoke\n")
 with open(os.path.join(rounds, 'proof-round.txt'), 'w', encoding='utf-8', newline='\n') as f:
-    f.write("# Proof round: every form at 1K (core, stewardship by count 10 iterations, stewardship 1 minute; each with and without business rules; about 90 minutes). Use it after a pack or TestAuto change.\n"
+    f.write("# Proof round: every form at 1K (core, stewardship by count 10 iterations, stewardship 1 minute; each with and without business rules; about 160 minutes). Use it after a pack or TestAuto change.\n"
             + RUN.format(f='proof-round.txt') + "crud-test-proof\n")
 with open(os.path.join(rounds, 'check-round.txt'), 'w', encoding='utf-8', newline='\n') as f:
     f.write("# Mid-release check: 1K, 10K and 100K, with and without business rules (each core run plus 5, 15 or 30 minute stewardship).\n"

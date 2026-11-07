@@ -14,8 +14,11 @@ CrewChief help pages `69`-`72_PackCrud*.md`.
 ```powershell
 Remove-Item -Recurse C:\devops\repos\speed-merchants\CrewChief\packs\crud\workloads, C:\devops\repos\speed-merchants\CrewChief\packs\crud\rounds, C:\devops\repos\speed-merchants\CrewChief\packs\crud\reference-kv
 python <skill>\scripts\gen_crud.py C:\devops\repos\speed-merchants\CrewChief\packs\crud
+pwsh C:\devops\repos\speed-merchants\CrewChief\packs\tools\New-PackCatalog.ps1 -PackRoot C:\devops\repos\speed-merchants\CrewChief\packs\crud -Family crud
 pwsh C:\devops\repos\speed-merchants\CrewChief\packs\tools\Test-Pack.ps1 -PackRoot C:\devops\repos\speed-merchants\CrewChief\packs\crud -Family crud
 ```
+
+`catalog-meta.json` (estimate per test) is hand-kept at the pack root; `New-PackCatalog.ps1` rewrites `catalog.json` from it, `tests/` and `rounds/`; the lint fails while it is stale.
 
 `scripts/connect_upsert_body.ps1` and `scripts/health.ps1` are copies of the Matching pack's (upsert by AUTO tag,
 adds missing TestAutoTags, deterministic step codes; health wait). The reference sets are regenerated too: on a box

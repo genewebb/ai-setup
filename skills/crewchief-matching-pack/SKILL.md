@@ -144,7 +144,10 @@ The TestAuto step configs live as JSON strings inside PowerShell here-strings in
 
 ```powershell
 python <skill>\scripts\gen_sizes.py C:\devops\repos\speed-merchants\CrewChief\packs\matching <skill>\scripts\connect_upsert_body.ps1
+pwsh C:\devops\repos\speed-merchants\CrewChief\packs\tools\New-PackCatalog.ps1 -PackRoot C:\devops\repos\speed-merchants\CrewChief\packs\matching -Family matching
 ```
+
+`catalog-meta.json` (estimate per test) is hand-kept at the pack root; `New-PackCatalog.ps1` rewrites `catalog.json` from it, `tests/` and `rounds/`; the lint fails while it is stale.
 
 - `scripts/gen_sizes.py`: the entry point. Empties `matching/workflows`, runs `gen_all.py <size>` for every size, then
   writes each size's load workload (from `load-template-1k.workload.json` + `retailclientimport-artifact.json`),
