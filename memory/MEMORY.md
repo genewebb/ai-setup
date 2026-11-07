@@ -30,6 +30,7 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [Seq events also in SQL: logging.tSystemLog (Profisee DB + PROD speedmerchants)](reference_systemlog_table.md)
 
 ## Active work (newest first; full status in each file)
+- **[Mid-release round runner plan 11/07: install pack + .NET Round Manager app (service on SMVMTR1, SQLite), lanes, status; D1-D21](project_mid_release_round_runner_plan_2026-11-07.md)**
 - **[Test lab + cadence: SMVM1-3 Connect/CRUD, CORPVMHA1/CORPSQL03 large, 26R3 now, 26R4 next](project_test_lab_topology_cadence.md)**
 - **[DBs to copy to shared repo for a FULL CLONE (SMVM2/SMVM3) + Profisee restore-configure-rebackup rule](project_pack_backup_inventory_new_machine_2026-11-07.md)**
 - **[CRUD pack 11/07: sizes, stewardship by time (1-60 min) or count (10-1000 it), full-restore reset, BR removal, schedules, proof test, 26R3T SMVM1](project_crud_pack_design_2026-11-07.md)**
