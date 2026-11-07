@@ -1,6 +1,6 @@
 ---
 name: crewchief-crud-pack
-description: The CrewChief CRUD workload pack (CrewChief/packs/crud) and its generator gen_crud.py - REST API Create/Update/Get/Delete at 1K-1M and interactive stewardship (1-60 min per step) with and without business rules, restored from profisee_CRUD_base.bak before every test, the 18-step 1M release run, business-rule removal through REST. Use when changing, regenerating, deploying or debugging the CRUD pack, its TestAuto workflows (AUTO:...:crud-*), crud-preflight / crud-setup / crud-test-*, or comparing CRUD runs with the release CRUD history.
+description: The CrewChief CRUD workload pack (CrewChief/packs/crud) and its generator gen_crud.py - REST API Create/Update/Get/Delete at 1K-1M and interactive stewardship (1-60 min or 10-1000 iterations per step) with and without business rules, restored from profisee_CRUD_base.bak before every test, the 18-step 1M release run, business-rule removal through REST. Use when changing, regenerating, deploying or debugging the CRUD pack, its TestAuto workflows (AUTO:...:crud-*), crud-preflight / crud-setup / crud-test-*, or comparing CRUD runs with the release CRUD history.
 ---
 
 # CrewChief CRUD pack
@@ -23,10 +23,11 @@ restore only `workloads/crud` unless the box is new.
 
 ## What it generates
 
-| Workflows (20) | Steps |
+| Workflows (26) | Steps |
 |---|---|
 | `crud-<1k|10k|100k|1m>-core-<br|nobr>` | Create (TDATA to ZDATA, 1000/batch), Update (10% `_Changed`, 5% `_New`), Get 1/10/100 users, Delete (filter, 500/batch) |
-| `crud-steward-<1|5|15|30|60>min-<br|nobr>` | 12 x StewardshipFilterScenario on TDATA: widths (ff,da) 10/5, 20/10, 40/20, 70/50 x users 1/10/100; TimeLimit `00:MM:00` (60 = `00:59:59`) |
+| `crud-steward-<1|5|15|30|60>min-<br|nobr>` | 12 x StewardshipFilterScenario on TDATA: widths (ff,da) 10/5, 20/10, 40/20, 70/50 x users 1/10/100; TimeLimit `00:MM:00` (60 = `00:59:59`), IterationLimit 0 |
+| `crud-steward-<10|100|1000>it-<br|nobr>` | Same 12 steps by count (Gene 11/07): TimeLimit `00:00:00`, IterationLimit N (`ForEachIterationAsync` stops at whichever limit is non-zero) |
 | `crud-1m-release-<br|nobr>` | Release CRUD order: Create, Update, Get x3, stewardship x12 (60 min), Delete |
 
 Configs copied from PROD 10000195/10000197 (read 11/07); changes: size, TimeLimit, all stewardship on TDATA (PROD
@@ -34,7 +35,8 @@ steps 10-13 read PDATA), blank `WorkloadExecution`, version/machines tokens. DqR
 Environment block: env name and app server = `crud/machines:ApplicationServerName`, DB server = `DatabaseServerName`.
 
 Tests: each size pairs core with stewardship 1K-5, 10K-15, 100K-30 min; 1M = release run; smoke = 1K core br + 1 min
-stewardship nobr.
+stewardship nobr; proof (`crud-test-proof`, `rounds/proof-round.txt`) = every form at 1K: core, 10it and 1min, br+nobr
+(Gene 11/07: prove forms without the 1M run). Generator keys: `STEWARD_FORMS`, `TEST_FORM`, `stew_key(form, m)`.
 
 ## Traps
 

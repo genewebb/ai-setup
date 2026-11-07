@@ -5,7 +5,7 @@
   internal/shared/         crud-base-reset (restore profisee_CRUD_base.bak, key, pools, health, base check),
                            crud-rules-remove (delete every TDATA/ZDATA business rule through REST)
   internal/<size>/         crud-<size>-core-{br,nobr}: Create, Update, Get 1/10/100 users, Delete on ZDATA
-  internal/steward/        crud-steward-<d>min-{br,nobr}: 12 stewardship steps on TDATA (4 widths x 1/10/100 users)
+  internal/steward/        crud-steward-<form>-{br,nobr}: 12 stewardship steps (form = 1/5/15/30/60min or 10/100/1000it) on TDATA (4 widths x 1/10/100 users)
   tests/                   crud-test-<size>-{br,nobr} (core + stewardship), crud-test-smoke
   rounds/                  smoke.txt, check-round.txt, release-round.txt
 
@@ -26,9 +26,17 @@ ref_dir = os.path.join(root, 'reference-kv', FAM)
 wl_root = os.path.join(root, 'workloads', FAM)
 
 SIZES = {'1K': 1000, '10K': 10000, '100K': 100000, '1M': 1000000}
-DURATIONS = [1, 5, 15, 30, 60]  # stewardship minutes per step
-# The stewardship length each size's test pairs with: short sizes give a short test, 1M + 60 min is today's release load.
-TEST_DURATION = {'1K': 5, '10K': 15, '100K': 30, '1M': 60}
+# Stewardship forms: each of the 12 steps runs for a time (TimeLimit) or for a set number of iterations (TimeLimit 0,
+# IterationLimit N; Gene 11/07: counts 10, 100 and 1000). key suffix -> (TimeLimit, IterationLimit, short text, long text)
+STEWARD_FORMS = {}
+for _d in (1, 5, 15, 30, 60):
+    STEWARD_FORMS[f"{_d}min"] = ("00:59:59" if _d == 60 else f"00:{_d:02d}:00", "0", f"{_d} min",
+                                 f"{_d} minute(s) per step, about {12 * _d} minutes in all")
+for _n in (10, 100, 1000):
+    STEWARD_FORMS[f"{_n}it"] = ("00:00:00", str(_n), f"{_n} iterations",
+                                f"{_n} iterations per step (each: one page read, one create, update or delete, a 1 second pause)")
+# The stewardship form each size's test pairs with: short sizes give a short test, 1M is the 18-step release run.
+TEST_FORM = {'1K': '5min', '10K': '15min', '100K': '30min', '1M': '60min'}
 MODES = {'br': ('With Business Rules', 10), 'nobr': ('No Business Rules', 0)}
 WIDTHS = [(15, 10, 5), (30, 20, 10), (60, 40, 20), (120, 70, 50)]  # (attributes, freeform, domain-based)
 USERS = [1, 10, 100]
@@ -51,7 +59,7 @@ VER = ref('environment', 'ProfiseeVersionCode')
 
 # ---------------------------------------------------------------- reference sets
 def core_key(low, m): return f"crud-{low}-core-{m}"
-def stew_key(d, m): return f"crud-steward-{d}min-{m}"
+def stew_key(f, m): return f"crud-steward-{f}-{m}"
 def release_key(m): return f"crud-1m-release-{m}"
 
 
@@ -69,12 +77,12 @@ for m, (mtext, _) in MODES.items():
     wf_desc[k] = (f"Display name of the TestAuto workflow for the 1M CRUD release run {mtext.lower()}: the release CRUD load step for "
                   "step (Create, Update, Get with 1, 10 and 100 users, 12 stewardship steps of 60 minutes, Delete last) on one model "
                   f"state. Its automation tag is AUTO:<this box>:<ProfiseeVersionCode>:{k}; the name is free text and only for people.")
-for d in DURATIONS:
+for f, (_, _, short, long_) in STEWARD_FORMS.items():
     for m, (mtext, _) in MODES.items():
-        k = stew_key(d, m)
-        wf_entries[k] = f"CRUD Stewardship {d} min {mtext}"
+        k = stew_key(f, m)
+        wf_entries[k] = f"CRUD Stewardship {short} {mtext}"
         wf_desc[k] = (f"Display name of the TestAuto workflow for CRUD stewardship {mtext.lower()}: 12 steps on TDATA (15, 30, 60 and "
-                      f"120 attributes with 1, 10 and 100 users), {d} minute(s) each. Its automation tag is "
+                      f"120 attributes with 1, 10 and 100 users), {long_}. Its automation tag is "
                       f"AUTO:<this box>:<ProfiseeVersionCode>:{k}; the name is free text and only for people.")
 
 REF_SETS = {
@@ -175,19 +183,20 @@ def core_details(n, m):
     return d
 
 
-def stew_details(minutes, m):
+def stew_details(form, m):
     mtext, dq = MODES[m]
-    limit = "00:59:59" if minutes == 60 else f"00:{minutes:02d}:00"
+    limit, iterations, _, _ = STEWARD_FORMS[form]
+    span = f"for {iterations} iterations" if iterations != "0" else f"for {STEWARD_FORMS[form][2].replace(' min', '')} minute(s)"
     out = []
     for u in USERS:
         for attrs, ff, da in WIDTHS:
             custom = {"CreateNewRecords": True, "DeleteRecordPercent": 5, "DeleteRecords": True, "HighBatchSize": 1000,
-                      "IterationLimit": "0", "LowBatchSize": 500, "NewRecordPercent": 35, "NumberOfRandomReads": 3,
+                      "IterationLimit": iterations, "LowBatchSize": 500, "NewRecordPercent": 35, "NumberOfRandomReads": 3,
                       "SleepMaxMs": "1000", "SleepMinMs": "1000", "TimeLimit": limit, "TransformSeed": "12345",
                       "UpdateExistingRecords": True, "UpdateRecordPercent": 60, "UpdateRecordsAvailable": 10000000}
             users = "1 User" if u == 1 else f"{u} Users"
             out.append((f"StewardshipFilterScenario {mtext} {attrs} Attributes {users}",
-                        f"Interactive stewardship on TDATA for {minutes} minute(s): {attrs} attributes ({ff} freeform, {da} domain-based), "
+                        f"Interactive stewardship on TDATA {span}:{attrs} attributes ({ff} freeform, {da} domain-based), "
                         f"{u} simulated user(s) reading, creating, updating and deleting records.",
                         scenario("StewardshipFilterScenario", "TDATA", "TDATA", ff, da, 1000, u, custom, 2, dq,
                                  tme="RecordInteractiveApiExecution",
@@ -500,26 +509,26 @@ for label, n in SIZES.items():
             ["crud", "internal", label, m], g("DatabaseServerName", "ProfiseeDatabaseName", "TestAutoBaseUrl", RecordCount=str(n)),
             steps))
 
-for d in DURATIONS:
+for d, (_, _, dshort, dlong) in STEWARD_FORMS.items():
     for m, (mtext, dq) in MODES.items():
         key = stew_key(d, m)
         details = stew_details(d, m)
-        child_steps.setdefault(f"crud-testauto-steward-{d}min-create", []).append(ps(f"Upsert Workflow {key}",
+        child_steps.setdefault(f"crud-testauto-steward-{d}-create", []).append(ps(f"Upsert Workflow {key}",
             spec_script(key, f"CRUD,{VER}," + ref('environment', 'MainMachineTag') + ",Stewardship",
-                        f"CRUD stewardship {mtext.lower()} on TDATA, 12 steps of {d} minute(s): 15, 30, 60 and 120 attributes with 1, 10 and 100 users",
+                        f"CRUD stewardship {mtext.lower()} on TDATA, 12 steps, {dlong}: 15, 30, 60 and 120 attributes with 1, 10 and 100 users",
                         key, details),
             f"What: Create or update the TestAuto workflow '{key}' and its {len(details)} steps, found by its automation tag. Why: "
             f"CrewChief runs it by that tag. Success: the workflow exists with exactly these steps." + SETUP_FAIL))
         steps = [run_child("Reset To CRUD Base", "crud-base-reset", "Restore the CRUD base backup and warm the instance")]
         if m == 'nobr':
             steps.append(run_child("Remove Business Rules", "crud-rules-remove", "Delete every business rule on TDATA and ZDATA through REST"))
-        steps.append(run_tag(f"Run CRUD Stewardship {d} min", key, f"CRUD stewardship {d} min {mtext.lower()}"))
+        steps.append(run_tag(f"Run CRUD Stewardship {dshort}", key, f"CRUD stewardship {dshort} {mtext.lower()}"))
         stew_names[(d, m)] = key
         dump(os.path.join(wl_root, 'internal', 'steward', key + '.workload.json'), workload(
             key,
             (f"What: Restore the CRUD base, {'delete the business rules, ' if m == 'nobr' else ''}and run the TestAuto workflow "
-             f"'CRUD Stewardship {d} min {mtext}': 12 interactive stewardship steps on TDATA (15, 30, 60 and 120 attributes with 1, "
-             f"10 and 100 users), {d} minute(s) each, about {12 * d} minutes in all. Why: measures interactive record work through "
+             f"'CRUD Stewardship {dshort} {mtext}': 12 interactive stewardship steps on TDATA (15, 30, 60 and 120 attributes with 1, "
+             f"10 and 100 users), {dlong}. Why: measures interactive record work through "
              f"the REST API {mtext.lower()}. When: from a crud-test-* parent; a rerun restores its own start. Needs: crud-setup ran on "
              f"this box for the current version; the base backup is in place (crud-preflight). Success: Every step Succeeded or "
              f"Skipped. If it fails: open the first failed step, whose If it fails text names what to check; rerun the whole workload."),
@@ -529,7 +538,7 @@ for d in DURATIONS:
 for m, (mtext, dq) in MODES.items():
     key = release_key(m)
     core = core_details(SIZES['1M'], m)
-    details = core[:5] + stew_details(60, m) + core[5:]
+    details = core[:5] + stew_details('60min', m) + core[5:]
     assert len(details) == 18
     child_steps.setdefault("crud-testauto-1m-create", []).append(ps(f"Upsert Workflow {key}",
         spec_script(key, f"CRUD,{VER}," + ref('environment', 'MainMachineTag') + ",1M,Release",
@@ -566,7 +575,7 @@ for cname, csteps in child_steps.items():
     dump(os.path.join(wl_root, 'internal', 'testauto', cname + '.workload.json'), workload(
         cname,
         (f"What: Create or update the tagged CRUD TestAuto workflows {', '.join(keys)} in the TestAuto repository. Why: their "
-         "run workloads find them by automation tag; one small workload per size or stewardship duration keeps each file small. "
+         "run workloads find them by automation tag; one small workload per size or stewardship form keeps each file small. "
          "When: Never run directly; crud-setup runs it. Running it alone is safe and updates in place. Needs: the TestAuto "
          "version in crud/environment:ProfiseeVersionCode exists in the repository (crud-setup checks it first). Success: Every "
          "step Succeeded. If it fails: open the first failed step, whose If it fails text names what to check."),
@@ -576,7 +585,7 @@ for cname, csteps in child_steps.items():
 dump(os.path.join(wl_root, 'start', 'crud-setup.workload.json'), workload(
     "crud-setup",
     (f"What: Create or update the {len(wf_entries)} tagged CRUD TestAuto workflows in the TestAuto repository: core per size (1K, "
-     "10K, 100K, 1M), stewardship per duration (1, 5, 15, 30, 60 minutes) and the 1M release run (the release CRUD load step for "
+     "10K, 100K, 1M), stewardship per form (1, 5, 15, 30, 60 minutes per step, or 10, 100, 1000 iterations per step) and the 1M release run (the release CRUD load step for "
      "step), each with and without business rules. Why: every "
      "CRUD workload finds its workflow by automation tag. When: once per box and Profisee version, and after any change to a "
      "workflow spec; reruns update in place. Needs: the TestAuto version in crud/environment:ProfiseeVersionCode exists in the "
@@ -586,7 +595,8 @@ dump(os.path.join(wl_root, 'start', 'crud-setup.workload.json'), workload(
 
 # ---------------------------------------------------------------- tests
 for label in SIZES:
-    d = TEST_DURATION[label]
+    d = TEST_FORM[label]
+    dmin = int(d[:-3])
     for m, (mtext, dq) in MODES.items():
         name = f"crud-test-{label.lower()}-{m}"
         if label == '1M':
@@ -597,10 +607,10 @@ for label in SIZES:
             run_steps = [run_child("Release 1M", release_names[m], f"Measured run: CRUD 1M release {mtext.lower()} (18 steps, one restore)")]
         else:
             what = (f"What: Runs the CRUD test at {label} {mtext.lower()}: the core run (Create, Update, Get with 1, 10 and 100 users, "
-                    f"Delete; {SIZES[label]} records) and then {d}-minute stewardship (12 steps, about {12 * d} minutes), each from a "
+                    f"Delete; {SIZES[label]} records) and then {dmin}-minute stewardship (12 steps, about {12 * dmin} minutes), each from a "
                     "fresh restore of the CRUD base. Why: This is the test a person starts: one size, one business-rule mode. ")
             run_steps = [run_child(f"Core {label}", core_names[(label, m)], f"Measured run: CRUD {label} core {mtext.lower()}"),
-                         run_child(f"Stewardship {d} min", stew_names[(d, m)], f"Measured run: CRUD stewardship {d} min {mtext.lower()}")]
+                         run_child(f"Stewardship {dmin} min", stew_names[(d, m)], f"Measured run: CRUD stewardship {dmin} min {mtext.lower()}")]
         dump(os.path.join(wl_root, 'tests', name + '.workload.json'), workload(
             name,
             (what +
@@ -619,7 +629,24 @@ dump(os.path.join(wl_root, 'tests', 'crud-test-smoke.workload.json'), workload(
      "stops at the first failed run: open that run's output."),
     ["crud", "tests", "1K", "br", "nobr"], {},
     [run_child("Core 1K With Rules", core_names[('1K', 'br')], "Measured run: CRUD 1K core with business rules"),
-     run_child("Stewardship 1 min No Rules", stew_names[(1, 'nobr')], "Measured run: CRUD stewardship 1 min without business rules")]))
+     run_child("Stewardship 1 min No Rules", stew_names[('1min', 'nobr')], "Measured run: CRUD stewardship 1 min without business rules")]))
+
+PROOF = [("Core 1K With Rules", core_names[('1K', 'br')], "CRUD 1K core with business rules"),
+         ("Core 1K No Rules", core_names[('1K', 'nobr')], "CRUD 1K core without business rules"),
+         ("Stewardship 10 iterations With Rules", stew_names[('10it', 'br')], "CRUD stewardship 10 iterations with business rules"),
+         ("Stewardship 10 iterations No Rules", stew_names[('10it', 'nobr')], "CRUD stewardship 10 iterations without business rules"),
+         ("Stewardship 1 min With Rules", stew_names[('1min', 'br')], "CRUD stewardship 1 min with business rules"),
+         ("Stewardship 1 min No Rules", stew_names[('1min', 'nobr')], "CRUD stewardship 1 min without business rules")]
+dump(os.path.join(wl_root, 'tests', 'crud-test-proof.workload.json'), workload(
+    "crud-test-proof",
+    ("What: Proves every CRUD form works at the smallest size: the 1K core run with and without business rules, stewardship "
+     "by count (10 iterations per step) with and without, and stewardship by time (1 minute per step) with and without, each "
+     "from a fresh restore of the CRUD base; about 90 minutes. Why: a change to the pack or to TestAuto must be shown to work "
+     "for every form without paying for the 1M or 60-minute runs. When: after crud-setup on a new box or version, or after a "
+     "pack or TestAuto change. Needs: crud-setup; crud-preflight green. Success: Every run ends Succeeded. If it fails: It "
+     "stops at the first failed run: open that run's output."),
+    ["crud", "tests", "1K", "br", "nobr"], {},
+    [run_child(lbl, wl, f"Measured run: {txt}") for lbl, wl, txt in PROOF]))
 
 # ---------------------------------------------------------------- schedules (Gene 11/07: wanted, like Matching)
 # Weekly defaults, Monday-Friday: Matching schedules use Sunday and Connect's Saturday 02:00, and every pack restores the
@@ -766,6 +793,9 @@ RUN = "# Run: bash ../../tools/runner/run-queue.sh <CrewChief box> {f}  (one tes
 with open(os.path.join(rounds, 'smoke.txt'), 'w', encoding='utf-8', newline='\n') as f:
     f.write("# Smoke test: 1K core with business rules, then 1-minute stewardship without (about 40 minutes). Use it after a move to a new machine or an upgrade.\n"
             + RUN.format(f='smoke.txt') + "crud-test-smoke\n")
+with open(os.path.join(rounds, 'proof-round.txt'), 'w', encoding='utf-8', newline='\n') as f:
+    f.write("# Proof round: every form at 1K (core, stewardship by count 10 iterations, stewardship 1 minute; each with and without business rules; about 90 minutes). Use it after a pack or TestAuto change.\n"
+            + RUN.format(f='proof-round.txt') + "crud-test-proof\n")
 with open(os.path.join(rounds, 'check-round.txt'), 'w', encoding='utf-8', newline='\n') as f:
     f.write("# Mid-release check: 1K, 10K and 100K, with and without business rules (each core run plus 5, 15 or 30 minute stewardship).\n"
             + RUN.format(f='check-round.txt') + "# No '+': each test restores the base, so a failed one does not stop the next.\n\n"
