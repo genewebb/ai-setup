@@ -15,7 +15,7 @@ $script:ProfBuildDetails = @{
         '-Configuration Release). "all" builds TestAuto, CrewChief, DataGen and Mutate in turn.'
     )
     run     = @(
-        'Same as typing the dp* command alone (dpspeed, dpcrewchief, dpdatagen, dpmutate, dpv2): for most products',
+        'Same as typing the dp* command alone (dpspeed, dpcrewchief, dpdatagen, dpmutate, dpmgr, dpv2): for most products',
         'build + publish + start the app here; for speedy (dpv2) rebuild the local containers.',
         'Extra dp* switches may follow (prof build run testauto -CleanBuild).'
     )
@@ -49,6 +49,7 @@ $script:ProfBuildProducts = [ordered]@{
     crewchief = [pscustomobject]@{ Name = 'CrewChief'; Command = 'dpcrewchief'; Repo = 'SpeedMerchantsRepo'; Build = @('CrewChief\CrewChief.sln'); VersionFile = 'CrewChief\Directory.Build.props'; Run = $true; Publish = $true }
     datagen   = [pscustomobject]@{ Name = 'DataGen'; Command = 'dpdatagen'; Repo = 'SpeedMerchantsRepo'; Build = @('TestData.Generation\TestData.Generation.sln'); VersionFile = 'TestData.Generation\Directory.Build.props'; Run = $true; Publish = $true }
     mutate    = [pscustomobject]@{ Name = 'Mutate (DataGen + Mutation)'; Command = 'dpmutate'; Repo = 'SpeedMerchantsRepo'; Build = @('TestData.Mutation\TestData.Mutation.sln'); VersionFile = 'TestData.Mutation\Directory.Build.props'; Run = $true; Publish = $true }
+    manager   = [pscustomobject]@{ Name = 'TestAutoManager'; Command = 'dpmgr'; Repo = 'SpeedMerchantsRepo'; Build = @('TestAutoManager\TestAutoManager.sln'); VersionFile = 'TestAutoManager\Directory.Build.props'; Run = $true; Publish = $true }
     speedy    = [pscustomobject]@{ Name = 'Speedy'; Command = 'dpv2'; Repo = 'SpeedyRepo'; Build = @('Speedmerchants.sln'); VersionFile = 'Directory.Build.props'; Run = $true; Publish = $true }
     all       = [pscustomobject]@{ Name = 'All four (TestAuto, CrewChief, DataGen, Mutate)'; Command = 'dpall'; Repo = 'SpeedMerchantsRepo'; Build = @('speed-merchants.sln', 'CrewChief\CrewChief.sln', 'TestData.Generation\TestData.Generation.sln', 'TestData.Mutation\TestData.Mutation.sln'); VersionFile = ''; Run = $false; Publish = $true }
 }

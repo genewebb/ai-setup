@@ -9,7 +9,7 @@ $script:ProfOldNames = @(
     [pscustomobject]@{ Old = 'rp'; New = 'prof setup reload (rp itself only reloads the profile in this window)'; Needs = 'Invoke-GeneProfReload' }
     [pscustomobject]@{ Old = 'machinecfg'; New = 'prof setup config'; Needs = 'Invoke-GeneProfConfig' }
     [pscustomobject]@{ Old = 'gpush'; New = 'prof git push'; Needs = 'Invoke-GeneProfGitPush' }
-    [pscustomobject]@{ Old = 'dpspeed, dpcrewchief, dpdatagen, dpmutate, dpv2'; New = 'prof build run testauto | crewchief | datagen | mutate | speedy'; Needs = 'Invoke-GeneProfBuildRun' }
+    [pscustomobject]@{ Old = 'dpspeed, dpcrewchief, dpdatagen, dpmutate, dpmgr, dpv2'; New = 'prof build run testauto | crewchief | datagen | mutate | manager | speedy'; Needs = 'Invoke-GeneProfBuildRun' }
     [pscustomobject]@{ Old = 'dp* -Package -Bump...'; New = 'prof build publish <product> -Bump Patch|Minor|Major'; Needs = 'Invoke-GeneProfBuildPublish' }
     [pscustomobject]@{ Old = 'dpall -Package'; New = 'prof build publish all'; Needs = 'Invoke-GeneProfBuildPublish' }
 )
