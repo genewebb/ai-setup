@@ -623,7 +623,7 @@ for label in SIZES:
 dump(os.path.join(wl_root, 'tests', 'crud-test-smoke.workload.json'), workload(
     "crud-test-smoke",
     ("What: The shortest CRUD test that touches every part of the pack: the 1K core run with business rules, then 1-minute "
-     "stewardship without business rules (so the rule removal runs too), each from a fresh restore of the CRUD base; about 40 "
+     "stewardship without business rules (so the rule removal runs too), each from a fresh restore of the CRUD base; about 50 "
      "minutes. Why: proves a box is ready after a move or an upgrade before a long test. When: after crud-setup on a new box or "
      "version, or after a pack change. Needs: crud-setup; crud-preflight green. Success: Every run ends Succeeded. If it fails: It "
      "stops at the first failed run: open that run's output."),
@@ -791,7 +791,7 @@ rounds = os.path.join(root, 'rounds')
 os.makedirs(rounds, exist_ok=True)
 RUN = "# Run: bash ../../tools/runner/run-queue.sh <CrewChief box> {f}  (one test at a time per Profisee database: Connect, Matching and CRUD all restore it)\n"
 with open(os.path.join(rounds, 'smoke.txt'), 'w', encoding='utf-8', newline='\n') as f:
-    f.write("# Smoke test: 1K core with business rules, then 1-minute stewardship without (about 40 minutes). Use it after a move to a new machine or an upgrade.\n"
+    f.write("# Smoke test: 1K core with business rules, then 1-minute stewardship without (about 50 minutes). Use it after a move to a new machine or an upgrade.\n"
             + RUN.format(f='smoke.txt') + "crud-test-smoke\n")
 with open(os.path.join(rounds, 'proof-round.txt'), 'w', encoding='utf-8', newline='\n') as f:
     f.write("# Proof round: every form at 1K (core, stewardship by count 10 iterations, stewardship 1 minute; each with and without business rules; about 90 minutes). Use it after a pack or TestAuto change.\n"

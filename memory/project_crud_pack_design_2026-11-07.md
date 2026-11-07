@@ -26,7 +26,12 @@ CRUD pack (`CrewChief/packs/crud`), Matching blueprint, decided with Gene 11/07/
 - Built + deployed 11/07: generator in skill `crewchief-crud-pack`; SMVMTR1 preflight + setup green, workflows
   10000470-10000489. Help pages 69-72, rule 8 softened (CRUD has no source DB). Nothing committed (Gene commits;
   speed-merchants branch bug/crud_pack_updates/genewebb, ai-setup clone on main).
-- Open: schedules for CRUD? (none built).
+- Gene 11/07: schedules wanted -> built (schedule/<size>/schedule-crud-<size>-<mode>, Mon-Fri defaults).
+- Gene 11/07: stewardship also by COUNT (10/100/1000 iterations: TimeLimit 00:00:00 + IterationLimit N) to prove forms
+  fast; 60-min stays for release numbers. Now 26 workflows (16 stewardship). Proof = `crud-test-proof` / proof-round.txt:
+  1K core + 10it + 1min, br+nobr (no 1M needed to prove forms).
+- Smoke 11/07 PASS on SMVMTR1 (50 min): core 1K br 15.6 min (ZDATA 900 rows), steward 1min nobr 34 min (rules removed via
+  REST verified). Each 1-min TestAuto step takes ~2 min wall (step = limit + ~1 min overhead).
 
 **Why:** short runs (1K + 1-5 min) for fast checks plus one release run per mode matching today's load.
 **How to apply:** follow [[crewchief-workload-packs]] blueprint; see [[project_smvmtr1_packs_verified_2026-11-07]] for box state.

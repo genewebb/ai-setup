@@ -51,4 +51,5 @@ stewardship nobr; proof (`crud-test-proof`, `rounds/proof-round.txt`) = every fo
 
 ## Deployed
 
-SMVMTR1 (11/07/2026, 26R3T): workflows 10000470-10000489. Results and timings: add here after runs.
+SMVMTR1 (11/07/2026, 26R3T): workflows 10000470-10000489, count forms 10000490-10000495. Smoke 11/07 PASS 50 min
+(core 1K br 15.6 min incl. restore, ZDATA 900; steward 1min nobr 34 min). A 1-min TestAuto step takes ~2 min wall.
