@@ -82,19 +82,19 @@ REF_SETS = {
         "entries": {"AdoOrganizationUrl": "https://profisee.visualstudio.com", "AdoProject": "Products",
                     "AdoPipelineDefinitionId": "293", "AdoBranch": "refs/heads/master",
                     "DownloadDirectory": "C:\\Deploy\\Downloads", "PublishDirectory": "C:\\Deploy\\ReleaseToWeb\\CurrentBuild",
-                    "RetentionCount": "5", "ServerMsi": "", "FastAppStudioMsi": "", "PlatformToolsMsi": ""},
+                    "RetentionCount": "5", "ServerMsi": "ProfiseePlatform.msi",
+                    "FastAppStudioMsi": "MasterDataMaestroDesktop_x64.msi", "PlatformToolsMsi": "ProfiseePlatformTools.msi"},
         "keyDescriptions": {
             "AdoOrganizationUrl": "Azure DevOps organization of the platform pipeline.",
             "AdoProject": "Azure DevOps project of the platform pipeline.",
             "AdoPipelineDefinitionId": "Definition id of the platform pipeline (293).",
             "AdoBranch": "Branch whose latest successful build is installed. Only master is allowed (Gene 11/07).",
-            "DownloadDirectory": "Folder on the test server the build is downloaded and unzipped into.",
+            "DownloadDirectory": "Folder ON THE APPLICATION SERVER the build is downloaded, unzipped and verified in (BuildPublish to a remote server reads the marker in that server's own download folder).",
             "PublishDirectory": "Folder ON THE APPLICATION SERVER the verified build is copied to; the installs read the MSIs from there.",
             "RetentionCount": "How many older builds the publish step keeps beside the current one.",
-            "ServerMsi": "Path of the Profisee Platform (server) MSI relative to PublishDirectory.",
-            "FastAppStudioMsi": "Path of the FastApp Studio MSI relative to PublishDirectory.",
-            "PlatformToolsMsi": "Path of the Platform Tools (command line utilities) MSI relative to PublishDirectory."},
-        "keyBlankAllowed": {"ServerMsi": True, "FastAppStudioMsi": True, "PlatformToolsMsi": True}},
+            "ServerMsi": "Path of the Profisee Server MSI relative to PublishDirectory (product name 'Profisee Server'; ProfiseePlatform.msi in the 26R4 builds).",
+            "FastAppStudioMsi": "Path of the FastApp Studio MSI relative to PublishDirectory (product name 'Profisee FastApp Studio'; the file is MasterDataMaestroDesktop_x64.msi in the 26R4 builds).",
+            "PlatformToolsMsi": "Path of the Command Line Utilities MSI relative to PublishDirectory (product name 'Profisee Command Line Utilities'; ProfiseePlatformTools.msi in the 26R4 builds)."}},
     'addons': {
         "description": "Install pack: optional imports after configure (blank = skipped).",
         "includeInReplacements": True,
@@ -151,13 +151,14 @@ LIST_MSI = r"""$ErrorActionPreference = 'Stop'
 $server = '{{ApplicationServerName}}'
 $publish = '{{PublishDirectory}}'
 $download = '{{DownloadDirectory}}'
-# The publish folder is a path on the application server; read it through the admin share.
+# Both folders are paths on the application server; read them through the admin share.
 $unc = '\\' + $server + '\' + ($publish -replace '^([A-Za-z]):', '$1$')
+$downloadUnc = '\\' + $server + '\' + ($download -replace '^([A-Za-z]):', '$1$')
 if (-not (Test-Path $unc)) { throw "Published build folder $publish is missing on $server ($unc)." }
 $msis = @(Get-ChildItem -Path $unc -Recurse -Filter *.msi | Sort-Object FullName)
 if ($msis.Count -eq 0) { throw "No MSI under $publish on $server." }
 Write-Output "Build folders in ${download}:"
-Get-ChildItem -Path $download -Directory -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending |
+Get-ChildItem -Path $downloadUnc -Directory -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending |
     Select-Object -First 3 | ForEach-Object { Write-Output ("  {0}  {1:yyyy-MM-dd HH:mm}" -f $_.Name, $_.LastWriteTime) }
 Write-Output "MSIs published to $publish on ${server} (path relative to the publish folder, size MB):"
 foreach ($m in $msis) {
@@ -174,35 +175,35 @@ build_steps = [
          "the environment variable AZURE_DEVOPS_PAT (machine scope, or the CrewChief service account) is missing, expired or lacks Build Read; or Azure DevOps is unreachable.",
          timeout=3600, organizationUrl=ref('build', 'AdoOrganizationUrl'), project=ref('build', 'AdoProject'),
          pipelineDefinitionId=ref('build', 'AdoPipelineDefinitionId'), branch=ref('build', 'AdoBranch'),
-         patSecret="{{$env:AZURE_DEVOPS_PAT}}", downloadDirectory="{{DownloadDirectory}}", skipIfCurrent=True, **LOCAL),
+         patSecret="{{$env:AZURE_DEVOPS_PAT}}", downloadDirectory="{{DownloadDirectory}}", skipIfCurrent=True, targetComputer="{{ApplicationServerName}}", **ADMIN),
     step("Unzip The Build", "BuildUnzipStep",
          "What: Extract the downloaded artifact. Why: the installs need the MSIs, not the zip. Success: the extracted "
-         "folder exists. If it fails: the download is incomplete or the disk of the test server is full.",
-         timeout=1800, downloadDirectory="{{DownloadDirectory}}", deleteZipAfterUnzip=False, **LOCAL),
+         "folder exists. If it fails: the download is incomplete or the disk of the application server is full.",
+         timeout=1800, downloadDirectory="{{DownloadDirectory}}", deleteZipAfterUnzip=False, targetComputer="{{ApplicationServerName}}", **ADMIN),
     step("Verify The Build", "BuildVerifyStep",
          "What: Check the extracted build holds at least the three MSIs an install needs. Why: a broken artifact must stop "
          "here, before anything is uninstalled. Success: three or more MSIs found. If it fails: the pipeline produced an "
          "incomplete artifact; pick an earlier build.",
-         downloadDirectory="{{DownloadDirectory}}", minimumMsiCount=3, **LOCAL),
+         downloadDirectory="{{DownloadDirectory}}", minimumMsiCount=3, targetComputer="{{ApplicationServerName}}", **ADMIN),
     step("Publish The Build To The Application Server", "BuildPublishStep",
-         "What: Copy the verified build to the publish folder on the application server and prune older copies. Why: the "
-         "installs then read the MSIs locally there (no second network hop). Success: the publish folder holds this build. "
+         "What: Copy the verified build from the download folder to the publish folder, both on the application server, and "
+         "prune older copies. Why: the installs then read the MSIs locally there (no second network hop). Success: the publish folder holds this build. "
          "If it fails: the admin credential (UserCredentials secrets) cannot write to the application server over CredSSP, "
          "or its disk is full.",
          timeout=3600, downloadDirectory="{{DownloadDirectory}}", targetDirectory="{{PublishDirectory}}",
          retentionCount=ref('build', 'RetentionCount'), targetComputer="{{ApplicationServerName}}", **ADMIN),
     ps("List The Published MSIs", LIST_MSI,
        "What: List the MSIs now in the publish folder on the application server, and the newest build folders on the test "
-       "server. Why: shows which build an install will use and the MSI paths the build reference keys name. Success: at "
+       "application server. Why: shows which build an install will use and the MSI paths the build reference keys name. Success: at "
        "least one MSI listed. If it fails: the publish step did not reach the application server; check the admin share "
        "(\\\\<server>\\c$) is reachable from the test server."),
 ]
 dump(os.path.join(wl_root, 'internal', 'install-build-get.workload.json'), workload(
     "install-build-get",
-    ("What: Get the latest successful master build of the platform pipeline: download it on this test server, unzip and "
-     "verify it, then copy it to the publish folder on the application server and list its MSIs. Why: every install uses "
+    ("What: Get the latest successful master build of the platform pipeline: download, unzip and verify it on the "
+     "application server, then copy it to the publish folder there and list its MSIs. Why: every install uses "
      "the newest master build, and a broken artifact must stop before anything is removed. When: first part of every "
-     "install; also alone to see what the newest build is. Needs: environment variable AZURE_DEVOPS_PAT on the test server for the CrewChief account (Build Read); the shared admin "
+     "install; also alone to see what the newest build is. Needs: environment variable AZURE_DEVOPS_PAT on the test server for the CrewChief account (Build Read); the application server reaches Azure DevOps; the shared admin "
      "credential can write to the application server. Success: Every step Succeeded. If it fails: open the first failed "
      "step, whose If it fails text names what to check."),
     ["install", "internal", "build"], g("ApplicationServerName", "DownloadDirectory", "PublishDirectory"), build_steps))
@@ -301,26 +302,51 @@ for preview in (False, True):
         g("ApplicationServerName", RemovePreview="true" if preview else "false"), remove_steps(preview)))
 
 # ---------------------------------------------------------------- internal/install-programs
-def msi(key):
-    return ref('build', 'PublishDirectory') + "\\" + ref('build', key)
+MSI_INSTALL = r"""$ErrorActionPreference = 'Stop'
+# InstallStep reads the MSI on the CrewChief machine and copies it to the server; the build is already published on
+# the server, so msiexec runs there against the local path.
+$msi = '%MSI%'
+if (-not (Test-Path -LiteralPath $msi)) { throw "MSI not found on ${env:COMPUTERNAME}: $msi (install/build:PublishDirectory + install/build:%KEY%)." }
+$log = Join-Path $env:TEMP ('install-' + [IO.Path]::GetFileNameWithoutExtension($msi) + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
+$p = Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/i', ('"' + $msi + '"'), '/qn', '/norestart', '/l*v', ('"' + $log + '"')) -Wait -PassThru
+$code = $p.ExitCode
+if ($code -eq 0 -or $code -eq 3010) {
+    $name = (Get-Item -LiteralPath $msi).Name
+    Write-Output "Installed $name on ${env:COMPUTERNAME} (msiexec exit $code). Log: $log"
+    return
+}
+Write-Output "msiexec exit $code. Last lines of ${log}:"
+if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log -Tail 400 | Where-Object { $_ -match 'error|failed|return value 3' } | Select-Object -Last 15 }
+throw "msiexec /i $msi failed with exit $code on ${env:COMPUTERNAME} (1618 = another install is running)."
+"""
 
 
 def install_msi(label, key, what):
-    return step(label, "InstallStep",
-                f"What: Install {what} from the published build on the application server (msiexec /i /qn). Why: one of the "
-                "three products a Profisee test box needs. Success: msiexec ends with 0 or 3010. If it fails: the MSI path "
-                f"(install/build:PublishDirectory + install/build:{key}) is wrong for this build, or another install is running "
-                "on the server (1618).", timeout=1800, msiPath=msi(key), arguments=None,
-                targetComputer="{{ApplicationServerName}}", **ADMIN, shareCredentialType=None, shareRemotePath=None,
-                shareUserId=None, sharePassword=None)
+    script = MSI_INSTALL.replace('%MSI%', ref('build', 'PublishDirectory') + "\\" + ref('build', key)).replace('%KEY%', key)
+    return remote_ps(label, script,
+                     f"What: Install {what} from the published build, running msiexec /i /qn on the application server. Why: one "
+                     "of the three products a Profisee test box needs. Success: msiexec ends with 0 or 3010. If it fails: the "
+                     f"MSI path (install/build:PublishDirectory + install/build:{key}) is wrong for this build, or another install "
+                     "is running on the server (1618); the step prints the error lines of the msiexec log.", timeout=1800)
+
+
+PORT_FREE = r"""$ErrorActionPreference = 'Stop'
+$port = [int]'""" + ref('instances', 'MaestroServicePort') + r"""'
+$held = @(Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue)
+if ($held.Count) {
+    $names = $held | ForEach-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName } | Sort-Object -Unique
+    throw "Port $port on ${env:COMPUTERNAME} is held by: $($names -join ', ')."
+}
+Write-Output "Port $port is free on ${env:COMPUTERNAME}."
+"""
 
 
 programs_steps = [
-    step("Check The Maestro Port Is Free", "CheckPortStep",
-         "What: Check nothing listens on the Maestro service port of the application server. Why: Configuration fails late "
-         "when an old service still holds it. Success: the port is free. If it fails: an old Profisee service is still "
-         "running; run install-remove-preview to see what is installed.",
-         port=ref('instances', 'MaestroServicePort'), expectation="Free", targetComputer="{{ApplicationServerName}}"),
+    # CheckPortStep checks only the CrewChief machine (it refuses a remote target), so the check runs on the server.
+    remote_ps("Check The Maestro Port Is Free", PORT_FREE,
+              "What: Check nothing listens on the Maestro service port of the application server, on that server. Why: "
+              "Configuration fails late when an old service still holds it. Success: the port is free. If it fails: an old "
+              "Profisee service is still running; run install-remove-preview to see what is installed."),
     install_msi("Install Profisee Platform", "ServerMsi", "the Profisee Platform (server)"),
     install_msi("Install FastApp Studio", "FastAppStudioMsi", "FastApp Studio"),
     install_msi("Install Platform Tools", "PlatformToolsMsi", "the Platform Tools (command line utilities)"),

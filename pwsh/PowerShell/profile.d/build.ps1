@@ -164,7 +164,7 @@ function Publish-SpeedMerchantsPackage {
         deletes the version it was meant to replace.
     #>
     param(
-        [Parameter(Mandatory)][ValidateSet('CrewChief', 'TestAuto', 'TestDataGeneration', 'TestDataGenerationAndMutation')][string[]]$Product,
+        [Parameter(Mandatory)][ValidateSet('CrewChief', 'TestAuto', 'TestDataGeneration', 'TestDataGenerationAndMutation', 'TestAutoManager')][string[]]$Product,
         [Parameter(Mandatory)][datetime]$BuiltAfter
     )
 
@@ -1412,6 +1412,114 @@ function dpmutate {
     & $startTarget $outDir $dllPath $webUrlEnv $CliArgs
 
     Write-Host "Done." -ForegroundColor Green
+}
+
+function dpmgr {
+    <#
+        TestAutoManager (the round runner service, speed-merchants\TestAutoManager) build/test/run/package
+        helper, same shape as dpmutate. The packaging body lives in the repo script
+        (TestAutoManager\installer\New-TestAutoManagerInstaller.ps1); this function is the convenience entry
+        point plus the shared share-copy tail step.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true, PositionalBinding = $false)]
+    param(
+        [ValidateSet('Debug','Release')]
+        [string]$Configuration,
+        [switch]$Run,
+        [switch]$Test,
+        [switch]$Package,
+        [switch]$Bump,
+        [switch]$BumpMinor,
+        [switch]$BumpMajor,
+        [switch]$Packs,
+        [string]$Destination,
+        [Alias('h','help')]
+        [switch]$ShowHelp,
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$ExtraArgs = @()
+    )
+
+    if ($ShowHelp) {
+        Write-Host ""
+        Write-Host "dpmgr  - TestAutoManager build/test/run/package helper" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "Syntax:" -ForegroundColor Yellow
+        Write-Host "  dpmgr [-Configuration Debug|Release] [-Run] [-Test] [-Package [-Bump|-BumpMinor|-BumpMajor]] [-Packs -Destination <packs folder>] [-ShowHelp] [-WhatIf]"
+        Write-Host ""
+        Write-Host "Options:" -ForegroundColor Yellow
+        Write-Host "  (none)          Build TestAutoManager.sln, then run TestAutoManager.Web in this console"
+        Write-Host "                  (http://localhost:5050; data in the build output's data folder)."
+        Write-Host "  -Run            Run without building."
+        Write-Host "  -Test           Build and run the test project, then exit."
+        Write-Host "  -Package        Build the install package -> $global:GeneBitsDir\TestAutoManager-Setup-<version>.exe,"
+        Write-Host "                  copy it to the team share and prune older ones there."
+        Write-Host "  -Bump           With -Package: patch version (0.1.0 -> 0.1.1) in TestAutoManager\Directory.Build.props."
+        Write-Host "  -BumpMinor      With -Package: minor version (0.1.3 -> 0.2.0)."
+        Write-Host "  -BumpMajor      With -Package: major version (0.1.3 -> 1.0.0)."
+        Write-Host "  -Packs          Copy the pack catalogs and TestRunProfiles to -Destination (an installed"
+        Write-Host '                  server''s web\packs, e.g. \\<server>\c$\Deploy\TestAutoManager\web\packs). No restart needed.'
+        Write-Host ""
+        Write-Host "Examples:" -ForegroundColor Yellow
+        Write-Host "  dpmgr -Package -Bump"
+        Write-Host '  dpmgr -Packs -Destination ''\\<server>\c$\Deploy\TestAutoManager\web\packs'''
+        Write-Host ""
+        return
+    }
+
+    if ($ExtraArgs.Count -gt 0) {
+        throw ("dpmgr: unrecognized argument(s): $($ExtraArgs -join ' ') - nothing was built. Run 'dpmgr -ShowHelp'.")
+    }
+    $bumpCount = @($Bump, $BumpMinor, $BumpMajor).Where({ $_ }).Count
+    if ($bumpCount -gt 0 -and -not $Package) { throw 'dpmgr: -Bump/-BumpMinor/-BumpMajor only apply with -Package - nothing was built or bumped.' }
+    if ($bumpCount -gt 1) { throw 'dpmgr: use at most one of -Bump (patch), -BumpMinor (minor), -BumpMajor (major).' }
+    if (@($Package, $Packs, $Test, $Run).Where({ $_ }).Count -gt 1) { throw 'dpmgr: pick one of -Package, -Packs, -Test, -Run.' }
+    if ($Packs -and -not $Destination) { throw 'dpmgr: -Packs needs -Destination <packs folder>.' }
+
+    $root = Join-Path $global:GeneMachine.SpeedMerchantsRepo 'TestAutoManager'
+    if (-not (Test-Path -LiteralPath $root)) { throw "TestAutoManager not found: $root" }
+    if (-not $Configuration) { $Configuration = 'Release' }
+
+    if ($Packs) {
+        $script = Join-Path $root 'installer\Publish-Packs.ps1'
+        if ($WhatIfPreference) { Write-Host "[WhatIf] Would run: $script -Destination $Destination" -ForegroundColor Yellow; return }
+        & $script -Destination $Destination
+        return
+    }
+
+    if ($Package) {
+        $script = Join-Path $root 'installer\New-TestAutoManagerInstaller.ps1'
+        if (-not (Test-Path -LiteralPath $script)) { throw "Packaging script not found: $script" }
+        $bumpText = if ($Bump) { ' -Bump' } elseif ($BumpMinor) { ' -BumpMinor' } elseif ($BumpMajor) { ' -BumpMajor' } else { '' }
+        if ($WhatIfPreference) {
+            Write-Host "[WhatIf] Would run: $script -Configuration $Configuration -OutputDir $global:GeneBitsDir$bumpText" -ForegroundColor Yellow
+            Write-Host "[WhatIf] Would copy TestAutoManager-Setup-<version>.exe to $($global:GeneMachine.PackageShare) and remove older versions there." -ForegroundColor Yellow
+            return
+        }
+        $started = Get-Date
+        $packArgs = @{ OutputDir = $global:GeneBitsDir; Configuration = $Configuration }
+        if ($Bump) { $packArgs.Bump = $true }
+        if ($BumpMinor) { $packArgs.BumpMinor = $true }
+        if ($BumpMajor) { $packArgs.BumpMajor = $true }
+        & $script @packArgs
+        Publish-SpeedMerchantsPackage -Product 'TestAutoManager' -BuiltAfter $started
+        return
+    }
+
+    $sln = Join-Path $root 'TestAutoManager.sln'
+    $web = Join-Path $root 'TestAutoManager.Web\TestAutoManager.Web.csproj'
+    if ($Test) {
+        if ($WhatIfPreference) { Write-Host "[WhatIf] Would run: dotnet test $sln -c $Configuration" -ForegroundColor Yellow; return }
+        dotnet test $sln -c $Configuration -nologo
+        if ($LASTEXITCODE -ne 0) { throw "dpmgr: tests failed ($LASTEXITCODE)." }
+        return
+    }
+    if (-not $Run) {
+        if ($WhatIfPreference) { Write-Host "[WhatIf] Would run: dotnet build $sln -c $Configuration, then dotnet run TestAutoManager.Web" -ForegroundColor Yellow; return }
+        dotnet build $sln -c $Configuration -nologo
+        if ($LASTEXITCODE -ne 0) { throw "dpmgr: build failed ($LASTEXITCODE)." }
+    }
+    if ($WhatIfPreference) { Write-Host "[WhatIf] Would run: dotnet run --project $web -c $Configuration --no-build" -ForegroundColor Yellow; return }
+    dotnet run --project $web -c $Configuration --no-build
 }
 
 function dpall {
