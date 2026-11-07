@@ -30,6 +30,9 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [Seq events also in SQL: logging.tSystemLog (Profisee DB + PROD speedmerchants)](reference_systemlog_table.md)
 
 ## Active work (newest first; full status in each file)
+- **[Test lab + cadence: SMVM1-3 Connect/CRUD, CORPVMHA1/CORPSQL03 large, 26R3 now, 26R4 next](project_test_lab_topology_cadence.md)**
+- **[DBs to copy to shared repo for a FULL CLONE (SMVM2/SMVM3) + Profisee restore-configure-rebackup rule](project_pack_backup_inventory_new_machine_2026-11-07.md)**
+- **[CRUD pack design 11/07: sizes, 1-60 min stewardship, snapshot reset, BR removal, 26R3T, SMVM1 only](project_crud_pack_design_2026-11-07.md)**
 - **[SMVMTR1 Connect+Matching 1K verified 11/07; SMVM2 now TR1's P2P target](project_smvmtr1_packs_verified_2026-11-07.md)**
 - **[Red is red: fix the check, never explain a false red away; building blocks declare caller values in 'inputs'](feedback_red_is_red_declared_inputs.md)**
 - **[Each pack own ModelSource<Pack> DB, name only from <family>/databases:ModelSourceDB (SQL, service configs, TestAuto)](feedback_pack_own_source_database.md)**
