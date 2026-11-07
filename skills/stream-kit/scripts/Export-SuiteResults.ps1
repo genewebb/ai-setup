@@ -185,7 +185,8 @@ function Get-DiscoveredTests($leg, [string[]] $Reported = @()) {
             # npx.cmd, not npx.ps1: the PowerShell shim would run under this script's preferences. '--no' refuses an install
             # and stdin is closed, so a tree without node_modules ends at once instead of waiting on npx's install prompt;
             # STREAM_PW_LIST_TIMEOUT_SECONDS (600) bounds anything else that never ends.
-            $limit = 600; if ([int]::TryParse([string]$env:STREAM_PW_LIST_TIMEOUT_SECONDS, [ref]$limit) -and $limit -le 0) { $limit = 600 }
+            # TryParse writes 0 into its [ref] on a failed parse, so it parses into its own variable.
+            $limit = 600; $n = 0; if ([int]::TryParse([string]$env:STREAM_PW_LIST_TIMEOUT_SECONDS, [ref]$n) -and $n -gt 0) { $limit = $n }
             $psi = [Diagnostics.ProcessStartInfo]::new('npx.cmd')
             $psi.ArgumentList.Add('--no'); foreach ($x in $a) { $psi.ArgumentList.Add($x) }
             $psi.UseShellExecute = $false; $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true

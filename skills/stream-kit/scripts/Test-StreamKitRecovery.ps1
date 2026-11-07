@@ -582,6 +582,29 @@ try {
     [void](Build $r22e 'G1.V' 'V ok MARK' 'build-1')
     $o22e = @(& "$S\Integrate-Patch.ps1" -Repo $r22e -Session integ-22e -Task G1.V)
     Case 'census path not touched: census not run, patch integrates' ($o22e[0] -eq 'INTEGRATED G1.V' -and (Get-Content -Raw (Join-Path $r22e '.streams\logs\G1.V.grader.main.txt')) -notmatch 'CENSUS-') ($o22e -join ' | ')
+    # 22f/22g BASELINE-ON-RED (kit item IN-20261106155330-1e2e, config census.baselineOnRed): no census before the
+    # apply; a census red in the grade re-runs the census on main and sorts it as the pre-apply baseline did.
+    function Set-Census22f([string] $repo) {
+        Set-Census22c $repo '\.txt$'
+        @{ census = @{ script = '.streams\checks\census.ps1'; paths = '\.txt$'; baselineOnRed = $true } } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $repo '.streams\config.json')
+    }
+    $r22f = New-Repo 'r22f' ([ordered]@{ 'G1.Y' = (ContentGrader 'G1.Y' 'ok') }); $repos += $r22f
+    Set-Census22f $r22f
+    Set-Content (Join-Path $r22f 'main-red.txt') 'already red'
+    git -C $r22f add main-red.txt; git -C $r22f commit -q -m red
+    [void](Build $r22f 'G1.Y' 'Y ok' 'build-1')
+    $o22f = @(& "$S\Integrate-Patch.ps1" -Repo $r22f -Session integ-22f -Task G1.Y)
+    $log22f = Get-Content -Raw (Join-Path $r22f '.streams\logs\G1.Y.grader.main.txt')
+    $base22f = Get-Content -Raw (Join-Path $r22f '.streams\suites\census-baseline.json') | ConvertFrom-Json
+    $tm22f = @(Get-Content (Join-Path $r22f '.streams\logs\integrate-timing.log') -ErrorAction SilentlyContinue)
+    Case '22f baseline-on-red: census red on main already is a baseline, patch integrates' ($o22f[0] -eq 'INTEGRATED G1.Y' -and $log22f -match '(?m)^BASELINE CENSUS-Main' -and $log22f -notmatch '(?m)^FAIL CENSUS-') (($o22f -join ' | ') + ' :: ' + $log22f)
+    Case '22f baseline-on-red: the census ran after the grade, not before it' (@($base22f.fails) -contains 'CENSUS-Main' -and ($tm22f -join ' ') -match 'baseline-census [\d.]+s deferred' -and ($tm22f -join ' ') -match 'baseline-census.*ran-on-red pass' -and (Test-Path (Join-Path $r22f 'G1.Y.txt'))) ($tm22f -join ' | ')
+    $r22g = New-Repo 'r22g' ([ordered]@{ 'G1.X' = (ContentGrader 'G1.X' 'ok') }); $repos += $r22g
+    Set-Census22f $r22g
+    [void](Build $r22g 'G1.X' 'X ok MARK' 'build-1')
+    $o22g = @(& "$S\Integrate-Patch.ps1" -Repo $r22g -Session integ-22g -Task G1.X)
+    $tx22g = T $r22g 'G1.X'
+    Case '22g baseline-on-red: census red only with the patch is REVERSED with the census why' ("$o22g" -eq 'REVERSED G1.X' -and $tx22g.state -eq 'ticketed' -and $tx22g.history[-1].note -match 'census CENSUS-Marker red only with this patch' -and (Get-Content -Raw (Join-Path $r22g 'G1.X.txt') -ErrorAction SilentlyContinue) -notmatch 'MARK') "$o22g state=$($tx22g.state) note=$($tx22g.history[-1].note)"
     # ---- 23. the reaper: an integrated worktree goes, a live builder's stays, and a refusal never deletes
     $r23 = New-Repo 'r23' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok'); 'G1.B' = (ContentGrader 'G1.B' 'ok') }); $repos += $r23
     $wtA23 = Build $r23 'G1.A' 'ok' 'build-1'
@@ -697,6 +720,27 @@ try {
         $what = if ($k -eq 'b') { 'written after the claim' } else { 'written inside the quiet period' }
         Case "reaper keeps a superseded copy with a file $what" ((Test-Path (Join-Path $deepK 'Edit.cs')) -and (($oK -join ' ') -match "KEPT G1\.A .*wrong tree")) "$deadK out=$($oK -join ' | ')"
     }
+
+    # ---- 26d. a live build claim with no recorded tree yet (kit item IN-20261107200918-086a). A pre-stage claims the row,
+    # then fails or takes a moment before New-TaskWorktree records base. G26.T309 bounced that way every 8 minutes and left
+    # older copies behind; the 15:02 tick met it inside the 20 s window, Test-Path -LiteralPath read a null record and the
+    # throw ended the whole watchdog pass. No record supersedes nothing, so the old copy stays until a later pass.
+    $r26d = New-Repo 'r26d' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok'); 'G1.B' = (ContentGrader 'G1.B' 'ok') }); $repos += $r26d
+    # G1.B keeps a recorded tree: the sweep's roots come from the paths tasks record, so the copy must sit under one.
+    $old26d = Build $r26d 'G1.A' 'ok' 'build-26da'
+    [void](Build $r26d 'G1.B' 'ok' 'build-26dc')
+    (Get-Item $old26d).LastWriteTime = (Get-Date).AddHours(-2)
+    Get-ChildItem $old26d -Recurse -File -Force | ForEach-Object { $_.LastWriteTime = (Get-Date).AddHours(-2) }
+    $doc26d = J $r26d
+    $row26d = $doc26d.tasks | Where-Object { $_.id -eq 'G1.A' }
+    $row26d.state = 'building'
+    $row26d.base = $null
+    $row26d.claim = @{ role = 'build'; session = 'build-26db'
+        at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); beat = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+    Set-Content -Path (Join-Path $r26d '.streams\tasks.json') -Encoding utf8 -Value ($doc26d | ConvertTo-Json -Depth 50)
+    $o26d = @(try { & "$S\Invoke-Watchdog.ps1" -Repo $r26d -Session status-26d } catch { "THREW $_" })
+    Case 'watchdog survives a live build claim with no recorded tree' (-not (($o26d -join ' ') -match 'THREW')) ($o26d -join ' | ')
+    Case 'no record supersedes nothing: the older copy is kept' (Test-Path $old26d) "$old26d went: $($o26d -join ' | ')"
 
     # ---- 27. an AUTHOR claim must not hold a worktree. A worktree belongs to a build claim: New-TaskWorktree is only
     # ever called by a builder. On the live board G2.T04 sat `planned` with a live author claim writing its next ticket,
@@ -3393,31 +3437,43 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     # ---- 88. the same waiting signal in a Windows Terminal tab (WT_SESSION): the runner retitles the tab through the
     # console title: '<tab>' at start and again before and after each unit (every pwsh started in the console, such as the
     # launch check's, retitles it), '<tab> - NEEDS YOU' on a prompt and '<tab>' once answered, whatever Wave or WezTerm env the tab inherited.
-    $r88 = New-Repo 'runner88' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r88; Open-Gate $r88 stream-kit
-    $ai88 = Join-Path $Scratch 'ai-stub88.ps1'; Set-Content -LiteralPath $ai88 -Value @('exit 0')
-    $cl88 = Join-Path $Scratch 'claude-stub88.ps1'; $log88 = Join-Path $Scratch 'wt-title88.log'
-    Set-Content -LiteralPath $cl88 -Value @(
-        "Set-Content -LiteralPath (`$env:STREAM_UNIT_OUT + '.waiting.json') -Value '{""waiting"":true,""since"":1,""count"":1,""tool"":""Bash"",""reason"":""stub88""}'"
-        'Start-Sleep -Seconds 3'
-        "Set-Content -LiteralPath (`$env:STREAM_UNIT_OUT + '.waiting.json') -Value '{""waiting"":false,""at"":2}'"
-        'Start-Sleep -Seconds 2'
-        "Set-Content -LiteralPath `$env:STREAM_UNIT_OUT -Value '{""result"":""stub88 built"",""is_error"":false,""num_turns"":1,""total_cost_usd"":0,""outcome"":""built""}'"
-        'exit 0')
-    $prev88 = @{ WT = $env:WT_SESSION; Block = $env:WAVETERM_BLOCKID; Pane = $env:WEZTERM_PANE }
-    $env:STREAM_RUNNER_AI = $ai88; $env:STREAM_RUNNER_CLAUDE = $cl88; $env:STREAM_RUNNER_TITLE_LOG = $log88
-    $env:WT_SESSION = 'wt88'; $env:WAVETERM_BLOCKID = 'block88'; $env:WEZTERM_PANE = '88'
-    try {
-        $job88 = Start-ThreadJob -ScriptBlock { param($s, $r) & "$s\Start-StreamRunner.ps1" -Repo $r -Role kit -Live -IntervalSeconds 1 -UnitTimeoutSeconds 60 -MaxRuns 1 -Tab 'Author 4' } -ArgumentList $S, $r88
-        $null = Wait-Job $job88 -Timeout 90
-        $o88 = @(Receive-Job $job88 -Keep); Stop-Job $job88 -ErrorAction SilentlyContinue; Remove-Job $job88 -Force -ErrorAction SilentlyContinue
-    } finally {
-        Remove-Item Env:\STREAM_RUNNER_AI, Env:\STREAM_RUNNER_CLAUDE, Env:\STREAM_RUNNER_TITLE_LOG -ErrorAction SilentlyContinue
-        foreach ($k in @(@('WT_SESSION', 'WT'), @('WAVETERM_BLOCKID', 'Block'), @('WEZTERM_PANE', 'Pane'))) {
-            if ($null -ne $prev88[$k[1]]) { Set-Item -Path "Env:$($k[0])" -Value $prev88[$k[1]] } else { Remove-Item -Path "Env:$($k[0])" -ErrorAction SilentlyContinue }
+    # The stub holds the prompt 10 s, so a slow poll on a loaded host still sees it. A second unit ends with its prompt
+    # still open (killed, or exited before the runner's next poll): the tab name must still come back after it, once by
+    # the 'unit ended' resolve and once by the after-unit restore (kit item IN-20261107131239-5b1e).
+    foreach ($v88 in @(@{ n = 'a'; tab = 'Author 4'; answer = $true }, @{ n = 'b'; tab = 'Author 5'; answer = $false })) {
+        $r88 = New-Repo "runner88$($v88.n)" ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r88; Open-Gate $r88 stream-kit
+        $ai88 = Join-Path $Scratch "ai-stub88$($v88.n).ps1"; Set-Content -LiteralPath $ai88 -Value @('exit 0')
+        $cl88 = Join-Path $Scratch "claude-stub88$($v88.n).ps1"; $log88 = Join-Path $Scratch "wt-title88$($v88.n).log"
+        $stub88 = @(
+            "Set-Content -LiteralPath (`$env:STREAM_UNIT_OUT + '.waiting.json') -Value '{""waiting"":true,""since"":1,""count"":1,""tool"":""Bash"",""reason"":""stub88""}'"
+            'Start-Sleep -Seconds 10')
+        if ($v88.answer) {
+            $stub88 += @(
+                "Set-Content -LiteralPath (`$env:STREAM_UNIT_OUT + '.waiting.json') -Value '{""waiting"":false,""at"":2}'"
+                'Start-Sleep -Seconds 2')
         }
+        $stub88 += @(
+            "Set-Content -LiteralPath `$env:STREAM_UNIT_OUT -Value '{""result"":""stub88 built"",""is_error"":false,""num_turns"":1,""total_cost_usd"":0,""outcome"":""built""}'"
+            'exit 0')
+        Set-Content -LiteralPath $cl88 -Value $stub88
+        $prev88 = @{ WT = $env:WT_SESSION; Block = $env:WAVETERM_BLOCKID; Pane = $env:WEZTERM_PANE }
+        $env:STREAM_RUNNER_AI = $ai88; $env:STREAM_RUNNER_CLAUDE = $cl88; $env:STREAM_RUNNER_TITLE_LOG = $log88
+        $env:WT_SESSION = 'wt88'; $env:WAVETERM_BLOCKID = 'block88'; $env:WEZTERM_PANE = '88'
+        try {
+            $job88 = Start-ThreadJob -ScriptBlock { param($s, $r, $t) & "$s\Start-StreamRunner.ps1" -Repo $r -Role kit -Live -IntervalSeconds 1 -UnitTimeoutSeconds 60 -MaxRuns 1 -Tab $t } -ArgumentList $S, $r88, $v88.tab
+            $null = Wait-Job $job88 -Timeout 120
+            $o88 = @(Receive-Job $job88 -Keep); Stop-Job $job88 -ErrorAction SilentlyContinue; Remove-Job $job88 -Force -ErrorAction SilentlyContinue
+        } finally {
+            Remove-Item Env:\STREAM_RUNNER_AI, Env:\STREAM_RUNNER_CLAUDE, Env:\STREAM_RUNNER_TITLE_LOG -ErrorAction SilentlyContinue
+            foreach ($k in @(@('WT_SESSION', 'WT'), @('WAVETERM_BLOCKID', 'Block'), @('WEZTERM_PANE', 'Pane'))) {
+                if ($null -ne $prev88[$k[1]]) { Set-Item -Path "Env:$($k[0])" -Value $prev88[$k[1]] } else { Remove-Item -Path "Env:$($k[0])" -ErrorAction SilentlyContinue }
+            }
+        }
+        $t88 = if (Test-Path $log88) { @(Get-Content $log88) } else { @() }
+        $want88 = @($v88.tab, $v88.tab, "$($v88.tab) - NEEDS YOU", $v88.tab, $v88.tab) -join '|'
+        $name88 = if ($v88.answer) { 'runner -Live: in Windows Terminal the runner names its tab at start, a prompt retitles the tab NEEDS YOU and the answer puts the name back' } else { 'runner -Live: a unit that ends with its prompt still open puts the tab name back after it' }
+        Case $name88 ((($t88 -join '|') -eq $want88) -and (($o88 -join "`n") -match ' EXIT 0 outcome built .* ok -> ')) "titles=$($t88 -join ' | ') out=$($o88 -join ' | ')"
     }
-    $t88 = if (Test-Path $log88) { @(Get-Content $log88) } else { @() }
-    Case 'runner -Live: in Windows Terminal the runner names its tab at start, a prompt retitles the tab NEEDS YOU and the answer puts the name back' ((($t88 -join '|') -eq 'Author 4|Author 4|Author 4 - NEEDS YOU|Author 4|Author 4') -and (($o88 -join "`n") -match ' EXIT 0 outcome built .* ok -> ')) "titles=$($t88 -join ' | ') out=$($o88 -join ' | ')"
     # 89. Status agrees with the watchdog on an integration row: G3.T900, set building by the integrator f13d2669 while it
     # beat a fresh lock, showed 'orphaned, no watchdog will free it' for 49 min although the watchdog keeps such a row on
     # purpose (case 63; kit item IN-20261005020647-63c2). Kept: not orphaned, no flag, the page names the integrator.
@@ -4826,6 +4882,13 @@ if ($Mode -eq 'retest') { exit 0 } else { exit 1 }
     try { $x105f = @(& "$S\Export-SuiteResults.ps1" -Repo $pr -Run run-P1-1 2>&1) } finally { $env:PATH = $path105f; Remove-Item Env:\STREAM_PW_LIST_TIMEOUT_SECONDS -ErrorAction SilentlyContinue }
     $sec105f = [int]$sw105f.Elapsed.TotalSeconds
     Case '105f a Playwright --list that never ends times out and is reported, not waited on' ($sec105f -lt 40 -and ($x105f -join ' ') -match 'playwright --list timed out after 3 s') "sec=$sec105f out=$($x105f -join ' | ')"
+    # 105g (kit item IN-20261107123917-b0f5): with STREAM_PW_LIST_TIMEOUT_SECONDS unset the limit is 600 s, not 0 s.
+    # A fake npx.cmd that ends after about 2 s with no json must not be reported as a timeout.
+    $bin105g = Join-Path $Scratch 'npx105g'; New-Item -ItemType Directory -Path $bin105g -Force | Out-Null
+    Set-Content -Path (Join-Path $bin105g 'npx.cmd') -Encoding ascii -Value "@echo off`r`nping -n 3 127.0.0.1 >NUL`r`nexit /b 1`r`n"
+    $path105g = $env:PATH; $env:PATH = "$bin105g;$path105g"; $saved105g = $env:STREAM_PW_LIST_TIMEOUT_SECONDS; Remove-Item Env:\STREAM_PW_LIST_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+    try { $x105g = @(& "$S\Export-SuiteResults.ps1" -Repo $pr -Run run-P1-1 2>&1) } finally { $env:PATH = $path105g; if ($saved105g) { $env:STREAM_PW_LIST_TIMEOUT_SECONDS = $saved105g } }
+    Case '105g with the timeout variable unset a short Playwright --list is not reported as timed out' (($x105g -join ' ') -notmatch 'timed out after') "out=$($x105g -join ' | ')"
 
     # 105c (kit item IN-20261026151817-80e7, G17.T122): a test reported under a teardown Playwright project
     # (fleet-stopping) re-run by --grep runs alone, without its dependency chain, and failed 'REFUSED: no CLI
@@ -5343,8 +5406,20 @@ if ($env:STUB116_CENSUS -eq 'red') { 'FAIL CENSUS-CommentCensusTests: NoProjectE
     Case '116i adhoc: a census FAIL main already carries (census-baseline.json) does not block the change' ($x116i -eq 0 -and ($o116i -join ' ') -match '^COMMITTED ADHOC-20261104-9 ') "exit=$x116i out=$($o116i -join ' | ')"
     Remove-Item -LiteralPath (Join-Path $r116 '.streams\suites\census-baseline.json') -Force
     if ($cfgText116) { Set-Content -LiteralPath $cfg116 -Value $cfgText116 -NoNewline -Encoding utf8 } else { Remove-Item -LiteralPath $cfg116 -Force }
+    # 116j (kit item IN-20261106141247-f54b): the owner committed the same change by hand under another subject. The
+    # patch no longer applies, but HEAD holds it: LANDED, with 'Landed: <commit>' in the request file, nothing committed.
+    $w116j = Wt116 'w116j' @{ 'j116.txt' = 'adhoc j' }
+    Set-Content -LiteralPath (Join-Path $r116 'j116.txt') -Value 'adhoc j'
+    git -C $r116 add j116.txt; git -C $r116 commit -q -m 'owner hand commit' -- j116.txt
+    $head116j = git -C $r116 rev-parse HEAD
+    $req116j = Join-Path $r116 '.streams\adhoc\ADHOC-20261106-10.md'
+    Set-Content -LiteralPath $req116j -Value '# ADHOC-20261106-10'
+    $o116j = @(& "$S\Commit-AdhocChange.ps1" -Repo $r116 -Session adhoc-116 -Id ADHOC-20261106-10 -Worktree $w116j -Title 'hand' -TestProject t.csproj -TestFilter 'T116'); $x116j = $LASTEXITCODE
+    $o116k = @(& "$S\Commit-AdhocChange.ps1" -Repo $r116 -Session adhoc-116 -Id ADHOC-20261106-10 -Worktree $w116j -Title 'hand' -TestProject t.csproj -TestFilter 'T116'); $x116k = $LASTEXITCODE
+    $lines116j = @(Get-Content -LiteralPath $req116j)
+    Case '116j adhoc: a change already committed by someone else reads LANDED and records Landed: <commit> once' ($x116j -eq 0 -and $x116k -eq 0 -and ($o116j -join ' ') -match "^LANDED ADHOC-20261106-10 $head116j " -and (git -C $r116 rev-parse HEAD) -eq $head116j -and @($lines116j | Where-Object { $_ -eq "Landed: $head116j" }).Count -eq 1) "exit=$x116j/$x116k out=$($o116j -join ' | ') file=$($lines116j -join ' / ')"
     Remove-Item Env:\STREAM_ADHOC_DOTNET -ErrorAction SilentlyContinue
-    $o116f = @(& "$S\Add-Lesson.ps1" -Repo $r116 -Role adhoc -Session adhoc-116 -Task ADHOC-20261011-1 -Text 'run the bUnit test from the worktree'); $x116f = $LASTEXITCODE
+    $o116f =@(& "$S\Add-Lesson.ps1" -Repo $r116 -Role adhoc -Session adhoc-116 -Task ADHOC-20261011-1 -Text 'run the bUnit test from the worktree'); $x116f = $LASTEXITCODE
     Case '116f adhoc: the ad-hoc role keeps a lessons file' ($x116f -eq 0 -and (Test-Path (Join-Path $r116 '.streams\lessons\adhoc.md'))) "exit=$x116f out=$($o116f -join ' | ')"
 
     # ---- 117. the watchdog keeps a stream-adhoc tree while its request file exists. The tree names no task, so it read

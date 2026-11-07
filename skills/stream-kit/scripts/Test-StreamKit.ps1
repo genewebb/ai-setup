@@ -182,6 +182,10 @@ try {
     Case 'one integrator per repo' ($e1 -eq 0 -and $e2 -eq 5)
     $i1 = & "$S\Integrate-Patch.ps1" -Repo $repo -Session integ-1
     Case 'integrates T1 first' ($i1[0] -eq 'INTEGRATED G1.T1' -and $i1[1] -like 'COMMITTED G1.T1 *') ($i1 -join ' | ')
+    # Phase 0 of owner request IN-20261106154815-b0f8: one TIMING line per drain step, kept out of the outcome lines.
+    $tm1 = @(Get-Content (Join-Path $repo '.streams\logs\integrate-timing.log') -ErrorAction SilentlyContinue | Where-Object { $_ -match ' TIMING G1\.T1 ' })
+    $tmSteps = @($tm1 | ForEach-Object { if ($_ -match ' TIMING G1\.T1 (\S+) [\d.]+s') { $Matches[1] } })
+    Case 'integrate timing: check, baseline-census, apply, grader and commit lines logged; none in the outcome lines' (($tmSteps -join ',') -eq 'check,baseline-census,apply,grader,commit' -and -not @($i1 | Where-Object { "$_" -like 'TIMING *' }).Count) (($tm1 -join ' | ') + ' :: ' + ($i1 -join ' | '))
     Case 'main tree has T1 and kept dirty work' ((Get-Content (Join-Path $repo 'a.txt') -Raw) -match 'a0 dirty DONE-G1.T1')
     $c1 = @(git -C $repo show --name-only --format='%s' HEAD) | Where-Object { $_ }
     Case 'T1 commit holds only its patch paths' ($c1[0] -like 'G1.T1:*' -and ((@($c1 | Select-Object -Skip 1)) -join ',') -eq 'a.txt') ($c1 -join ',')
@@ -1259,6 +1263,14 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     git -C $pr commit -q --allow-empty -m 'ADHOC-20261011-1: adds AC-A-003'
     $pj4 = (& "$S\Get-StreamStatus.ps1" -Repo $pr -Json | ConvertFrom-Json).leftToPlan
     Case 'a clause named by a COMMITTED stream-adhoc request counts as planned; an uncommitted request names nothing' (-not $pj3.known -and $pj3.reason -match 'P1 1 of 3' -and $pj4.known -and [int]$pj4.total -eq 1 -and [int]$pj4.byGroup.P1.count -eq 0 -and (@($pj4.unnamedIds.none) -join ',') -eq 'AC-B-002') "before=$($pj3 | ConvertTo-Json -Compress -Depth 6) after=$($pj4 | ConvertTo-Json -Compress -Depth 6)"
+    # A request the owner committed by hand under another subject carries 'Landed: <commit>'; it counts only while that
+    # commit is an ancestor of HEAD (kit item IN-20261106141247-f54b).
+    $orphan = git -C $pr commit-tree -m 'side' (git -C $pr rev-parse 'HEAD^{tree}')
+    Set-Content (Join-Path $pr '.streams\adhoc\ADHOC-20261011-2.md') "# ADHOC-20261011-2`n- AC-B-002`nLanded: $orphan"
+    $pj5 = (& "$S\Get-StreamStatus.ps1" -Repo $pr -Json | ConvertFrom-Json).leftToPlan
+    Set-Content (Join-Path $pr '.streams\adhoc\ADHOC-20261011-2.md') "# ADHOC-20261011-2`n- AC-B-002`nLanded: $(git -C $pr rev-parse HEAD)"
+    $pj6 = (& "$S\Get-StreamStatus.ps1" -Repo $pr -Json | ConvertFrom-Json).leftToPlan
+    Case 'a Landed: commit on HEAD names the request clauses; a commit off HEAD names nothing' ($pj5.known -and [int]$pj5.total -eq 1 -and $pj6.known -and [int]$pj6.total -eq 0) "offHead=$($pj5 | ConvertTo-Json -Compress -Depth 6) onHead=$($pj6 | ConvertTo-Json -Compress -Depth 6)"
     $pn = (& "$S\Get-StreamStatus.ps1" -Repo $lr -Json | ConvertFrom-Json).leftToPlan
     Case 'a repo with no requirements folder reads left to plan unknown' (-not $pn.known -and $pn.reason -match '^no requirements folder: ') ($pn | ConvertTo-Json -Compress -Depth 6)
 
@@ -1324,6 +1336,7 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     Set-Content (Join-Path $dwb 'b.txt') 'b DONE-B'
     & "$S\Export-TaskPatch.ps1" -Repo $dr -Task D1.B -Worktree $dwb | Out-Null
     & "$S\Update-Task.ps1" -Repo $dr -Task D1.B -Role build -Session build-db -To built -Release -Artifacts @{ patch = '.streams\patches\D1.B.patch' } | Out-Null
+    $dPatchA1 = [IO.File]::ReadAllBytes((Join-Path $dr '.streams\patches\D1.A.patch'))
     # A is rebuilt with different content and lands; B's base stacked the old A, so B is BASE-STALE, patch kept
     $da2 = & "$S\Claim-Task.ps1" -Repo $dr -Role build -Session build-da2 | ConvertFrom-Json
     Case 'deps: A is claimable again after the bounce' ($da2.id -eq 'D1.A') $da2.id
@@ -1331,6 +1344,27 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     Set-Content (Join-Path $dwa2 'a.txt') 'a DONE-A v2 rebuilt'
     & "$S\Export-TaskPatch.ps1" -Repo $dr -Task D1.A -Worktree $dwa2 | Out-Null
     & "$S\Update-Task.ps1" -Repo $dr -Task D1.A -Role build -Session build-da2 -To built -Release -Artifacts @{ patch = '.streams\patches\D1.A.patch' } | Out-Null
+    # B still reads built on the old A patch: a row waiting on B cannot lay its base, so no build claim offers it, and
+    # the board names B. Putting the old A patch back shows the changed patch is the only reason.
+    $dcfg0 = Join-Path $dr '.streams\config.json'
+    Set-Content -LiteralPath $dcfg0 -Encoding utf8 -Value '{ "focus": { "groups": ["D2"] } }'
+    . "$S\lib\Streams.ps1"; . "$S\lib\Inbox.ps1"
+    $dP0 = Get-StreamPaths $dr
+    $dclD = Get-Claimable $dP0 (J $dr) 'build' @{}
+    Case 'deps: a row on a built dependency whose stacked patch changed is not offered' ($dclD.ids -notcontains 'D2.X' -and @($dclD.waiting | ForEach-Object { $_.id }) -contains 'D2.X') "ids $($dclD.ids -join ',')"
+    $dclR = @(& "$S\Claim-Task.ps1" -Repo $dr -Role build -Session build-dx -Task D2.X 2>&1) -join ' '
+    Case 'deps: a claim by name of that row is refused, naming the changed patch' ($dclR -match 'REFUSED-TASK D2\.X .*patch that has changed') $dclR
+    $sjd2 = & "$S\Get-StreamStatus.ps1" -Repo $dr -Json | ConvertFrom-Json
+    $dRoot = @($sjd2.claimable.roots | Where-Object { $_.id -eq 'D1.B' })
+    Case 'deps: the board names that built dependency as the root and says what it needs' ($dRoot.Count -eq 1 -and $dRoot[0].need -match 'base changed') ($sjd2.claimable.roots | ConvertTo-Json -Compress)
+    $dIdle = @(& "$S\Start-StreamRunner.ps1" -Repo $dr -Role build -DryRun 2>&1 | ForEach-Object { "$_" }) -join ' '
+    Case 'deps: the idle report says the dependency is built on a changed patch' ($dIdle -match 'D1\.B \[built on a changed D1\.A\.patch') $dIdle
+    $dPatchA2 = [IO.File]::ReadAllBytes((Join-Path $dr '.streams\patches\D1.A.patch'))
+    [IO.File]::WriteAllBytes((Join-Path $dr '.streams\patches\D1.A.patch'), $dPatchA1)
+    $dclO = Get-Claimable $dP0 (J $dr) 'build' @{}
+    Case 'deps: with the stacked patch unchanged the same row is offered' ($dclO.ids -contains 'D2.X') "ids $($dclO.ids -join ',')"
+    [IO.File]::WriteAllBytes((Join-Path $dr '.streams\patches\D1.A.patch'), $dPatchA2)
+    Remove-Item -LiteralPath $dcfg0
     & "$S\Enter-Integrator.ps1" -Repo $dr -Session integ-d | Out-Null
     $di1 = @(& "$S\Integrate-Patch.ps1" -Repo $dr -Session integ-d)
     Case 'deps: the rebuilt A integrates' ($di1[0] -eq 'INTEGRATED D1.A') ($di1 -join ' | ')
@@ -1631,6 +1665,29 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $seI2 = @(& "$S\Integrate-Patch.ps1" -Repo $seR -Session integ-se -Task S1.Q)
     $seMoved = @(Get-ChildItem -Recurse -File (Join-Path $seR '.streams\stray') -Filter pn.txt -ErrorAction SilentlyContinue)
     Case 'STRAY-EMPTY: an empty untracked file at a created path is moved aside; a non-empty one still REBASEs' ($seI1[0] -eq 'STRAY-EMPTY S1.P pn.txt' -and $seI1 -contains 'INTEGRATED S1.P' -and (T $seR 'S1.P').state -eq 'integrated' -and (Get-Content -Raw (Join-Path $seR 'pn.txt')).Trim() -eq 'new file' -and $seMoved.Count -eq 1 -and $seI2[-1] -eq 'REBASE S1.Q' -and (Get-Content -Raw (Join-Path $seR 'qn.txt')).Trim() -eq 'not empty') (($seI1 -join ' | ') + ' :: ' + ($seI2 -join ' | '))
+    # MOCKUP-TREE (kit item IN-20261107203530-f681): a mockup whose write set is in the tree hands off a patch that is
+    # applied, graded and committed like a docs row; only a mockup delivered in place under .streams lands with no change.
+    $mtR = Join-Path $Scratch 'mtrepo'; New-Item -ItemType Directory -Path $mtR -Force | Out-Null
+    git -C $mtR init -q -b main; git -C $mtR config user.email t@t; git -C $mtR config user.name t; Grant-GitPolicy $mtR
+    Set-Content (Join-Path $mtR 'm.txt') 'm base'
+    git -C $mtR add -A; git -C $mtR commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $mtR | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $mtR '.streams\graders') -Force | Out-Null
+    Grader (Join-Path $mtR '.streams\graders\M1.M.ps1') 'm.txt' 'DONE-M'
+    $mtPlan = @{
+        groups = @(@{ id = 'M1'; name = 'mt'; state = 'released'; scope = @{ include = @('F-MT') }; origin = 'plan' })
+        tasks  = @(@{ id = 'M1.M'; group = 'M1'; title = 'M'; why = @('AC-M'); kind = 'mockup'; writeSet = @('m.txt'); dependsOn = @(); estMinutes = 10; artifacts = @{ ticket = '.streams\tickets\M1.M.md'; grader = '.streams\graders\M1.M.ps1' } }) }
+    $mtPf = Join-Path $Scratch 'mtplan.json'; $mtPlan | ConvertTo-Json -Depth 10 | Set-Content $mtPf
+    & "$S\Add-Tasks.ps1" -Repo $mtR -Role plan -Session plan-mt -File $mtPf | Out-Null
+    & "$S\Claim-Task.ps1" -Repo $mtR -Role build -Session 'build-mt' -Task 'M1.M' | Out-Null
+    $mtWt = & "$S\New-TaskWorktree.ps1" -Repo $mtR -Task 'M1.M' -Session 'build-mt' -WorktreeRoot $wtRoot | Select-Object -Last 1
+    Set-Content (Join-Path $mtWt 'm.txt') 'm DONE-M'
+    & "$S\Export-TaskPatch.ps1" -Repo $mtR -Task 'M1.M' -Worktree $mtWt | Out-Null
+    & "$S\Update-Task.ps1" -Repo $mtR -Task 'M1.M' -Role build -Session 'build-mt' -To built -Release -Artifacts @{ patch = '.streams\patches\M1.M.patch' } | Out-Null
+    & "$S\Enter-Integrator.ps1" -Repo $mtR -Session integ-mt | Out-Null
+    $mtI = @(& "$S\Integrate-Patch.ps1" -Repo $mtR -Session integ-mt -Task M1.M)
+    $mtLog = @(git -C $mtR log --format=%s)
+    Case 'MOCKUP-TREE: a mockup with a tree write set lands its patch and is committed, never no-tree-change' ($mtI -contains 'INTEGRATED M1.M' -and $mtI -notmatch '\(mockup\)' -and (Get-Content -Raw (Join-Path $mtR 'm.txt')).Trim() -eq 'm DONE-M' -and (T $mtR 'M1.M').state -eq 'integrated' -and ($mtLog -match '^M1\.M').Count -ge 1) (($mtI -join ' | ') + ' :: ' + ($mtLog -join ' / '))
     # INTENT-TO-ADD (kit item IN-20261106113700-53f1): a grader that reads the index sees the patch's new file on main,
     # and a reversed patch leaves no intent-to-add entry behind.
     $iaR = Join-Path $Scratch 'iarepo'; New-Item -ItemType Directory -Path $iaR -Force | Out-Null
@@ -1663,6 +1720,62 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $iaHeadP = @(git -C $iaR ls-tree --name-only HEAD -- pn.txt)
     $iaIdxQ = @(git -C $iaR ls-files --cached -- qn.txt); $iaStQ = @(git -C $iaR status --porcelain -- qn.txt q.txt)
     Case 'INTENT-TO-ADD: a new file is in the index for the main grade; a reversed one leaves no index entry' ($iaI1 -contains 'INTEGRATED I1.P' -and $iaHeadP.Count -eq 1 -and @($iaI2 | Where-Object { $_ -like 'REVERSED I1.Q*' }).Count -eq 1 -and -not $iaIdxQ.Count -and -not $iaStQ.Count -and -not (Test-Path (Join-Path $iaR 'qn.txt'))) (($iaI1 -join ' | ') + ' :: ' + ($iaI2 -join ' | ') + " :: idxQ=$($iaIdxQ -join ',') st=$($iaStQ -join ',')")
+    # BATCH DRAIN (kit item IN-20261106155331-d772): config drain.batchMax > 1 applies disjoint ready rows as one
+    # combined patch, grades each, commits each row's own paths and pushes once; a red reverses the batch and the
+    # first row drains singly; id-register and composition rows stay out; the default 1 makes no batch file.
+    function New-BatchRepo([string] $name, [string[]] $files, [string[]] $red = @()) {
+        $r = Join-Path $Scratch $name; New-Item -ItemType Directory -Path $r -Force | Out-Null
+        git -C $r init -q -b main; git -C $r config user.email t@t; git -C $r config user.name t; Grant-GitPolicy $r
+        foreach ($x in $files) { $fp = Join-Path $r $x; New-Item -ItemType Directory -Path (Split-Path $fp) -Force | Out-Null; Set-Content $fp "$x base" }
+        git -C $r add -A; git -C $r commit -q -m base
+        $bare = Join-Path $Scratch "$name-origin.git"; git init -q --bare $bare; git -C $r remote add origin $bare
+        & "$S\Init-Streams.ps1" -Repo $r | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $r '.streams\graders') -Force | Out-Null
+        $cfgPath = Join-Path $r '.streams\config.json'
+        $cfg = if (Test-Path $cfgPath) { Get-Content -Raw $cfgPath | ConvertFrom-Json -AsHashtable } else { @{} }
+        $cfg['drain'] = @{ batchMax = 3 }; $cfg | ConvertTo-Json -Depth 10 | Set-Content $cfgPath
+        $ids = @(); $rows = @(); $n = 0
+        foreach ($x in $files) {
+            $n++; $id = "B1.R$n"; $ids += $id
+            if ($red -contains $x) { Set-Content -Encoding utf8 (Join-Path $r ".streams\graders\$id.ps1") "param([string]`$Root)`n'FAIL C1: always red'; exit 1" }
+            else { Grader (Join-Path $r ".streams\graders\$id.ps1") $x "DONE-$n" }
+            $rows += @{ id = $id; group = 'B1'; title = "R$n"; why = @("AC-R$n"); kind = 'code'; writeSet = @($x); dependsOn = @(); estMinutes = 10; artifacts = @{ ticket = ".streams\tickets\$id.md"; grader = ".streams\graders\$id.ps1" } }
+        }
+        $pf = Join-Path $Scratch "$name-plan.json"
+        @{ groups = @(@{ id = 'B1'; name = 'batch'; state = 'released'; scope = @{ include = @('F-B') }; origin = 'plan' }); tasks = $rows } | ConvertTo-Json -Depth 10 | Set-Content $pf
+        & "$S\Add-Tasks.ps1" -Repo $r -Role plan -Session "plan-$name" -File $pf | Out-Null
+        $n = 0
+        foreach ($id in $ids) {
+            $n++; $x = $files[$n - 1]
+            & "$S\Claim-Task.ps1" -Repo $r -Role build -Session "build-$id" -Task $id | Out-Null
+            $wt = & "$S\New-TaskWorktree.ps1" -Repo $r -Task $id -Session "build-$id" -WorktreeRoot $wtRoot | Select-Object -Last 1
+            Set-Content (Join-Path $wt $x) "$x DONE-$n"
+            & "$S\Export-TaskPatch.ps1" -Repo $r -Task $id -Worktree $wt | Out-Null
+            & "$S\Update-Task.ps1" -Repo $r -Task $id -Role build -Session "build-$id" -To built -Release -Artifacts @{ patch = ".streams\patches\$id.patch" } | Out-Null
+        }
+        & "$S\Enter-Integrator.ps1" -Repo $r -Session "integ-$name" | Out-Null
+        $r
+    }
+    $prevPushRef = $env:STREAM_PUSH_REF; $env:STREAM_PUSH_REF = 'main'
+    try {
+        $bt1 = New-BatchRepo 'bt1repo' @('a.txt', 'b.txt', 'c.txt')
+        $bt1Out = @(& "$S\Integrate-Patch.ps1" -Repo $bt1 -Session integ-bt1repo)
+        $bt1Commits = @(git -C $bt1 log --format=%h -n 3)
+        $bt1Names = @($bt1Commits | ForEach-Object { (@(git -C $bt1 show --name-only --format= $_) | Where-Object { $_ }) -join ',' })
+        $bt1States = @('B1.R1', 'B1.R2', 'B1.R3' | ForEach-Object { (T $bt1 $_).state })
+        Case 'BATCH: three disjoint green rows integrate and commit one by one with their own paths, one push' (@($bt1Out | Where-Object { $_ -like 'INTEGRATED B1.R*' }).Count -eq 3 -and @($bt1Out | Where-Object { $_ -like 'COMMITTED B1.R*' }).Count -eq 3 -and ($bt1Names -join '|') -eq 'c.txt|b.txt|a.txt' -and @($bt1Out | Where-Object { $_ -like 'PUSH* BATCH *' }).Count -eq 1 -and -not @($bt1Out | Where-Object { $_ -match '^PUSHED B1\.R' }).Count -and ($bt1States -join ',') -eq 'integrated,integrated,integrated') ($bt1Out -join ' | ')
+        $bt2 = New-BatchRepo 'bt2repo' @('a.txt', 'b.txt', 'c.txt') @('b.txt')
+        $bt2Out = @(& "$S\Integrate-Patch.ps1" -Repo $bt2 -Session integ-bt2repo)
+        $bt2States = @('B1.R1', 'B1.R2', 'B1.R3' | ForEach-Object { (T $bt2 $_).state })
+        $bt2Off = ((Get-Content -Raw (Join-Path $bt2 'b.txt')).Trim() -eq 'b.txt base') -and ((Get-Content -Raw (Join-Path $bt2 'c.txt')).Trim() -eq 'c.txt base')
+        Case 'BATCH: a red row reverses the batch; the first row drains singly, the others stay built' (@($bt2Out | Where-Object { $_ -like 'BATCH-RED B1.R1,B1.R2,B1.R3 (red: B1.R2)*' }).Count -eq 1 -and $bt2Out -contains 'INTEGRATED B1.R1' -and @($bt2Out | Where-Object { $_ -like 'COMMITTED B1.R1 *' }).Count -eq 1 -and ($bt2States -join ',') -eq 'integrated,built,built' -and $bt2Off -and -not @(git -C $bt2 status --porcelain -- b.txt c.txt).Count) ($bt2Out -join ' | ')
+        $bt3 = New-BatchRepo 'bt3repo' @('a.txt', 'ids.yaml', 'src/Composition/Reg.cs', 'd.txt')
+        $bt3Out = @(& "$S\Integrate-Patch.ps1" -Repo $bt3 -Session integ-bt3repo)
+        $bt3States = @('B1.R1', 'B1.R2', 'B1.R3', 'B1.R4' | ForEach-Object { (T $bt3 $_).state })
+        Case 'BATCH: id-register and composition rows stay out of the batch and stay built' (@($bt3Out | Where-Object { $_ -like 'COMMITTED B1.R*' }).Count -eq 2 -and @($bt3Out | Where-Object { $_ -like 'PUSH* BATCH B1.R1,B1.R4 *' }).Count -eq 1 -and ($bt3States -join ',') -eq 'integrated,built,built,integrated') ($bt3Out -join ' | ')
+    } finally { $env:STREAM_PUSH_REF = $prevPushRef }
+    Case 'BATCH: the default drain.batchMax 1 writes no batch patch' (-not @(Get-ChildItem (Join-Path $seR '.streams\patches') -Filter 'batch-*' -ErrorAction SilentlyContinue).Count -and -not @(Get-ChildItem (Join-Path $iaR '.streams\patches') -Filter 'batch-*' -ErrorAction SilentlyContinue).Count)
+
     # ALREADY-ON-MAIN (kit item IN-20261019062723-9b6e): a built patch main already holds is graded in place and
     # committed (uncommitted on main), or integrated with nothing to do (already in HEAD), never REBASE-looped.
     $amR = Join-Path $Scratch 'amrepo'; New-Item -ItemType Directory -Path $amR -Force | Out-Null

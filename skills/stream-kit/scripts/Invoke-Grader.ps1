@@ -42,6 +42,7 @@ param(
     [ValidateSet('', 'grader', 'check')] [string] $Only = '',
     [int] $TimeoutSeconds = 0,
     [string[]] $CensusPaths = @(),
+    [switch] $NoCensus,
     [switch] $ExpectRed
 )
 $missing = @(foreach ($n in 'Repo', 'Task', 'Root') { if (-not (Get-Variable $n -ValueOnly)) { "-$n" } })
@@ -67,10 +68,11 @@ if (-not $scripts.Count) { "NO-GRADER $Task$(if ($Only) { " (no $Only)" } else {
 # *CensusTests), so G18.T061 integrated green and left main red. The changed paths are -CensusPaths (the integrator
 # passes the patch's paths on main), else the worktree's own diff against HEAD plus untracked files, else the row's
 # kept patch. A census FAIL id already in .streams\suites\census-baseline.json (main's own red) is rewritten BASELINE
-# and does not fail the run. Never with -Only or -ExpectRed: a RED proof is about the row's clauses.
+# and does not fail the run. Never with -Only or -ExpectRed: a RED proof is about the row's clauses. -NoCensus skips it:
+# a batch drain grades each row of one combined patch and runs the census once, on the last row's grade.
 $censusScript = ''
 $censusCfg = (Get-StreamConfig $P)['census']
-if ($censusCfg -is [Collections.IDictionary] -and $censusCfg['script'] -and -not $Only -and -not $ExpectRed) {
+if ($censusCfg -is [Collections.IDictionary] -and $censusCfg['script'] -and -not $Only -and -not $ExpectRed -and -not $NoCensus) {
     $cs = [string]$censusCfg['script']
     if (-not [IO.Path]::IsPathRooted($cs)) { $cs = Join-Path $Repo $cs }
     $rootFull = (Resolve-Path $Root).Path.TrimEnd('\')
@@ -137,6 +139,7 @@ try {
         $err = ''
         $in = ''
         $tail = ''
+        $scriptWatch = [Diagnostics.Stopwatch]::StartNew()
         if ($BeatSession) {
             # A child process, so this session can beat the integrator lock while the grader runs.
             $err = "$tmp.err"
@@ -170,7 +173,8 @@ try {
             & pwsh -NoProfile -File $g -Root $Root *> $part
             $one = $LASTEXITCODE
         }
-        if ($scripts.Count -gt 1) { Add-LineTo $log "== $(Split-Path -Leaf (Split-Path $g)) $(Split-Path -Leaf $g) exit $one" }
+        # The seconds let Integrate-Patch report each script's share of a main grade (census vs check vs grader).
+        if ($scripts.Count -gt 1) { Add-LineTo $log "== $(Split-Path -Leaf (Split-Path $g)) $(Split-Path -Leaf $g) exit $one in $([Math]::Round($scriptWatch.Elapsed.TotalSeconds, 1))s" }
         $body = Read-RedirectText $part
         if ($tail) { $body = "$body$(if ($body) { [Environment]::NewLine })$tail" }
         if ($g -eq $censusScript -and $one -ne 0 -and -not $timedOut) {
