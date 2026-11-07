@@ -30,6 +30,7 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [Seq events also in SQL: logging.tSystemLog (Profisee DB + PROD speedmerchants)](reference_systemlog_table.md)
 
 ## Active work (newest first; full status in each file)
+- **[SMVMTR1 Connect+Matching 1K verified 11/07; SMVM2 now TR1's P2P target](project_smvmtr1_packs_verified_2026-11-07.md)**
 - **[Red is red: fix the check, never explain a false red away; building blocks declare caller values in 'inputs'](feedback_red_is_red_declared_inputs.md)**
 - **[Each pack own ModelSource<Pack> DB, name only from <family>/databases:ModelSourceDB (SQL, service configs, TestAuto)](feedback_pack_own_source_database.md)**
 - **[Tags used on workflows (incl. AUTO: IDs) must exist in TestAutoTags](feedback_tags_must_exist_in_testautotags.md)**
