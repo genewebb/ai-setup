@@ -101,7 +101,10 @@ function Get-DeliveryDrift($P, [string] $Task, $WriteSet) {
     if (-not (Test-InPlaceWriteSet $WriteSet)) { return @() }
     @(Compare-DeliveredManifest $P $Task $WriteSet | Where-Object { $_ -and $_ -ne 'NO-MANIFEST' })
 }
-foreach ($m in @($ready | Where-Object { $_.kind -eq 'mockup' })) {
+# A mockup is a no-tree-change row only when it is delivered in place under .streams; a mockup whose write set is in
+# the tree (docs/ui/<screen>) hands off a patch and lands like a docs row (kit item IN-20261107203530-f681).
+$inPlaceMockups = @($ready | Where-Object { $_.kind -eq 'mockup' -and (Test-InPlaceWriteSet $_.writeSet) })
+foreach ($m in $inPlaceMockups) {
     $drift = @(Get-DeliveryDrift $P $m.id $m.writeSet)
     foreach ($line in $drift) { "DELIVERY-CHANGED $($m.id) $line" }
     $suffix = if ($drift.Count) { " -- delivered folder changed since hand-off: $($drift -join '; ')" } else { '' }
@@ -116,8 +119,8 @@ foreach ($m in $inPlace) {
     & $update -Repo $Repo -Task $m.id -Role integrate -Session $Session -To integrated -Note "in place under .streams: no tree change$suffix" | Out-Null
     "INTEGRATED $($m.id) (in place)$(if ($drift.Count) { ' CHANGED SINCE HAND-OFF' })"
 }
-$t = @($ready | Where-Object { $_.kind -in @('code', 'docs') -and -not (Test-InPlaceWriteSet $_.writeSet) -and (Test-DepsAt $doc $_ @('integrated', 'done')) }) | Select-Object -First 1
-if (-not $t) { if (-not (@($ready | Where-Object { $_.kind -eq 'mockup' }).Count + $inPlace.Count)) { 'NONE' }; exit 0 }
+$t = @($ready | Where-Object { $_.kind -in @('code', 'docs', 'mockup') -and -not (Test-InPlaceWriteSet $_.writeSet) -and (Test-DepsAt $doc $_ @('integrated', 'done')) }) | Select-Object -First 1
+if (-not $t) { if (-not ($inPlaceMockups.Count + $inPlace.Count)) { 'NONE' }; exit 0 }
 
 # A row with neither a builder's check nor an author's grader cannot be verified on main (stream-integrate A3, owner
 # rulings IN-20261002160453-ce2a and IN-20261002160643-741d), so it is bounced BEFORE the apply. On 2026-10-03
@@ -167,7 +170,188 @@ if ((Test-Path -LiteralPath $patch -PathType Leaf) -and -not @(Get-PatchPaths $p
 # A write to main and a main-tree grader build must exclude each other. Without this an author's RED run compiled a
 # tree that was being rewritten under it and reported a phantom CS1061 for a member HEAD declares (kit item
 # IN-20260929183913-7850). The lock is released before the grader, which takes it itself.
-$applyLock = Enter-MainTreeLock $P "integrate $($t.id) apply" 600
+# TIMING (owner request IN-20261106154815-b0f8, phase 0): one `TIMING <id> <step> <s>s` line per step of a patch,
+# appended to .streams\logs\integrate-timing.log and written to the host (a detached drain's stdout log), so a drain's
+# cost per step can be compared before and after a change to the drain. Each line measures the time since the previous
+# one. The host stream keeps the lines out of the outcome lines callers read by position.
+$script:stepWatch = [Diagnostics.Stopwatch]::StartNew()
+function Write-StepTime([string] $Id, [string] $Step, [string] $Detail = '') {
+    $line = "TIMING $Id $Step $([Math]::Round($script:stepWatch.Elapsed.TotalSeconds, 1))s$(if ($Detail) { " $Detail" })"
+    $script:stepWatch.Restart()
+    try { Add-LineTo (Join-Path $P.Logs 'integrate-timing.log') "$(Get-Now) $Session $line" } catch { }
+    Write-Host $line
+}
+# BATCH DRAIN (kit item IN-20261106155331-d772, design in its evidence file): with config drain.batchMax N > 1, up to N
+# ready rows whose patches touch disjoint paths, apply alone on main, and touch no id register or composition file are
+# applied as ONE combined patch and graded row by row on it, the census once on the last grade; all green commits each
+# row's own paths and pushes once. Any red reverses the whole batch, writes no row state, and the first row drains
+# singly below, so its own grade decides as without a batch. The default, 1, never enters this branch.
+$drainCfg = (Get-StreamConfig $P)['drain']
+$batchMax = 1; if ($drainCfg -is [Collections.IDictionary] -and $drainCfg['batchMax']) { $batchMax = [int]$drainCfg['batchMax'] }
+if ($batchMax -gt 1) {
+    $bLock = Enter-MainTreeLock $P "integrate batch apply" 600
+    if (-not $bLock) { "RETRY $($t.id) (main tree busy: $(Get-MainTreeLockHolder $P))"; exit 0 }
+    $bRows = [Collections.Generic.List[object]]::new(); $bPatch = @{}; $bOwn = @{}
+    $bSeen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($c in @($ready | Where-Object { $_.kind -in @('code', 'docs', 'mockup') -and -not (Test-InPlaceWriteSet $_.writeSet) -and (Test-DepsAt $doc $_ @('integrated', 'done')) })) {
+        if ($bRows.Count -ge $batchMax) { break }
+        $ok = $false
+        $cp = [string](Get-Field $c 'artifacts', 'patch'); if ($cp -and -not [IO.Path]::IsPathRooted($cp)) { $cp = Join-Path $Repo $cp }
+        if (((Get-Field $c 'artifacts', 'check') -or (Get-Field $c 'artifacts', 'grader')) -and $cp -and (Test-Path -LiteralPath $cp -PathType Leaf) -and -not @(Get-DependencyBaseDrift $P $doc $c | Where-Object { $_ }).Count) {
+            $cps = @(Get-PatchPaths $cp | Where-Object { $_ })
+            if ($cps.Count -and -not @($cps | Where-Object { $_ -match $script:AllocatorFileRx -or $_ -match $script:CompositionFileRx -or $bSeen.Contains($_) }).Count) {
+                & git -C $Repo apply --check --binary --whitespace=nowarn $cp 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0 -and -not @(Get-AllocatorDuplicates $Repo $cp | Where-Object { $_ }).Count) { $ok = $true }
+            }
+        }
+        # The first ready row must itself qualify, so a batch never lands a row ahead of one priority puts before it.
+        if (-not $ok) { if (-not $bRows.Count) { break } else { continue } }
+        $bRows.Add($c); $bPatch[[string]$c.id] = $cp; $bOwn[[string]$c.id] = $cps; foreach ($x in $cps) { [void]$bSeen.Add($x) }
+    }
+    $bStamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddHHmmss')
+    $bId = "batch-$bStamp"
+    $combined = Join-Path $P.Patches "$bId.patch"
+    $bOk = $false
+    if ($bRows.Count -ge 2) {
+        $sb = [Text.StringBuilder]::new()
+        foreach ($r in $bRows) { $txt = [IO.File]::ReadAllText($bPatch[[string]$r.id]); [void]$sb.Append($txt); if (-not $txt.EndsWith("`n")) { [void]$sb.Append("`n") } }
+        [IO.File]::WriteAllText($combined, $sb.ToString())
+        & git -C $Repo apply --check --binary --whitespace=nowarn $combined 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { $bOk = $true } else { Remove-Item -LiteralPath $combined -Force -ErrorAction SilentlyContinue }
+    }
+    if (-not $bOk) { $bLock.Dispose() } else {
+        $bIds = @($bRows | ForEach-Object { [string]$_.id })
+        Write-StepTime $bId 'check' ($bIds -join ',')
+        $union = @($bSeen)
+        # Census baseline over the union of the batch's paths. A stale baseline is run now, or emptied under
+        # census.baselineOnRed; either way a census red in the batch grade sends the batch back to the single drain.
+        $bCensus = (Get-StreamConfig $P)['census']
+        if ($bCensus -is [Collections.IDictionary] -and $bCensus['script']) {
+            $cRx = if ($bCensus['paths']) { [string]$bCensus['paths'] } else { '.' }
+            $cScript = [string]$bCensus['script']; if (-not [IO.Path]::IsPathRooted($cScript)) { $cScript = Join-Path $Repo $cScript }
+            if (@($union | Where-Object { $_ -match $cRx }).Count -and (Test-Path -LiteralPath $cScript)) {
+                $bFile = Join-Path $P.Root 'suites\census-baseline.json'
+                $cHead = (& git -C $Repo rev-parse HEAD 2>$null | Select-Object -First 1)
+                $cDirtyText = (@(& git -C $Repo diff HEAD 2>$null) + @(& git -C $Repo ls-files --others --exclude-standard 2>$null)) -join "`n"
+                $cDirty = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($cDirtyText))).Replace('-', '')
+                $cOld = $null
+                if (Test-Path -LiteralPath $bFile) { try { $cOld = Get-Content -LiteralPath $bFile -Raw | ConvertFrom-Json -AsHashtable } catch { $cOld = $null } }
+                if (-not $cOld -or $cOld['head'] -ne $cHead -or $cOld['dirtyHash'] -ne $cDirty) {
+                    New-Item -ItemType Directory -Path (Split-Path $bFile) -Force | Out-Null
+                    if ($bCensus['baselineOnRed'] -eq $true) {
+                        Write-AtomicText $bFile (@{ head = ''; dirtyHash = ''; fails = @(); at = (Get-Date).ToUniversalTime().ToString('o'); deferred = $true } | ConvertTo-Json -Depth 4)
+                    } else {
+                        $cOut = @(& pwsh -NoProfile -NonInteractive -File $cScript -Root $Repo 2>&1 | ForEach-Object { "$_" })
+                        $cFails = @($cOut | Where-Object { $_ -match '^FAIL\s+([^\s:]+)' } | ForEach-Object { $Matches[1] })
+                        Write-AtomicText $bFile (@{ head = $cHead; dirtyHash = $cDirty; fails = $cFails; at = (Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json -Depth 4)
+                    }
+                }
+            }
+        }
+        Write-StepTime $bId 'baseline-census'
+        [void](Invoke-Git $Repo @('apply', '--binary', '--whitespace=nowarn', $combined))
+        $script:appliedPatch = $combined; $script:appliedTask = $t.id
+        $bNew = @(Get-Content -LiteralPath $combined | ForEach-Object -Begin { $cur = $null } -Process {
+                if ($_ -match '^diff --git a/(.+?) b/(.+)$') { $cur = $Matches[2] } elseif ($cur -and $_ -match '^new file mode') { $cur } })
+        if ($bNew.Count) {
+            $script:intentPaths = @(& git -C $Repo ls-files --others -- @bNew 2>$null)
+            if ($script:intentPaths.Count) { & git -C $Repo add -N -f -- @($script:intentPaths) 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0) { $script:intentPaths = @() } }
+        }
+        $bLock.Dispose()
+        Write-StepTime $bId 'apply'
+        $redId = ''
+        for ($i = 0; $i -lt $bRows.Count; $i++) {
+            $r = $bRows[$i]; $rid = [string]$r.id
+            # Get-GradePendingPatch honors the marker only for the task the main-grader lock names, so it is rewritten
+            # per row; it names the combined patch, so a base laid meanwhile reverses the whole batch out.
+            Write-AtomicText (Join-Path $P.Root 'main-pending.json') (@{ task = $rid; patch = $combined; at = (Get-Now) } | ConvertTo-Json)
+            try {
+                if ($i -lt $bRows.Count - 1) { $null = @(& "$PSScriptRoot\Invoke-Grader.ps1" -Repo $Repo -Task $rid -Root $Repo -Label main -BeatSession $Session -NoCensus); $rc = $LASTEXITCODE }
+                else { $null = @(& "$PSScriptRoot\Invoke-Grader.ps1" -Repo $Repo -Task $rid -Root $Repo -Label main -BeatSession $Session -CensusPaths $union); $rc = $LASTEXITCODE }
+            } catch { $rc = -1 }
+            Write-StepTime $bId "grader $rid" "exit $rc"
+            if ($rc -ne 0) { $redId = $rid; break }
+        }
+        if (-not (Test-IntegratorLock $P $Session)) {
+            $revLock = Enter-MainTreeLock $P "integrate $bId reverse" 600
+            [void](Invoke-Git $Repo @('apply', '-R', '--binary', '--whitespace=nowarn', $combined))
+            $script:appliedPatch = $null
+            if ($revLock) { $revLock.Dispose() }
+            & git -C $Repo update-index -q --refresh 2>&1 | Out-Null
+            Add-Decision $P $Session "integrator lock lost to $(Get-IntegratorLockHolder $P) while batch $($bIds -join ',') graded on main; batch reversed, rows left built"
+            "LOCK-LOST $($bIds -join ',') (batch reversed, still built)"; exit 5
+        }
+        if ($redId) {
+            $revLock = Enter-MainTreeLock $P "integrate $bId reverse" 600
+            [void](Invoke-Git $Repo @('apply', '-R', '--binary', '--whitespace=nowarn', $combined))
+            $script:appliedPatch = $null
+            if ($revLock) { $revLock.Dispose() }
+            & git -C $Repo update-index -q --refresh 2>&1 | Out-Null
+            $gone = @($script:intentPaths | Where-Object { $_ -and -not (Test-Path -LiteralPath (Join-Path $Repo $_)) })
+            if ($gone.Count) { & git -C $Repo rm --cached -q --ignore-unmatch -- @gone 2>&1 | Out-Null }
+            $script:intentPaths = @()
+            Remove-Item -LiteralPath (Join-Path $P.Root 'main-pending.json') -Force -ErrorAction SilentlyContinue
+            Write-StepTime $bId 'reverse'
+            Add-Decision $P $Session "BATCH-RED $($bIds -join ',') (red: $redId); draining singly"
+            "BATCH-RED $($bIds -join ',') (red: $redId); draining singly"
+        } else {
+            $landed = [Collections.Generic.List[object]]::new()
+            foreach ($r in $bRows) {
+                $u = @(& $update -Repo $Repo -Task $r.id -Role integrate -Session $Session -To integrated -Note "applied in $bId with $($bIds -join ','); grader PASS on main")
+                if ($LASTEXITCODE -ne 0) { Add-Decision $P $Session "batch ${bId}: state write -To integrated for $($r.id) refused (exit $LASTEXITCODE): $($u -join ' ')"; break }
+                $landed.Add($r); "INTEGRATED $($r.id)"
+            }
+            $script:appliedPatch = $null
+            # A row whose state write was refused must not keep code on main: its own patch comes off (paths are disjoint).
+            foreach ($r in @($bRows | Where-Object { $landed -notcontains $_ })) {
+                $revLock = Enter-MainTreeLock $P "integrate $($r.id) reverse" 600
+                try { [void](Invoke-Git $Repo @('apply', '-R', '--binary', '--whitespace=nowarn', $bPatch[[string]$r.id])) } finally { if ($revLock) { $revLock.Dispose() } }
+                "RETRY $($r.id) (batch state write refused; its patch reversed, still built)"
+            }
+            if ($NoCommit -or -not $landed.Count) { exit 0 }
+            $gitPolicy = Get-IntegrateGitPolicy $Repo
+            if ($PushRef -eq '<profile>') { $PushRef = Resolve-StreamPushRef $Repo $gitPolicy.PushRef }
+            if (-not $gitPolicy.Commit) {
+                foreach ($r in $landed) { Add-Decision $P $Session "commit of $($r.id) skipped, left uncommitted: Commit is not allowed ($($gitPolicy.Why))"; "COMMIT SKIPPED $($r.id) (git policy: $($gitPolicy.Why))" }
+                exit 0
+            }
+            $sha = ''; $done = @()
+            foreach ($r in $landed) {
+                $paths = @(Get-Content -LiteralPath $bPatch[[string]$r.id] | ForEach-Object { if ($_ -match '^diff --git a/(.+) b/(.+)$') { $Matches[1]; $Matches[2] } } | Sort-Object -Unique)
+                try {
+                    $staleLock = Clear-StaleGitIndexLock $P $Session $Repo; if ($staleLock) { "STALE-INDEX-LOCK removed $staleLock" }
+                    [void](Invoke-Git $Repo (@('add', '-A', '-f', '--') + $paths))
+                    [void](Invoke-Git $Repo (@('commit', '-q', '-m', "$($r.id): $($r.title)", '-m', "Integrated by stream-integrate ($Session) in $bId; grader PASS on main.", '-m', 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>', '--') + $paths))
+                    $sha = (Invoke-Git $Repo @('rev-parse', '--short', 'HEAD')) | Select-Object -First 1
+                    Add-Decision $P $Session "committed $($r.id) as $sha ($bId)"
+                    "COMMITTED $($r.id) $sha"; $done += [string]$r.id
+                } catch {
+                    Add-Decision $P $Session "commit of $($r.id) failed, left uncommitted: $($_.Exception.Message)"
+                    "COMMIT FAILED $($r.id) (left uncommitted)"
+                }
+            }
+            Write-StepTime $bId 'commit'
+            $remotes = @(& git -C $Repo remote 2>$null)
+            if ($sha -and $PushRef -and ($remotes -contains 'origin')) {
+                if (-not $gitPolicy.Push) {
+                    Add-Decision $P $Session "push of $sha to origin $PushRef skipped: Push is not allowed ($($gitPolicy.Why))"
+                    "PUSH SKIPPED BATCH $($done -join ',') $sha (git policy: $($gitPolicy.Why))"
+                } else {
+                    try {
+                        [void](Invoke-Git $Repo @('push', 'origin', "HEAD:$PushRef"))
+                        Add-Decision $P $Session "pushed $sha to origin $PushRef ($bId)"
+                        "PUSHED BATCH $($done -join ',') $sha -> $PushRef"
+                    } catch {
+                        Add-Decision $P $Session "push of $sha to origin $PushRef failed (commits stand, integration unaffected): $($_.Exception.Message)"
+                        "PUSH FAILED BATCH $($done -join ',') $sha (committed; integration unaffected)"
+                    }
+                    Write-StepTime $bId 'push'
+                }
+            }
+            exit 0
+        }
+    }
+}$applyLock = Enter-MainTreeLock $P "integrate $($t.id) apply" 600
 if (-not $applyLock) { "RETRY $($t.id) (main tree busy: $(Get-MainTreeLockHolder $P))"; exit 0 }
 & git -C $Repo apply --check --binary --whitespace=nowarn $patch 2>&1 | Out-Null; $applyExit = $LASTEXITCODE
 # STRAY-EMPTY (kit item IN-20261019112954-86bc): a 0-byte UNTRACKED file at a path the patch creates is not a moved
@@ -252,6 +436,9 @@ if (-not $clean) {
     $applyLock.Dispose()
     "REBASE $($t.id)"; exit 0
 }
+Write-StepTime $t.id 'check'
+$baselineState = 'none'
+$script:deferredCensus = $null
 # CENSUS BASELINE (kit item IN-20261023162852-ea21): before the apply, while this session holds the main tree, the repo
 # census (config "census") is run on main as it stands when the cached baseline is for another HEAD or dirty tree, so
 # Invoke-Grader can tell main's own census red (BASELINE) from red this patch brings. Only when the patch touches a
@@ -268,7 +455,17 @@ if ($censusCfg -is [Collections.IDictionary] -and $censusCfg['script'] -and -not
         $cDirty = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($cDirtyText))).Replace('-', '')
         $cOld = $null
         if (Test-Path -LiteralPath $bFile) { try { $cOld = Get-Content -LiteralPath $bFile -Raw | ConvertFrom-Json -AsHashtable } catch { $cOld = $null } }
-        if (-not $cOld -or $cOld['head'] -ne $cHead -or $cOld['dirtyHash'] -ne $cDirty) {
+        $baselineState = 'cached'
+        if ($censusCfg['baselineOnRed'] -eq $true -and (-not $cOld -or $cOld['head'] -ne $cHead -or $cOld['dirtyHash'] -ne $cDirty)) {
+            # BASELINE-ON-RED (kit item IN-20261106155330-1e2e, config census.baselineOnRed): the baseline census is run
+            # only once the graded patch shows a census red. A stale baseline must not excuse a red, so it is emptied:
+            # the grade sees every census FAIL as new, and the red path below re-runs the census on main to sort them.
+            $baselineState = 'deferred'
+            $script:deferredCensus = @{ script = $cScript; file = $bFile }
+            New-Item -ItemType Directory -Path (Split-Path $bFile) -Force | Out-Null
+            Write-AtomicText $bFile (@{ head = ''; dirtyHash = ''; fails = @(); at = (Get-Date).ToUniversalTime().ToString('o'); deferred = $true } | ConvertTo-Json -Depth 4)
+        } elseif (-not $cOld -or $cOld['head'] -ne $cHead -or $cOld['dirtyHash'] -ne $cDirty) {
+            $baselineState = 'ran'
             $cOut = @(& pwsh -NoProfile -NonInteractive -File $cScript -Root $Repo 2>&1 | ForEach-Object { "$_" })
             $cFails = @($cOut | Where-Object { $_ -match '^FAIL\s+([^\s:]+)' } | ForEach-Object { $Matches[1] })
             New-Item -ItemType Directory -Path (Split-Path $bFile) -Force | Out-Null
@@ -277,6 +474,7 @@ if ($censusCfg -is [Collections.IDictionary] -and $censusCfg['script'] -and -not
         }
     }
 }
+Write-StepTime $t.id 'baseline-census' $baselineState
 if (-not $alreadyOnMain) { [void](Invoke-Git $Repo @('apply', '--binary', '--whitespace=nowarn', $patch)) }
 $script:appliedPatch = $patch; $script:appliedTask = $t.id
 # INTENT-TO-ADD (kit item IN-20261106113700-53f1): a check that reads the index (a census over `git ls-files --cached`)
@@ -300,6 +498,7 @@ if ($newPaths.Count) {
 # base beside the grade with the patch reversed out (lib Get-GradePendingPatch). The drain's finally removes it.
 Write-AtomicText (Join-Path $P.Root 'main-pending.json') (@{ task = $t.id; patch = $patch; at = (Get-Now) } | ConvertTo-Json)
 $applyLock.Dispose()
+Write-StepTime $t.id 'apply'
 # A grader that crashes must never leave the patch half-integrated on main: reverse it and bounce the task.
 # The patch's own paths decide whether the repo census (config "census", Invoke-Grader) runs on main.
 $censusPaths = @(Get-Content -LiteralPath $patch | Where-Object { $_ -match '^diff --git a/(\S+) b/' } | ForEach-Object { $Matches[1] })
@@ -315,6 +514,10 @@ catch {
     & $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To ticketed -Note "integrate: grader could not run on main (patch reversed): $err" | Out-Null
     "REVERSED $($t.id) (grader error)"; exit 0
 }
+# The grade's split by script comes from Invoke-Grader's `== <dir> <script> exit <n> in <s>s` section lines.
+$gradeSplit = @(Get-Content -LiteralPath (Join-Path $P.Logs "$($t.id).grader.main.txt") -ErrorAction SilentlyContinue |
+        ForEach-Object { if ("$_" -match '^== \S+ (\S+) exit -?\d+ in ([\d.]+)s$') { "$($Matches[1])=$($Matches[2])s" } })
+Write-StepTime $t.id 'grader' ($gradeSplit -join ' ')
 # The grader can run for a long time. If the lock changed hands while it ran, another integrator owns this tree:
 # reverse the patch and stop rather than commit under someone else's lock.
 if (-not (Test-IntegratorLock $P $Session)) {
@@ -325,6 +528,42 @@ if (-not (Test-IntegratorLock $P $Session)) {
     & git -C $Repo update-index -q --refresh 2>&1 | Out-Null
     Add-Decision $P $Session "integrator lock lost to $(Get-IntegratorLockHolder $P) while $($t.id) graded on main; patch reversed, task left built"
     "LOCK-LOST $($t.id) (patch reversed, still built)"; exit 5
+}
+# BASELINE-ON-RED, the red half: a census FAIL in a grade whose baseline was deferred is sorted the way the pre-apply
+# baseline sorts it. The patch comes off, the census runs on main as it stood, the patch goes back on, and a census id
+# main already had is rewritten BASELINE in the main log; the grade passes when nothing else failed.
+$censusLeaf = if ($script:deferredCensus) { Split-Path -Leaf $script:deferredCensus.script } else { '' }
+$mainLogPath = Join-Path $P.Logs "$($t.id).grader.main.txt"
+$gLines = @(Get-Content -LiteralPath $mainLogPath -ErrorAction SilentlyContinue)
+if ($gcode -ne 0 -and $gcode -ne 8 -and $censusLeaf -and @($gLines | Where-Object { "$_" -match '^FAIL\s+CENSUS-' }).Count) {
+    $redLock = Enter-MainTreeLock $P "integrate $($t.id) census baseline" 600
+    try {
+        [void](Invoke-Git $Repo @('apply', '-R', '--binary', '--whitespace=nowarn', $patch))
+        $cHead = (& git -C $Repo rev-parse HEAD 2>$null | Select-Object -First 1)
+        $cDirtyText = (@(& git -C $Repo diff HEAD 2>$null) + @(& git -C $Repo ls-files --others --exclude-standard 2>$null)) -join "`n"
+        $cDirty = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($cDirtyText))).Replace('-', '')
+        $cOut = @(& pwsh -NoProfile -NonInteractive -File $script:deferredCensus.script -Root $Repo 2>&1 | ForEach-Object { "$_" })
+        $cFails = @($cOut | Where-Object { $_ -match '^FAIL\s+([^\s:]+)' } | ForEach-Object { $Matches[1] })
+        Write-AtomicText $script:deferredCensus.file (@{ head = $cHead; dirtyHash = $cDirty; fails = $cFails; at = (Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json -Depth 4)
+        if ($cFails.Count) { Add-Decision $P $Session "census baseline on main for $($t.id) (run on red): already red $($cFails -join ',')" }
+        [void](Invoke-Git $Repo @('apply', '--binary', '--whitespace=nowarn', $patch))
+    } finally { if ($redLock) { $redLock.Dispose() } }
+    $section = ''; $otherRed = $false; $censusNew = 0; $censusFail = 0
+    $gLines = @($gLines | ForEach-Object {
+            $line = "$_"
+            if ($line -match '^== \S+ (\S+) exit (-?\d+) in [\d.]+s$') {
+                $section = $Matches[1]
+                if ($section -ne $censusLeaf -and [int]$Matches[2] -ne 0) { $otherRed = $true }
+                $line
+            } elseif ($section -eq $censusLeaf -and $line -match '^FAIL\s+([^\s:]+)') {
+                $censusFail++
+                if ($cFails -contains $Matches[1]) { "BASELINE $($Matches[1]) (red on main before this change)" } else { $censusNew++; $line }
+            } else { $line }
+        })
+    Write-AtomicText $mainLogPath (($gLines -join [Environment]::NewLine) + [Environment]::NewLine)
+    $verdict = 'red'
+    if ($censusFail -and -not $censusNew -and -not $otherRed) { $gcode = 0; $verdict = 'pass' }
+    Write-StepTime $t.id 'baseline-census' "ran-on-red $verdict"
 }
 if ($gcode -eq 0) {
     $u = @(& $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To integrated -Note $(if ($alreadyOnMain) { 'already applied on main (uncommitted, reverse-applies clean); grader PASS on main in place' } else { 'applied; grader PASS on main' }))
@@ -351,6 +590,7 @@ if ($gcode -eq 0) {
         $sha = (Invoke-Git $Repo @('rev-parse', '--short', 'HEAD')) | Select-Object -First 1
         Add-Decision $P $Session "committed $($t.id) as $sha"
         "COMMITTED $($t.id) $sha"
+        Write-StepTime $t.id 'commit'
         # The stream branch is shared, so every integration commit is pushed as soon as it lands (owner decision,
         # 2026-09-29, kit item IN-20260929001946-67a7 part 1). The branch itself needs a PR, so the push names the
         # ref explicitly rather than relying on an upstream. A failed push is REPORTED and never blocks integration:
@@ -369,6 +609,7 @@ if ($gcode -eq 0) {
                 Add-Decision $P $Session "push of $sha to origin $PushRef failed (commit stands, integration unaffected): $($_.Exception.Message)"
                 "PUSH FAILED $($t.id) $sha (committed; integration unaffected)"
             }
+            Write-StepTime $t.id 'push'
         }
     } catch {
         Add-Decision $P $Session "commit of $($t.id) failed, left uncommitted: $($_.Exception.Message)"
@@ -433,6 +674,7 @@ if ($gcode -eq 0) {
     $script:appliedPatch = $null
     if ($revLock) { $revLock.Dispose() }
     & git -C $Repo update-index -q --refresh 2>&1 | Out-Null
+    Write-StepTime $t.id 'reverse'
     $fails = ($g | Where-Object { $_ -like 'FAIL *' }) -join ' | '
     $envHit = @(@(Get-Content $mainLog -ErrorAction SilentlyContinue) + @($g) | Where-Object { "$_" -match $script:EnvFailurePattern } | Select-Object -First 1)
     if ($envHit.Count) {

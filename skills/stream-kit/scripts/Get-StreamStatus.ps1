@@ -641,6 +641,7 @@ function Get-RootNeed([string] $id) {
             else { 'needs builder' }
         }
         'building' { if (Test-ClaimLive $x) { 'building' } else { 'building with no live claim' } }
+        'built' { if (@(Get-DependencyBaseDrift $P $doc $x | Where-Object { $_ }).Count) { 'base changed: integrator sends it back' } else { 'built' } }
         default { [string] $x.state }
     }
 }
@@ -662,6 +663,8 @@ foreach ($t in $waitingOnDeps) {
         if ($x -and $unready.Count -and $x.state -in @('planned', 'ticketed') -and $x.kind -ne 'gate') { foreach ($u in $unready) { $stack.Push([string]$u) } }
         else { [void]$mine.Add($d) }
     }
+    # Every dependency of such a row can read built, so the walk above finds no root for it.
+    foreach ($s in @(Get-BaseDriftedDeps $P $doc $t)) { [void]$mine.Add($s.dep) }
     foreach ($r in $mine) { $rootBlocks[$r] = 1 + [int]$rootBlocks[$r] }
 }
 $roots = @($rootBlocks.Keys | Sort-Object @{ e = { $rootBlocks[$_] }; Descending = $true }, @{ e = { $_ }; Descending = $false } |
@@ -987,7 +990,17 @@ function Get-LeftToPlan($doc, [string] $repo) {
         if ($adFiles.Count) {
             $landed = @{}
             foreach ($subj in @(git -C $repo log --format=%s -E --grep '^ADHOC-[0-9]+-[0-9]+:' 2>$null)) { if ([string]$subj -match '^(ADHOC-\d+-\d+):') { $landed[$Matches[1]] = $true } }
-            foreach ($f in $adFiles) { if ($landed.ContainsKey($f.BaseName)) { AddNames ([IO.File]::ReadAllText($f.FullName)) } }
+            # A change the owner committed by hand under another subject carries a 'Landed: <commit>' line in its request
+            # file; it counts once that commit is on HEAD (ADHOC-20261102-13 rode the owner's commit 2e12d219).
+            foreach ($f in $adFiles) {
+                $txt = [IO.File]::ReadAllText($f.FullName)
+                $ok = $landed.ContainsKey($f.BaseName)
+                if (-not $ok) {
+                    $lm = [regex]::Match($txt, '(?m)^Landed:[ \t]*([0-9a-fA-F]{7,40})\b')
+                    if ($lm.Success) { git -C $repo merge-base --is-ancestor $lm.Groups[1].Value HEAD 2>$null; $ok = ($LASTEXITCODE -eq 0) }
+                }
+                if ($ok) { AddNames $txt }
+            }
         }
     }
     # Clause id -> requirement id. A file's id is its top-level `id:`, which is what group scope.include names.

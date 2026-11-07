@@ -246,7 +246,9 @@ $script:tally = [ordered]@{ units = 0; cost = 0.0; outcomes = [ordered]@{} }
 $script:idleSince = $null; $script:idleLastWhy = $null; $script:idleLastPrint = $null
 function Get-WaitingDeps($doc, $Task) {
     $open = @(foreach ($d in @($Task.dependsOn)) { if (-not $d) { continue }; $dt = Get-Task $doc $d; if ($dt.state -notin $script:BuildReadyStates) { "$d [$($dt.state)]" } })
-    if ($open.Count) { $open -join ', ' } else { 'a built dependency whose own base is no longer whole' }
+    if ($open.Count) { return $open -join ', ' }
+    $stale = @(Get-BaseDriftedDeps $P $doc $Task | ForEach-Object { "$($_.dep) [built on a changed $($_.leaves -join ', '); the integrator sends it back]" })
+    if ($stale.Count) { $stale -join ', ' } else { 'a built dependency whose own base is no longer whole' }
 }
 # Idle report clock times carry the local zone (owner ruling 2026-10-18: owner-facing times in local machine time).
 function Format-Local([datetime] $Utc) { Format-LocalStamp ([datetime]::SpecifyKind($Utc, [DateTimeKind]::Utc)) 'HH:mm:ss' }
@@ -1311,9 +1313,11 @@ function Invoke-LiveUnit([string] $Claude, [string[]] $CliArgs, [string] $Out, [
         $proc.WaitForExit()
         $proc.ExitCode
     } finally {
-        if ($waiting) { Exit-OwnerWait $Session $token 'unit ended' }
+        if ($waiting) { Exit-OwnerWait $Session $token 'unit ended'; $waiting = $false }
         Restore-ConsoleMode $saved
-        if ($Tab -and -not $waiting) { Set-RunnerTabTitle $Tab }
+        # Always, also after a 'unit ended' resolve: the session's own exit can retitle the console after it, and a
+        # unit that exits between two polls ends here still waiting (kit item IN-20261107131239-5b1e).
+        if ($Tab) { Set-RunnerTabTitle $Tab }
     }
 }
 

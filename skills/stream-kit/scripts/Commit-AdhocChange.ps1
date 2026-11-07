@@ -13,7 +13,7 @@
 #      from the machine profile, fail closed); FAIL: reverses the patch, so main never keeps an unproven change.
 # A filter that matches no test is a FAIL: a change with no test of its own is not proven.
 # Outcome line (one of): COMMITTED <Id> <sha> | REVERSED <Id> (build|test|census failed; log <path>) | REBASE <Id> |
-# DIRTY <Id> <paths> | NOTHING <Id> | ADHOC-BUSY <Id> (<lock> held by <holder>) | COMMIT SKIPPED <Id> (git policy).
+# DIRTY <Id> <paths> | NOTHING <Id> | LANDED <Id> <commit> (HEAD already holds it; 'Landed:' added to the request file) | ADHOC-BUSY <Id> (<lock> held by <holder>) | COMMIT SKIPPED <Id> (git policy).
 # Exit 0 committed (or -NoCommit applied), 1 reversed, 2 nothing to land, 3 refused (rebase / dirty), 4 busy.
 # STREAM_ADHOC_DOTNET replaces the dotnet executable (the self-test's stub).
 param(
@@ -88,7 +88,22 @@ try {
     $dirty = @(& git -C $Repo status --porcelain -- @paths)
     if ($dirty.Count) { "DIRTY $Id $(($dirty | ForEach-Object { $_.Substring(3) }) -join ', ')"; exit 3 }
     & git -C $Repo apply --check --binary --whitespace=nowarn $patch 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { "REBASE $Id (patch does not apply to main HEAD; rebase the worktree onto main and run again)"; exit 3 }
+    if ($LASTEXITCODE -ne 0) {
+        # The paths are clean on main, so a clean reverse check means HEAD already holds the change: someone else
+        # committed it under another subject. The request file then carries 'Landed: <commit>', which the status
+        # page's left-to-plan count reads in place of an '<Id>:' subject.
+        & git -C $Repo apply --reverse --check --binary --whitespace=nowarn $patch 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $by = (Invoke-Git $Repo (@('log', '-1', '--format=%H', 'HEAD', '--') + $paths)) | Select-Object -First 1
+            $req = Join-Path $adhocDir "$Id.md"
+            $line = "Landed: $by"
+            $has = (Test-Path -LiteralPath $req) -and (@(Get-Content -LiteralPath $req) -contains $line)
+            if (-not $has) { Add-Content -LiteralPath $req -Value $line -Encoding utf8 }
+            Add-Decision $P $Session "adhoc $Id already on HEAD in $by (committed by someone else); request file records Landed"
+            "LANDED $Id $by (already on HEAD; recorded in $req)"; exit 0
+        }
+        "REBASE $Id (patch does not apply to main HEAD; rebase the worktree onto main and run again)"; exit 3
+    }
 
     # 4. Apply, build, targeted test.
     [void](Invoke-Git $Repo @('apply', '--binary', '--whitespace=nowarn', $patch))

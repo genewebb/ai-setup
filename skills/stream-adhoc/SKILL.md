@@ -1,6 +1,6 @@
 ---
 name: stream-adhoc
-description: v0.1. Stream kit ad-hoc role. One long interactive session per repo (addStreamTab -Role Adhoc) that takes the owner's ad-hoc change requests typed in its tab, mostly tweaks to existing UI and changes no group has picked up, and does every role's job for each one - requirements, mockups when the look or flow changes, owner approval of both, the code, one targeted test, a compile and that test on main, and the commit. It changes only finished work (closed groups); a request that belongs to an open group's future work becomes a requirement plus a stream-plan inbox item for that group, with no code. No suites run; the owner tests by hand. Use for /stream-adhoc repo: <repo>.
+description: v0.2. Stream kit ad-hoc role. One long interactive session per repo (addStreamTab -Role Adhoc) that takes the owner's ad-hoc change requests typed in its tab, mostly tweaks to existing UI and changes no group has picked up, and does every role's job for each one - requirements, mockups when the look or flow changes, owner approval of both, the code, one targeted test, a compile and that test on main, and the commit. It changes only finished work (closed groups); a request that belongs to an open group's future work becomes a requirement plus a stream-plan inbox item for that group, with no code. No suites run; the owner tests by hand. Use for /stream-adhoc repo: <repo>.
 ---
 
 # stream-adhoc
@@ -119,6 +119,7 @@ file `.streams\adhoc\<Id>.md` from the first step to the last:
    | Outcome | Meaning and next step |
    |---|---|
    | `COMMITTED <Id> <sha>` | Landed. Go to step 9. |
+| `LANDED <Id> <sha>` | HEAD already holds the change (the owner committed it under another subject). The script added `Landed: <sha>` to the request file, so the status page counts its clauses. Go to step 9. |
    | `REVERSED <Id> (build\|test\|census failed ...)` | Main is unchanged. Read the log it names, fix the code in the worktree, re-run step 7, then run this step again. |
    | `REBASE <Id>` | Main moved under the change. In the worktree: `git stash push --include-untracked`, `git switch --detach <main HEAD sha>`, `git stash pop`. Resolve any conflict, re-run step 7, then run this step again. |
    | `DIRTY <Id> <paths>` | Another change to those paths is uncommitted on main. If the integrator is mid-apply, wait 5 minutes and retry. If the paths stay dirty, ask the owner. |

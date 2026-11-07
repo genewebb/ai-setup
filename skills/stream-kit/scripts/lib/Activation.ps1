@@ -42,7 +42,7 @@ function Get-GroupMilestones($P, $doc, [string] $Group) {
     $planned = @($rows | Where-Object { $_.state -eq 'planned' })
     $m2bad = [Collections.Generic.List[string]]::new()
     foreach ($t in @($rows | Where-Object { $_.state -eq 'ticketed' -and $_.kind -in $script:BuildKinds })) {
-        if (Test-BuildReady $doc $t) { continue }
+        if (Test-BuildReady $P $doc $t) { continue }
         foreach ($d in @($t.dependsOn)) {
             if (-not $d) { continue }
             $dt = $byId[[string]$d]

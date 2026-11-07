@@ -808,18 +808,35 @@ $script:BuildReadyStates = @('built', 'integrated', 'done')
 # New-TaskWorktree.ps1 stacks only the dependencies that are still built. On 2026-10-17 G9.T010 was bounced
 # grader-suspect and went back to building, so G9.T026's base stacked G9.T011.patch without G9.T010's, and every
 # pre-stage failed "patch does not apply" at MutationRunOrchestrator.cs:84 (kit item IN-20261017100037-aa62).
-function Test-DepsBaseReady($doc, $Task, $Seen = @()) {
+# The base is also not whole when a dependency patch the built row stacked has changed since (Get-DependencyBaseDrift):
+# the built row's patch was cut on the old one and may not apply on the new one. The integrator sends such a row back
+# (BASE-STALE), and until then a claim only fails its pre-stage: G26.T309 took 5 claim and release pairs waiting on
+# G26.T290, built on the old G26.T289 patch (kit item IN-20261107202332-262e).
+function Test-DepsBaseReady($P, $doc, $Task, $Seen = @()) {
     foreach ($d in @($Task.dependsOn)) {
         if (-not $d -or $Seen -contains $d) { continue }
         $dt = Get-Task $doc $d
         if ($dt.state -in @('integrated', 'done')) { continue }
         if ($dt.state -ne 'built') { return $false }
-        if (-not (Test-DepsBaseReady $doc $dt (@($Seen) + $d))) { return $false }
+        if (@(Get-DependencyBaseDrift $P $doc $dt | Where-Object { $_ }).Count) { return $false }
+        if (-not (Test-DepsBaseReady $P $doc $dt (@($Seen) + $d))) { return $false }
     }
     $true
 }
-function Test-BuildReady($doc, $Task) {
-    $Task.state -eq 'ticketed' -and $Task.kind -in $script:BuildKinds -and (Test-DepsBaseReady $doc $Task)
+function Test-BuildReady($P, $doc, $Task) {
+    $Task.state -eq 'ticketed' -and $Task.kind -in $script:BuildKinds -and (Test-DepsBaseReady $P $doc $Task)
+}
+# The built rows under a task, through built rows only, whose stacked dependency patch has changed: one entry per row,
+# @{ dep; leaves }, for the words that say why a row waits. Empty when no such row exists.
+function Get-BaseDriftedDeps($P, $doc, $Task, $Seen = @()) {
+    foreach ($d in @($Task.dependsOn)) {
+        if (-not $d -or $Seen -contains $d) { continue }
+        $dt = Get-Task $doc $d
+        if ($dt.state -ne 'built') { continue }
+        $drift = @(Get-DependencyBaseDrift $P $doc $dt | Where-Object { $_ })
+        if ($drift.Count) { [ordered]@{ dep = [string]$d; leaves = @($drift | ForEach-Object { $_.leaf }) } }
+        Get-BaseDriftedDeps $P $doc $dt (@($Seen) + $d)
+    }
 }
 
 # ---- dependency base drift (2026-10-18 dependency review, finding F1) ----
@@ -838,20 +855,25 @@ function Get-DependencyBaseDrift($P, $doc, $Task) {
     $out = [Collections.Generic.List[object]]::new()
     $base = if ($Task -is [Collections.IDictionary] -and $Task.Contains('base')) { $Task['base'] } else { $null }
     if ($base -isnot [Collections.IDictionary] -or -not $base.Contains('deps')) { return , $out }
-    $leafToId = @{}
-    foreach ($t in $doc.tasks) {
-        $a = if ($t -is [Collections.IDictionary] -and $t.Contains('artifacts')) { $t['artifacts'] } else { $null }
-        $pp = if ($a -is [Collections.IDictionary] -and $a.Contains('patch') -and $a['patch']) { [string]$a['patch'] } else { '' }
-        if ($pp) { $leafToId[(Split-Path -Leaf $pp)] = [string]$t.id }
-    }
+    # The build-claim gate calls this per ticketed row under the tasks lock, so the board scan waits for a real change.
+    $leafToId = $null
     foreach ($e in @($base['deps'])) {
         $s = [string]$e; $i = $s.LastIndexOf(':')
         if ($i -lt 1) { continue }
         $leaf = $s.Substring(0, $i); $recorded = $s.Substring($i + 1)
-        $dep = if ($leafToId.ContainsKey($leaf)) { $leafToId[$leaf] } else { $leaf -replace '\.patch$', '' }
         $f = Join-Path $P.Patches $leaf
         $now = if (Test-Path -LiteralPath $f) { Get-FileHash16 $f } else { 'gone' }
-        if ($now -ne $recorded) { $out.Add([ordered]@{ dep = $dep; leaf = $leaf; recorded = $recorded; now = $now }) }
+        if ($now -eq $recorded) { continue }
+        if ($null -eq $leafToId) {
+            $leafToId = @{}
+            foreach ($t in $doc.tasks) {
+                $a = if ($t -is [Collections.IDictionary] -and $t.Contains('artifacts')) { $t['artifacts'] } else { $null }
+                $pp = if ($a -is [Collections.IDictionary] -and $a.Contains('patch') -and $a['patch']) { [string]$a['patch'] } else { '' }
+                if ($pp) { $leafToId[(Split-Path -Leaf $pp)] = [string]$t.id }
+            }
+        }
+        $dep = if ($leafToId.ContainsKey($leaf)) { $leafToId[$leaf] } else { $leaf -replace '\.patch$', '' }
+        $out.Add([ordered]@{ dep = $dep; leaf = $leaf; recorded = $recorded; now = $now })
     }
     , $out
 }
@@ -1133,7 +1155,7 @@ function Get-Claimable($P, $doc, [string] $Role, $Held = $null) {
             if (Test-ClaimLive $t) { $r.claimed++; continue }
             if ($Held.Contains([string]$t.id)) { $r.held++; $r.heldIds.Add([string]$t.id); continue }
         }
-        if ($Role -eq 'build' -and -not (Test-BuildReady $doc $t)) { $r.waiting.Add($t); continue }
+        if ($Role -eq 'build' -and -not (Test-BuildReady $P $doc $t)) { $r.waiting.Add($t); continue }
         $r.ids.Add([string]$t.id); $r.rows.Add($t)
     }
     # AUTHOR SPILL (owner ruling 2026-10-12): authors have their own queue. When the focus set offers an author nothing,

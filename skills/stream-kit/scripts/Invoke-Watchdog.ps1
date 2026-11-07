@@ -395,9 +395,9 @@ foreach ($root in $roots) {
             # still reapable, and the safe test is the clock: a tree the current holder created cannot predate its own
             # claim, so only reap a non-recorded copy whose mtime is older than claim.at. New-TaskWorktree also records
             # base AFTER laying the tree down, and this keeps that window safe.
-            # A recorded path that no longer exists supersedes nothing (see the stale-record note below), so it is skipped.
+            # A recorded path that no longer exists supersedes nothing (see the stale-record note below), so it is skipped; so does no record at all, a pre-stage holding the claim before New-TaskWorktree writes base.
             if ($recorded[$id] -eq $d.FullName -or -not $claimAt[$id] -or $d.LastWriteTime.ToUniversalTime() -ge $claimAt[$id]) { continue }
-            if (-not (Test-Path -LiteralPath $recorded[$id])) { continue }
+            if (-not $recorded[$id] -or -not (Test-Path -LiteralPath $recorded[$id])) { continue }
             # The directory's own mtime moves only when an entry directly under it is added or removed, so an edit deep
             # in the tree leaves it old. On 2026-10-16 build-202610160434-9e90 recorded G7.T019-2 but kept editing the
             # old G7.T019 tree; the watchdog reaped that tree as a superseded copy 21 s after the unit wrote
