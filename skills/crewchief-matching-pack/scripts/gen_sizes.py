@@ -83,6 +83,44 @@ template = read(os.path.join(here, 'load-template-1k.workload.json'))
 tsteps = {s['label']: s for s in template['steps']}
 base = {"parameters": {}, "timeoutSeconds": 600, "continueOnError": False, "retryEnabled": False, "maxRetries": 0,
         "retryDelaySeconds": 5, "workingDirectory": None, "notes": ""}
+ADMIN = {"credentialSecretName": None, "credentialUserId": "{{$config:UserCredentials:AdminUser}}",
+         "credentialPassword": "{{$config:UserCredentials:AdminPassword}}", "remoteAuthentication": "CredSSP"}
+
+# 11/08: restore + key change needs IIS stopped and started (as the Connect pack's API key workload does); a pool recycle
+# left the Data and Connect services rejecting the API user (400 DATA00030, 403 CNX00080).
+IIS_WHY = ("Why: {verb} the Windows service so the next steps work on a quiet or a running Profisee instance, as they need. "
+           "Success: The service on the target machine ends in the state the action asks for ({action}). If it fails: Check the "
+           "service name exists on the target machine (services.msc) and the admin credential (UserCredentials secrets) can manage "
+           "services there over CredSSP.")
+
+
+def iis(name, action, what):
+    return {"label": f"{action} {name}", "inline": {**base, "serviceName": name, "action": action,
+            "targetComputer": "{{ApplicationServerName}}", **ADMIN, "type": "ServiceControlStep",
+            "description": f"What: {what} " + IIS_WHY.format(verb=action, action=action)}}
+
+
+IIS_STOP = [iis("W3SVC", "Stop", "Stop the World Wide Web Publishing Service on {{ApplicationServerName}} so no worker process keeps the old key."),
+            iis("WAS", "Stop", "Stop the Windows Process Activation Service on {{ApplicationServerName}}: every application pool stops with it.")]
+IIS_START = [iis("WAS", "Start", "Start the Windows Process Activation Service on {{ApplicationServerName}}."),
+             iis("W3SVC", "Start", "Start the World Wide Web Publishing Service on {{ApplicationServerName}}; the application pools start and read the new key.")]
+
+DATA_KEY_DESC = ("What: Prove the Data service accepts the API key as a real user: GET v1/Rules?PageSize=1 must return 200. "
+                 "Why: the gateway check (v1/Entities) can pass while the Data and Connect services still reject the user "
+                 "(400 DATA00030 \"user is not valid\", 403 CNX00080); that only showed up minutes later inside a test. "
+                 "Success: 200. If it fails: 400 DATA00030 or 403 = the key is not set for corp\\speedmerchants in this "
+                 "database, or IIS was not restarted after the restore and the key change.")
+
+# Why a REST call failed, from its body; a 401 body echoes the API key and is never shown (11/08).
+GET_WHY = [
+    "function Get-Why($resp) {",
+    "    # Why a call failed, from its body. A 401 body echoes the API key, so it is never shown; ids and keys are masked.",
+    "    if ([int]$resp.StatusCode -eq 401) { return '(401 body not shown)' }",
+    "    $t = (([string]$resp.Content) -replace '[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}', '<id>' -replace '\\s+', ' ').Trim()",
+    "    if ($t.Length -gt 800) { $t = $t.Substring(0, 800) + ' ...' }",
+    "    if ($t) { \"Body: $t\" } else { '(empty body)' }",
+    "}",
+]
 
 delete_script = "\r\n".join([
     "$ErrorActionPreference = 'Stop'",
@@ -92,7 +130,8 @@ delete_script = "\r\n".join([
     "$r = Invoke-WebRequest -Method Delete -Uri \"${connect}v1/Connect/Strategies?IntegrationStrategyUids={{StrategyId}}\" -Headers $headers -SkipHttpErrorCheck -TimeoutSec 300",
     "$code = [int]$r.StatusCode",
     "# A 401 body echoes the API key, so no response body is ever printed.",
-    "if ($code -notin 200, 204, 404) { throw \"Deleting Connect strategy {{StrategyName}} ({{StrategyId}}) returned HTTP $code.\" }",
+    *GET_WHY,
+    "if ($code -notin 200, 204, 404) { throw \"Deleting Connect strategy {{StrategyName}} ({{StrategyId}}) returned HTTP $code. $(Get-Why $r)\" }",
     "\"Connect strategy {{StrategyName}}: delete returned HTTP $code (404 = it was not there).\"",
 ])
 
@@ -112,7 +151,15 @@ def run_child(name, what, timeout=172800):
                             f"If it fails: Open the run output of '{name}'; its first failed step says what to check.")}
 
 
-setup_steps = []
+# First step of matching-setup: upgrade the empty baseline every load restores to the installed build (Gene 11/08).
+upgrade = run_child("install-base-upgrade", "", timeout=14400)
+upgrade["parameters"] = {"BaseBackupFileName": "profisee_Matching_empty.bak"}
+upgrade["description"] = (
+    "What: Upgrade the Matching empty baseline backup (profisee_Matching_empty.bak, restored by every Matching load) to the "
+    "installed Profisee build (restore, Configuration, back up again under the same name). Why: every test restores this backup; "
+    "one taken on an older build makes the new install reject the API user. Success: The child workload ends with every step "
+    "Succeeded. If it fails: Open the run output of 'install-base-upgrade'; its first failed step says what to check.")
+setup_steps = [{"label": "Upgrade Base Backup", "inline": upgrade}]
 for label, n in SIZES.items():
     low = label.lower()
     wl = os.path.join(wl_root, 'internal', low)
@@ -149,15 +196,21 @@ for label, n in SIZES.items():
     backup_loaded = copy.deepcopy(tsteps['Back Up Loaded'])
     backup_loaded['inline']['sqlCommandTimeoutSeconds'] = 7200
     backup_loaded['inline']['timeoutSeconds'] = 7300
+    verify_data = copy.deepcopy(tsteps['Verify API Key Through Gateway'])
+    verify_data['label'] = "Verify API Key Through Data Service"
+    verify_data['inline']['url'] = "{{ProfiseeBaseUrl}}/v1/Rules?PageSize=1"
+    verify_data['inline']['description'] = DATA_KEY_DESC
     load['steps'] = [
         copy.deepcopy(s1steps['Wait For Interrupted Runs']),
         copy.deepcopy(s1steps['Stop Profisee Service']),
+        *copy.deepcopy(IIS_STOP),
         restore,
         copy.deepcopy(tsteps['Set API Key']),
-        copy.deepcopy(s1steps['Recycle Instance Pools']),
+        *copy.deepcopy(IIS_START),
         copy.deepcopy(s1steps['Start Profisee Service']),
         copy.deepcopy(tsteps['Start Every Service']),
         copy.deepcopy(tsteps['Verify API Key Through Gateway']),
+        verify_data,
         {"label": "Check Connect Run-As User", "inline": {**copy.deepcopy(tsteps['Check RetailClient Is Empty']['inline']),
             "sqlScript": ("IF NOT EXISTS (SELECT 1 FROM meta.tUser WHERE [Name] = N'{{RunAsUser}}')\r\n"
                           "    THROW 50013, N'Connect run-as user {{RunAsUser}} (ConnectRuntime:ConnectRunAsUser) is not a Profisee user; the load batch would fail.', 1;\r\n"
@@ -275,10 +328,12 @@ for label, n in SIZES.items():
 
 dump(os.path.join(wl_root, 'start', 'matching-setup.workload.json'), {
     "name": "matching-setup",
-    "description": ("What: Create or update the Matching run profiles and the tagged TestAuto workflows of every size (1K, 10K, 100K, 1M, 100M) "
+    "description": ("What: Upgrade the Matching empty baseline backup to the installed Profisee build (install-base-upgrade), then "
+                    "create or update the Matching run profiles and the tagged TestAuto workflows of every size (1K, 10K, 100K, 1M, 100M) "
                     "in the TestAuto repository. Why: every scenario workload finds its workflow by automation tag and the timing steps "
                     "record under the run profiles. When: once per box and Profisee version, and after any change to a workflow spec; "
-                    "reruns update in place. Needs: the TestAuto version in matching/environment:ProfiseeVersionCode exists in the "
+                    "reruns update in place. Needs: the install pack on this box (install-base-upgrade and its reference data); "
+                    "profisee_Matching_empty.bak in the SQL Server default backup folder; the TestAuto version in matching/environment:ProfiseeVersionCode exists in the "
                     "repository. Success: Every step Succeeded. If it fails: open the first failed step, whose If it fails text names what to check."),
     "tags": ["matching", "setup"], "globalParameters": {}, "globalParametersNotes": "",
     "credentialUserId": None, "credentialPassword": None, "credentialNotes": "", "steps": setup_steps})

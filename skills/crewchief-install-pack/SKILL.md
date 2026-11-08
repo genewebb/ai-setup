@@ -1,6 +1,6 @@
 ---
 name: crewchief-install-pack
-description: The CrewChief Install workload pack (CrewChief/packs/install) and its generator gen_install.py - download the latest master build of platform pipeline 293, remove Profisee from an application server, install Server / FastApp Studio / Platform Tools, Profisee Configuration on a new or the existing database, verify, base prep of pack base backups (BaseBackup1..4) and add-ons through the Profisee utilities. Use when changing, regenerating, deploying or running the Install pack, install-preflight / install-clean / install-upgrade / install-clean-base-prep, or when a test round must start from a fresh install.
+description: The CrewChief Install workload pack (CrewChief/packs/install) and its generator gen_install.py - download the latest master build of platform pipeline 293, remove Profisee from an application server, install Server / FastApp Studio / Platform Tools, Profisee Configuration on a new or the existing database, verify, add-ons through the Profisee utilities, and install-base-upgrade (the building block each pack setup runs to upgrade its own base backup). Use when changing, regenerating, deploying or running the Install pack, install-preflight / install-clean / install-upgrade / install-clean-base-prep, or when a test round must start from a fresh install.
 ---
 
 # CrewChief Install pack
@@ -28,7 +28,7 @@ pack's health wait.
 ## Safety (hard rules)
 
 - `install-clean`, `install-upgrade`, `install-clean-base-prep`, `install-remove`, `install-configure-new` and
-  `install-base-prep` uninstall, drop the Profisee database, or overwrite base backups. Run them only with the
+  `install-base-upgrade` uninstall, drop the Profisee database, or overwrite a base backup. Run them only with the
   owner's go-ahead, only when no run uses that box (`status.json` not Running).
 - Safe any time: `install-preflight`, `install-remove-preview`, `install-build-get` (writes only the download and
   publish folders).
@@ -39,13 +39,13 @@ pack's health wait.
 | Folder | Workload | Does |
 |---|---|---|
 | start | `install-preflight` | Secrets present, ADO token finds the latest master build, license + 10 GB on the app server, SQL answers, lists installed products |
-| tests | `install-clean` / `install-upgrade` / `install-clean-base-prep` | build-get, remove, programs, configure-new / -upgrade, verify (+ base prep + add-ons) |
+| tests | `install-clean` / `install-upgrade` / `install-clean-base-prep` | build-get, remove, programs, configure-new / -upgrade, verify (+ add-ons for clean-base-prep; name kept, no base upgrade since 11/08) |
 | internal | `install-build-get` | AdoBuildDownload (skipIfCurrent), unzip, verify >= 3 MSIs, publish to the app server, list MSIs |
 | internal | `install-remove(-preview)` | Stop service (runWhen MainServiceName) and IIS, remote PS uninstall (Server, FastApp Studio, utilities: the old workloads' order), delete IIS app + pools |
 | internal | `install-programs` | CheckPort Free, three InstallSteps (CredSSP), start WAS, W3SVC |
 | internal | `install-configure-new` / `-upgrade` | (DropDatabase) + ConfigureStep with the old CORPVM31 switch set |
 | internal | `install-verify` | Health wait, exactly one Profisee Server whose DisplayVersion starts with ProfiseeVersionNumber |
-| internal | `install-base-prep` | 4 slots: RestoreDatabase, ConfigureStep (upgrade), BackupDatabase, each `runWhen` BaseBackup<i> |
+| internal | `install-base-upgrade` | Declared input `BaseBackupFileName` (no default, no runWhen): RestoreDatabase, ConfigureStep (upgrade, 7200 s), BackupDatabase. Run first by `crud-setup` and `matching-setup` (11/08: the old 4-slot `install-base-prep` skipped blank slots as Succeeded, so bases stayed on the old build and the new install rejected the API user, 400 DATA00030 / 403 CNX00080). Test-Pack resolves this cross-pack child from the sibling install folder |
 | internal | `install-addons` | Utilities exe on the app server: /Import model, /deploydata archive, /Import users (runWhen per file key) |
 
 ## Decisions (do not undo without asking)
