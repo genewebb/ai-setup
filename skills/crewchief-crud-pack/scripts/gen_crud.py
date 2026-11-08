@@ -104,7 +104,7 @@ REF_SETS = {
                   "entries": {"ProfiseeDatabaseName": "Profisee", "BaseBackupFileName": "profisee_CRUD_base.bak"},
                   "keyDescriptions": {
                       "ProfiseeDatabaseName": "The Profisee database of the instance under test; every CRUD test restores it from the base backup.",
-                      "BaseBackupFileName": "File name (no folder) of the CRUD base backup in the SQL Server default backup folder of the database server: TDATA with at least 10M rows, ZDATA empty, 10 business rules on each. On a new machine restore it, run Profisee Configuration, then back it up again under this name."}},
+                      "BaseBackupFileName": "File name (no folder) of the CRUD base backup in the SQL Server default backup folder of the database server: TDATA with at least 10M rows, ZDATA empty, 10 business rules on each. crud-setup upgrades it to the installed build first (install-base-upgrade: restore, Configuration, back up again under this name)."}},
     'environment': {"description": "CRUD pack: what differs between Profisee releases and boxes. Edit after every Profisee upgrade.",
                     "includeInReplacements": True,
                     "entries": {"ProfiseeVersionCode": "26R3T", "MainMachineTag": "SMVM1", "MainServiceName": ""},
@@ -268,6 +268,47 @@ def pools(label, action, desc):
             "description": desc}}
 
 
+IIS_WHY = ("Why: {verb} the Windows service so the next steps work on a quiet or a running Profisee instance, as they need. "
+           "Success: The service on the target machine ends in the state the action asks for ({action}). If it fails: Check the "
+           "service name exists on the target machine (services.msc) and the admin credential (UserCredentials secrets) can manage "
+           "services there over CredSSP.")
+
+
+def iis(name, action, what):
+    """IIS service stop/start, as the Connect pack's API key workload (11/08: a pool recycle left services on the old user)."""
+    return {"label": f"{action} {name}", "inline": {**base, "serviceName": name, "action": action,
+            "targetComputer": "{{ApplicationServerName}}", **ADMIN, "type": "ServiceControlStep",
+            "description": f"What: {what} " + IIS_WHY.format(verb=action, action=action)}}
+
+
+IIS_STOP = [iis("W3SVC", "Stop", "Stop the World Wide Web Publishing Service on {{ApplicationServerName}} so no worker process keeps the old key."),
+            iis("WAS", "Stop", "Stop the Windows Process Activation Service on {{ApplicationServerName}}: every application pool stops with it.")]
+IIS_START = [iis("WAS", "Start", "Start the Windows Process Activation Service on {{ApplicationServerName}}."),
+             iis("W3SVC", "Start", "Start the World Wide Web Publishing Service on {{ApplicationServerName}}; the application pools start and read the new key.")]
+
+# Why a REST call failed, from its body; shared by every PowerShell step that calls Profisee REST (11/08).
+GET_WHY = r"""function Get-Why($resp) {
+    # Why a call failed, from its body. A 401 body echoes the API key, so it is never shown; ids and keys are masked.
+    if ([int]$resp.StatusCode -eq 401) { return '(401 body not shown)' }
+    $t = (([string]$resp.Content) -replace '[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}', '<id>' -replace '\s+', ' ').Trim()
+    if ($t.Length -gt 800) { $t = $t.Substring(0, 800) + ' ...' }
+    if ($t) { "Body: $t" } else { '(empty body)' }
+}
+"""
+
+
+def verify_data_key():
+    return {"label": "Verify API Key Through Data Service", "inline": {**base, "retryEnabled": True, "maxRetries": 4, "retryDelaySeconds": 30,
+        "url": "{{ProfiseeBaseUrl}}/v1/Rules?PageSize=1", "method": "GET", "headers": {"x-api-key": "{{ProfiseeApiKey}}", "accept": "application/json"},
+        "body": "", "outputFile": "", "expectedStatusCodes": [200], "followRedirects": True, "verifySsl": True, "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "description": ("What: Prove the Data service accepts the API key as a real user: GET v1/Rules?PageSize=1 must return 200. "
+                        "Why: the gateway check (v1/Entities) can pass while the Data and Connect services still reject the user "
+                        "(400 DATA00030 \"user is not valid\", 403 CNX00080); that only showed up minutes later inside a test. "
+                        "Success: 200. If it fails: 400 DATA00030 or 403 = the key is not set for corp\\speedmerchants in this "
+                        "database, or IIS was not restarted after the restore and the key change.")}}
+
+
 def health(label="Start Every Service"):
     return ps(label, HEALTH,
               "What: Wait until every health check of the instance is Healthy. Why: services stay cold after a restore and "
@@ -348,6 +389,7 @@ PRINT CONCAT(N'CRUD base state: TDATA ', @tdata, N' rows, ZDATA empty, business 
 reset_steps = [
     wait_runs(),
     service("Stop Profisee Service", "Stop", "What: Stop the Profisee Windows service before the restore. Why: it holds connections and caches from before the restore. Success: the service is stopped."),
+    *IIS_STOP,
     {"label": "Restore CRUD Base", "inline": {**base, "serverName": "{{DatabaseServerName}}", "connectionSecretName": "", "authMode": "Windows",
         "credentialUserId": "", "credentialPassword": "", "databaseName": "{{ProfiseeDatabaseName}}", "operation": "RestoreDatabase",
         "snapshotName": "", "backupFileName": "{{BaseBackupFileName}}", "fileUncPath": None, "overwrite": True, "relocateFiles": False,
@@ -364,10 +406,7 @@ reset_steps = [
                         "Why: TestAuto and the rule removal call the gateway with that key; a base backup configured on another "
                         "machine may carry another one. Success: the user row is updated. If it fails: the user is missing from "
                         "meta.tUser; add it in Profisee as a super administrator, then back up the base again.")}},
-    pools("Recycle Instance Pools", "Recycle",
-          "What: Recycle every application pool of this instance. Why: services keep caches from before the restore; only this "
-          "instance's pools are touched because other instances may share IIS. Success: every pool recycles. If it fails: a pool "
-          "name does not exist; compare crud/instances:ProfiseeInstanceName with IIS Manager on the application server."),
+    *IIS_START,
     service("Start Profisee Service", "Start", "What: Start the Profisee Windows service after the pools recycle. Why: it must read the restored database. Success: the service is running."),
     health(),
     {"label": "Verify API Key Through Gateway", "inline": {**base, "retryEnabled": True, "maxRetries": 4, "retryDelaySeconds": 30,
@@ -375,6 +414,7 @@ reset_steps = [
         "body": "", "outputFile": "", "expectedStatusCodes": [200], "followRedirects": True, "verifySsl": True, "maxTimeSeconds": 300,
         "type": "HTTP",
         "description": "What: Call the gateway with the standard key. Why: proves the key took before TestAuto uses it. Success: HTTP 200. If it fails: 401 means the key did not take; recycle the instance's application pools and rerun."}},
+    verify_data_key(),
     sql("Check Base State", check_base,
         "What: Confirm the restored database is the CRUD base: TDATA holds at least 10M rows, ZDATA is empty, and TDATA and ZDATA "
         "each carry business rules. Why: a run on another starting state measures something else. Success: the state line prints. "
@@ -398,10 +438,10 @@ rules_remove = r"""$ErrorActionPreference = 'Stop'
 $base = '{{ProfiseeBaseUrl}}'.TrimEnd('/')
 $headers = @{ 'x-api-key' = '{{ProfiseeApiKey}}'; accept = 'application/json' }
 $entities = @('TDATA', 'ZDATA')
-# Never print a response body: a 401 body echoes the API key.
+""" + GET_WHY + r"""# Never print a 401 body: it echoes the API key (Get-Why leaves it out).
 function Get-EntityRules {
     $r = Invoke-WebRequest -Uri "$base/v1/Rules?PageSize=1000" -Headers $headers -SkipCertificateCheck -SkipHttpErrorCheck -TimeoutSec 300
-    if ([int]$r.StatusCode -ne 200) { throw "Listing business rules returned HTTP $([int]$r.StatusCode) at $base/v1/Rules." }
+    if ([int]$r.StatusCode -ne 200) { throw "Listing business rules returned HTTP $([int]$r.StatusCode) at $base/v1/Rules. $(Get-Why $r)" }
     $page = $r.Content | ConvertFrom-Json
     if ($page.totalPages -gt 1) { throw "More than 1000 business rules in the model; this step reads one page only." }
     @($page.data | Where-Object { $_.entity -in $entities })
@@ -411,7 +451,7 @@ if (-not $rules) { 'No business rules on TDATA or ZDATA: nothing to delete.'; re
 foreach ($e in $entities) { "$e has $(@($rules | Where-Object entity -eq $e).Count) business rule(s): $((@($rules | Where-Object entity -eq $e) | ForEach-Object attribute) -join ', ')" }
 $ids = ($rules | ForEach-Object id) -join ','
 $r = Invoke-WebRequest -Method Delete -Uri "$base/v1/Rules?RuleIds=$([uri]::EscapeDataString($ids))" -Headers $headers -SkipCertificateCheck -SkipHttpErrorCheck -TimeoutSec 600
-if ([int]$r.StatusCode -notin 200, 204) { throw "Deleting $($rules.Count) business rule(s) returned HTTP $([int]$r.StatusCode)." }
+if ([int]$r.StatusCode -notin 200, 204) { throw "Deleting $($rules.Count) business rule(s) returned HTTP $([int]$r.StatusCode). $(Get-Why $r)" }
 $left = Get-EntityRules
 if ($left) { throw "$($left.Count) business rule(s) still on TDATA or ZDATA after the delete: $(($left | ForEach-Object name) -join ', ')." }
 "Deleted $($rules.Count) business rule(s) from TDATA and ZDATA; none left."
@@ -444,7 +484,21 @@ dump(os.path.join(wl_root, 'internal', 'shared', 'crud-rules-remove.workload.jso
          "rules. Success: none left. If it fails: the count is named; rerun this workload after crud-base-reset.")]))
 
 # ---------------------------------------------------------------- core and stewardship workloads + setup specs
+def base_upgrade(why_what):
+    """First step of a pack setup: upgrade the pack's own base backup to the installed build (Gene 11/08). The install pack's
+    building block install-base-upgrade does restore > Configuration > back up under the same name."""
+    s = run_child("Upgrade Base Backup", "install-base-upgrade", "", timeout=14400)
+    s["inline"]["parameters"] = {"BaseBackupFileName": ref('databases', 'BaseBackupFileName')}
+    s["inline"]["description"] = (
+        f"What: Upgrade {why_what} to the installed Profisee build (restore, Configuration, back up again under the same name). "
+        "Why: every test restores this backup; one taken on an older build makes the new install reject the API user. "
+        "Success: The child workload ends with every step Succeeded. If it fails: Open the run output of 'install-base-upgrade'; "
+        "its first failed step says what to check.")
+    return s
+
+
 setup_steps = [
+    base_upgrade("the CRUD base backup"),
     {"label": "ScenarioMgt Check", "inline": {**base, "url": "{{ScenarioMgtBaseUrl}}v1/Records/TestAutoWorkflow?PageSize=1", "method": "GET",
         "headers": {"x-api-key": "{{ScenarioMgtApiKey}}", "accept": "application/json"}, "body": "", "outputFile": "",
         "expectedStatusCodes": [200], "followRedirects": True, "verifySsl": True, "maxTimeSeconds": 300, "type": "HTTP",
@@ -584,12 +638,14 @@ for cname, csteps in child_steps.items():
 
 dump(os.path.join(wl_root, 'start', 'crud-setup.workload.json'), workload(
     "crud-setup",
-    (f"What: Create or update the {len(wf_entries)} tagged CRUD TestAuto workflows in the TestAuto repository: core per size (1K, "
+    (f"What: Upgrade the CRUD base backup to the installed Profisee build (install-base-upgrade), then create or update the "
+     f"{len(wf_entries)} tagged CRUD TestAuto workflows in the TestAuto repository: core per size (1K, "
      "10K, 100K, 1M), stewardship per form (1, 5, 15, 30, 60 minutes per step, or 10, 100, 1000 iterations per step) and the 1M release run (the release CRUD load step for "
      "step), each with and without business rules. Why: every "
      "CRUD workload finds its workflow by automation tag. When: once per box and Profisee version, and after any change to a "
-     "workflow spec; reruns update in place. Needs: the TestAuto version in crud/environment:ProfiseeVersionCode exists in the "
-     "repository; TestAuto answers on port 8443. Success: Every step Succeeded. If it fails: open the first failed step, whose If "
+     "workflow spec; reruns update in place. Needs: the install pack on this box (install-base-upgrade and its reference data); "
+     "the base backup (crud/databases:BaseBackupFileName) in the SQL Server default backup folder; the TestAuto version in "
+     "crud/environment:ProfiseeVersionCode exists in the repository; TestAuto answers on port 8443. Success: Every step Succeeded. If it fails: open the first failed step, whose If "
      "it fails text names what to check."),
     ["crud", "start", "setup"], g("ScenarioMgtBaseUrl", "ScenarioMgtApiKey"), setup_steps))
 

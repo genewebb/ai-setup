@@ -56,3 +56,12 @@ stewardship nobr; proof (`crud-test-proof`, `rounds/proof-round.txt`) = every fo
 
 SMVMTR1 (11/07/2026, 26R3T): workflows 10000470-10000489, count forms 10000490-10000495. Smoke 11/07 PASS 50 min
 (core 1K br 15.6 min incl. restore, ZDATA 900; steward 1min nobr 34 min). A 1-min TestAuto step takes ~2 min wall.
+
+## Base upgrade and key sequence (11/08)
+
+- `crud-setup` step 1 runs the install pack's `install-base-upgrade` with `BaseBackupFileName = {{$ref:crud/databases:BaseBackupFileName}}`
+  (restore, Configuration, back up under the same name). After the 11/07 reinstall the old-build base made the new install
+  reject the API user: GET v1/Rules 400 DATA00030 although the key was set (1 row).
+- `crud-base-reset`: stop Main, stop W3SVC + WAS, restore, SetApiKey, start WAS + W3SVC, start Main, health, verify key
+  through the gateway (v1/Entities) AND the Data service (v1/Rules?PageSize=1). The gateway check alone passes while Data rejects.
+- REST PowerShell steps append `Get-Why` to failures (401 body never shown, ids masked, 800 chars).

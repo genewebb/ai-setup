@@ -64,7 +64,7 @@ tag missing from PROD `TestAutoTags` (Code = Name; never changes an existing one
 
 | Workload | Restores | Does | Backs up |
 |---|---|---|---|
-| `matching-<size>-scenario1-load` | `profisee_Matching_empty.bak` | SetApiKey, recycle all pools, health, check the Connect run-as user, delete strategy + delete/import the `ModelSource` service configuration (server/database from reference data) + import + enable Connect strategy `RetailClientImport` reading `<ModelSourceDB>.dbo.RetailClient<size>Scenario1`, load, check | `loaded` |
+| `matching-<size>-scenario1-load` | `profisee_Matching_empty.bak` | stop W3SVC + WAS, restore, SetApiKey, start WAS + W3SVC (11/08: a pool recycle left Data/Connect rejecting the API user), health, verify key through gateway AND Data service (GET v1/Rules), check the Connect run-as user, delete strategy + delete/import the `ModelSource` service configuration (server/database from reference data) + import + enable Connect strategy `RetailClientImport` reading `<ModelSourceDB>.dbo.RetailClient<size>Scenario1`, load, check | `loaded` |
 | `matching-<size>-testauto-create` | - | 5 run profiles + 5 tagged TestAuto workflows in the TestAuto repository | - |
 | `matching-<size>-scenario1` | `loaded` | recycle all pools, health, monitor quiet, run workflow, check | `after-1` |
 | `matching-<size>-scenario2` | `after-1` | + Turn Continuous Matching On (before monitor quiet) | `after-2` |
@@ -247,3 +247,10 @@ board shows EST.
 - Mutation plan (ScenarioTable mode, TransformSeed 350, D5 rules with NoChange 3):
   `Q:\Work\Work\99 Documentation\speed-merchants\planning\2026-11-04-matching-scenario2-mutation-plan.md`.
 - Related skills: `crewchief-workload-packs`, `testauto-matching-scenarios`, `testauto-matching-source-data`.
+
+## Base upgrade (11/08)
+
+`matching-setup` step 1 runs the install pack's `install-base-upgrade` with `BaseBackupFileName = profisee_Matching_empty.bak`:
+restore, Configuration, back up under the same name. After a reinstall an old-build baseline made the new install reject
+the API user (403 CNX00080 at the Connect strategy delete). Failure bodies of REST PowerShell steps go through `Get-Why`
+(401 body never shown, ids masked, 800 chars).
