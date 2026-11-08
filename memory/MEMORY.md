@@ -30,6 +30,7 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [Seq events also in SQL: logging.tSystemLog (Profisee DB + PROD speedmerchants)](reference_systemlog_table.md)
 
 ## Active work (newest first; full status in each file)
+- **[DATA00030/CNX00080 after restore = backup configured before last Configuration (stale service ids); every pack test configures its base at start; packs are GENERATED](reference_pack_base_backup_must_match_build.md)**
 - **[Manager nested step tree + focus UI + History tab, CrewChief live step file 11/07: built, uncommitted, not deployed](project_manager_step_tree_focus_ui_2026-11-07.md)**
 - **[Mid-release round runner plan 11/07: install pack + .NET TestAutoManager app (service on SMVMTR1, SQLite), lanes, status; D1-D21](project_mid_release_round_runner_plan_2026-11-07.md)**
 - **[Test lab + cadence: SMVM1-3 Connect/CRUD, CORPVMHA1/CORPSQL03 large, 26R3 now, 26R4 next](project_test_lab_topology_cadence.md)**

@@ -2,7 +2,9 @@
 
   reference-kv/crud/       machines, instances, databases, environment, urls, workflows
   start/                   crud-preflight (checks only), crud-setup (the 18 tagged TestAuto workflows)
-  internal/shared/         crud-base-reset (restore profisee_CRUD_base.bak, key, pools, health, base check),
+  internal/shared/         crud-run-start (once per test: restore profisee_CRUD_base.bak, Configuration, key, checks,
+                           back up profisee_CRUD_run-start.bak), crud-base-reset (restore the run-start backup, key,
+                           IIS restart, health, base check),
                            crud-rules-remove (delete every TDATA/ZDATA business rule through REST)
   internal/<size>/         crud-<size>-core-{br,nobr}: Create, Update, Get 1/10/100 users, Delete on ZDATA
   internal/steward/        crud-steward-<form>-{br,nobr}: 12 stewardship steps (form = 1/5/15/30/60min or 10/100/1000it) on TDATA (4 widths x 1/10/100 users)
@@ -101,10 +103,12 @@ REF_SETS = {
                   "keyDescriptions": {"ProfiseeInstanceName": "IIS application path of the instance under test, as in https://<server>/<instance>; also the prefix of its application pools."}},
     'databases': {"description": "CRUD pack: database and backup names. CRUD has no source database: its source entity TDATA (10M rows) lives in the Profisee database itself.",
                   "includeInReplacements": True,
-                  "entries": {"ProfiseeDatabaseName": "Profisee", "BaseBackupFileName": "profisee_CRUD_base.bak"},
+                  "entries": {"ProfiseeDatabaseName": "Profisee", "BaseBackupFileName": "profisee_CRUD_base.bak",
+                              "RunStartBackupFileName": "profisee_CRUD_run-start.bak"},
                   "keyDescriptions": {
-                      "ProfiseeDatabaseName": "The Profisee database of the instance under test; every CRUD test restores it from the base backup.",
-                      "BaseBackupFileName": "File name (no folder) of the CRUD base backup in the SQL Server default backup folder of the database server: TDATA with at least 10M rows, ZDATA empty, 10 business rules on each. crud-setup upgrades it to the installed build first (install-base-upgrade: restore, Configuration, back up again under this name)."}},
+                      "ProfiseeDatabaseName": "The Profisee database of the instance under test; every CRUD test restores it (base backup once per test run, then the run-start backup before each measured run).",
+                      "BaseBackupFileName": "File name (no folder) of the CRUD base backup in the SQL Server default backup folder of the database server: TDATA with at least 10M rows, ZDATA empty, 10 business rules on each. Never overwritten: every test run restores it, runs Profisee Configuration on it and backs up a run-start copy (crud-run-start).",
+                      "RunStartBackupFileName": "File name (no folder) of the run-start copy crud-run-start writes in the SQL Server default backup folder at the start of every CRUD test: the base after Configuration on this application server and the standard API key. crud-base-reset restores it before each measured run of that test. Rewritten by every test; never copy it to another box."}},
     'environment': {"description": "CRUD pack: what differs between Profisee releases and boxes. Edit after every Profisee upgrade.",
                     "includeInReplacements": True,
                     "entries": {"ProfiseeVersionCode": "26R3T", "MainMachineTag": "SMVM1", "MainServiceName": ""},
@@ -306,7 +310,9 @@ def verify_data_key():
                         "Why: the gateway check (v1/Entities) can pass while the Data and Connect services still reject the user "
                         "(400 DATA00030 \"user is not valid\", 403 CNX00080); that only showed up minutes later inside a test. "
                         "Success: 200. If it fails: 400 DATA00030 or 403 = the key is not set for corp\\speedmerchants in this "
-                        "database, or IIS was not restarted after the restore and the key change.")}}
+                        "database, IIS was not restarted after the restore and the key change, or the restored backup was "
+                        "configured before Profisee Configuration last ran on this application server (its service sign-in ids "
+                        "are stale): start the run from a crud-test-* workload, whose crud-run-start configures the base first.")}}
 
 
 def health(label="Start Every Service"):
@@ -352,6 +358,7 @@ G = {
     "ProfiseeInstanceName": ref('instances', 'ProfiseeInstanceName'),
     "ProfiseeDatabaseName": ref('databases', 'ProfiseeDatabaseName'),
     "BaseBackupFileName": ref('databases', 'BaseBackupFileName'),
+    "RunStartBackupFileName": ref('databases', 'RunStartBackupFileName'),
     "ProfiseeBaseUrl": "https://" + ref('machines', 'ApplicationServerNameFQDN') + "/" + ref('instances', 'ProfiseeInstanceName') + "/rest",
     "MainHealthUrl": "https://" + ref('machines', 'ApplicationServerNameFQDN') + "/" + ref('instances', 'ProfiseeInstanceName') + "/rest/health",
     "TestAutoBaseUrl": "https://" + ref('machines', 'TestServerNameFQDN') + ":8443",
@@ -373,6 +380,17 @@ def g(*names, **extra):
 
 
 # ---------------------------------------------------------------- internal/shared/crud-base-reset
+def db_step(label, operation, file_token, desc):
+    return {"label": label, "inline": {**base, "serverName": "{{DatabaseServerName}}", "connectionSecretName": "", "authMode": "Windows",
+        "credentialUserId": "", "credentialPassword": "", "databaseName": "{{ProfiseeDatabaseName}}", "operation": operation,
+        "snapshotName": "", "backupFileName": file_token, "fileUncPath": None, "overwrite": True, "relocateFiles": False,
+        "waitIndefinitely": True, "dryRun": False, "type": "DatabaseOperationsStep", "timeoutSeconds": 7200, "description": desc}}
+
+
+def restore_step(label, file_token, desc):
+    return db_step(label, "RestoreDatabase", file_token, desc)
+
+
 check_base = f"""DECLARE @tdata bigint = (SELECT SUM(p.rows) FROM sys.partitions p WHERE p.object_id = OBJECT_ID(N'data.tTDATA') AND p.index_id IN (0, 1));
 DECLARE @zdata bigint = (SELECT COUNT_BIG(*) FROM data.tZDATA);
 DECLARE @rulesT int = (SELECT COUNT(*) FROM [rule].vDQRule WHERE Entity = N'TDATA');
@@ -390,15 +408,13 @@ reset_steps = [
     wait_runs(),
     service("Stop Profisee Service", "Stop", "What: Stop the Profisee Windows service before the restore. Why: it holds connections and caches from before the restore. Success: the service is stopped."),
     *IIS_STOP,
-    {"label": "Restore CRUD Base", "inline": {**base, "serverName": "{{DatabaseServerName}}", "connectionSecretName": "", "authMode": "Windows",
-        "credentialUserId": "", "credentialPassword": "", "databaseName": "{{ProfiseeDatabaseName}}", "operation": "RestoreDatabase",
-        "snapshotName": "", "backupFileName": "{{BaseBackupFileName}}", "fileUncPath": None, "overwrite": True, "relocateFiles": False,
-        "waitIndefinitely": True, "dryRun": False, "type": "DatabaseOperationsStep", "timeoutSeconds": 7200,
-        "description": ("What: Restore the CRUD base backup (crud/databases:BaseBackupFileName) over the Profisee database WITH REPLACE. "
-                        "The executor takes the database OFFLINE WITH ROLLBACK IMMEDIATE first and brings it back ONLINE if the restore fails. "
-                        "Why: every CRUD run starts from the same model: TDATA full, ZDATA empty, business rules on both. Success: restored "
-                        "(about 6 minutes). If it fails: the backup is missing from the SQL Server default backup folder of "
-                        "crud/machines:DatabaseServerName, or the CrewChief account is not sysadmin there.")}},
+    restore_step("Restore Run-Start Backup", "{{RunStartBackupFileName}}",
+        "What: Restore the run-start backup (crud/databases:RunStartBackupFileName) over the Profisee database WITH REPLACE. "
+        "The executor takes the database OFFLINE WITH ROLLBACK IMMEDIATE first and brings it back ONLINE if the restore fails. "
+        "Why: every measured CRUD run starts from the same model (TDATA full, ZDATA empty, business rules on both), configured on "
+        "this application server at the start of this test by crud-run-start. Success: restored (about 6 minutes). If it fails: "
+        "the run-start backup is missing (run the test from its crud-test-* workload, which writes it first), or the CrewChief "
+        "account is not sysadmin on crud/machines:DatabaseServerName."),
     {"label": "Set API Key", "inline": {**base, "username": "{{ApiKeyUserName}}", "key": "{{ProfiseeApiKey}}", "serverName": "{{DatabaseServerName}}",
         "databaseName": "{{ProfiseeDatabaseName}}", "authMode": "Windows", "credentialUserId": "", "credentialPassword": "",
         "sqlDestinationConnectionSecretName": "", "stripHyphens": True, "type": "SetApiKeyStep",
@@ -422,16 +438,69 @@ reset_steps = [
 ]
 dump(os.path.join(wl_root, 'internal', 'shared', 'crud-base-reset.workload.json'), workload(
     "crud-base-reset",
-    ("What: Restore the CRUD base backup over the Profisee database, set the standard API key, recycle the instance's pools, wait "
-     "for every service, and check the base state (TDATA full, ZDATA empty, business rules on both). Why: every CRUD run starts "
-     "from the same model, so runs compare. When: Never run directly; every CRUD core and stewardship workload runs it first. "
-     "Needs: the base backup (crud/databases:BaseBackupFileName) in the SQL Server default backup folder; no other test running "
-     "against this Profisee database. Success: Every step Succeeded or Skipped. If it fails: open the first failed step, whose If "
+    ("What: Restore the run-start backup over the Profisee database, set the standard API key, restart IIS, wait for every "
+     "service, check the API key through the gateway and the Data service, and check the base state (TDATA full, ZDATA empty, "
+     "business rules on both). Why: every CRUD run starts from the same model, so runs compare. When: Never run directly; every "
+     "CRUD core and stewardship workload runs it first. Needs: crud-run-start ran at the start of this test (it writes "
+     "crud/databases:RunStartBackupFileName); no other test running against this Profisee database. Success: Every step Succeeded or Skipped. If it fails: open the first failed step, whose If "
      "it fails text names what to check."),
     ["crud", "internal", "shared"],
-    g("ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName", "BaseBackupFileName",
+    g("ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName", "RunStartBackupFileName",
       "ProfiseeBaseUrl", "MainHealthUrl", "TestAutoBaseUrl", "ProfiseeApiKey", "ApiKeyUserName"),
     reset_steps))
+
+# ---------------------------------------------------------------- internal/shared/crud-run-start (Gene 11/08)
+# Profisee Configuration writes new service sign-in ids into the database it runs on AND into the application server, so
+# only the base configured last works (11/08: the CRUD base, configured before the Matching base, got 400 DATA00030).
+# Every test therefore configures the base once at its start and backs up a run-start copy; resets restore that copy.
+reset_by_label = {st["label"]: st for st in reset_steps}
+configure_child = run_child("Configure The Restored Base", "install-configure-upgrade",
+                            "Run Profisee Configuration on the restored base", timeout=7500)
+configure_child["inline"]["description"] = (
+    "What: Run Profisee Configuration on the restored CRUD base (install pack building block install-configure-upgrade: "
+    "upgrade, keeps the data). Why: Configuration writes this application server's service sign-in ids into the database; a "
+    "base configured earlier makes the Data service reject the user (400 DATA00030). Success: The child workload ends with "
+    "every step Succeeded. If it fails: Open the run output of 'install-configure-upgrade'; Configuration's log is quoted there.")
+run_start_steps = [
+    wait_runs(),
+    service("Stop Profisee Service", "Stop", "What: Stop the Profisee Windows service before the restore. Why: it holds connections and caches from before the restore. Success: the service is stopped."),
+    *IIS_STOP,
+    restore_step("Restore CRUD Base", "{{BaseBackupFileName}}",
+        "What: Restore the CRUD base backup (crud/databases:BaseBackupFileName) over the Profisee database WITH REPLACE. "
+        "The executor takes the database OFFLINE WITH ROLLBACK IMMEDIATE first and brings it back ONLINE if the restore fails. "
+        "Why: Configuration runs on it next. Success: restored (about 6 minutes). If it fails: the backup is missing from the "
+        "SQL Server default backup folder of crud/machines:DatabaseServerName, or the CrewChief account is not sysadmin there."),
+    *IIS_START,
+    service("Start Profisee Service", "Start", "What: Start the Profisee Windows service after the restore. Why: Configuration expects a running instance. Success: the service is running."),
+    configure_child,
+    health("Wait For Every Service After Configuration"),
+    *IIS_STOP,
+    reset_by_label["Set API Key"],
+    *IIS_START,
+    health(),
+    reset_by_label["Verify API Key Through Gateway"],
+    verify_data_key(),
+    reset_by_label["Check Base State"],
+    db_step("Back Up Run-Start", "BackupDatabase", "{{RunStartBackupFileName}}",
+        "What: Back up the configured database over the run-start file (crud/databases:RunStartBackupFileName). Why: every "
+        "measured run of this test restores it (crud-base-reset), so Configuration runs once per test, not once per run. The "
+        "base backup itself is never overwritten. Success: written (file date now). If it fails: the SQL Server service account "
+        "cannot write its default backup folder, or the disk is full."),
+]
+dump(os.path.join(wl_root, 'internal', 'shared', 'crud-run-start.workload.json'), workload(
+    "crud-run-start",
+    ("What: Restore the CRUD base backup, run Profisee Configuration on it (install-configure-upgrade), confirm every service is "
+     "Healthy, set the standard API key, restart IIS, check the key through the gateway and the Data service, check the base "
+     "state, and back up the result as the run-start backup. Why: Configuration writes this application server's service "
+     "sign-in ids into the database; only a base configured after the last Configuration on this server works. When: Never "
+     "run directly; every crud-test-* workload runs it first. Needs: the install pack on this box (install-configure-upgrade "
+     "and its reference data); the base backup (crud/databases:BaseBackupFileName) in the SQL Server default backup folder; no "
+     "other test running against this Profisee database. Success: Every step Succeeded or Skipped. If it fails: open the first "
+     "failed step, whose If it fails text names what to check."),
+    ["crud", "internal", "shared", "run-start"],
+    g("ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName", "BaseBackupFileName",
+      "RunStartBackupFileName", "ProfiseeBaseUrl", "MainHealthUrl", "TestAutoBaseUrl", "ProfiseeApiKey", "ApiKeyUserName"),
+    run_start_steps))
 
 # ---------------------------------------------------------------- internal/shared/crud-rules-remove
 rules_remove = r"""$ErrorActionPreference = 'Stop'
@@ -484,21 +553,7 @@ dump(os.path.join(wl_root, 'internal', 'shared', 'crud-rules-remove.workload.jso
          "rules. Success: none left. If it fails: the count is named; rerun this workload after crud-base-reset.")]))
 
 # ---------------------------------------------------------------- core and stewardship workloads + setup specs
-def base_upgrade(why_what):
-    """First step of a pack setup: upgrade the pack's own base backup to the installed build (Gene 11/08). The install pack's
-    building block install-base-upgrade does restore > Configuration > back up under the same name."""
-    s = run_child("Upgrade Base Backup", "install-base-upgrade", "", timeout=14400)
-    s["inline"]["parameters"] = {"BaseBackupFileName": ref('databases', 'BaseBackupFileName')}
-    s["inline"]["description"] = (
-        f"What: Upgrade {why_what} to the installed Profisee build (restore, Configuration, back up again under the same name). "
-        "Why: every test restores this backup; one taken on an older build makes the new install reject the API user. "
-        "Success: The child workload ends with every step Succeeded. If it fails: Open the run output of 'install-base-upgrade'; "
-        "its first failed step says what to check.")
-    return s
-
-
 setup_steps = [
-    base_upgrade("the CRUD base backup"),
     {"label": "ScenarioMgt Check", "inline": {**base, "url": "{{ScenarioMgtBaseUrl}}v1/Records/TestAutoWorkflow?PageSize=1", "method": "GET",
         "headers": {"x-api-key": "{{ScenarioMgtApiKey}}", "accept": "application/json"}, "body": "", "outputFile": "",
         "expectedStatusCodes": [200], "followRedirects": True, "verifySsl": True, "maxTimeSeconds": 300, "type": "HTTP",
@@ -638,13 +693,12 @@ for cname, csteps in child_steps.items():
 
 dump(os.path.join(wl_root, 'start', 'crud-setup.workload.json'), workload(
     "crud-setup",
-    (f"What: Upgrade the CRUD base backup to the installed Profisee build (install-base-upgrade), then create or update the "
+    (f"What: Create or update the "
      f"{len(wf_entries)} tagged CRUD TestAuto workflows in the TestAuto repository: core per size (1K, "
      "10K, 100K, 1M), stewardship per form (1, 5, 15, 30, 60 minutes per step, or 10, 100, 1000 iterations per step) and the 1M release run (the release CRUD load step for "
      "step), each with and without business rules. Why: every "
      "CRUD workload finds its workflow by automation tag. When: once per box and Profisee version, and after any change to a "
-     "workflow spec; reruns update in place. Needs: the install pack on this box (install-base-upgrade and its reference data); "
-     "the base backup (crud/databases:BaseBackupFileName) in the SQL Server default backup folder; the TestAuto version in "
+     "workflow spec; reruns update in place. Needs: the TestAuto version in "
      "crud/environment:ProfiseeVersionCode exists in the repository; TestAuto answers on port 8443. Success: Every step Succeeded. If it fails: open the first failed step, whose If "
      "it fails text names what to check."),
     ["crud", "start", "setup"], g("ScenarioMgtBaseUrl", "ScenarioMgtApiKey"), setup_steps))
@@ -660,17 +714,20 @@ for label in SIZES:
                     "for step (Create 1M ZDATA records, Update, Get with 1, 10 and 100 users, 12 stewardship steps of 60 minutes, "
                     "Delete last). Why: This is the release measurement a person starts; the same steps and order as earlier "
                     "releases' CRUD runs, so results compare. ")
-            run_steps = [run_child("Release 1M", release_names[m], f"Measured run: CRUD 1M release {mtext.lower()} (18 steps, one restore)")]
+            run_steps = [run_child("Prepare Run Start", "crud-run-start", "Restore the CRUD base, run Configuration on it, set the API key and back up the run-start copy every measured run restores", timeout=14400),
+                         run_child("Release 1M", release_names[m], f"Measured run: CRUD 1M release {mtext.lower()} (18 steps, one restore)")]
         else:
             what = (f"What: Runs the CRUD test at {label} {mtext.lower()}: the core run (Create, Update, Get with 1, 10 and 100 users, "
                     f"Delete; {SIZES[label]} records) and then {dmin}-minute stewardship (12 steps, about {12 * dmin} minutes), each from a "
                     "fresh restore of the CRUD base. Why: This is the test a person starts: one size, one business-rule mode. ")
-            run_steps = [run_child(f"Core {label}", core_names[(label, m)], f"Measured run: CRUD {label} core {mtext.lower()}"),
+            run_steps = [run_child("Prepare Run Start", "crud-run-start", "Restore the CRUD base, run Configuration on it, set the API key and back up the run-start copy every measured run restores", timeout=14400),
+                         run_child(f"Core {label}", core_names[(label, m)], f"Measured run: CRUD {label} core {mtext.lower()}"),
                          run_child(f"Stewardship {dmin} min", stew_names[(d, m)], f"Measured run: CRUD stewardship {dmin} min {mtext.lower()}")]
         dump(os.path.join(wl_root, 'tests', name + '.workload.json'), workload(
             name,
             (what +
-             "When: Any time after crud-setup has run on this box for the current Profisee version; never at the same time as "
+             "It starts with crud-run-start (restore the base, Profisee Configuration, API key, run-start backup); every measured run "
+             "restores that run-start backup. When: Any time after crud-setup has run on this box for the current Profisee version; never at the same time as "
              "another test on the same Profisee database (Connect and Matching restore it too). Needs: crud-setup; the crud/* "
              "reference sets filled in; crud-preflight green. Success: Every run ends Succeeded; each TestAuto execution holds its "
              "metrics. If it fails: It stops at the first failed run: open that run's output."),
@@ -684,7 +741,8 @@ dump(os.path.join(wl_root, 'tests', 'crud-test-smoke.workload.json'), workload(
      "version, or after a pack change. Needs: crud-setup; crud-preflight green. Success: Every run ends Succeeded. If it fails: It "
      "stops at the first failed run: open that run's output."),
     ["crud", "tests", "1K", "br", "nobr"], {},
-    [run_child("Core 1K With Rules", core_names[('1K', 'br')], "Measured run: CRUD 1K core with business rules"),
+    [run_child("Prepare Run Start", "crud-run-start", "Restore the CRUD base, run Configuration on it, set the API key and back up the run-start copy every measured run restores", timeout=14400),
+     run_child("Core 1K With Rules", core_names[('1K', 'br')], "Measured run: CRUD 1K core with business rules"),
      run_child("Stewardship 1 min No Rules", stew_names[('1min', 'nobr')], "Measured run: CRUD stewardship 1 min without business rules")]))
 
 PROOF = [("Core 1K With Rules", core_names[('1K', 'br')], "CRUD 1K core with business rules"),
@@ -702,7 +760,7 @@ dump(os.path.join(wl_root, 'tests', 'crud-test-proof.workload.json'), workload(
      "pack or TestAuto change. Needs: crud-setup; crud-preflight green. Success: Every run ends Succeeded. If it fails: It "
      "stops at the first failed run: open that run's output."),
     ["crud", "tests", "1K", "br", "nobr"], {},
-    [run_child(lbl, wl, f"Measured run: {txt}") for lbl, wl, txt in PROOF]))
+    [run_child("Prepare Run Start", "crud-run-start", "Restore the CRUD base, run Configuration on it, set the API key and back up the run-start copy every measured run restores", timeout=14400)] + [run_child(lbl, wl, f"Measured run: {txt}") for lbl, wl, txt in PROOF]))
 
 # ---------------------------------------------------------------- schedules (Gene 11/07: wanted, like Matching)
 # Weekly defaults, Monday-Friday: Matching schedules use Sunday and Connect's Saturday 02:00, and every pack restores the

@@ -40,7 +40,7 @@ REF_SETS = {
         "keyDescriptions": {
             "ApplicationServerName": "Short name of the application server Profisee is removed from and installed on. Every remote step targets it with the shared admin credential (UserCredentials secrets) over CredSSP.",
             "ApplicationServerNameFQDN": "Fully qualified name of the application server; health and REST checks after the install use it.",
-            "DatabaseServerName": "SQL Server that holds the Profisee database of this instance (dropped and recreated by a clean install; restored and backed up by install-base-upgrade).",
+            "DatabaseServerName": "SQL Server that holds the Profisee database of this instance (dropped and recreated by a clean install; pack base backups are restored here and configured through install-configure-upgrade at the start of each pack run).",
             "TestServerName": "Machine running CrewChief and these workloads (short name). The build is downloaded here and then copied to the application server."}},
     'environment': {
         "description": "Install pack: what differs between Profisee releases and boxes. Edit before installing a new release.",
@@ -71,7 +71,7 @@ REF_SETS = {
         "includeInReplacements": True,
         "entries": {"ProfiseeDatabaseName": "Profisee"},
         "keyDescriptions": {
-            "ProfiseeDatabaseName": "The Profisee database of the instance. A clean install DROPS it and Configuration creates it empty; an upgrade keeps it. Pack base backups are upgraded by each pack's setup (install-base-upgrade), not listed here."}},
+            "ProfiseeDatabaseName": "The Profisee database of the instance. A clean install DROPS it and Configuration creates it empty; an upgrade keeps it. Pack base backups are not listed here: each pack run restores its own base and runs Configuration on it (install-configure-upgrade) before it tests."}},
     'build': {
         "description": "Install pack: where the build comes from (Gene 11/07: platform pipeline 293, master branch only) and where it is put.",
         "includeInReplacements": True,
@@ -403,21 +403,31 @@ DROP_DB = step("Drop The Profisee Database", "DatabaseOperationsStep",
                snapshotName="", backupFileName=None, fileUncPath=None, overwrite=False, relocateFiles=False,
                waitIndefinitely=False, dryRun=False)
 G["ProfiseeDatabaseName"] = ref('databases', 'ProfiseeDatabaseName')
+# Gene 11/08: every pack run restores its base and runs install-configure-upgrade on it. Configuration writes new service
+# sign-in ids into the database AND the application server, so a base configured before another one is rejected
+# (400 DATA00030). A full pack base (CRUD: 47 GB) configures far slower than an empty database.
 for drop_db in (True, False):
     name = "install-configure-new" if drop_db else "install-configure-upgrade"
+    conf = configure(drop_db)
+    if not drop_db:
+        conf["inline"]["timeoutSeconds"] = 7200
     dump(os.path.join(wl_root, 'internal', name + '.workload.json'), workload(
         name,
         (("What: Drop the Profisee database and run Profisee Configuration to create the instance on a new, empty one. "
           if drop_db else
           "What: Run Profisee Configuration to create the instance on the existing Profisee database, upgrading it. ") +
          "Why: the installed programs do nothing until Configuration creates the instance for this machine. When: from "
-         "install-clean / install-upgrade, after install-programs. Needs: the programs of this release "
+         "install-clean / install-upgrade, after install-programs" +
+         ("." if drop_db else
+          "; and at the start of every pack run, right after the pack restores its base backup (crud-run-start, "
+          "matching-*-scenario1-load), so the base carries this application server's service sign-in ids.") +
+         " Needs: the programs of this release "
          "installed; the license file on the application server; secrets UserCredentials:AdminUser, AdminPassword and "
          "ProfAdminClientId. Success: Every step Succeeded. If it fails: open the first failed step, whose If it fails text "
          "names what to check."),
         ["install", "internal", "configure", "new-db" if drop_db else "upgrade"],
         g("ApplicationServerName", "DatabaseServerName", "ProfiseeDatabaseName"),
-        ([DROP_DB] if drop_db else []) + [configure(drop_db)]))
+        ([DROP_DB] if drop_db else []) + [conf]))
 
 # ---------------------------------------------------------------- internal/install-verify
 with open(os.path.join(here, 'health.ps1'), encoding='utf-8', newline='') as f:
@@ -537,51 +547,6 @@ dump(os.path.join(wl_root, 'start', 'install-preflight.workload.json'), workload
       AdoOrganizationUrl=ref('build', 'AdoOrganizationUrl'), AdoProject=ref('build', 'AdoProject'),
       AdoPipelineDefinitionId=ref('build', 'AdoPipelineDefinitionId'), AdoBranch=ref('build', 'AdoBranch')), pre_steps))
 
-# ---------------------------------------------------------------- database operation helper (install-base-upgrade)
-def db_op(label, desc, operation, file_token, timeout=7200, run_when=None):
-    s = step(label, "DatabaseOperationsStep", desc, timeout=timeout, serverName="{{DatabaseServerName}}",
-             connectionSecretName="", authMode="Windows", credentialUserId="", credentialPassword="",
-             databaseName="{{ProfiseeDatabaseName}}", operation=operation, snapshotName="", backupFileName=file_token,
-             fileUncPath=None, overwrite=True, relocateFiles=False, waitIndefinitely=True, dryRun=False)
-    if run_when:
-        s["inline"]["runWhen"] = run_when
-    return s
-
-
-# ---------------------------------------------------------------- internal/install-base-upgrade (Gene 11/08)
-# Each pack upgrades its OWN base backup as the first step of its setup (crud-setup, matching-setup), passing the file name.
-# Replaces install-base-prep and its four BaseBackup1..4 slots: blank slots skipped silently and reported Succeeded, so after
-# the 11/07 reinstall both bases stayed on the old build and the new install rejected the API user (400 DATA00030, 403
-# CNX00080). The file name is a declared input with no default: a missing name is an unresolved token and fails.
-UPGRADE_FILE = "{{BaseBackupFileName}}"
-up_restore = db_op("Restore The Base Backup", (
-    "What: Restore the backup named in the BaseBackupFileName input over the Profisee database WITH REPLACE (the executor "
-    "takes it OFFLINE first and brings it back ONLINE on failure). Why: base prep upgrades a pack base backup to this machine "
-    "and version. Success: restored. If it fails: the file is missing from the SQL Server default backup folder of the "
-    "database server."), "RestoreDatabase", UPGRADE_FILE)
-up_conf = configure(False)
-up_conf["label"] = "Configure On The Restored Database"
-up_conf["inline"]["timeoutSeconds"] = 7200  # a full pack base (CRUD: 47 GB) upgrades far slower than an empty database
-up_backup = db_op("Back Up Again Under The Same Name", (
-    "What: Back up the configured Profisee database over the file named in the BaseBackupFileName input. Why: the pack that "
-    "owns this backup restores it at every reset; it must carry this machine, this version and its configuration. Success: "
-    "written (file date now). If it fails: the SQL Server service account cannot write its default backup folder."),
-    "BackupDatabase", UPGRADE_FILE)
-upgrade_wl = workload(
-    "install-base-upgrade",
-    ("What: Restore one pack base backup (input BaseBackupFileName) as the Profisee database, run Profisee Configuration on it "
-     "(upgrade, keeps the data), and back it up again under the same name. Why: a pack restores its base backup at every reset; "
-     "a backup taken on an older build makes the newer install reject the API user (400 DATA00030, 403 CNX00080; seen 11/08). "
-     "When: first step of each pack's setup (crud-setup, matching-setup), so a new install can never be followed by a test on "
-     "an old base. Needs: the instance installed and configured; the file in the SQL Server default backup folder. Success: "
-     "three steps Succeeded. If it fails: open the first failed step; the original file was NOT overwritten unless the backup "
-     "step ran."),
-    ["install", "internal", "base-upgrade"],
-    g("ApplicationServerName", "DatabaseServerName", "ProfiseeDatabaseName"), [up_restore, up_conf, up_backup])
-upgrade_wl["inputs"] = [{"name": "BaseBackupFileName", "description": (
-    "File name (no folder, in the SQL Server default backup folder of the database server) of the pack base backup to upgrade, "
-    "passed by the pack's setup, e.g. profisee_CRUD_base.bak.")}]
-dump(os.path.join(wl_root, 'internal', 'install-base-upgrade.workload.json'), upgrade_wl)
 
 # ---------------------------------------------------------------- internal/install-addons (Platform Tools on the app server)
 CLU_EXE = ("C:\\Program Files\\Profisee\\Master Data Maestro Utilities\\" + ref('environment', 'ProfiseeVersionNumber') +
@@ -622,15 +587,15 @@ dump(os.path.join(wl_root, 'internal', 'install-addons.workload.json'), workload
      clu("Import Accounts And Teams", "UsersFile", "/Import", "import the accounts and teams")]))
 
 name = "install-clean-base-prep"
-# The name is kept (rounds and profiles use it); since 11/08 the base backups are upgraded by each pack's setup instead.
+# The name is kept (rounds and profiles use it); since 11/08 each pack run configures its own base (install-configure-upgrade).
 kids = TESTS["install-clean"][1] + [("Add-Ons", "install-addons")]
 dump(os.path.join(wl_root, 'tests', name + '.workload.json'), workload(
     name,
     ("What: install-clean (remove, install the latest master build, new empty database), then the add-ons in install/addons "
-     "(on that clean database). The pack base backups are NOT upgraded here: each pack's setup (crud-setup, matching-setup) "
-     "upgrades its own base first through install-base-upgrade. Why: the default start of a test round: the build under test "
-     "installed. When: at the start of a round on that box, never while a test runs against it; run each pack's setup after "
-     "it. Needs: install-preflight green. Success: every child Succeeded or Skipped. If it fails: it stops at the first failed "
+     "(on that clean database). The pack base backups are NOT touched here: every pack run restores its base, runs "
+     "Configuration on it (install-configure-upgrade) and backs up a run-start copy before it tests. Why: the default start of "
+     "a test round: the build under test installed. When: at the start of a round on that box, never while a test runs "
+     "against it; run each pack's setup after it. Needs: install-preflight green. Success: every child Succeeded or Skipped. If it fails: it stops at the first failed "
      "child; open that run's output."),
     ["install", "tests"], {}, [run_child(l, w, f"{l}: {w}") for l, w in kids]))
 

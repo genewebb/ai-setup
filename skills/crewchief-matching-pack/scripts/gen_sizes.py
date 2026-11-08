@@ -109,7 +109,9 @@ DATA_KEY_DESC = ("What: Prove the Data service accepts the API key as a real use
                  "Why: the gateway check (v1/Entities) can pass while the Data and Connect services still reject the user "
                  "(400 DATA00030 \"user is not valid\", 403 CNX00080); that only showed up minutes later inside a test. "
                  "Success: 200. If it fails: 400 DATA00030 or 403 = the key is not set for corp\\speedmerchants in this "
-                 "database, or IIS was not restarted after the restore and the key change.")
+                 "database, IIS was not restarted after the restore and the key change, or the restored backup was "
+                 "configured before Profisee Configuration last ran on this application server (stale service sign-in "
+                 "ids): start from the size's load, which configures the empty baseline first.")
 
 # Why a REST call failed, from its body; a 401 body echoes the API key and is never shown (11/08).
 GET_WHY = [
@@ -151,15 +153,17 @@ def run_child(name, what, timeout=172800):
                             f"If it fails: Open the run output of '{name}'; its first failed step says what to check.")}
 
 
-# First step of matching-setup: upgrade the empty baseline every load restores to the installed build (Gene 11/08).
-upgrade = run_child("install-base-upgrade", "", timeout=14400)
-upgrade["parameters"] = {"BaseBackupFileName": "profisee_Matching_empty.bak"}
-upgrade["description"] = (
-    "What: Upgrade the Matching empty baseline backup (profisee_Matching_empty.bak, restored by every Matching load) to the "
-    "installed Profisee build (restore, Configuration, back up again under the same name). Why: every test restores this backup; "
-    "one taken on an older build makes the new install reject the API user. Success: The child workload ends with every step "
-    "Succeeded. If it fails: Open the run output of 'install-base-upgrade'; its first failed step says what to check.")
-setup_steps = [{"label": "Upgrade Base Backup", "inline": upgrade}]
+# Gene 11/08: Profisee Configuration writes new service sign-in ids into the database it runs on AND the application
+# server, so only the backup configured last works. Every load (the first run of each Matching test) restores the empty
+# baseline and runs Configuration on it; the scenario checkpoints it backs up later in the same test carry those ids.
+configure = run_child("install-configure-upgrade", "Run Profisee Configuration on the restored empty baseline", timeout=7500)
+configure["description"] = (
+    "What: Run Profisee Configuration on the restored empty baseline (install pack building block install-configure-upgrade: "
+    "upgrade, keeps the data). Why: Configuration writes this application server's service sign-in ids into the database; a "
+    "backup configured earlier makes the Data and Connect services reject the user (400 DATA00030, 403 CNX00080). Success: "
+    "The child workload ends with every step Succeeded. If it fails: Open the run output of 'install-configure-upgrade'; "
+    "Configuration's log is quoted there.")
+setup_steps = []
 for label, n in SIZES.items():
     low = label.lower()
     wl = os.path.join(wl_root, 'internal', low)
@@ -171,11 +175,12 @@ for label, n in SIZES.items():
     load['name'] = f'matching-{low}-scenario1-load'
     load['tags'] = ["matching", label, "scenario1", "load"]
     load['description'] = (
-        f"What: Restore the empty baseline, set the standard API key, warm the instance, point the Connect strategy "
+        f"What: Restore the empty baseline, run Profisee Configuration on it, set the standard API key, warm the instance, point the Connect strategy "
         f"RetailClientImport at {{{{SourceTableName}}}}, load its {n} rows into the empty RetailClient entity, check every Code "
         f"arrived, and back up the {label} 'loaded' checkpoint. Why: Scenario 1 of this size starts from this backup; Scenario 2, 3b and 3c "
         "update records by these Codes. When: once per box and Profisee version for each size, and whenever the empty baseline "
-        "changes; a rerun restores the baseline itself. Needs: profisee_Matching_empty.bak (the model, the RetailClient matching "
+        "changes; a rerun restores and configures the baseline itself. Needs: the install pack on this box "
+        "(install-configure-upgrade and its reference data); profisee_Matching_empty.bak (the model, the RetailClient matching "
         "strategy, no records; the load re-creates the ModelSource service configuration) in the SQL Server default backup folder; the machine's "
         "API user exists in Profisee. Success: every step Succeeded. If it fails: the failed step's description says what to fix; rerun the whole workload.")
     g = load['globalParameters']
@@ -196,6 +201,8 @@ for label, n in SIZES.items():
     backup_loaded = copy.deepcopy(tsteps['Back Up Loaded'])
     backup_loaded['inline']['sqlCommandTimeoutSeconds'] = 7200
     backup_loaded['inline']['timeoutSeconds'] = 7300
+    after_configure = copy.deepcopy(tsteps['Start Every Service'])
+    after_configure['label'] = "Wait For Every Service After Configuration"
     verify_data = copy.deepcopy(tsteps['Verify API Key Through Gateway'])
     verify_data['label'] = "Verify API Key Through Data Service"
     verify_data['inline']['url'] = "{{ProfiseeBaseUrl}}/v1/Rules?PageSize=1"
@@ -205,9 +212,13 @@ for label, n in SIZES.items():
         copy.deepcopy(s1steps['Stop Profisee Service']),
         *copy.deepcopy(IIS_STOP),
         restore,
-        copy.deepcopy(tsteps['Set API Key']),
         *copy.deepcopy(IIS_START),
         copy.deepcopy(s1steps['Start Profisee Service']),
+        {"label": "Configure The Restored Baseline", "inline": copy.deepcopy(configure)},
+        after_configure,
+        *copy.deepcopy(IIS_STOP),
+        copy.deepcopy(tsteps['Set API Key']),
+        *copy.deepcopy(IIS_START),
         copy.deepcopy(tsteps['Start Every Service']),
         copy.deepcopy(tsteps['Verify API Key Through Gateway']),
         verify_data,
@@ -328,12 +339,10 @@ for label, n in SIZES.items():
 
 dump(os.path.join(wl_root, 'start', 'matching-setup.workload.json'), {
     "name": "matching-setup",
-    "description": ("What: Upgrade the Matching empty baseline backup to the installed Profisee build (install-base-upgrade), then "
-                    "create or update the Matching run profiles and the tagged TestAuto workflows of every size (1K, 10K, 100K, 1M, 100M) "
+    "description": ("What: Create or update the Matching run profiles and the tagged TestAuto workflows of every size (1K, 10K, 100K, 1M, 100M) "
                     "in the TestAuto repository. Why: every scenario workload finds its workflow by automation tag and the timing steps "
                     "record under the run profiles. When: once per box and Profisee version, and after any change to a workflow spec; "
-                    "reruns update in place. Needs: the install pack on this box (install-base-upgrade and its reference data); "
-                    "profisee_Matching_empty.bak in the SQL Server default backup folder; the TestAuto version in matching/environment:ProfiseeVersionCode exists in the "
+                    "reruns update in place. Needs: the TestAuto version in matching/environment:ProfiseeVersionCode exists in the "
                     "repository. Success: Every step Succeeded. If it fails: open the first failed step, whose If it fails text names what to check."),
     "tags": ["matching", "setup"], "globalParameters": {}, "globalParametersNotes": "",
     "credentialUserId": None, "credentialPassword": None, "credentialNotes": "", "steps": setup_steps})

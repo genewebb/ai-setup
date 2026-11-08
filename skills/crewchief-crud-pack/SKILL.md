@@ -57,11 +57,17 @@ stewardship nobr; proof (`crud-test-proof`, `rounds/proof-round.txt`) = every fo
 SMVMTR1 (11/07/2026, 26R3T): workflows 10000470-10000489, count forms 10000490-10000495. Smoke 11/07 PASS 50 min
 (core 1K br 15.6 min incl. restore, ZDATA 900; steward 1min nobr 34 min). A 1-min TestAuto step takes ~2 min wall.
 
-## Base upgrade and key sequence (11/08)
+## Run start and key sequence (11/08)
 
-- `crud-setup` step 1 runs the install pack's `install-base-upgrade` with `BaseBackupFileName = {{$ref:crud/databases:BaseBackupFileName}}`
-  (restore, Configuration, back up under the same name). After the 11/07 reinstall the old-build base made the new install
-  reject the API user: GET v1/Rules 400 DATA00030 although the key was set (1 row).
-- `crud-base-reset`: stop Main, stop W3SVC + WAS, restore, SetApiKey, start WAS + W3SVC, start Main, health, verify key
-  through the gateway (v1/Entities) AND the Data service (v1/Rules?PageSize=1). The gateway check alone passes while Data rejects.
+- Profisee Configuration writes NEW service sign-in ids (meta.tUser ClientId of every service user, encrypted) into the
+  database it runs on AND into the application server. Only the backup configured LAST works; any other gets GET
+  v1/Rules 400 DATA00030 (auth log: `No client with id ... found`). Seen 11/08: CRUD base configured 10:32, Matching
+  10:38, CRUD failed. `auth.Clients` is empty in every base (not the cause).
+- So every `crud-test-*` (and smoke, proof) starts with `crud-run-start` (Gene: once per pack run): wait, stop Main, IIS
+  stop, restore `BaseBackupFileName` (never overwritten), IIS start, start Main, `install-configure-upgrade` (install pack,
+  Configure 7200 s), health, IIS stop, SetApiKey, IIS start, health, verify gateway + Data, Check Base State, BackupDatabase
+  `RunStartBackupFileName` (`profisee_CRUD_run-start.bak`). `crud-setup` no longer touches the base.
+- `crud-base-reset`: stop Main, stop W3SVC + WAS, restore the RUN-START copy, SetApiKey, start WAS + W3SVC, start Main,
+  health, verify key through the gateway (v1/Entities) AND the Data service (v1/Rules?PageSize=1). The gateway check alone
+  passes while Data rejects. A core/steward workload run alone after another pack configured fails red at the Data check.
 - REST PowerShell steps append `Get-Why` to failures (401 body never shown, ids masked, 800 chars).

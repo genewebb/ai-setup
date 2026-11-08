@@ -248,9 +248,11 @@ board shows EST.
   `Q:\Work\Work\99 Documentation\speed-merchants\planning\2026-11-04-matching-scenario2-mutation-plan.md`.
 - Related skills: `crewchief-workload-packs`, `testauto-matching-scenarios`, `testauto-matching-source-data`.
 
-## Base upgrade (11/08)
+## Configuration per load (11/08)
 
-`matching-setup` step 1 runs the install pack's `install-base-upgrade` with `BaseBackupFileName = profisee_Matching_empty.bak`:
-restore, Configuration, back up under the same name. After a reinstall an old-build baseline made the new install reject
-the API user (403 CNX00080 at the Connect strategy delete). Failure bodies of REST PowerShell steps go through `Get-Why`
+Profisee Configuration writes new service sign-in ids into the database it runs on AND the application server, so only
+the backup configured last works (400 DATA00030 / 403 CNX00080 otherwise). Each `matching-<size>-scenario1-load` restores
+`profisee_Matching_empty.bak` (never overwritten), starts IIS, runs the install pack's `install-configure-upgrade`, waits
+for every service, then IIS stop, SetApiKey, IIS start, health, gateway + Data checks. The scenario checkpoints that test
+backs up carry those ids. `matching-setup` no longer touches the baseline. Failure bodies of REST PowerShell steps go through `Get-Why`
 (401 body never shown, ids masked, 800 chars).
