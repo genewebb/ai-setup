@@ -12,7 +12,7 @@ $script:ProfBuildVerbs = [ordered]@{
 $script:ProfBuildDetails = @{
     compile = @(
         'Use it to check that the code compiles. Runs dotnet build on the product''s solution (Debug unless',
-        '-Configuration Release). "all" builds TestAuto, CrewChief, DataGen and Mutate in turn.'
+        '-Configuration Release). "all" builds TestAuto, CrewChief, DataGen, Mutate and TestAutoManager in turn.'
     )
     run     = @(
         'Same as typing the dp* command alone (dpspeed, dpcrewchief, dpdatagen, dpmutate, dpmgr, dpv2): for most products',
@@ -22,7 +22,7 @@ $script:ProfBuildDetails = @{
     publish = @(
         'Builds the product''s install package and puts it on the team share, as dp* -Package does.',
         '-Bump Patch|Minor|Major raises the version first (7.0.39 -> 7.0.40 | 7.1.0 | 8.0.0); without it the current',
-        'version is packaged again. "all" packages all four products (dpall -Package): add -Products testauto,crewchief',
+        'version is packaged again. "all" packages all five products (dpall -Package): add -Products testauto,crewchief',
         'to pick some, -Parallel to run them at once. speedy also takes -AllowDirty.'
     )
     containers = @(
@@ -43,7 +43,7 @@ $script:ProfBuildUsage = @{
 }
 
 # The products. Repo = key in this machine's profile; Build = solution or project under it (compile);
-# VersionFile = where <Version> lives (publish shows it). 'all' is the four speed-merchants products together.
+# VersionFile = where <Version> lives (publish shows it). 'all' is the five speed-merchants products together.
 $script:ProfBuildProducts = [ordered]@{
     testauto  = [pscustomobject]@{ Name = 'TestAuto'; Command = 'dpspeed'; Repo = 'SpeedMerchantsRepo'; Build = @('speed-merchants.sln'); VersionFile = 'TestAuto.Web\TestAuto.Web.csproj'; Run = $true; Publish = $true }
     crewchief = [pscustomobject]@{ Name = 'CrewChief'; Command = 'dpcrewchief'; Repo = 'SpeedMerchantsRepo'; Build = @('CrewChief\CrewChief.sln'); VersionFile = 'CrewChief\Directory.Build.props'; Run = $true; Publish = $true }
@@ -51,7 +51,7 @@ $script:ProfBuildProducts = [ordered]@{
     mutate    = [pscustomobject]@{ Name = 'Mutate (DataGen + Mutation)'; Command = 'dpmutate'; Repo = 'SpeedMerchantsRepo'; Build = @('TestData.Mutation\TestData.Mutation.sln'); VersionFile = 'TestData.Mutation\Directory.Build.props'; Run = $true; Publish = $true }
     manager   = [pscustomobject]@{ Name = 'TestAutoManager'; Command = 'dpmgr'; Repo = 'SpeedMerchantsRepo'; Build = @('TestAutoManager\TestAutoManager.sln'); VersionFile = 'TestAutoManager\Directory.Build.props'; Run = $true; Publish = $true }
     speedy    = [pscustomobject]@{ Name = 'Speedy'; Command = 'dpv2'; Repo = 'SpeedyRepo'; Build = @('Speedmerchants.sln'); VersionFile = 'Directory.Build.props'; Run = $true; Publish = $true }
-    all       = [pscustomobject]@{ Name = 'All four (TestAuto, CrewChief, DataGen, Mutate)'; Command = 'dpall'; Repo = 'SpeedMerchantsRepo'; Build = @('speed-merchants.sln', 'CrewChief\CrewChief.sln', 'TestData.Generation\TestData.Generation.sln', 'TestData.Mutation\TestData.Mutation.sln'); VersionFile = ''; Run = $false; Publish = $true }
+    all       = [pscustomobject]@{ Name = 'All five (TestAuto, CrewChief, DataGen, Mutate, TestAutoManager)'; Command = 'dpall'; Repo = 'SpeedMerchantsRepo'; Build = @('speed-merchants.sln', 'CrewChief\CrewChief.sln', 'TestData.Generation\TestData.Generation.sln', 'TestData.Mutation\TestData.Mutation.sln', 'TestAutoManager\TestAutoManager.sln'); VersionFile = ''; Run = $false; Publish = $true }
 }
 
 # The products whose dp* command exists in this session. A trimmed copy (prof setup share) ships only the picked dp*
@@ -78,7 +78,7 @@ $script:ProfGroups['build'] = [pscustomobject]@{
 # Old product names still accepted on the command line. dpall -Products keeps its own names (speed for TestAuto):
 # prof build publish all -Products testauto,... is translated to them.
 $script:ProfBuildAliases = @{ speed = 'testauto' }
-$script:ProfBuildDpAllNames = [ordered]@{ testauto = 'speed'; crewchief = 'crewchief'; datagen = 'datagen'; mutate = 'mutate' }
+$script:ProfBuildDpAllNames = [ordered]@{ testauto = 'speed'; crewchief = 'crewchief'; datagen = 'datagen'; mutate = 'mutate'; manager = 'manager' }
 
 function Get-GeneBuildProduct([string]$Product) {
     $products = Get-GeneBuildProducts
@@ -286,9 +286,9 @@ function Read-GeneBuildMenu {
             if (-not $b) { return $null }
             if ($b.Name -ne 'None') { $p.Bump = $b.Name }
             if ($pick.Key -eq 'all') {
-                $prods = Select-GeneMenu -Title 'Which products? (Enter = all four)' -Items @($script:ProfBuildDpAllNames.Keys) -Multi -Default 0 -Reader $Reader -AllowEmpty
+                $prods = Select-GeneMenu -Title 'Which products? (Enter = all five)' -Items @($script:ProfBuildDpAllNames.Keys) -Multi -Default 0 -Reader $Reader -AllowEmpty
                 if ($null -eq $prods) { return $null }
-                if (@($prods).Count -and @($prods).Count -lt 4) { $extra += '-Products'; $extra += , @($prods) }
+                if (@($prods).Count -and @($prods).Count -lt $script:ProfBuildDpAllNames.Count) { $extra += '-Products'; $extra += , @($prods) }
                 if (& $yn 'Package them at the same time (-Parallel)? Faster, but pegs the machine') { $extra += '-Parallel' }
             }
             if ($pick.Key -eq 'speedy' -and (& $yn 'Allow uncommitted changes (-AllowDirty, never a release)?')) { $extra += '-AllowDirty' }

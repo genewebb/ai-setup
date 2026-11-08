@@ -1525,11 +1525,11 @@ function dpmgr {
 function dpall {
     <#
     .SYNOPSIS
-        Packages ALL four SpeedMerchants products in one shot (optionally bumping the version of
+        Packages ALL five SpeedMerchants products in one shot (optionally bumping the version of
         each), serially by default.
 
     .DESCRIPTION
-        One release command over the four products that dpspeed / dpcrewchief / dpdatagen / dpmutate
+        One release command over the five products that dpspeed / dpcrewchief / dpdatagen / dpmutate / dpmgr
         package individually. It calls each repo's profile-free New-*Installer.ps1 DIRECTLY rather
         than re-entering the sibling dp* wrappers, because a background job runs in a fresh pwsh
         process with NO profile loaded - the dp* functions do not exist there. The installer scripts
@@ -1549,7 +1549,7 @@ function dpall {
         commands for the build/publish/run loop.
 
     .PARAMETER Products
-        Which products to package. Default: all four.
+        Which products to package. Default: all five.
 
     .PARAMETER Package
         Required. Packages the selected products - the same -Package the dp* commands take. The bump
@@ -1585,8 +1585,8 @@ function dpall {
     #>
     [CmdletBinding(SupportsShouldProcess = $true, PositionalBinding = $false)]
     param(
-        [ValidateSet('speed', 'crewchief', 'datagen', 'mutate')]
-        [string[]]$Products = @('speed', 'crewchief', 'datagen', 'mutate'),
+        [ValidateSet('speed', 'crewchief', 'datagen', 'mutate', 'manager')]
+        [string[]]$Products = @('speed', 'crewchief', 'datagen', 'mutate', 'manager'),
 
         [ValidateSet('Debug', 'Release')]
         [string]$Configuration,
@@ -1608,13 +1608,14 @@ function dpall {
         Write-Host "dpall  - package (and optionally version-bump) ALL SpeedMerchants products" -ForegroundColor Cyan
         Write-Host ""
         Write-Host "USAGE" -ForegroundColor Yellow
-        Write-Host "  dpall -Package [-Bump|-BumpMinor|-BumpMajor] [-Products speed,crewchief,datagen,mutate] [-Configuration Debug|Release] [-Parallel] [-SkipShare] [-ShowHelp] [-WhatIf]"
+        Write-Host "  dpall -Package [-Bump|-BumpMinor|-BumpMajor] [-Products speed,crewchief,datagen,mutate,manager] [-Configuration Debug|Release] [-Parallel] [-SkipShare] [-ShowHelp] [-WhatIf]"
         Write-Host ""
         Write-Host "PRODUCTS" -ForegroundColor Yellow
         Write-Host "  speed      TestAuto                        (dpspeed -Package)"
         Write-Host "  crewchief  CrewChief                       (dpcrewchief -Package)"
         Write-Host "  datagen    TestDataGeneration              (dpdatagen -Package)"
         Write-Host "  mutate     TestDataGenerationAndMutation   (dpmutate -Package)"
+        Write-Host "  manager    TestAutoManager                 (dpmgr -Package)"
         Write-Host ""
         Write-Host "OPTIONS" -ForegroundColor Yellow
         Write-Host "  -Package        Required. Package the selected products (same as dp* -Package)."
@@ -1679,6 +1680,12 @@ function dpall {
             Product     = 'TestDataGenerationAndMutation'
             Script      = Join-Path $repoRoot 'TestData.Mutation\Installer\New-DataGenerationAndMutationInstaller.ps1'
             VersionFile = Join-Path $repoRoot 'TestData.Mutation\Directory.Build.props'
+        }
+        manager = @{
+            Label       = 'TestAutoManager'
+            Product     = 'TestAutoManager'
+            Script      = Join-Path $repoRoot 'TestAutoManager\installer\New-TestAutoManagerInstaller.ps1'
+            VersionFile = Join-Path $repoRoot 'TestAutoManager\Directory.Build.props'
         }
     }
 
