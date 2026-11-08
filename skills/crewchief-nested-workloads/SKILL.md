@@ -113,6 +113,14 @@ them. There is a transfer-time warning for exactly this, and
 Run As inheritance also flows through nesting — see
 [[crewchief-adding-a-step-type]] for the `WorkloadRunAsInheritance` rules.
 
+## 6. Watching nested steps live
+
+A nested run reports its steps through the `AsyncLocal` hub `LiveStepTree` under its parent's path (e.g. `[1, 1, 0]`),
+because the child engine runs on the parent's async flow inside `LiveStepTree.Enter(path)`. Keep that flow: running a
+child engine on a fresh thread without the ambient context (e.g. `Task.Run` with `ExecutionContext.SuppressFlow`)
+would make its steps vanish from the CLI live file and from `children` in runs.json. Details in
+[[crewchief-workload-and-runs]] "Live step tree file".
+
 ## A stale comment to ignore
 
 `IWorkloadResolver.cs:10-16` still says *"the concrete implementation … is written and registered
@@ -129,5 +137,6 @@ iteration" note about the factory, which is also wired.
 - `CrewChief\CrewChief.Engine\Orchestration\IWorkloadResolver.cs`
 - `CrewChief\CrewChief.Engine\Orchestration\NullWorkloadResolver.cs`
 - `CrewChief\CrewChief.Data\Services\WorkloadResolver.cs`
+- `CrewChief\CrewChief.Engine\Orchestration\LiveStepTree.cs`
 - `CrewChief\CrewChief.Tests.Unit\Data\RunWorkloadTransferWarningTests.cs`
 - `CrewChief\CrewChief.Web\Documentation\51_StepGuideRunWorkload.md`
