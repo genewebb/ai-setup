@@ -84,7 +84,7 @@ REF_SETS = {
             "AdoOrganizationUrl": "Azure DevOps organization of the platform pipeline.",
             "AdoProject": "Azure DevOps project of the platform pipeline.",
             "AdoPipelineDefinitionId": "Definition id of the platform pipeline (293).",
-            "AdoBranch": "Branch whose latest successful build is installed. Only master is allowed (Gene 11/07).",
+            "AdoBranch": "Branch whose latest successful build is installed when an install test runs alone. A TestAutoManager round passes its own branch and build instead (parameters AdoBranch and AdoBuildId).",
             "DownloadDirectory": "Folder ON THE APPLICATION SERVER the build is downloaded, unzipped and verified in (BuildPublish to a remote server reads the marker in that server's own download folder).",
             "PublishDirectory": "Folder ON THE APPLICATION SERVER the verified build is copied to; the installs read the MSIs from there.",
             "RetentionCount": "How many older builds the publish step keeps beside the current one.",
@@ -123,9 +123,23 @@ def step(label, type_, desc, timeout=600, **fields):
     return {"label": label, "inline": {**base, **fields, "type": type_, "timeoutSeconds": timeout, "description": desc}}
 
 
-def workload(name, desc, tags, globals_, steps, notes=""):
-    return {"name": name, "description": desc, "tags": tags, "globalParameters": globals_, "globalParametersNotes": notes,
-            "credentialUserId": None, "credentialPassword": None, "credentialNotes": "", "steps": steps}
+def workload(name, desc, tags, globals_, steps, notes="", inputs=None):
+    w = {"name": name, "description": desc, "tags": tags, "globalParameters": globals_, "globalParametersNotes": notes,
+         "credentialUserId": None, "credentialPassword": None, "credentialNotes": "", "steps": steps}
+    if inputs:
+        w["inputs"] = [{"name": n, "description": d} for n, d in inputs]
+    return w
+
+
+# Every parent of install-build-get passes the build to install: the reference-data branch and the latest build, unless
+# the caller (a TestAutoManager round, through CrewChief --param) passes AdoBranch / AdoBuildId of its own.
+BUILD_GLOBALS = {"AdoBranch": ref('build', 'AdoBranch'), "AdoBuildId": ""}
+BUILD_INPUTS = [
+    ("AdoBranch", "Branch of the platform pipeline to install from (refs/heads/...), passed by the test that runs this "
+                  "one: install/build:AdoBranch, or the branch of a TestAutoManager round."),
+    ("AdoBuildId", "Exact Azure DevOps build id to install, passed by the test that runs this one; blank = the latest "
+                   "successful build of AdoBranch."),
+]
 
 
 G = {
@@ -164,13 +178,14 @@ foreach ($m in $msis) {
 """
 
 build_steps = [
-    step("Download The Latest Master Build", "AdoBuildDownloadStep",
-         "What: Download the latest successful build of the platform pipeline on the master branch. Why: every install "
-         "starts from the newest master build (Gene 11/07: only master). Success: the build's artifact is in the download "
-         "folder, or it was already there (skip when current). If it fails: the Azure DevOps token secret "
-         "the environment variable AZURE_DEVOPS_PAT (machine scope, or the CrewChief service account) is missing, expired or lacks Build Read; or Azure DevOps is unreachable.",
+    step("Download The Build", "AdoBuildDownloadStep",
+         "What: Download the platform pipeline build named by AdoBuildId, or, when it is blank, the latest successful build "
+         "of AdoBranch. Why: every install starts from the build under test. Success: the build's artifact is in the download "
+         "folder, or it was already there (skip when current). If it fails: the environment variable AZURE_DEVOPS_PAT "
+         "(machine scope, or the CrewChief service account) is missing, expired or lacks Build Read; Azure DevOps is "
+         "unreachable; or the build id is not a successful build of this pipeline on AdoBranch (the message says which).",
          timeout=3600, organizationUrl=ref('build', 'AdoOrganizationUrl'), project=ref('build', 'AdoProject'),
-         pipelineDefinitionId=ref('build', 'AdoPipelineDefinitionId'), branch=ref('build', 'AdoBranch'),
+         pipelineDefinitionId=ref('build', 'AdoPipelineDefinitionId'), branch="{{AdoBranch}}", buildId="{{AdoBuildId}}",
          patSecret="{{$env:AZURE_DEVOPS_PAT}}", downloadDirectory="{{DownloadDirectory}}", skipIfCurrent=True, targetComputer="{{ApplicationServerName}}", **ADMIN),
     step("Unzip The Build", "BuildUnzipStep",
          "What: Extract the downloaded artifact. Why: the installs need the MSIs, not the zip. Success: the extracted "
@@ -196,13 +211,15 @@ build_steps = [
 ]
 dump(os.path.join(wl_root, 'internal', 'install-build-get.workload.json'), workload(
     "install-build-get",
-    ("What: Get the latest successful master build of the platform pipeline: download, unzip and verify it on the "
-     "application server, then copy it to the publish folder there and list its MSIs. Why: every install uses "
-     "the newest master build, and a broken artifact must stop before anything is removed. When: first part of every "
-     "install; also alone to see what the newest build is. Needs: environment variable AZURE_DEVOPS_PAT on the test server for the CrewChief account (Build Read); the application server reaches Azure DevOps; the shared admin "
+    ("What: Get the build under test of the platform pipeline (AdoBuildId, or the latest successful build of AdoBranch): "
+     "download, unzip and verify it on the application server, then copy it to the publish folder there and list its "
+     "MSIs. Why: every install uses the build under test, and a broken artifact must stop before anything is removed. "
+     "When: first part of every install test, which passes AdoBranch and AdoBuildId (install-preflight shows the newest "
+     "build without installing). Needs: environment variable AZURE_DEVOPS_PAT on the test server for the CrewChief account (Build Read); the application server reaches Azure DevOps; the shared admin "
      "credential can write to the application server. Success: Every step Succeeded. If it fails: open the first failed "
      "step, whose If it fails text names what to check."),
-    ["install", "internal", "build"], g("ApplicationServerName", "DownloadDirectory", "PublishDirectory"), build_steps))
+    ["install", "internal", "build"], g("ApplicationServerName", "DownloadDirectory", "PublishDirectory"), build_steps,
+    inputs=BUILD_INPUTS))
 
 # ---------------------------------------------------------------- internal/install-remove (+ preview)
 # UninstallStep matches an exact display name only (UninstallExecutor), and the installed version can differ from the one
@@ -486,11 +503,12 @@ TESTS = {
 for name, (what, kids) in TESTS.items():
     dump(os.path.join(wl_root, 'tests', name + '.workload.json'), workload(
         name,
-        (f"What: Removes Profisee from the application server and installs the latest master build: {what}. Why: every test "
+        (f"What: Removes Profisee from the application server and installs the build under test: {what}. The build is AdoBuildId, or the latest successful build of AdoBranch "
+         "(a TestAutoManager round passes both; run alone: install/build:AdoBranch and its latest build). Why: every test "
          "round starts from a known install of the build under test. When: at the start of a round on that box, never while "
          "a test runs against it. Needs: install-preflight green. Success: every child Succeeded and install-verify printed the "
          "expected version. If it fails: it stops at the first failed child; open that run's output."),
-        ["install", "tests"], {}, [run_child(l, w, f"{l}: {w}") for l, w in kids]))
+        ["install", "tests"], dict(BUILD_GLOBALS), [run_child(l, w, f"{l}: {w}") for l, w in kids]))
 
 PREFLIGHT = r"""$ErrorActionPreference = 'Stop'
 $problems = @()
@@ -505,7 +523,7 @@ $hdr = @{ Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::
 $api = '{{AdoOrganizationUrl}}/{{AdoProject}}/_apis/build/builds?definitions={{AdoPipelineDefinitionId}}&branchName={{AdoBranch}}&resultFilter=succeeded&statusFilter=completed&$top=1&api-version=7.0'
 try {
     $b = (Invoke-RestMethod -Uri $api -Headers $hdr -TimeoutSec 60).value | Select-Object -First 1
-    if ($b) { Write-Output "latest successful master build: $($b.buildNumber) (finished $($b.finishTime))" } else { $problems += 'no successful master build found' }
+    if ($b) { Write-Output "latest successful build of {{AdoBranch}}: $($b.buildNumber) (finished $($b.finishTime))" } else { $problems += 'no successful build of {{AdoBranch}} found' }
 } catch { $problems += "Azure DevOps refused the token or is unreachable: $($_.Exception.Message -replace '[0-9a-f]{32}', '[redacted]')" }
 # The application server: admin share, license file, free disk.
 $app = '{{ApplicationServerName}}'
@@ -591,12 +609,12 @@ name = "install-clean-base-prep"
 kids = TESTS["install-clean"][1] + [("Add-Ons", "install-addons")]
 dump(os.path.join(wl_root, 'tests', name + '.workload.json'), workload(
     name,
-    ("What: install-clean (remove, install the latest master build, new empty database), then the add-ons in install/addons "
+    ("What: install-clean (remove, install the build under test, new empty database), then the add-ons in install/addons "
      "(on that clean database). The pack base backups are NOT touched here: every pack run restores its base, runs "
      "Configuration on it (install-configure-upgrade) and backs up a run-start copy before it tests. Why: the default start of "
      "a test round: the build under test installed. When: at the start of a round on that box, never while a test runs "
      "against it; run each pack's setup after it. Needs: install-preflight green. Success: every child Succeeded or Skipped. If it fails: it stops at the first failed "
      "child; open that run's output."),
-    ["install", "tests"], {}, [run_child(l, w, f"{l}: {w}") for l, w in kids]))
+    ["install", "tests"], dict(BUILD_GLOBALS), [run_child(l, w, f"{l}: {w}") for l, w in kids]))
 
 print("install pack written")
