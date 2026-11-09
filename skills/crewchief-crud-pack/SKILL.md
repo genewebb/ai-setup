@@ -65,9 +65,14 @@ SMVMTR1 (11/07/2026, 26R3T): workflows 10000470-10000489, count forms 10000490-1
   10:38, CRUD failed. `auth.Clients` is empty in every base (not the cause).
 - So every `crud-test-*` (and smoke, proof) starts with `crud-run-start` (Gene: once per pack run): wait, stop Main, IIS
   stop, restore `BaseBackupFileName` (never overwritten), IIS start, start Main, `install-configure-upgrade` (install pack,
-  Configure 7200 s), health, IIS stop, SetApiKey, IIS start, health, verify gateway + Data, Check Base State, BackupDatabase
+  Configure 7200 s), health, `crud-api-key-set`, Check Base State, BackupDatabase
   `RunStartBackupFileName` (`profisee_CRUD_run-start.bak`). `crud-setup` no longer touches the base.
-- `crud-base-reset`: stop Main, stop W3SVC + WAS, restore the RUN-START copy, SetApiKey, start WAS + W3SVC, start Main,
-  health, verify key through the gateway (v1/Entities) AND the Data service (v1/Rules?PageSize=1). The gateway check alone
-  passes while Data rejects. A core/steward workload run alone after another pack configured fails red at the Data check.
+- `crud-base-reset`: wait, stop Main, stop W3SVC + WAS, restore the RUN-START copy, `crud-api-key-set`, Check Base State.
+  The gateway check alone passes while Data rejects. A core/steward workload run alone after another pack configured
+  fails red at the Data check.
+- **Key standard (Gene 11/08, help rule 10):** the API key is set before ANY gateway call; a clean Configuration issues a
+  new key (401). `internal/shared/crud-api-key-set` = stop Main, IIS stop, SetApiKey, IIS start, start Main, health,
+  verify gateway (v1/Entities) AND Data (v1/Rules), 200 only. Run by `crud-preflight` (after Wait For Interrupted Runs;
+  the preflight no longer "changes nothing": it restarts IIS), `crud-run-start` and `crud-base-reset`. No 401 allowance
+  anywhere. First proven 11/09 on SMVM2 fresh 26R3 (TR2 crud-preflight green).
 - REST PowerShell steps append `Get-Why` to failures (401 body never shown, ids masked, 800 chars).

@@ -163,6 +163,40 @@ configure["description"] = (
     "backup configured earlier makes the Data and Connect services reject the user (400 DATA00030, 403 CNX00080). Success: "
     "The child workload ends with every step Succeeded. If it fails: Open the run output of 'install-configure-upgrade'; "
     "Configuration's log is quoted there.")
+# ---- internal/shared/matching-api-key-set (Gene 11/08): the pack standard. The key is set, and IIS restarted so every
+# service reads it, before any step queries the gateway; a clean Profisee Configuration issues a new key (gateway 401).
+_s1k = {s['label']: s for s in read(os.path.join(wl_root, 'internal', '1k', 'matching-1k-scenario1.workload.json'))['steps']}
+_verify_data = copy.deepcopy(tsteps['Verify API Key Through Gateway'])
+_verify_data['label'] = "Verify API Key Through Data Service"
+_verify_data['inline']['url'] = "{{ProfiseeBaseUrl}}/v1/Rules?PageSize=1"
+_verify_data['inline']['description'] = DATA_KEY_DESC
+_key_globals = {k: template['globalParameters'][k] for k in (
+    "ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName", "ProfiseeBaseUrl",
+    "MainHealthUrl", "ProfiseeApiKey", "ApiKeyUserName")}
+dump(os.path.join(wl_root, 'internal', 'shared', 'matching-api-key-set.workload.json'), {
+    "name": "matching-api-key-set",
+    "description": ("What: Stop the Profisee service and IIS on the application server, write the standard API key "
+                    "(RestKeys:ProfiseeRestKey) for the API user (ConnectRuntime:ApiKeyUserName) into the Profisee database, start "
+                    "IIS and the service, wait for every service, and prove the key through the gateway and the Data service. Why: "
+                    "the pack standard: the key is set before any step queries the gateway; a clean Profisee Configuration issues a "
+                    "new key, and the services read a key change only after IIS restarts. When: Never run directly; "
+                    "matching-preflight and every matching-<size>-scenario1-load run it. Running it alone is safe when no test uses "
+                    "this Profisee database. Needs: the API user exists in the Profisee database; no test running on this application "
+                    "server. Success: Every step Succeeded or Skipped. If it fails: open the first failed step, whose If it fails text "
+                    "names what to check."),
+    "tags": ["matching", "internal", "shared", "api-key"], "globalParameters": _key_globals, "globalParametersNotes": "",
+    "credentialUserId": None, "credentialPassword": None, "credentialNotes": "",
+    "steps": [copy.deepcopy(_s1k['Stop Profisee Service']), *copy.deepcopy(IIS_STOP), copy.deepcopy(tsteps['Set API Key']),
+              *copy.deepcopy(IIS_START), copy.deepcopy(_s1k['Start Profisee Service']), copy.deepcopy(tsteps['Start Every Service']),
+              copy.deepcopy(tsteps['Verify API Key Through Gateway']), _verify_data]})
+
+
+def key_set_child():
+    return {"label": "Set And Verify API Key", "inline": run_child(
+        "matching-api-key-set", "Set the standard API key, restart IIS so every service reads it, and prove it through the "
+        "gateway and the Data service", timeout=3600)}
+
+
 setup_steps = []
 for label, n in SIZES.items():
     low = label.lower()
@@ -203,10 +237,6 @@ for label, n in SIZES.items():
     backup_loaded['inline']['timeoutSeconds'] = 7300
     after_configure = copy.deepcopy(tsteps['Start Every Service'])
     after_configure['label'] = "Wait For Every Service After Configuration"
-    verify_data = copy.deepcopy(tsteps['Verify API Key Through Gateway'])
-    verify_data['label'] = "Verify API Key Through Data Service"
-    verify_data['inline']['url'] = "{{ProfiseeBaseUrl}}/v1/Rules?PageSize=1"
-    verify_data['inline']['description'] = DATA_KEY_DESC
     load['steps'] = [
         copy.deepcopy(s1steps['Wait For Interrupted Runs']),
         copy.deepcopy(s1steps['Stop Profisee Service']),
@@ -216,12 +246,7 @@ for label, n in SIZES.items():
         copy.deepcopy(s1steps['Start Profisee Service']),
         {"label": "Configure The Restored Baseline", "inline": copy.deepcopy(configure)},
         after_configure,
-        *copy.deepcopy(IIS_STOP),
-        copy.deepcopy(tsteps['Set API Key']),
-        *copy.deepcopy(IIS_START),
-        copy.deepcopy(tsteps['Start Every Service']),
-        copy.deepcopy(tsteps['Verify API Key Through Gateway']),
-        verify_data,
+        key_set_child(),
         {"label": "Check Connect Run-As User", "inline": {**copy.deepcopy(tsteps['Check RetailClient Is Empty']['inline']),
             "sqlScript": ("IF NOT EXISTS (SELECT 1 FROM meta.tUser WHERE [Name] = N'{{RunAsUser}}')\r\n"
                           "    THROW 50013, N'Connect run-as user {{RunAsUser}} (ConnectRuntime:ConnectRunAsUser) is not a Profisee user; the load batch would fail.', 1;\r\n"

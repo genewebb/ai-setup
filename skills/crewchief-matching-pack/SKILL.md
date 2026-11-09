@@ -47,7 +47,8 @@ by Gene 11/06; changes nothing except Start on a stopped pool, as Connect's):
 | Connect Run-As User Is A Profisee User | `meta.tUser` has `ConnectRuntime:ConnectRunAsUser` |
 | TestAuto Answers | by-tag probe on port 8443 |
 | TestAuto Model Answers | ScenarioMgt `TestAutoWorkflow?PageSize=1` with its key |
-| Gateway Answer | Profisee REST with `RestKeys:ProfiseeRestKey`: 200 ok, 401 stated (every load sets the key) |
+| Wait For Interrupted Runs | no TestAuto run active (the next step restarts IIS) |
+| Set And Verify API Key | runs `internal/shared/matching-api-key-set` (key standard, below): 200 only through gateway AND Data |
 | Every Automation Tag Found Once | 20 `AUTO:<box>:<version>:matching-<size>-scenario<x>` tags; none = "not created yet, run matching-setup" (stated) |
 
 **Rounds** (`packs\matching\rounds\`, for `tools\runner\run-queue.sh`): `smoke.txt` (`matching-test-1k`),
@@ -253,6 +254,12 @@ board shows EST.
 Profisee Configuration writes new service sign-in ids into the database it runs on AND the application server, so only
 the backup configured last works (400 DATA00030 / 403 CNX00080 otherwise). Each `matching-<size>-scenario1-load` restores
 `profisee_Matching_empty.bak` (never overwritten), starts IIS, runs the install pack's `install-configure-upgrade`, waits
-for every service, then IIS stop, SetApiKey, IIS start, health, gateway + Data checks. The scenario checkpoints that test
+for every service, then runs `matching-api-key-set`.
+
+**Key standard (Gene 11/08, help rule 10):** the API key is set before ANY gateway call; a clean Configuration issues a
+new key (401). `internal/shared/matching-api-key-set` (built in `gen_sizes.py` from the 1K scenario1 service steps and the
+load template) = stop Main, IIS stop, SetApiKey, IIS start, start Main, health, verify gateway + Data (200 only). Run by
+`matching-preflight` (gen_preflight.py; it now restarts IIS, never during a test) and every `scenario1-load`. Scenario
+workloads 1-3c restore checkpoints that already carry the key. First proven 11/09 on SMVM3 fresh 26R3. The scenario checkpoints that test
 backs up carry those ids. `matching-setup` no longer touches the baseline. Failure bodies of REST PowerShell steps go through `Get-Why`
 (401 body never shown, ids masked, 800 chars).

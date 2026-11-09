@@ -152,22 +152,22 @@ steps.append({"label": "TestAuto Model Answers", "inline": {
                     "workflows. Why: matching-setup writes them through this model. " + HTTP_RESULT),
     **COMMON}})
 
-steps.append(ps_step(
-    "Gateway Answers",
-    ("Call the Profisee gateway of the instance under test (https://<matching/machines:ApplicationServerNameFQDN>/"
-     "<matching/instances:ProfiseeInstanceName>/rest) with the RestKeys:ProfiseeRestKey secret: 200 = answers and the key "
-     "works; 401 = answers but the key is not set in this database yet (stated: every Matching load restores the baseline "
-     "and sets the key itself)."),
-    "$ErrorActionPreference = 'Stop'\n"
-    "$url = '{{ProfiseeBaseUrl}}/v1/Entities?PageSize=1'\n"
-    "# Never print a response body: a 401 body echoes the API key.\n"
-    "try { $r = Invoke-WebRequest -Uri $url -Headers @{ 'x-api-key' = '{{ProfiseeApiKey}}'; accept = 'application/json' } -SkipCertificateCheck -SkipHttpErrorCheck -TimeoutSec 120 }\n"
-    "catch { throw \"Profisee gateway does not answer at $url : $($_.Exception.Message)\" }\n"
-    "switch ([int]$r.StatusCode) {\n"
-    "    200 { 'Profisee gateway: answers, API key works.' }\n"
-    "    401 { 'Profisee gateway: answers, API key not set in this database yet (normal: every Matching load sets it after its restore).' }\n"
-    "    default { throw \"Profisee gateway: HTTP $([int]$r.StatusCode) at $url\" }\n"
-    "}"))
+# Pack standard (Gene 11/08): the key is set before any gateway query. A clean Profisee Configuration issues a new key,
+# so a plain gateway check answered 401; the shared key-set workload sets it, restarts IIS and proves it (200 only).
+steps.append({"label": "Wait For Interrupted Runs", "inline": {
+    "type": "TestAutoWorkflowStep", "baseUrl": "{{TestAutoBaseUrl}}", "workflowCode": "", "executionCode": "",
+    "attachToActiveRun": True, "waitOnly": True, "pollIntervalSeconds": 60, "waitIndefinitely": True,
+    "maxConsecutivePollFailures": 30, "ignoreSslErrors": True,
+    "description": ("What: Wait for any TestAuto run already in progress on this box. Why: the next step restarts IIS on the "
+                    "application server, which would break a running test. Success: no run is active. If it fails: TestAuto is "
+                    "unreachable on port 8443."),
+    **COMMON}})
+steps.append({"label": "Set And Verify API Key", "inline": {
+    "type": "RunWorkloadStep", "workloadName": "matching-api-key-set", **COMMON, "timeoutSeconds": 3600,
+    "description": ("What: Set the standard API key, restart IIS so every service reads it, and prove it through the gateway and "
+                    "the Data service. Why: Runs the child workload 'matching-api-key-set' so its tested steps are reused here, not "
+                    "repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run "
+                    "output of 'matching-api-key-set'; its first failed step says what to check.")}})
 
 keys = [f"matching-{s.lower()}-{scn}" for s in SIZES for scn in SCENARIOS]
 key_lines = ",\n".join(f"    '{k}'" for k in keys)
@@ -196,17 +196,18 @@ steps.append(ps_step(
 workload = {
     "name": "matching-preflight",
     "description": (
-        "What: Checks this box is ready for Matching testing without changing anything: the Profisee Windows service and "
-        "application pools exist, the baseline backup is on the database server, the source tables are in ModelSource, the "
-        "Connect run-as user is a Profisee user, TestAuto and its model answer, the gateway answers with its key, and every "
-        "automation tag sits on exactly one workflow. CrewChief's own pre-run check first proves every matching/* reference "
-        "value it uses is filled in. Why: Finds every environment problem in one run, before a test fails half way through. "
-        "When: Before and after matching-setup, after any reference data change, after a Profisee upgrade, before every "
-        "round, and first whenever a test fails. Needs: The matching/* reference sets and the box's secrets; nothing else "
-        "(it changes nothing; the pool step only starts a pool that is stopped). Success: Every step Succeeded or Skipped; "
-        "before the first matching-setup the tag step says \"not created yet\" and the gateway step may say \"key not set "
-        "yet\", both normal. If it fails: Each step's failure text names the reference key, secret or machine to fix; fix "
-        "reference data or the box, never a workload file."),
+        "What: Checks this box is ready for Matching testing: the Profisee Windows service and application pools exist, the "
+        "baseline backup is on the database server, the source tables are in ModelSource, the Connect run-as user is a "
+        "Profisee user, TestAuto and its model answer, the standard API key is set and works through the gateway and the Data "
+        "service (matching-api-key-set), and every automation tag sits on exactly one workflow. CrewChief's own pre-run check "
+        "first proves every matching/* reference value it uses is filled in. Why: Finds every environment problem in one run, "
+        "before a test fails half way through. When: Before and after matching-setup, after any reference data change, after "
+        "a Profisee upgrade, before every round, and first whenever a test fails; never while a test runs on this application "
+        "server. Needs: The matching/* reference sets and the box's secrets; the API user exists in the Profisee database. It "
+        "changes only two things: the pool step starts a pool that is stopped, and the key step writes the standard API key "
+        "and restarts IIS (pack standard: the key is set before any gateway query). Success: Every step Succeeded or Skipped; "
+        "before the first matching-setup the tag step says \"not created yet\", normal. If it fails: Each step's failure text "
+        "names the reference key, secret or machine to fix; fix reference data or the box, never a workload file."),
     "tags": ["matching", "start"],
     "globalParameters": {
         "ApplicationServerName": "{{$ref:matching/machines:ApplicationServerName}}",
@@ -216,8 +217,6 @@ workload = {
         "ModelSourceDB": "{{$ref:matching/databases:ModelSourceDB}}",
         "TestAutoBaseUrl": "https://{{$ref:matching/machines:TestServerNameFQDN}}:8443",
         "ScenarioMgtBaseUrl": "{{$ref:matching/urls:ScenarioMgtBaseUrl}}",
-        "ProfiseeBaseUrl": "https://{{$ref:matching/machines:ApplicationServerNameFQDN}}/{{$ref:matching/instances:ProfiseeInstanceName}}/rest",
-        "ProfiseeApiKey": "{{$config:RestKeys:ProfiseeRestKey}}",
         "RunAsUser": "{{$config:ConnectRuntime:ConnectRunAsUser}}",
     },
     "globalParametersNotes": "",

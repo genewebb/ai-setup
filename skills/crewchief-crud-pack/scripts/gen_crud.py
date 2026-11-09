@@ -404,6 +404,50 @@ BEGIN
 END
 PRINT CONCAT(N'CRUD base state: TDATA ', @tdata, N' rows, ZDATA empty, business rules TDATA ', @rulesT, N', ZDATA ', @rulesZ, N'.');"""
 
+# ---------------------------------------------------------------- internal/shared/crud-api-key-set (Gene 11/08)
+# Standard of every pack: set the standard API key (and restart IIS so every service reads it) before any step queries the
+# gateway. A clean Profisee Configuration issues a new key, so a gateway query without this answers 401.
+key_set_steps = [
+    service("Stop Profisee Service", "Stop", "What: Stop the Profisee Windows service before the key change. Why: it caches the user it signed in with. Success: the service is stopped."),
+    *IIS_STOP,
+    {"label": "Set API Key", "inline": {**base, "username": "{{ApiKeyUserName}}", "key": "{{ProfiseeApiKey}}", "serverName": "{{DatabaseServerName}}",
+        "databaseName": "{{ProfiseeDatabaseName}}", "authMode": "Windows", "credentialUserId": "", "credentialPassword": "",
+        "sqlDestinationConnectionSecretName": "", "stripHyphens": True, "type": "SetApiKeyStep",
+        "description": ("What: Write the standard API key for the machine's API user (ConnectRuntime:ApiKeyUserName) into meta.tUser. "
+                        "Why: TestAuto, the rule removal and every check call the gateway with that key; a clean Profisee Configuration "
+                        "issues a new key and a base backup configured on another machine may carry another one. Success: the user row "
+                        "is updated. If it fails: the user is missing from meta.tUser; add it in Profisee as a super administrator.")}},
+    *IIS_START,
+    service("Start Profisee Service", "Start", "What: Start the Profisee Windows service after IIS starts. Why: it must read the new key. Success: the service is running."),
+    health(),
+    {"label": "Verify API Key Through Gateway", "inline": {**base, "retryEnabled": True, "maxRetries": 4, "retryDelaySeconds": 30,
+        "url": "{{ProfiseeBaseUrl}}/v1/Entities", "method": "GET", "headers": {"x-api-key": "{{ProfiseeApiKey}}", "accept": "application/json"},
+        "body": "", "outputFile": "", "expectedStatusCodes": [200], "followRedirects": True, "verifySsl": True, "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "description": "What: Call the gateway with the standard key. Why: proves the key took before anything else uses it. Success: HTTP 200. If it fails: 401 means the key did not take; check the user in meta.tUser and rerun this workload."}},
+    verify_data_key(),
+]
+dump(os.path.join(wl_root, 'internal', 'shared', 'crud-api-key-set.workload.json'), workload(
+    "crud-api-key-set",
+    ("What: Stop the Profisee service and IIS on the application server, write the standard API key (RestKeys:ProfiseeRestKey) "
+     "for the API user (ConnectRuntime:ApiKeyUserName) into the Profisee database, start IIS and the service, wait for every "
+     "service, and prove the key through the gateway and the Data service. Why: the pack standard: the key is set before any "
+     "step queries the gateway; a clean Profisee Configuration issues a new key, and the services read a key change only after "
+     "IIS restarts. When: Never run directly; crud-preflight, crud-run-start and crud-base-reset run it. Running it alone is "
+     "safe when no test uses this Profisee database. Needs: the API user exists in the Profisee database; no test running on "
+     "this application server. Success: Every step Succeeded or Skipped. If it fails: open the first failed step, whose If it "
+     "fails text names what to check."),
+    ["crud", "internal", "shared", "api-key"],
+    g("ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName", "ProfiseeBaseUrl",
+      "MainHealthUrl", "ProfiseeApiKey", "ApiKeyUserName"),
+    key_set_steps))
+KEY_SET_WHAT = "Set the standard API key, restart IIS so every service reads it, and prove it through the gateway and the Data service"
+
+
+def key_set_child():
+    return run_child("Set And Verify API Key", "crud-api-key-set", KEY_SET_WHAT, timeout=3600)
+
+
 reset_steps = [
     wait_runs(),
     service("Stop Profisee Service", "Stop", "What: Stop the Profisee Windows service before the restore. Why: it holds connections and caches from before the restore. Success: the service is stopped."),
@@ -415,22 +459,7 @@ reset_steps = [
         "this application server at the start of this test by crud-run-start. Success: restored (about 6 minutes). If it fails: "
         "the run-start backup is missing (run the test from its crud-test-* workload, which writes it first), or the CrewChief "
         "account is not sysadmin on crud/machines:DatabaseServerName."),
-    {"label": "Set API Key", "inline": {**base, "username": "{{ApiKeyUserName}}", "key": "{{ProfiseeApiKey}}", "serverName": "{{DatabaseServerName}}",
-        "databaseName": "{{ProfiseeDatabaseName}}", "authMode": "Windows", "credentialUserId": "", "credentialPassword": "",
-        "sqlDestinationConnectionSecretName": "", "stripHyphens": True, "type": "SetApiKeyStep",
-        "description": ("What: Write the standard API key for the machine's API user (ConnectRuntime:ApiKeyUserName) into meta.tUser. "
-                        "Why: TestAuto and the rule removal call the gateway with that key; a base backup configured on another "
-                        "machine may carry another one. Success: the user row is updated. If it fails: the user is missing from "
-                        "meta.tUser; add it in Profisee as a super administrator, then back up the base again.")}},
-    *IIS_START,
-    service("Start Profisee Service", "Start", "What: Start the Profisee Windows service after the pools recycle. Why: it must read the restored database. Success: the service is running."),
-    health(),
-    {"label": "Verify API Key Through Gateway", "inline": {**base, "retryEnabled": True, "maxRetries": 4, "retryDelaySeconds": 30,
-        "url": "{{ProfiseeBaseUrl}}/v1/Entities", "method": "GET", "headers": {"x-api-key": "{{ProfiseeApiKey}}", "accept": "application/json"},
-        "body": "", "outputFile": "", "expectedStatusCodes": [200], "followRedirects": True, "verifySsl": True, "maxTimeSeconds": 300,
-        "type": "HTTP",
-        "description": "What: Call the gateway with the standard key. Why: proves the key took before TestAuto uses it. Success: HTTP 200. If it fails: 401 means the key did not take; recycle the instance's application pools and rerun."}},
-    verify_data_key(),
+    key_set_child(),
     sql("Check Base State", check_base,
         "What: Confirm the restored database is the CRUD base: TDATA holds at least 10M rows, ZDATA is empty, and TDATA and ZDATA "
         "each carry business rules. Why: a run on another starting state measures something else. Success: the state line prints. "
@@ -474,12 +503,7 @@ run_start_steps = [
     service("Start Profisee Service", "Start", "What: Start the Profisee Windows service after the restore. Why: Configuration expects a running instance. Success: the service is running."),
     configure_child,
     health("Wait For Every Service After Configuration"),
-    *IIS_STOP,
-    reset_by_label["Set API Key"],
-    *IIS_START,
-    health(),
-    reset_by_label["Verify API Key Through Gateway"],
-    verify_data_key(),
+    key_set_child(),
     reset_by_label["Check Base State"],
     db_step("Back Up Run-Start", "BackupDatabase", "{{RunStartBackupFileName}}",
         "What: Back up the configured database over the run-start file (crud/databases:RunStartBackupFileName). Why: every "
@@ -827,16 +851,6 @@ tags_ps = ("$ErrorActionPreference = 'Stop'\n"
            "if ($ok -eq 0) { \"Workflows for $version not created yet on this box (0 of $($keys.Count) automation tags found): run crud-setup. Not a failure before the first setup or after an upgrade.\"; return }\n"
            "if ($missing) { throw \"$($missing.Count) of $($keys.Count) automation tags have no TestAuto workflow (run crud-setup again): $($missing -join ', ')\" }\n"
            "\"All $($keys.Count) automation tags for $version found exactly once.\"")
-gateway_ps = ("$ErrorActionPreference = 'Stop'\n"
-              "$url = '{{ProfiseeBaseUrl}}/v1/Entities?PageSize=1'\n"
-              "# Never print a response body: a 401 body echoes the API key.\n"
-              "try { $r = Invoke-WebRequest -Uri $url -Headers @{ 'x-api-key' = '{{ProfiseeApiKey}}'; accept = 'application/json' } -SkipCertificateCheck -SkipHttpErrorCheck -TimeoutSec 120 }\n"
-              "catch { throw \"Profisee gateway does not answer at $url : $($_.Exception.Message)\" }\n"
-              "switch ([int]$r.StatusCode) {\n"
-              "    200 { 'Profisee gateway: answers, API key works.' }\n"
-              "    401 { 'Profisee gateway: answers, API key not set in this database yet (normal: every CRUD run sets it after its restore).' }\n"
-              "    default { throw \"Profisee gateway: HTTP $([int]$r.StatusCode) at $url\" }\n"
-              "}")
 HTTP_RESULT = ("Success: The response status is 200. If it fails: 401 = the API key secret is wrong; 404 = the address is wrong; "
                "no response = the server in the URL (crud/urls, crud/machines) is down.")
 pre_steps = [
@@ -871,11 +885,8 @@ pre_steps = [
         "maxTimeSeconds": 120,
         "description": ("What: Read one TestAuto workflow record from the TestAuto repository (crud/urls:ScenarioMgtBaseUrl) with the "
                         "RestClients:ScenarioMgt:ApiKey secret. Why: crud-setup writes the workflows through it. " + HTTP_RESULT)}},
-    ps("Gateway Answers", gateway_ps,
-       "What: Call the Profisee gateway of the instance under test with the RestKeys:ProfiseeRestKey secret: 200 = answers and "
-       "the key works; 401 = answers but the key is not set in this database yet (stated: every CRUD run sets it after its "
-       "restore). Why: TestAuto and the rule removal call this gateway. Success: the script ends without an error. If it fails: "
-       "the gateway does not answer or answered another code; check the application server and the instance name."),
+    wait_runs(),
+    key_set_child(),
     ps("Every Automation Tag Found Once", tags_ps,
        f"What: Look up all {len(pre_keys)} CRUD automation tags of this box and the current version "
        "(crud/environment:ProfiseeVersionCode) in TestAuto: each must sit on exactly one workflow; none at all = workflows not "
@@ -885,19 +896,21 @@ pre_steps = [
 ]
 dump(os.path.join(wl_root, 'start', 'crud-preflight.workload.json'), workload(
     "crud-preflight",
-    ("What: Checks this box is ready for CRUD testing without changing anything: the Profisee Windows service and application "
-     "pools exist, the CRUD base backup is on the database server, the current Profisee database state, TestAuto and its "
-     "repository answer, the gateway answers with its key, and every automation tag sits on exactly one workflow. CrewChief's "
-     "own pre-run check first proves every crud/* reference value it uses is filled in. Why: finds every environment problem in "
-     "one run, before a test fails half way through. When: before and after crud-setup, after any reference data change, after "
-     "a Profisee upgrade, before every round, and first whenever a test fails. Needs: the crud/* reference sets and the box's "
-     "secrets; nothing else (it changes nothing; the pool step only starts a pool that is stopped). Only one test may use this "
+    ("What: Checks this box is ready for CRUD testing: the Profisee Windows service and application pools exist, the CRUD base "
+     "backup is on the database server, the current Profisee database state, TestAuto and its repository answer, the standard "
+     "API key is set and works through the gateway and the Data service (crud-api-key-set), and every automation tag sits on "
+     "exactly one workflow. CrewChief's own pre-run check first proves every crud/* reference value it uses is filled in. Why: "
+     "finds every environment problem in one run, before a test fails half way through. When: before and after crud-setup, "
+     "after any reference data change, after a Profisee upgrade, before every round, and first whenever a test fails; never "
+     "while a test runs on this application server. Needs: the crud/* reference sets and the box's secrets; the API user exists "
+     "in the Profisee database. It changes only two things: the pool step starts a pool that is stopped, and the key step "
+     "writes the standard API key and restarts IIS (pack standard: the key is set before any gateway query). Only one test may use this "
      "application server's Profisee database at a time: Connect, Matching and CRUD all restore it. Success: Every step Succeeded "
      "or Skipped; before the first crud-setup the tag step says \"not created yet\", normal. If it fails: each step's failure "
      "text names the reference key, secret or machine to fix; fix reference data or the box, never a workload file."),
     ["crud", "start"],
     g("ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName", "BaseBackupFileName",
-      "TestAutoBaseUrl", "ScenarioMgtBaseUrl", "ScenarioMgtApiKey", "ProfiseeBaseUrl", "ProfiseeApiKey"),
+      "TestAutoBaseUrl", "ScenarioMgtBaseUrl", "ScenarioMgtApiKey"),
     pre_steps))
 
 # ---------------------------------------------------------------- rounds
