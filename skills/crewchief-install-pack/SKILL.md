@@ -1,6 +1,6 @@
 ---
 name: crewchief-install-pack
-description: The CrewChief Install workload pack (CrewChief/packs/install) and its generator gen_install.py - download the latest master build of platform pipeline 293, remove Profisee from an application server, install Server / FastApp Studio / Platform Tools, Profisee Configuration on a new or the existing database, verify, add-ons through the Profisee utilities; install-configure-upgrade is also the building block every pack test runs on its restored base. Use when changing, regenerating, deploying or running the Install pack, install-preflight / install-clean / install-upgrade / install-clean-base-prep, or when a test round must start from a fresh install.
+description: The CrewChief Install workload pack (CrewChief/packs/install) and its generator gen_install.py - download the build under test of platform pipeline 293 (AdoBranch / AdoBuildId from the caller, else the reference branch and its latest build), remove Profisee from an application server, install Server / FastApp Studio / Platform Tools, Profisee Configuration on a new or the existing database, verify, add-ons through the Profisee utilities; install-configure-upgrade is also the building block every pack test runs on its restored base. Use when changing, regenerating, deploying or running the Install pack, install-preflight / install-clean / install-upgrade / install-clean-base-prep, or when a test round must start from a fresh install.
 ---
 
 # CrewChief Install pack
@@ -38,7 +38,7 @@ pack's health wait.
 
 | Folder | Workload | Does |
 |---|---|---|
-| start | `install-preflight` | Secrets present, ADO token finds the latest master build, license + 10 GB on the app server, SQL answers, lists installed products |
+| start | `install-preflight` | Secrets present, ADO token finds the latest build of install/build:AdoBranch, license + 10 GB on the app server, SQL answers, lists installed products |
 | tests | `install-clean` / `install-upgrade` / `install-clean-base-prep` | build-get, remove, programs, configure-new / -upgrade, verify (+ add-ons for clean-base-prep; name kept, no base upgrade since 11/08) |
 | internal | `install-build-get` | AdoBuildDownload (skipIfCurrent), unzip, verify >= 3 MSIs, publish to the app server, list MSIs |
 | internal | `install-remove(-preview)` | Stop service (runWhen MainServiceName) and IIS, remote PS uninstall (Server, FastApp Studio, utilities: the old workloads' order), delete IIS app + pools |
@@ -52,4 +52,9 @@ pack's health wait.
 - No SetApiKey in verify (API user missing after clean install; pack resets set the key).
 - Uninstall by discovery in one remote PowerShell step, because UninstallStep needs exact versioned DisplayNames.
 - Build is published to the app server so MSIs install from a local path (no double hop).
-- Build source: pipeline 293, `refs/heads/master` only.
+- Build source: pipeline 293. The test workloads (install-clean, install-upgrade, install-clean-base-prep) carry globals
+  `AdoBranch = {{$ref:install/build:AdoBranch}}` and `AdoBuildId = ""`; `install-build-get` declares both as inputs and its
+  download step uses `branch: {{AdoBranch}}`, `buildId: {{AdoBuildId}}` (CrewChief build with AdoBuildDownloadStep.BuildId,
+  11/09). A TestAutoManager round passes `--param AdoBranch=... --param AdoBuildId=...`, which beats the globals (verified
+  11/09 with a two-workload fixture; a blank global resolves to empty). Run alone = reference branch, latest build.
+  install-build-get alone now needs both inputs (install-preflight shows the newest build).
