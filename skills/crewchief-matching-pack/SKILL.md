@@ -65,7 +65,7 @@ tag missing from PROD `TestAutoTags` (Code = Name; never changes an existing one
 
 | Workload | Restores | Does | Backs up |
 |---|---|---|---|
-| `matching-<size>-scenario1-load` | `profisee_Matching_empty.bak` | stop W3SVC + WAS, restore, SetApiKey, start WAS + W3SVC (11/08: a pool recycle left Data/Connect rejecting the API user), health, verify key through gateway AND Data service (GET v1/Rules), check the Connect run-as user, delete strategy + delete/import the `ModelSource` service configuration (server/database from reference data) + import + enable Connect strategy `RetailClientImport` reading `<ModelSourceDB>.dbo.RetailClient<size>Scenario1`, load, check | `loaded` |
+| `matching-<size>-scenario1-load` | `profisee_Matching_empty_<code>.bak` | stop W3SVC + WAS, restore, SetApiKey, start WAS + W3SVC (11/08: a pool recycle left Data/Connect rejecting the API user), health, verify key through gateway AND Data service (GET v1/Rules), check the Connect run-as user, delete strategy + delete/import the `ModelSource` service configuration (server/database from reference data) + import + enable Connect strategy `RetailClientImport` reading `<ModelSourceDB>.dbo.RetailClient<size>Scenario1`, load, check | `loaded` |
 | `matching-<size>-testauto-create` | - | 5 run profiles + 5 tagged TestAuto workflows in the TestAuto repository | - |
 | `matching-<size>-scenario1` | `loaded` | recycle all pools, health, monitor quiet, run workflow, check | `after-1` |
 | `matching-<size>-scenario2` | `after-1` | + Turn Continuous Matching On (before monitor quiet) | `after-2` |
@@ -73,8 +73,8 @@ tag missing from PROD `TestAutoTags` (Code = Name; never changes an existing one
 | `matching-<size>-scenario3b` | `after-3a` | same | `after-3b` |
 | `matching-<size>-scenario3c` | `after-3b` | same | `after-3c` |
 
-Backups: `profisee_Matching_<SizeLabel>_<suffix>.bak` in the SQL Server default backup folder. The empty baseline
-`profisee_Matching_empty.bak` (size-free: model, RetailClient matching strategy, the API user `corp\speedmerchants`
+Backups: `profisee_Matching_<SizeLabel>_<suffix>_<code>.bak` in the SQL Server default backup folder. The empty baseline
+`profisee_Matching_empty_<code>.bak` (made once per box and version by `start/matching-base-create` from the seed `matching/databases:EmptySeedBackupFileName` = today's unversioned `profisee_Matching_empty.bak`; size-free: model, RetailClient matching strategy, the API user `corp\speedmerchants`
 as super administrator, no records) is made by hand once per box and release. Whatever `ModelSource` service
 configuration it holds is replaced by the load (below). **New box (Gene 11/06):** restore the laptop's baseline on
 the new instance (same Profisee build, e.g. 26.3.0.1), run Profisee Configuration for that machine, then take a
@@ -137,6 +137,20 @@ Activity Monitor rows fall inside the scenario, decided by Gene 11/05; the run s
 | Scenario 3c | start, counts, enable + run, CreateOnly from `RetailClient1KScenario3c`, wait, end, post-run collection, counts, timing |
 
 Run profiles: `<ProfiseeVersionCode>-RetailClient-Scenario <x>-1000-0` (IncrementalVolumeCount 100 for 2/3b/3c).
+
+## Version-aware (multi-version lanes, Task 10)
+
+- `<code>` = `{{ProfiseeVersionCode}}`. Roots (`matching-preflight`, `-setup`, `-base-create`, `matching-test-<size>`, `matching-<size>-all`)
+  get the version keys as globals defaulting to `$ref:matching/environment:<key>` (ProfiseeVersionCode, ProfiseeVersionNumber,
+  MainServiceName, AnalyticsPoolName, ConfigurationManagerKind); everything below declares inputs. `declare_version_keys()` at the end
+  of `gen_sizes.py` computes both from the generated files (transitive over RunWorkload steps, including install-configure-upgrade's
+  declared inputs), so no workload can miss one. Pools list `{{AnalyticsPoolName}}` (blank = dropped).
+- `matching-base-create` (D18): wait for runs, refuse when the versioned empty baseline exists (THROW 50014), stop service + IIS, restore the seed,
+  start, install-configure-upgrade, health, `matching-api-key-set`, check RetailClient empty, back up `profisee_Matching_empty_<code>.bak`.
+- API key (Gene 11/09): every workload that restores a database sets and verifies the key itself: base-create, every load, and
+  every scenario workload (`key_set_step()` in `gen_s1.py` after Start Profisee Service; gen_all clones it).
+- Template `load-template-1k.workload.json` carries the loaded-backup SQL; its name ends `_<BackupSuffix>_{{ProfiseeVersionCode}}.bak`.
+- Lint: `Test-Pack.ps1` lists `matching` in `$VersionAwareFamilies` (R-tag, R-root, R-bak).
 
 ## Changing anything: use the generators
 
@@ -253,7 +267,7 @@ board shows EST.
 
 Profisee Configuration writes new service sign-in ids into the database it runs on AND the application server, so only
 the backup configured last works (400 DATA00030 / 403 CNX00080 otherwise). Each `matching-<size>-scenario1-load` restores
-`profisee_Matching_empty.bak` (never overwritten), starts IIS, runs the install pack's `install-configure-upgrade`, waits
+`profisee_Matching_empty_{{ProfiseeVersionCode}}.bak` (never overwritten), starts IIS, runs the install pack's `install-configure-upgrade` (its inputs ProfiseeVersionNumber, ConfigurationManagerKind, MainServiceName reach it from the root as passed-through inputs), waits
 for every service, then runs `matching-api-key-set`.
 
 **Key standard (Gene 11/08, help rule 10):** the API key is set before ANY gateway call; a clean Configuration issues a

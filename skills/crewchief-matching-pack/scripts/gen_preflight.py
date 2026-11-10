@@ -65,8 +65,8 @@ steps.append({"label": "Profisee Service Exists", "inline": {
                     "secrets) can manage services there over CredSSP. Skipped when: matching/environment:MainServiceName is "
                     "blank, which is normal on releases that have no Profisee Windows service; the step then "
                     "reports Skipped, not Failed."),
-    "targetComputer": "{{ApplicationServerName}}", "serviceName": "{{$ref:matching/environment:MainServiceName}}",
-    "runWhen": "{{$ref:matching/environment:MainServiceName}}", **ADMIN, **COMMON}})
+    "targetComputer": "{{ApplicationServerName}}", "serviceName": "{{MainServiceName}}",
+    "runWhen": "{{MainServiceName}}", **ADMIN, **COMMON}})
 
 steps.append({"label": "Application Pools Exist", "inline": {
     "type": "AppPoolStep", "action": "Start", "credentialSecretName": None, "staggerSeconds": None,
@@ -75,18 +75,18 @@ steps.append({"label": "Application Pools Exist", "inline": {
                     "if one of these pools is missing; this finds it first. Success: Every named pool is Started. If it fails: A "
                     "pool that does not exist fails the step: compare matching/instances:ProfiseeInstanceName with IIS Manager on "
                     "the application server (matching/machines:ApplicationServerName)."),
-    "appPoolNames": ["{{ProfiseeInstanceName}}" + s for s in POOL_SUFFIXES], "targetComputer": "{{ApplicationServerName}}",
+    "appPoolNames": ["{{AnalyticsPoolName}}" if s == "-analytics" else "{{ProfiseeInstanceName}}" + s for s in POOL_SUFFIXES], "targetComputer": "{{ApplicationServerName}}",
     **ADMIN, **COMMON}})
 
-later = ', '.join(f"profisee_Matching_<size>_{s}.bak" for s in BACKUP_SUFFIXES)
+later = ', '.join(f"profisee_Matching_<size>_{s}_<code>.bak" for s in BACKUP_SUFFIXES)
 backup_sql = "\n".join([
     "DECLARE @dir nvarchar(400) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400));",
     "DECLARE @exists int, @f nvarchar(600), @have nvarchar(max) = N'', @notYet nvarchar(max) = N'';",
-    "SET @f = @dir + N'\\profisee_Matching_empty.bak'; EXEC master.dbo.xp_fileexist @f, @exists OUTPUT;",
-    "IF @exists = 0 BEGIN DECLARE @msg nvarchar(2048) = CONCAT(N'Baseline backup missing: ', @f, N'. Every Matching load restores it: copy profisee_Matching_empty.bak into the SQL Server default backup folder.'); THROW 50010, @msg, 1; END",
+    "SET @f = @dir + N'\\profisee_Matching_empty_{{ProfiseeVersionCode}}.bak'; EXEC master.dbo.xp_fileexist @f, @exists OUTPUT;",
+    "IF @exists = 0 BEGIN DECLARE @msg nvarchar(2048) = N'Matching base profisee_Matching_empty_{{ProfiseeVersionCode}}.bak for version {{ProfiseeVersionCode}} is missing on {{DatabaseServerName}}. Run matching-base-create on this lane.'; THROW 50010, @msg, 1; END",
     "PRINT CONCAT(N'Baseline backup found: ', @f);",
 ] + [
-    f"SET @f = @dir + N'\\profisee_Matching_{size}_{suffix}.bak'; EXEC master.dbo.xp_fileexist @f, @exists OUTPUT; "
+    f"SET @f = @dir + N'\\profisee_Matching_{size}_{suffix}_{{{{ProfiseeVersionCode}}}}.bak'; EXEC master.dbo.xp_fileexist @f, @exists OUTPUT; "
     f"IF @exists = 1 SET @have += N'{size}_{suffix} ' ELSE SET @notYet += N'{size}_{suffix} ';"
     for size in SIZES for suffix in BACKUP_SUFFIXES
 ] + [
@@ -95,11 +95,11 @@ backup_sql = "\n".join([
 ])
 steps.append(sql_step(
     "Baseline Backup Exists",
-    ("Check profisee_Matching_empty.bak sits in the SQL Server default backup folder of the database server "
-     "(matching/machines:DatabaseServerName); every Matching load restores it. Also lists which per-size scenario backups "
+    ("Check the empty baseline of this version (profisee_Matching_empty_<code>.bak) sits in the SQL Server default backup folder of the database server "
+     "(matching/machines:DatabaseServerName); every Matching load restores it, and matching-base-create makes it. Also lists which per-size scenario backups "
      f"({later}) already exist; those are written by the runs themselves, so a missing one is stated, not failed."),
     backup_sql, MASTER,
-    "Success: The baseline backup exists; the output lists the scenario backups present and not made yet."))
+    "Success: The baseline backup exists; the output lists the scenario backups present and not made yet. If it fails: the baseline of this version is missing: run matching-base-create on this lane."))
 
 table_lines = ["DECLARE @missing nvarchar(max) = N'', @gaOnly nvarchar(max) = N'', @n bigint;"]
 for size in SIZES:
@@ -178,7 +178,7 @@ steps.append(ps_step(
      "workflows not created yet on this box (stated, not failed: run matching-setup)."),
     "$ErrorActionPreference = 'Stop'\n"
     "$testAuto = '{{TestAutoBaseUrl}}'.TrimEnd('/')\n"
-    "$version = '{{$ref:matching/environment:ProfiseeVersionCode}}'\n"
+    "$version = '{{ProfiseeVersionCode}}'\n"
     f"$keys = @(\n{key_lines}\n)\n"
     "$missing = @(); $dupes = @(); $ok = 0\n"
     "foreach ($key in $keys) {\n"

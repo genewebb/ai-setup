@@ -57,6 +57,21 @@ stewardship nobr; proof (`crud-test-proof`, `rounds/proof-round.txt`) = every fo
 SMVMTR1 (11/07/2026, 26R3T): workflows 10000470-10000489, count forms 10000490-10000495. Smoke 11/07 PASS 50 min
 (core 1K br 15.6 min incl. restore, ZDATA 900; steward 1min nobr 34 min). A 1-min TestAuto step takes ~2 min wall.
 
+## Version-aware lanes (multi-version, 11/09)
+
+- Version keys ProfiseeVersionCode, ProfiseeVersionNumber, MainServiceName, AnalyticsPoolName, ConfigurationManagerKind are ROOT
+  GLOBALS defaulting to `{{$ref:crud/environment:<key>}}` (a root = a workload no workload runs: crud-preflight, crud-setup,
+  crud-base-create, crud-test-*); a TestAutoManager lane overrides them with `--param`. Every workload below declares the keys
+  it or its callees use as `inputs` (`inputs_for`, `run_inputs`); a key read by `$ref` below a root fails Test-Pack (R-root).
+- Base names are composed in the roots: `BaseBackupFileName = {{$ref:crud/databases:BaseBackupStem}}_{{ProfiseeVersionCode}}.bak`
+  (likewise `RunStartBackupFileName`); children take them as inputs. `BaseSeedBackupFileName` (`profisee_CRUD_base.bak`, today's
+  file) is the only unversioned backup key; Test-Pack R-bak exempts keys ending `SeedBackupFileName`.
+- The 20-pool lists use `{{AnalyticsPoolName}}` for the analytics pool (blank is dropped by the pool step).
+- Tags: `AUTO:{{$env:COMPUTERNAME}}:{{ProfiseeVersionCode}}:<key>`.
+- `start/crud-base-create` (D18): wait, refuse when the versioned base exists (never overwrites), stop Main + IIS, restore the seed,
+  IIS + Main start, `install-configure-upgrade`, health, `crud-api-key-set` (R-key: restore + configure are followed by the key set), Check Base State, back up as `BaseBackupFileName`. The seed must be the
+  same or an older version (Configuration only upgrades). `crud-preflight` 'CRUD Base Backup Exists' names it when the base is missing.
+
 ## Run start and key sequence (11/08)
 
 - Profisee Configuration writes NEW service sign-in ids (meta.tUser ClientId of every service user, encrypted) into the
@@ -64,9 +79,9 @@ SMVMTR1 (11/07/2026, 26R3T): workflows 10000470-10000489, count forms 10000490-1
   v1/Rules 400 DATA00030 (auth log: `No client with id ... found`). Seen 11/08: CRUD base configured 10:32, Matching
   10:38, CRUD failed. `auth.Clients` is empty in every base (not the cause).
 - So every `crud-test-*` (and smoke, proof) starts with `crud-run-start` (Gene: once per pack run): wait, stop Main, IIS
-  stop, restore `BaseBackupFileName` (never overwritten), IIS start, start Main, `install-configure-upgrade` (install pack,
+  stop, restore `BaseBackupFileName` (never overwritten), IIS start, start Main, `install-configure-upgrade` (install pack; its three version inputs ProfiseeVersionNumber, ConfigurationManagerKind, MainServiceName are inputs of `crud-run-start`, passed through from the root, no step parameters; timeout 7500 s,
   Configure 7200 s), health, `crud-api-key-set`, Check Base State, BackupDatabase
-  `RunStartBackupFileName` (`profisee_CRUD_run-start.bak`). `crud-setup` no longer touches the base.
+  `RunStartBackupFileName`. `crud-setup` no longer touches the base.
 - `crud-base-reset`: wait, stop Main, stop W3SVC + WAS, restore the RUN-START copy, `crud-api-key-set`, Check Base State.
   The gateway check alone passes while Data rejects. A core/steward workload run alone after another pack configured
   fails red at the Data check.

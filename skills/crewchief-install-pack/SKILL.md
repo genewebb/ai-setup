@@ -43,11 +43,22 @@ pack's health wait.
 | internal | `install-build-get` | AdoBuildDownload (skipIfCurrent), unzip, verify >= 3 MSIs, publish to the app server, list MSIs |
 | internal | `install-remove(-preview)` | Stop service (runWhen MainServiceName) and IIS, remote PS uninstall (Server, FastApp Studio, utilities: the old workloads' order), delete IIS app + pools |
 | internal | `install-programs` | CheckPort Free, three InstallSteps (CredSSP), start WAS, W3SVC |
-| internal | `install-configure-new` / `-upgrade` | (DropDatabase) + ConfigureStep with the old CORPVM31 switch set; `-upgrade` Configure timeout 7200 s because `crud-run-start` and every Matching load run it on their restored base (11/08: Configuration writes new service sign-in ids into the DB and the app server, so only the backup configured last works; 400 DATA00030 otherwise). Test-Pack resolves this cross-pack child from the sibling install folder |
-| internal | `install-verify` | Health wait, exactly one Profisee Server whose DisplayVersion starts with ProfiseeVersionNumber |
+| internal | `install-configure-new` / `-upgrade` | first step "Configuration Manager Supported" refuses `ConfigurationManagerKind` = `new` (text from `install/environment:ConfigurationManagerNewRefusal`); then (DropDatabase) + ConfigureStep with the old CORPVM31 switch set; `-upgrade` Configure timeout 7200 s because `crud-run-start` and every Matching load run it on their restored base (11/08: Configuration writes new service sign-in ids into the DB and the app server, so only the backup configured last works; 400 DATA00030 otherwise). Test-Pack resolves this cross-pack child from the sibling install folder. Both end with a `RunWorkloadStep` of `install-api-key-set` (Gene 11/09: Test-Pack rule R-key, every family, no exceptions: a workload that runs Configuration or restores the Profisee database sets the API key itself afterwards); both take `MainServiceName` as an input for it |
+| internal | `install-api-key-set` | Same shape as `crud-api-key-set`: stop Main service (runWhen) + W3SVC + WAS, SetApiKeyStep (`RestKeys:ProfiseeRestKey` for `ConnectRuntime:ApiKeyUserName`), start WAS + W3SVC + Main service, health wait, verify through the gateway (`v1/Entities`) and the Data service (`v1/Rules?PageSize=1`). Reads `install/machines`, `install/instances`, `install/databases` keys already there; input `MainServiceName` |
+| internal | `install-verify` | Health wait, exactly one Profisee Server whose DisplayVersion starts with the ProfiseeVersionNumber input |
 | internal | `install-addons` | Utilities exe on the app server: /Import model, /deploydata archive, /Import users (runWhen per file key) |
 
 ## Decisions (do not undo without asking)
+
+- Version keys (multi-version lanes, 11/09; decisions D6, D11, D12, D17): `ProfiseeVersionNumber`, `MainServiceName`,
+  `ConfigurationManagerKind` (`classic` default, `new` refused) are globals of the four roots (`install-preflight`
+  has only `InstalledVersionMustBe`, default `""` = no check, plus the step "Installed Version Matches The Lane"),
+  each `{{$ref:install/environment:<key>}}`; every workload below a root (`install-remove`, `install-configure-*`,
+  `install-verify`, `install-addons`) declares them as `inputs` and gets the value from its parent. A caller's `--param`
+  (TestAutoManager lane) beats the root's global. `Test-Pack.ps1` rule R-root enforces it (`install` is in
+  `$VersionAwareFamilies`). Release names cannot sit in a workload (lint), so the D17 refusal text lives in
+  `install/environment:ConfigurationManagerNewRefusal`. crud (`crud-run-start`) and matching (`*-scenario1-load`)
+  call `install-configure-upgrade` with these three as step parameters.
 
 - No SetApiKey in verify (API user missing after clean install; pack resets set the key).
 - Uninstall by discovery in one remote PowerShell step, because UninstallStep needs exact versioned DisplayNames.
