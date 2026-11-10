@@ -187,6 +187,7 @@ After compacting: read memory, check todo list, resume work.
 ### Voice: Terse
 - Compressed, direct output (caveman style where the client has it). No ASCII art, kaomoji or decorative banners.
 - The Truth & Uncertainty output format above still applies to every substantive answer.
+- Start every reply with my name: "Gene".
 
 ---
 

@@ -18,6 +18,9 @@ here = os.path.dirname(os.path.abspath(__file__))
 FAM = 'install'
 ref_dir = os.path.join(root, 'reference-kv', FAM)
 wl_root = os.path.join(root, 'workloads', FAM)
+# Service and pool steps (Gene 11/10): found on the server, never named; one shared builder for every pack.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(root)), 'tools'))
+import instance_steps  # noqa: E402
 
 
 def dump(path, obj):
@@ -45,7 +48,7 @@ REF_SETS = {
     'environment': {
         "description": "Install pack: what differs between Profisee releases and boxes. Edit before installing a new release.",
         "includeInReplacements": True,
-        "entries": {"ProfiseeVersionCode": "26R3T", "ProfiseeVersionNumber": "26.3.0", "MainServiceName": "",
+        "entries": {"ProfiseeVersionCode": "26R3T", "ProfiseeVersionNumber": "26.3.0",
                     "ConfigurationManagerKind": "classic",
                     "ConfigurationManagerNewRefusal": "Configuration manager 'new' is not supported yet (26R4 deferred).",
                     "LicenseFile": "C:\\Deploy\\License\\Prof_2020_3Inst_3Nodes_AllFeatures_AllConnectors_Production_@.corp.profisee.com_ConnexOn_AIOn_McpOn.plic",
@@ -53,13 +56,11 @@ REF_SETS = {
         "keyDescriptions": {
             "ProfiseeVersionCode": "TestAuto version code of the release being installed (as in the other packs' environment sets). Hand runs of a root read it here; a TestAutoManager round passes it per lane.",
             "ProfiseeVersionNumber": "Product version of the release being installed, e.g. 26.4.0: the install is checked against it and the Configuration program is found under it.",
-            "MainServiceName": "Profisee Windows service on the application server, stopped before the uninstall. Blank on releases with no Windows service; the stop step then reports Skipped.",
             "ConfigurationManagerKind": "Which Profisee Configuration program the release has: classic (the Configuration.exe the install runs) or new. 'new' is refused by install-configure-new and install-configure-upgrade until the release that has it is supported.",
             "ConfigurationManagerNewRefusal": "The text install-configure-new and install-configure-upgrade fail with when ConfigurationManagerKind is new (kept here because it names a release).",
             "LicenseFile": "Full path ON THE APPLICATION SERVER of the Profisee license file Configuration applies.",
             "WebSiteName": "IIS web site the instance lives under.",
-            "MetadataProvider": "Configuration switch metadataProvider (None on the test lab)."},
-        "keyBlankAllowed": {"MainServiceName": True}},
+            "MetadataProvider": "Configuration switch metadataProvider (None on the test lab)."}},
     'instances': {
         "description": "Install pack: the Profisee instance created on the application server.",
         "includeInReplacements": True,
@@ -130,6 +131,7 @@ def step(label, type_, desc, timeout=600, **fields):
 def workload(name, desc, tags, globals_, steps, notes="", inputs=None):
     w = {"name": name, "description": desc, "tags": tags, "globalParameters": globals_, "globalParametersNotes": notes,
          "credentialUserId": None, "credentialPassword": None, "credentialNotes": "", "steps": steps}
+    instance_steps.add_service_discovery(w, FAM)
     if inputs:
         # Hand runs (Gene 11/10): every input carries a "default", used only when no caller supplies the value.
         w["inputs"] = [{"name": n, "description": d, "default": INPUT_DEFAULTS[n]} for n, d in inputs]
@@ -140,7 +142,6 @@ def workload(name, desc, tags, globals_, steps, notes="", inputs=None):
 # supplied blank counts as supplied). Same reference data the roots read; AdoBuildId blank = the latest build of AdoBranch.
 INPUT_DEFAULTS = {"AdoBranch": ref('build', 'AdoBranch'), "AdoBuildId": "",
                   "ProfiseeVersionNumber": ref('environment', 'ProfiseeVersionNumber'),
-                  "MainServiceName": ref('environment', 'MainServiceName'),
                   "ConfigurationManagerKind": ref('environment', 'ConfigurationManagerKind')}
 
 # Every parent of install-build-get passes the build to install: the reference-data branch and the latest build, unless
@@ -156,12 +157,8 @@ BUILD_INPUTS = [
 # Version keys (decision D12): a root (a workload no workload runs) reads each from reference data in its own global of
 # the same name, or takes it from the caller (a TestAutoManager lane passes it as --param); every workload below a
 # root declares the ones it uses as inputs and gets the value from its parent.
-VERSION_GLOBALS = {"MainServiceName": ref('environment', 'MainServiceName'),
-                   "ProfiseeVersionNumber": ref('environment', 'ProfiseeVersionNumber'),
+VERSION_GLOBALS = {"ProfiseeVersionNumber": ref('environment', 'ProfiseeVersionNumber'),
                    "ConfigurationManagerKind": ref('environment', 'ConfigurationManagerKind')}
-IN_MAIN_SERVICE = ("MainServiceName", "Profisee Windows service on the application server, stopped before the uninstall; "
-                   "blank = the release has no Windows service. Passed by the test that runs this one (install/environment:"
-                   "MainServiceName, or the lane's service name).")
 IN_VERSION_NUMBER = ("ProfiseeVersionNumber", "Product version of the release being installed (n.n.n): the Configuration "
                      "and utilities programs are found under it. Passed by the test that runs this one "
                      "(install/environment:ProfiseeVersionNumber, or the lane's version).")
@@ -284,10 +281,11 @@ def iis_service(name, action, desc):
                 targetComputer="{{ApplicationServerName}}", **ADMIN)
 
 
-# P2 (Gene 11/10): the Windows service(s) of the INSTALLED Profisee are found on the application server itself, never named by
-# MainServiceName (that value belongs to the lane's version, the installed one can be another). A service counts when its
-# name or display name starts with "Profisee" and its program sits under a folder an installed Profisee product lives in
-# (the InstallLocation the uninstall entries hold, plus the standard Program Files\Profisee folders). None found = nothing to stop.
+# P2 (Gene 11/10): the Windows service(s) of the INSTALLED Profisee are found on the application server itself, never named
+# (the installed release can differ from the version under test, and the installer lets a person name the service anything).
+# A service counts when its program sits under a folder an installed Profisee product lives in (the InstallLocation the
+# uninstall entries hold, plus the standard Program Files\Profisee folders), whatever its name. The uninstall below removes
+# every one of those products, so every such service is stopped. None found = nothing to stop.
 STOP_INSTALLED_SERVICES = r"""$ErrorActionPreference = 'Stop'
 $keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
         'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
@@ -302,9 +300,7 @@ function Get-ProgramPath([string]$commandLine) {
     if ($commandLine -match '^\s*(.+?\.exe)(\s|$)') { return $Matches[1] }
     return $commandLine.Trim()
 }
-$found = @(Get-CimInstance -ClassName Win32_Service | Where-Object {
-        $_.PathName -and ($_.Name -like 'Profisee*' -or $_.DisplayName -like 'Profisee*')
-    } | Where-Object {
+$found = @(Get-CimInstance -ClassName Win32_Service | Where-Object { $_.PathName } | Where-Object {
         $program = Get-ProgramPath $_.PathName
         @($roots | Where-Object { $program.StartsWith($_ + '\', [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
     })
@@ -321,10 +317,10 @@ foreach ($s in $found) {
 
 def stop_installed_services():
     return remote_ps("Stop The Profisee Service", STOP_INSTALLED_SERVICES,
-        "What: On the application server, find every Windows service of the installed Profisee (a name or display name starting "
-        "with Profisee whose program sits under the folder of an installed Profisee product) and stop it. Why: older releases run "
-        "one and it holds files the uninstall must replace; it is found on the server, whatever MainServiceName says, because the "
-        "installed release can differ from the version under test. Success: every such service is stopped; none found is also a "
+        "What: On the application server, find every Windows service of the installed Profisee (any service, whatever its name, "
+        "whose program sits under the folder of an installed Profisee product) and stop it. Why: older releases run one and it "
+        "holds files the uninstall must replace; it is found on the server, never named, because the installed release can "
+        "differ from the version under test and the installer lets a person name the service anything. Success: every such service is stopped; none found is also a "
         "success (the line says so). If it fails: the admin credential cannot manage services there over CredSSP, or a service did "
         "not stop within 3 minutes (see its state in services.msc).", timeout=900)
 
@@ -505,13 +501,9 @@ G["ApiKeyUserName"] = "{{$config:ConnectRuntime:ApiKeyUserName}}"
 # matching-api-key-set; the reference keys it reads are this pack's (machines, instances, databases) and the key comes from
 # the RestKeys:ProfiseeRestKey secret.
 def key_service(action, what):
-    s = step(f"{action} The Profisee Service", "ServiceControlStep", f"What: {what} Why: it caches the user it signed in with and must "
-             "read the new key. Success: the service is " + ("stopped" if action == 'Stop' else "running") + ". If it fails: the service "
-             "name in MainServiceName (install/environment:MainServiceName, or the lane's) is wrong, or the admin credential cannot manage "
-             "services there over CredSSP. Skipped when: MainServiceName is blank (newer releases have no Profisee Windows service).",
-             serviceName="{{MainServiceName}}", action=action, targetComputer="{{ApplicationServerName}}", **ADMIN)
-    s["inline"]["runWhen"] = "{{MainServiceName}}"
-    return s
+    # The service name comes from the step Find The Instance Service (instance_steps.add_service_discovery in workload()).
+    return instance_steps.service_step(f"{action} The Profisee Service", action, "{{ApplicationServerName}}", what,
+                                       "it caches the user it signed in with and must read the new key.")
 
 
 def key_http(label, path, what, why):
@@ -562,7 +554,7 @@ dump(os.path.join(wl_root, 'internal', 'install-api-key-set.workload.json'), wor
     ["install", "internal", "api-key"],
     g("ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName", "ProfiseeBaseUrl", "MainHealthUrl",
       "ProfiseeApiKey", "ApiKeyUserName"),
-    key_set_steps, inputs=[IN_MAIN_SERVICE]))
+    key_set_steps))
 
 
 def run_child(label, name, what, timeout=21600):
@@ -609,7 +601,7 @@ for drop_db in (True, False):
             "the kind is classic. If it fails: the lane or install/environment:ConfigurationManagerKind names the new "
             "manager; run a release that has the classic one.", timeout=60)] +
         ([DROP_DB] if drop_db else []) + [conf, key_set_child()],
-        inputs=[IN_VERSION_NUMBER, IN_CONFIG_KIND, IN_MAIN_SERVICE]))
+        inputs=[IN_VERSION_NUMBER, IN_CONFIG_KIND]))
 
 # ---------------------------------------------------------------- internal/install-verify
 VERSION_CHECK = r"""$ErrorActionPreference = 'Stop'
