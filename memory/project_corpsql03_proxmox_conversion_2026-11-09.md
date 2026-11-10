@@ -24,3 +24,7 @@ Facts worth not re-deriving (read from the machine 11/09):
 
 **Why:** Gene wants variance between instances as near zero as possible, and the real number if not zero.
 **How to apply:** start from the three notes; do not reopen purchase options; nothing destructive on CORPSQL03 before the gates in note 1 section 4. Related: [[project-test-lab-topology-cadence]].
+
+**Added 2026-11-09 (later):** Gene's requirement: isolation test must use full instances (app server Windows VM + its own separate DB server), at least 3 instances simultaneously, more if possible. SQL-only (Level A) is diagnostic only, no verdict. Note 2 E4 reworked: blocks = each instance solo + all together, compare to own solo, bootstrap over blocks, idle slot rotates, report by position. SMVMTR1-3 online (no SMVMTR4); fourth driver open. Campaign ~240 h (3 instances). Gene asked about <1% noise: unknown until E1; margin floor 2% vs 1% is open decision after E1. Lucid layout diagram: https://lucid.app/lucidchart/a8bc58dc-7b17-4886-9f55-e63c74cdf331/edit
+Decided by Gene 2026-11-09: margin floor stays 2%, revisit after E1; E4 starts with 3 instances (SMVMTR1-3), fourth driver later.
+Gene 2026-11-09: once the Proxmox box is configured, Gene sets up access from the laptop so Claude can drive checks and changes. Until then no access to the new host; do not assume it.
