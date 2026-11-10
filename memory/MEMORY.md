@@ -31,6 +31,7 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [Seq events also in SQL: logging.tSystemLog (Profisee DB + PROD speedmerchants)](reference_systemlog_table.md)
 
 ## Active work (newest first; full status in each file)
+- **[CORPSQL03 to Proxmox 11/09: no new hardware, pilot Docker-in-VM vs LXC for DB, 3 design notes, gates before wipe](project_corpsql03_proxmox_conversion_2026-11-09.md)**
 - [QA Connect box 26R3QA 11/09: pack zip verified vs repo; doc gaps listed](project_qa_connect_box_26r3qa_2026-11-09.md)
 - **[Multi-version lanes 11/09: per-lane version/build/name/prep decided; 26R4 config waits on Gene's code pull](project_multi_version_lanes_2026-11-09.md)**
 - **[DATA00030/CNX00080 after restore = backup configured before last Configuration (stale service ids); every pack test configures its base at start; packs are GENERATED](reference_pack_base_backup_must_match_build.md)**
