@@ -20,7 +20,7 @@ pwsh C:\devops\repos\speed-merchants\CrewChief\packs\tools\Test-Pack.ps1 -PackRo
 
 `catalog-meta.json` (estimate per test) is hand-kept at the pack root; `New-PackCatalog.ps1` rewrites `catalog.json` from it, `tests/` and `rounds/`; the lint fails while it is stale.
 
-`scripts/connect_upsert_body.ps1` and `scripts/health.ps1` are copies of the Matching pack's (upsert by AUTO tag,
+`scripts/connect_upsert_body.ps1.txt` and `scripts/health.ps1` are copies of the Matching pack's (upsert by AUTO tag,
 adds missing TestAutoTags, deterministic step codes; health wait). The reference sets are regenerated too: on a box
 restore only `workloads/crud` unless the box is new.
 

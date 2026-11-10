@@ -56,7 +56,7 @@ by Gene 11/06; changes nothing except Start on a stopped pool, as Connect's):
 and `<size>-round.txt` (load, then `+`scenario1..3c, one line each, for re-running a failed scenario).
 
 **Tags (prompt 05, applied 11/06):** CrewChief workload tags `1K`/`10K`/`100K`/`1M` (upper case) and `20U` on the
-3a/3b/3c workloads; setup and shared workloads have no size tag. The upsert (`connect_upsert_body.ps1`) adds any
+3a/3b/3c workloads; setup and shared workloads have no size tag. The upsert (`connect_upsert_body.ps1.txt`) adds any
 tag missing from PROD `TestAutoTags` (Code = Name; never changes an existing one). Its standalone parse warning
 (`Unexpected token 'Stop'` from the ai-setup install) is expected: the file starts with `'@`, the end of the
 `$specJson` here-string the generator writes before it, so it only parses inside the generated script.
@@ -158,7 +158,7 @@ The TestAuto step configs live as JSON strings inside PowerShell here-strings in
 `matching-1k-testauto-create.workload.json`; do not hand-edit them. Edit and rerun the generator:
 
 ```powershell
-python <skill>\scripts\gen_sizes.py C:\devops\repos\speed-merchants\CrewChief\packs\matching <skill>\scripts\connect_upsert_body.ps1
+python <skill>\scripts\gen_sizes.py C:\devops\repos\speed-merchants\CrewChief\packs\matching <skill>\scripts\connect_upsert_body.ps1.txt
 pwsh C:\devops\repos\speed-merchants\CrewChief\packs\tools\New-PackCatalog.ps1 -PackRoot C:\devops\repos\speed-merchants\CrewChief\packs\matching -Family matching
 ```
 
@@ -173,7 +173,7 @@ pwsh C:\devops\repos\speed-merchants\CrewChief\packs\tools\New-PackCatalog.ps1 -
 - `scripts/wf10000215/NN.json`: PROD workflow 10000215 step configs (read 11/05, CHUNKREF reassembled by `seq`).
   2/3a/3b/3c steps are these, patched only for: box/version tokens, size, run profile, `{{STEP:n}}`, blank
   `WorkloadExecution`, and ScenarioTable mode.
-- `scripts/connect_upsert_body.ps1`: the Connect pack's workflow upsert code (after its spec), reused verbatim,
+- `scripts/connect_upsert_body.ps1.txt`: the Connect pack's workflow upsert code (after its spec), reused verbatim,
   including the 11/05 "ensure tags" block.
 - `scripts/gen_preflight.py <root>`: `start/matching-preflight` (run by `gen_sizes.py` last).
 

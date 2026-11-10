@@ -244,7 +244,7 @@ def stew_details(form, m):
     return out
 
 
-with open(os.path.join(here, 'connect_upsert_body.ps1'), encoding='utf-8') as f:
+with open(os.path.join(here, 'connect_upsert_body.ps1.txt'), encoding='utf-8') as f:
     upsert_code = f.read()
 upsert_code = upsert_code.replace('{{$ref:connect/environment:ProfiseeVersionCode}}', '{{ProfiseeVersionCode}}') \
                          .replace('connect/environment:ProfiseeVersionCode', f'{FAM}/environment:ProfiseeVersionCode') \
