@@ -294,7 +294,7 @@
         "sqlAllowNonTransactionalBatches": false,
         "useTransaction": false,
         "captureScalarResult": false,
-        "sqlScript": "DECLARE @bak nvarchar(500) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400)) + N'\\profisee_Matching_{{SizeLabel}}_{{BackupSuffix}}.bak';\r\nDECLARE @sql nvarchar(max) = N'BACKUP DATABASE ' + QUOTENAME(N'{{ProfiseeDatabaseName}}') + N' TO DISK = N''' + REPLACE(@bak, N'''', N'''''') + N''' WITH INIT, COMPRESSION, CHECKSUM';\r\nEXEC (@sql);\r\nSET @sql = N'RESTORE VERIFYONLY FROM DISK = N''' + REPLACE(@bak, N'''', N'''''') + N''' WITH CHECKSUM';\r\nEXEC (@sql);\r\nPRINT CONCAT(N'Backed up {{ProfiseeDatabaseName}} to ', @bak, N' and verified it.');",
+        "sqlScript": "DECLARE @bak nvarchar(500) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400)) + N'\\profisee_Matching_{{SizeLabel}}_{{BackupSuffix}}_{{ProfiseeVersionCode}}.bak';\r\nDECLARE @sql nvarchar(max) = N'BACKUP DATABASE ' + QUOTENAME(N'{{ProfiseeDatabaseName}}') + N' TO DISK = N''' + REPLACE(@bak, N'''', N'''''') + N''' WITH INIT, COMPRESSION, CHECKSUM';\r\nEXEC (@sql);\r\nSET @sql = N'RESTORE VERIFYONLY FROM DISK = N''' + REPLACE(@bak, N'''', N'''''') + N''' WITH CHECKSUM';\r\nEXEC (@sql);\r\nPRINT CONCAT(N'Backed up {{ProfiseeDatabaseName}} to ', @bak, N' and verified it.');",
         "autoWrapPassFailCode": true,
         "dryRun": false,
         "sqlDropConnections": false,

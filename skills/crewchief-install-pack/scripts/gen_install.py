@@ -46,12 +46,16 @@ REF_SETS = {
         "description": "Install pack: what differs between Profisee releases and boxes. Edit before installing a new release.",
         "includeInReplacements": True,
         "entries": {"ProfiseeVersionCode": "26R3T", "ProfiseeVersionNumber": "26.3.0", "MainServiceName": "",
+                    "ConfigurationManagerKind": "classic",
+                    "ConfigurationManagerNewRefusal": "Configuration manager 'new' is not supported yet (26R4 deferred).",
                     "LicenseFile": "C:\\Deploy\\License\\Prof_2020_3Inst_3Nodes_AllFeatures_AllConnectors_Production_@.corp.profisee.com_ConnexOn_AIOn_McpOn.plic",
                     "WebSiteName": "Default Web Site", "MetadataProvider": "None"},
         "keyDescriptions": {
-            "ProfiseeVersionCode": "TestAuto version code of the release being installed (as in the other packs' environment sets).",
+            "ProfiseeVersionCode": "TestAuto version code of the release being installed (as in the other packs' environment sets). Hand runs of a root read it here; a TestAutoManager round passes it per lane.",
             "ProfiseeVersionNumber": "Product version of the release being installed, e.g. 26.4.0: the install is checked against it and the Configuration program is found under it.",
             "MainServiceName": "Profisee Windows service on the application server, stopped before the uninstall. Blank on releases with no Windows service; the stop step then reports Skipped.",
+            "ConfigurationManagerKind": "Which Profisee Configuration program the release has: classic (the Configuration.exe the install runs) or new. 'new' is refused by install-configure-new and install-configure-upgrade until the release that has it is supported.",
+            "ConfigurationManagerNewRefusal": "The text install-configure-new and install-configure-upgrade fail with when ConfigurationManagerKind is new (kept here because it names a release).",
             "LicenseFile": "Full path ON THE APPLICATION SERVER of the Profisee license file Configuration applies.",
             "WebSiteName": "IIS web site the instance lives under.",
             "MetadataProvider": "Configuration switch metadataProvider (None on the test lab)."},
@@ -71,7 +75,7 @@ REF_SETS = {
         "includeInReplacements": True,
         "entries": {"ProfiseeDatabaseName": "Profisee"},
         "keyDescriptions": {
-            "ProfiseeDatabaseName": "The Profisee database of the instance. A clean install DROPS it and Configuration creates it empty; an upgrade keeps it. Pack base backups are not listed here: each pack run restores its own base and runs Configuration on it (install-configure-upgrade) before it tests."}},
+            "ProfiseeDatabaseName": "The Profisee database of the instance. A clean install DROPS it and Configuration creates it empty; an upgrade keeps it. Pack base backups are not listed here: each pack run restores its own base, named <stem>_<ProfiseeVersionCode>.bak (one per release, in that pack's databases set), and runs Configuration on it (install-configure-upgrade) before it tests."}},
     'build': {
         "description": "Install pack: where the build comes from (Gene 11/07: platform pipeline 293, master branch only) and where it is put.",
         "includeInReplacements": True,
@@ -140,6 +144,21 @@ BUILD_INPUTS = [
     ("AdoBuildId", "Exact Azure DevOps build id to install, passed by the test that runs this one; blank = the latest "
                    "successful build of AdoBranch."),
 ]
+
+# Version keys (decision D12): a root (a workload no workload runs) reads each from reference data in its own global of
+# the same name, or takes it from the caller (a TestAutoManager lane passes it as --param); every workload below a
+# root declares the ones it uses as inputs and gets the value from its parent.
+VERSION_GLOBALS = {"MainServiceName": ref('environment', 'MainServiceName'),
+                   "ProfiseeVersionNumber": ref('environment', 'ProfiseeVersionNumber'),
+                   "ConfigurationManagerKind": ref('environment', 'ConfigurationManagerKind')}
+IN_MAIN_SERVICE = ("MainServiceName", "Profisee Windows service on the application server, stopped before the uninstall; "
+                   "blank = the release has no Windows service. Passed by the test that runs this one (install/environment:"
+                   "MainServiceName, or the lane's service name).")
+IN_VERSION_NUMBER = ("ProfiseeVersionNumber", "Product version of the release being installed (n.n.n): the Configuration "
+                     "and utilities programs are found under it. Passed by the test that runs this one "
+                     "(install/environment:ProfiseeVersionNumber, or the lane's version).")
+IN_CONFIG_KIND = ("ConfigurationManagerKind", "classic or new: which Configuration program the release has. Passed by the test "
+                  "that runs this one (install/environment:ConfigurationManagerKind, or the lane's value); new is refused.")
 
 
 G = {
@@ -261,10 +280,10 @@ def profisee_service(action):
     s = step(f"{action} The Profisee Service", "ServiceControlStep",
              f"What: {action} the Profisee Windows service on the application server. Why: older releases run one; it "
              "holds files the uninstall must replace. Success: the service is " + ("stopped" if action == 'Stop' else "running") +
-             ". If it fails: the service name in install/environment:MainServiceName is wrong. Skipped when: that key is blank "
-             "(newer releases have no Profisee Windows service).",
-             serviceName=ref('environment', 'MainServiceName'), action=action, targetComputer="{{ApplicationServerName}}", **ADMIN)
-    s["inline"]["runWhen"] = ref('environment', 'MainServiceName')
+             ". If it fails: the service name in MainServiceName (install/environment:MainServiceName, or the lane's) is wrong. "
+             "Skipped when: it is blank (newer releases have no Profisee Windows service).",
+             serviceName="{{MainServiceName}}", action=action, targetComputer="{{ApplicationServerName}}", **ADMIN)
+    s["inline"]["runWhen"] = "{{MainServiceName}}"
     return s
 
 
@@ -312,7 +331,8 @@ for preview in (False, True):
         ("Needs: the shared admin credential is an administrator of the application server (WinRM, CredSSP). Success: Every "
          "step Succeeded or Skipped. If it fails: open the first failed step, whose If it fails text names what to check."),
         ["install", "internal", "remove"] + (["preview"] if preview else []),
-        g("ApplicationServerName", RemovePreview="true" if preview else "false"), remove_steps(preview)))
+        g("ApplicationServerName", RemovePreview="true" if preview else "false"), remove_steps(preview),
+        inputs=None if preview else [IN_MAIN_SERVICE]))
 
 # ---------------------------------------------------------------- internal/install-programs
 MSI_INSTALL = r"""$ErrorActionPreference = 'Stop'
@@ -378,9 +398,16 @@ dump(os.path.join(wl_root, 'internal', 'install-programs.workload.json'), worklo
     ["install", "internal", "programs"], g("ApplicationServerName"), programs_steps))
 
 # ---------------------------------------------------------------- internal/install-configure-new / -upgrade
-CONFIG_EXE = ("C:\\Program Files\\Profisee\\Master Data Maestro Server\\" + ref('environment', 'ProfiseeVersionNumber') +
+CONFIG_EXE = ("C:\\Program Files\\Profisee\\Master Data Maestro Server\\" + "{{ProfiseeVersionNumber}}" +
               "\\Configuration\\Profisee.MasterDataMaestro.Services.Configuration.exe")
 ADMIN_USER, ADMIN_PW = "{{$config:UserCredentials:AdminUser}}", "{{$config:UserCredentials:AdminPassword}}"
+
+
+CONFIG_KIND_CHECK = """$ErrorActionPreference = 'Stop'
+# The Configuration program of a release that has the 'new' manager is not driven yet: refuse before anything is touched.
+if ('{{ConfigurationManagerKind}}' -eq 'new') { throw "%s" }
+Write-Output 'Configuration manager kind: {{ConfigurationManagerKind}}'
+""" % ref('environment', 'ConfigurationManagerNewRefusal')
 
 
 def configure(drop_db):
@@ -420,6 +447,97 @@ DROP_DB = step("Drop The Profisee Database", "DatabaseOperationsStep",
                snapshotName="", backupFileName=None, fileUncPath=None, overwrite=False, relocateFiles=False,
                waitIndefinitely=False, dryRun=False)
 G["ProfiseeDatabaseName"] = ref('databases', 'ProfiseeDatabaseName')
+with open(os.path.join(here, 'health.ps1'), encoding='utf-8', newline='') as f:
+    HEALTH = f.read()
+G["MainHealthUrl"] = ("https://" + ref('machines', 'ApplicationServerNameFQDN') + "/" + ref('instances', 'ProfiseeInstanceName')
+                      + "/rest/health")
+G["ProfiseeInstanceName"] = ref('instances', 'ProfiseeInstanceName')
+G["ProfiseeBaseUrl"] = ("https://" + ref('machines', 'ApplicationServerNameFQDN') + "/" + ref('instances', 'ProfiseeInstanceName')
+                        + "/rest")
+G["ProfiseeApiKey"] = "{{$config:RestKeys:ProfiseeRestKey}}"
+G["ApiKeyUserName"] = "{{$config:ConnectRuntime:ApiKeyUserName}}"
+
+# ---------------------------------------------------------------- internal/install-api-key-set (Gene 11/09)
+# Rule of every pack: a workload that runs Profisee Configuration (or restores the Profisee database) sets the standard API
+# key itself afterwards and proves it through the gateway and the Data service (Test-Pack rule R-key). A Configuration run
+# issues a new key, and the services read a key change only after IIS restarts. Same shape as crud-api-key-set and
+# matching-api-key-set; the reference keys it reads are this pack's (machines, instances, databases) and the key comes from
+# the RestKeys:ProfiseeRestKey secret.
+def key_service(action, what):
+    s = step(f"{action} The Profisee Service", "ServiceControlStep", f"What: {what} Why: it caches the user it signed in with and must "
+             "read the new key. Success: the service is " + ("stopped" if action == 'Stop' else "running") + ". If it fails: the service "
+             "name in MainServiceName (install/environment:MainServiceName, or the lane's) is wrong, or the admin credential cannot manage "
+             "services there over CredSSP. Skipped when: MainServiceName is blank (newer releases have no Profisee Windows service).",
+             serviceName="{{MainServiceName}}", action=action, targetComputer="{{ApplicationServerName}}", **ADMIN)
+    s["inline"]["runWhen"] = "{{MainServiceName}}"
+    return s
+
+
+def key_http(label, path, what, why):
+    return step(label, "HTTP", f"What: {what} Why: {why} Success: HTTP 200. If it fails: 401, 400 DATA00030 or 403 means the key did not "
+                "take: check the API user in meta.tUser and that IIS restarted after the key change; then rerun this workload.",
+                timeout=600, retryEnabled=True, maxRetries=4, retryDelaySeconds=30, url="{{ProfiseeBaseUrl}}" + path, method="GET",
+                headers={"x-api-key": "{{ProfiseeApiKey}}", "accept": "application/json"}, body="", outputFile="",
+                expectedStatusCodes=[200], followRedirects=True, verifySsl=True, maxTimeSeconds=300)
+
+
+key_set_steps = [
+    key_service("Stop", "Stop the Profisee Windows service before the key change."),
+    *IIS_STOP,
+    step("Set API Key", "SetApiKeyStep",
+         "What: Write the standard API key for the machine's API user (ConnectRuntime:ApiKeyUserName) into meta.tUser. Why: TestAuto, "
+         "the rule removal and every check call the gateway with that key; Profisee Configuration issues a new key and a restored "
+         "backup may carry another one. Success: the user row is updated. If it fails: the user is missing from meta.tUser; add it "
+         "in Profisee as a super administrator.",
+         username="{{ApiKeyUserName}}", key="{{ProfiseeApiKey}}", serverName="{{DatabaseServerName}}",
+         databaseName="{{ProfiseeDatabaseName}}", authMode="Windows", credentialUserId="", credentialPassword="",
+         sqlDestinationConnectionSecretName="", stripHyphens=True),
+    iis_service("WAS", "Start", "What: Start the Windows Process Activation Service on the application server. Why: IIS must run again "
+                "so the application pools start and read the new key. Success: running. If it fails: the admin credential cannot manage "
+                "services there over CredSSP."),
+    iis_service("W3SVC", "Start", "What: Start the World Wide Web Publishing Service on the application server. Why: as the step before. "
+                "Success: running. If it fails: as the step before."),
+    key_service("Start", "Start the Profisee Windows service after IIS starts."),
+    ps("Start Every Service", HEALTH,
+       "What: Wait until every health check of the instance is Healthy. Why: services stay cold after a recycle; the key checks "
+       "below must not meet a cold service. Success: all checks Healthy within 10 minutes. If it fails: open the health URL "
+       "({{MainHealthUrl}}) and fix the service it names.", timeout=900),
+    key_http("Verify API Key Through Gateway", "/v1/Entities", "Call the gateway with the standard key.",
+             "proves the key took before anything else uses it."),
+    key_http("Verify API Key Through Data Service", "/v1/Rules?PageSize=1",
+             "Prove the Data service accepts the API key as a real user: GET v1/Rules?PageSize=1.",
+             "the gateway check can pass while the Data and Connect services still reject the user (400 DATA00030, 403 CNX00080)."),
+]
+dump(os.path.join(wl_root, 'internal', 'install-api-key-set.workload.json'), workload(
+    "install-api-key-set",
+    ("What: Stop the Profisee service and IIS on the application server, write the standard API key (RestKeys:ProfiseeRestKey) for "
+     "the API user (ConnectRuntime:ApiKeyUserName) into the Profisee database, start IIS and the service, wait for every service, "
+     "and prove the key through the gateway and the Data service. Why: the pack standard (Test-Pack rule R-key): whatever runs "
+     "Profisee Configuration sets the key itself afterwards, so no later step meets a 401. When: Never run directly; "
+     "install-configure-new and install-configure-upgrade run it right after Configuration. Running it alone is safe when no test "
+     "uses this Profisee instance. Needs: the instance is configured and the API user exists in the Profisee database; secrets "
+     "RestKeys:ProfiseeRestKey and ConnectRuntime:ApiKeyUserName; no test running on this application server. Success: Every step "
+     "Succeeded or Skipped. If it fails: open the first failed step, whose If it fails text names what to check."),
+    ["install", "internal", "api-key"],
+    g("ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName", "ProfiseeBaseUrl", "MainHealthUrl",
+      "ProfiseeApiKey", "ApiKeyUserName"),
+    key_set_steps, inputs=[IN_MAIN_SERVICE]))
+
+
+def run_child(label, name, what, timeout=21600):
+    return step(label, "RunWorkloadStep",
+                (f"What: {what}. Why: Runs the child workload '{name}' so its tested steps are reused here, not repeated. "
+                 "Success: The child workload ends with every step Succeeded or Skipped. "
+                 f"If it fails: Open the run output of '{name}'; its first failed step says what to check."),
+                timeout=timeout, workloadName=name)
+
+
+def key_set_child():
+    return run_child("Set And Verify API Key", "install-api-key-set",
+                     "Set the standard API key, restart IIS so every service reads it, and prove it through the gateway and the Data service",
+                     timeout=3600)
+
+
 # Gene 11/08: every pack run restores its base and runs install-configure-upgrade on it. Configuration writes new service
 # sign-in ids into the database AND the application server, so a base configured before another one is rejected
 # (400 DATA00030). A full pack base (CRUD: 47 GB) configures far slower than an empty database.
@@ -438,21 +556,23 @@ for drop_db in (True, False):
          ("." if drop_db else
           "; and at the start of every pack run, right after the pack restores its base backup (crud-run-start, "
           "matching-*-scenario1-load), so the base carries this application server's service sign-in ids.") +
-         " Needs: the programs of this release "
+         " Then it sets the standard API key and proves it (install-api-key-set), because Configuration issues a new key. Needs: the programs of this release "
          "installed; the license file on the application server; secrets UserCredentials:AdminUser, AdminPassword and "
          "ProfAdminClientId. Success: Every step Succeeded. If it fails: open the first failed step, whose If it fails text "
          "names what to check."),
         ["install", "internal", "configure", "new-db" if drop_db else "upgrade"],
         g("ApplicationServerName", "DatabaseServerName", "ProfiseeDatabaseName"),
-        ([DROP_DB] if drop_db else []) + [conf]))
+        [ps("Configuration Manager Supported", CONFIG_KIND_CHECK,
+            "What: Refuse the run when ConfigurationManagerKind is new. Why: only the classic Configuration program is driven by "
+            "this pack; the check runs first so nothing is dropped or changed for a release that cannot be configured. Success: "
+            "the kind is classic. If it fails: the lane or install/environment:ConfigurationManagerKind names the new "
+            "manager; run a release that has the classic one.", timeout=60)] +
+        ([DROP_DB] if drop_db else []) + [conf, key_set_child()],
+        inputs=[IN_VERSION_NUMBER, IN_CONFIG_KIND, IN_MAIN_SERVICE]))
 
 # ---------------------------------------------------------------- internal/install-verify
-with open(os.path.join(here, 'health.ps1'), encoding='utf-8', newline='') as f:
-    HEALTH = f.read()
-G["MainHealthUrl"] = ("https://" + ref('machines', 'ApplicationServerNameFQDN') + "/" + ref('instances', 'ProfiseeInstanceName')
-                      + "/rest/health")
 VERSION_CHECK = r"""$ErrorActionPreference = 'Stop'
-$want = '{{ExpectedVersion}}'
+$want = '{{ProfiseeVersionNumber}}'
 $keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
         'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
 $p = @(Get-ItemProperty -Path $keys -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match '^Profisee Server\b' })
@@ -467,29 +587,21 @@ verify_steps = [
        "({{MainHealthUrl}}) and the Configuration log on the application server.", timeout=900),
     remote_ps("Check The Installed Version", VERSION_CHECK,
               "What: Check exactly one Profisee Server is installed on the application server and its version starts with "
-              "install/environment:ProfiseeVersionNumber. Why: a run must never measure the old version by mistake. Success: "
-              "the version line prints. If it fails: the build installed is not the release named in reference data; fix the "
-              "reference value or the build."),
+              "ProfiseeVersionNumber. Why: a run must never measure the old version by mistake. Success: "
+              "the version line prints. If it fails: the build installed is not the release the lane (or "
+              "install/environment:ProfiseeVersionNumber) names; fix the version or pick the right build."),
 ]
 dump(os.path.join(wl_root, 'internal', 'install-verify.workload.json'), workload(
     "install-verify",
     ("What: Check the new instance answers (every health check Healthy) and the installed Profisee Server version is the one "
-     "in install/environment:ProfiseeVersionNumber. Why: the proof an install worked before any pack measures it. When: last "
-     "part of every install; alone any time. Needs: the instance exists. Success: Every step Succeeded. If it fails: open the "
+     "in ProfiseeVersionNumber (the lane's, or install/environment:ProfiseeVersionNumber). Why: the proof an install worked before any pack measures it. When: last "
+     "part of every install; alone any time (then pass ProfiseeVersionNumber). Needs: the instance exists. Success: Every step Succeeded. If it fails: open the "
      "first failed step, whose If it fails text names what to check."),
     ["install", "internal", "verify"],
-    g("ApplicationServerName", "MainHealthUrl", ExpectedVersion=ref('environment', 'ProfiseeVersionNumber')), verify_steps))
+    g("ApplicationServerName", "MainHealthUrl"), verify_steps, inputs=[IN_VERSION_NUMBER]))
 
 
 # ---------------------------------------------------------------- tests and preflight
-def run_child(label, name, what, timeout=21600):
-    return step(label, "RunWorkloadStep",
-                (f"What: {what}. Why: Runs the child workload '{name}' so its tested steps are reused here, not repeated. "
-                 "Success: The child workload ends with every step Succeeded or Skipped. "
-                 f"If it fails: Open the run output of '{name}'; its first failed step says what to check."),
-                timeout=timeout, workloadName=name)
-
-
 TESTS = {
     "install-clean": ("a clean install on a NEW, empty Profisee database (the database named in install/databases is dropped)",
                       [("Get The Build", "install-build-get"), ("Remove Profisee", "install-remove"),
@@ -508,7 +620,7 @@ for name, (what, kids) in TESTS.items():
          "round starts from a known install of the build under test. When: at the start of a round on that box, never while "
          "a test runs against it. Needs: install-preflight green. Success: every child Succeeded and install-verify printed the "
          "expected version. If it fails: it stops at the first failed child; open that run's output."),
-        ["install", "tests"], dict(BUILD_GLOBALS), [run_child(l, w, f"{l}: {w}") for l, w in kids]))
+        ["install", "tests"], {**BUILD_GLOBALS, **VERSION_GLOBALS}, [run_child(l, w, f"{l}: {w}") for l, w in kids]))
 
 PREFLIGHT = r"""$ErrorActionPreference = 'Stop'
 $problems = @()
@@ -542,6 +654,23 @@ try {
 if ($problems) { throw ("Install preflight found: " + ($problems -join '; ')) }
 Write-Output 'Install preflight: every check passed.'
 """
+LANE_VERSION = r"""$ErrorActionPreference = 'Stop'
+$prefix = '{{InstalledVersionMustBe}}'
+$keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+$p = @(Get-ItemProperty -Path $keys -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match '^Profisee Server\b' })
+if ($p.Count -ne 1) { throw "$env:COMPUTERNAME has $($p.Count) Profisee Server products installed (expected exactly 1 for a lane that tests $prefix): $(($p | ForEach-Object DisplayName) -join ', ')" }
+$v = "$($p[0].DisplayVersion)"
+if (-not $v.StartsWith("$prefix.")) { throw "$env:COMPUTERNAME runs Profisee Server $v; this lane tests $prefix. Pick Install, or a lane of version $v." }
+Write-Output "$env:COMPUTERNAME runs Profisee Server $v, as the lane ($prefix) expects."
+"""
+_lane_step = remote_ps("Installed Version Matches The Lane", LANE_VERSION,
+                       "What: Check exactly one Profisee Server is installed on the application server and its DisplayVersion starts "
+                       "with InstalledVersionMustBe followed by a dot. Why: a lane that keeps the installed Profisee (no install) must "
+                       "not run against another version. Success: the version line prints. If it fails: the message names the "
+                       "installed version; pick Install in the round, or a lane of that version. Skipped when: InstalledVersionMustBe "
+                       "is blank (a hand run, or a lane that installs).")
+_lane_step["inline"]["runWhen"] = "{{InstalledVersionMustBe}}"
 pre_steps = [
     ps("Check Secrets, Build, License, Disk And SQL", PREFLIGHT,
        "What: Check the secrets an install needs are present (not printed), the Azure DevOps token finds the latest "
@@ -552,22 +681,24 @@ pre_steps = [
               "What: List the Profisee products installed on the application server (preview, nothing removed). Why: shows "
               "what an install will remove and proves the admin credential works there over CredSSP. Success: the products "
               "(or none) are listed. If it fails: WinRM/CredSSP to the application server or the admin credential is wrong."),
+    _lane_step,
 ]
 dump(os.path.join(wl_root, 'start', 'install-preflight.workload.json'), workload(
     "install-preflight",
     ("What: Check everything an install needs, changing nothing: secrets present, the Azure DevOps token finds the latest "
      "master build, license file and disk space on the application server, SQL Server answers, and what is installed now. "
      "Why: an install removes the old version first, so it must not start when it cannot finish. When: before every install "
-     "and after changing install reference data. Needs: the install reference sets filled in. Success: Every step Succeeded. "
+     "and after changing install reference data. A TestAutoManager lane that keeps the installed Profisee passes "
+     "InstalledVersionMustBe (the lane's build prefix); blank = no version check. Needs: the install reference sets filled in. Success: Every step Succeeded. "
      "If it fails: the failing step lists each problem."),
     ["install", "start", "preflight"],
-    g("ApplicationServerName", "DatabaseServerName", RemovePreview="true", LicenseFile=ref('environment', 'LicenseFile'),
+    g("ApplicationServerName", "DatabaseServerName", RemovePreview="true", InstalledVersionMustBe="", LicenseFile=ref('environment', 'LicenseFile'),
       AdoOrganizationUrl=ref('build', 'AdoOrganizationUrl'), AdoProject=ref('build', 'AdoProject'),
       AdoPipelineDefinitionId=ref('build', 'AdoPipelineDefinitionId'), AdoBranch=ref('build', 'AdoBranch')), pre_steps))
 
 
 # ---------------------------------------------------------------- internal/install-addons (Platform Tools on the app server)
-CLU_EXE = ("C:\\Program Files\\Profisee\\Master Data Maestro Utilities\\" + ref('environment', 'ProfiseeVersionNumber') +
+CLU_EXE = ("C:\\Program Files\\Profisee\\Master Data Maestro Utilities\\" + "{{ProfiseeVersionNumber}}" +
            "\\Profisee.MasterDataMaestro.Utilities.exe")
 
 
@@ -602,7 +733,8 @@ dump(os.path.join(wl_root, 'internal', 'install-addons.workload.json'), workload
     ["install", "internal", "addons"], g("ApplicationServerName"),
     [clu("Import The Model", "ModelFile", "/Import", "import the model"),
      clu("Deploy The Data Archive", "ArchiveFile", "/deploydata", "deploy the data archive"),
-     clu("Import Accounts And Teams", "UsersFile", "/Import", "import the accounts and teams")]))
+     clu("Import Accounts And Teams", "UsersFile", "/Import", "import the accounts and teams")],
+    inputs=[IN_VERSION_NUMBER]))
 
 name = "install-clean-base-prep"
 # The name is kept (rounds and profiles use it); since 11/08 each pack run configures its own base (install-configure-upgrade).
@@ -615,6 +747,6 @@ dump(os.path.join(wl_root, 'tests', name + '.workload.json'), workload(
      "a test round: the build under test installed. When: at the start of a round on that box, never while a test runs "
      "against it; run each pack's setup after it. Needs: install-preflight green. Success: every child Succeeded or Skipped. If it fails: it stops at the first failed "
      "child; open that run's output."),
-    ["install", "tests"], dict(BUILD_GLOBALS), [run_child(l, w, f"{l}: {w}") for l, w in kids]))
+    ["install", "tests"], {**BUILD_GLOBALS, **VERSION_GLOBALS}, [run_child(l, w, f"{l}: {w}") for l, w in kids]))
 
 print("install pack written")

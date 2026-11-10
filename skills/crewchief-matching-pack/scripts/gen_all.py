@@ -19,7 +19,7 @@ subprocess.run([sys.executable, os.path.join(here, 'gen_s1.py'), root, upsert_pa
 wl_dir = os.path.join(root, 'workloads', 'matching', 'internal', LOW)
 ref_dir = os.path.join(root, 'reference-kv', 'matching')
 src = os.path.join(here, 'wf10000215')
-VER = "{{$ref:matching/environment:ProfiseeVersionCode}}"
+VER = "{{ProfiseeVersionCode}}"  # version keys: roots declare, everything below takes inputs (gen_sizes.py declare_version_keys)
 TRANSFORM_SEED = 350
 MUTATION = {  # plan 2026-11-04-matching-scenario2-mutation-plan.md, D5 with NoChange 3 (Gene 11/05)
     "MaxAttributeChanges": 2,
@@ -38,6 +38,14 @@ TABLE_DROP_KEYS = ["NewSourceSystems", "ChangedSourceSystems", "SourceSystemNewO
                    "SelectedNewSourceCodes", "SelectedChangedSourceCodes", "UpdateVariationLevel",
                    # wizard state only (read by TestAuto.Web's editor, not at run time); keeps the config under 4000 characters
                    "ModelSourceDefaults", "SelectedLookupAttributeCodes", "SelectedScenarioTemplate"]
+
+
+def step_by(steps, label, step_type):
+    """The step with this label; fails loudly when it is missing or of another type (a step insertion must never swap one silently)."""
+    found = [s for s in steps if s['label'] == label]
+    assert len(found) == 1, f"expected exactly one step labelled {label!r}, found {len(found)}"
+    assert found[0]['inline'].get('type') == step_type, f"step {label!r} is {found[0]['inline'].get('type')}, expected {step_type}"
+    return found[0]
 
 
 def run_profile(scn):
@@ -228,7 +236,10 @@ with open(wf_ref_path, 'w', encoding='utf-8') as f:
 create_path = os.path.join(wl_dir, f'matching-{LOW}-testauto-create.workload.json')
 with open(create_path, encoding='utf-8') as f:
     create = json.load(f)
-s1_upsert = create['steps'][2]['inline']['scriptContent']
+create_check = step_by(create['steps'], 'ScenarioMgt Check', 'HTTP')
+profile_step = step_by(create['steps'], 'Upsert Run Profile', 'PowerShellStep')
+base_step = step_by(create['steps'], f'Upsert Workflow matching-{LOW}-scenario1', 'PowerShellStep')
+s1_upsert = base_step['inline']['scriptContent']
 upsert_body = s1_upsert[s1_upsert.index("\r\n'@"):]  # starts with the newline that closes the here-string
 
 profiles = [("1", 0), ("2", SLICE), ("3a", 0), ("3b", SLICE), ("3c", SLICE)]  # IncrementalVolumeCount as PROD's 26R3 profiles
@@ -236,7 +247,7 @@ profile_lines = ",\r\n".join(
     "    [ordered]@{ Code = '%s'; ProfiseeVersion = $version; Scenario = 'UnifiedMatchingScenario'; MatchingStrategy = 'RetailClient'; "
     "MatchingScenarioName = 'Scenario %s'; SourceRecordCount = %d; AttributeCount = 42; DBACount = 5; FreeformCount = 37; "
     "IncrementalVolumeCount = %d; RuleCount = 0 }" % (run_profile(scn), scn, SIZE_RECORDS, inc) for scn, inc in profiles)
-create['steps'][1]['inline']['scriptContent'] = "\r\n".join([
+profile_step['inline']['scriptContent'] = "\r\n".join([
     "$ErrorActionPreference = 'Stop'",
     "$base = '{{ScenarioMgtBaseUrl}}'.TrimEnd('/') + '/'",
     "$headers = @{ 'x-api-key' = '{{ScenarioMgtApiKey}}'; accept = 'application/json' }",
@@ -251,13 +262,12 @@ create['steps'][1]['inline']['scriptContent'] = "\r\n".join([
     "Invoke-RestMethod -Method Patch -Uri \"${base}v1/Records/UnifiedMatchingApiExecutionRunProfile?IsUpsert=true&recordsAreSameShape=true\" -Headers $headers -ContentType 'application/json' -Body (ConvertTo-Json -Depth 5 -InputObject $profiles) | Out-Null",
     "\"Run profiles upserted: $(($profiles | ForEach-Object { $_.Code }) -join ' | ')\"",
 ])
-create['steps'][1]['label'] = "Upsert Run Profiles"
-create['steps'][1]['inline']['description'] = (
+profile_step['label'] = "Upsert Run Profiles"
+profile_step['inline']['description'] = (
     f"What: Create or update the {SIZE_LABEL} Matching run profiles of Scenarios 1, 2, 3a, 3b and 3c "
     f"(<ProfiseeVersionCode>-RetailClient-Scenario <x>-{SIZE_RECORDS}-0). Why: the snapshot, lookup and timing steps record "
     "their results under them. Success: the profiles are upserted. If it fails: a missing TestAuto version is named in the error; create it in the repository.")
-create['steps'] = create['steps'][:3]
-base_step = create['steps'][2]
+create['steps'] = [create_check, profile_step, base_step]
 for key, (scn, what, details) in workflows.items():
     spec = {"Key": key, "Name": "{{$ref:matching/workflows:" + key + "}}", "Category": "Matching",
             "PlainTags": f"Matching,{VER},{{{{$ref:matching/environment:MainMachineTag}}}},{SIZE_LABEL},Scenario {scn}",
@@ -303,7 +313,7 @@ cm_script = "\r\n".join([
     "\"Continuous matching on for '{{MatchingStrategyName}}' (autoMatch and autoSurvive = 1); the workflow enables and runs it.\""
 ])
 cm_step = {"label": "Turn Continuous Matching On", "inline": {
-    **{k: v for k, v in s1['steps'][5]['inline'].items() if k not in ('scriptContent', 'description')},
+    **{k: v for k, v in step_by(s1['steps'], 'Start Every Service', 'PowerShellStep')['inline'].items() if k not in ('scriptContent', 'description')},
     "timeoutSeconds": 300, "scriptContent": cm_script,
     "description": ("What: Turn continuous matching on for the RetailClient strategy (read it, set autoMatch and autoSurvive, PUT it back). "
                     "Why: Scenarios 2, 3a, 3b and 3c measure records matched as they arrive; the checkpoint from Scenario 1 has it off. Saving the "
@@ -388,6 +398,11 @@ whats = {f'matching-{LOW}-scenario2': "Scenario 2 (operational batch from " + T2
          f'matching-{LOW}-scenario3b': "Scenario 3b (lookup, then create, from " + T3B + ")",
          f'matching-{LOW}-scenario3c': "Scenario 3c (creates from " + T3C + ")"}
 
+for _lab, _type in (('Restore Loaded', 'DatabaseOperationsStep'), (f'Run Matching {SIZE_LABEL} Scenario 1', 'TestAutoWorkflowStep'),
+                     ('Check Matching Ran', 'SqlStep'), ('Back Up After Scenario 1', 'DatabaseOperationsStep'),
+                     ('Start Every Service', 'PowerShellStep'), ('Set And Verify API Key', 'RunWorkloadStep')):
+    step_by(s1['steps'], _lab, _type)  # every label the loop below rewrites exists once, with its type
+
 for key, (start, end) in chain.items():
     w = copy.deepcopy(s1)
     scn = workflows[key][0]
@@ -411,7 +426,7 @@ for key, (start, end) in chain.items():
         inl = st['inline']
         if lab == 'Restore Loaded':
             st['label'] = f"Restore {start.title().replace('-', ' ')}"
-            inl['backupFileName'] = f"profisee_Matching_{{{{SizeLabel}}}}_{start}.bak"
+            inl['backupFileName'] = f"profisee_Matching_{{{{SizeLabel}}}}_{start}_{VER}.bak"
             inl['description'] = inl['description'].replace("the 'loaded' checkpoint", f"the '{start}' checkpoint") \
                 .replace("every Scenario 1 run starts from the same loaded, unmatched state", f"every Scenario {scn} run starts from the same state") \
                 .replace(f"(run matching-{LOW}-scenario1-load)", "(run the previous scenario workload)")
@@ -426,12 +441,14 @@ for key, (start, end) in chain.items():
             inl['description'] = desc
         if lab == 'Back Up After Scenario 1':
             st['label'] = f"Back Up {end.title().replace('-', ' ')}"
-            inl['backupFileName'] = f"profisee_Matching_{{{{SizeLabel}}}}_{end}.bak"
+            inl['backupFileName'] = f"profisee_Matching_{{{{SizeLabel}}}}_{end}_{VER}.bak"
             inl['description'] = inl['description'].replace("'after-1'", f"'{end}'").replace("Scenario 2 restores it", "the next scenario restores it")
         steps.append(st)
         if lab == 'Start Every Service':
             steps.append(copy.deepcopy(cm_step))
     w['steps'] = steps
+    step_by(steps, 'Turn Continuous Matching On', 'PowerShellStep')
+    assert [s['inline'].get('workloadName') for s in steps if s['inline'].get('type') == 'RunWorkloadStep'] == ['matching-api-key-set'], key
     with open(os.path.join(wl_dir, key + '.workload.json'), 'w', encoding='utf-8') as f:
         json.dump(w, f, indent=2)
 print('written', list(workflows))

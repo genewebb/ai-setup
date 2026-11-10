@@ -33,23 +33,37 @@ m['keyDescriptions'].update({
     "TestServerName": "Machine running TestAuto; written into each TestAuto step's environment block.",
     "TestServerNameFQDN": "Fully qualified name of the TestAuto machine; CrewChief calls TestAuto on port 8443 there."})
 save('machines', m)
+d = load('databases')
+d['entries']['EmptySeedBackupFileName'] = "profisee_Matching_empty.bak"
+d['keyDescriptions']['EmptySeedBackupFileName'] = ("File name (no folder) of the backup matching-base-create restores to make the empty baseline of a new Profisee "
+    "version: the empty Matching model (RetailClient matching strategy, API user, no records) of the same or an older Profisee version "
+    "(Configuration only upgrades). Today's unversioned baseline file; it is only read, never written. The baseline of a version is "
+    "profisee_Matching_empty_<code>.bak, made by matching-base-create.")
+save('databases', d)
 save('urls', {"description": "Matching pack: REST addresses.", "includeInReplacements": True,
               "entries": {"ScenarioMgtBaseUrl": "https://profiseecloud.dev/speedmerchantstest/rest/"},
               "keyDescriptions": {"ScenarioMgtBaseUrl": "REST address of the TestAuto repository (ScenarioMgt) the local TestAuto reads; workflows and run profiles are written there."}})
 save('environment', {"description": "Matching pack: what differs between Profisee releases and boxes. Edit after every Profisee upgrade.",
                      "includeInReplacements": True,
-                     "entries": {"ProfiseeVersionCode": "26R3T", "MainMachineTag": "CORPLTR94", "MainServiceName": ""},
+                     "entries": {"ProfiseeVersionCode": "26R3T", "MainMachineTag": "CORPLTR94", "MainServiceName": "",
+                                 "ProfiseeVersionNumber": "26.3.0", "ConfigurationManagerKind": "classic",
+                                 "AnalyticsPoolName": "profisee-analytics"},
                      "keyDescriptions": {
+                         "AnalyticsPoolName": "Name of the analytics application pool of the instance, recycled with the other pools. Blank on releases with no analytics pool: the pool lists then drop it. A TestAutoManager lane passes its own.",
+                         "ProfiseeVersionNumber": "Product version of the release under test (n.n.n); every load passes it to the install pack's install-configure-upgrade, which finds the Configuration program under it.",
+                         "ConfigurationManagerKind": "classic or new: which Configuration program the release has; every load passes it to install-configure-upgrade, which refuses new.",
                          "ProfiseeVersionCode": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under; also part of every automation tag and run profile code.",
                          "MainMachineTag": "Plain tag naming the machine the runs measure.",
                          "MainServiceName": "Profisee Windows service on the application server, stopped around a restore. Blank on releases with no Windows service; the stop and start steps then report Skipped."},
-                     "keyBlankAllowed": {"MainServiceName": True}})
+                     "keyBlankAllowed": {"MainServiceName": True, "AnalyticsPoolName": True}})
 wfr = load('workflows')  # the driver (gen_sizes.py) empties the entries once; each size adds its own
 wfr['entries'][f"matching-{LOW}-scenario1"] = f"Matching {SIZE_LABEL} Scenario 1"
 wfr['keyDescriptions'][f"matching-{LOW}-scenario1"] = f"Display name of the TestAuto workflow for Matching Scenario 1 (match the full load), {SIZE_LABEL}. Its automation tag is AUTO:<this box>:<ProfiseeVersionCode>:matching-{LOW}-scenario1; the name is free text and only for people."
 save('workflows', wfr)
 
-VER = "{{$ref:matching/environment:ProfiseeVersionCode}}"
+# Version keys (decisions D11, D12): roots declare them (gen_sizes.py declare_version_keys); every workload below a root takes
+# them as inputs, so a lane's value reaches the whole tree and the backup names carry the version.
+VER = "{{ProfiseeVersionCode}}"
 RUN_PROFILE = VER + f"-RetailClient-Scenario 1-{N}-0"
 
 empty_rest = {"RestUrlBase": "", "RestApiKey": ""}
@@ -152,13 +166,13 @@ spec = {"Key": KEY, "Name": "{{$ref:matching/workflows:" + KEY + "}}", "Category
         "Details": [{"Name": n, "Description": d, "ExecutionOrder": i + 1, "ProfiseeVersion": VER, "ScenarioConfiguration": c}
                     for i, (n, d, c) in enumerate(details)]}
 
-upsert_code = upsert_code.replace('connect/environment:ProfiseeVersionCode', 'matching/environment:ProfiseeVersionCode') \
+upsert_code = upsert_code.replace('{{$ref:connect/environment:ProfiseeVersionCode}}', '{{ProfiseeVersionCode}}') \
                          .replace('run connect-setup again', f'run matching-{LOW}-testauto-create again') \
                          .replace('$spec = $specJson | ConvertFrom-Json',
                                   "# TestAuto resolves its own step tokens at run time; the spec writes their braces as {% %} so CrewChief leaves them alone.\r\n"
                                   "$specJson = $specJson.Replace('{%', '{{').Replace('%}', '}}')\r\n"
                                   "$spec = $specJson | ConvertFrom-Json")
-assert "Replace('{%'" in upsert_code, 'upsert code shape changed'
+assert "Replace('{%'" in upsert_code and 'connect/environment' not in upsert_code, 'upsert code shape changed'
 spec_script = "$specJson = @'\r\n" + json.dumps(spec, ensure_ascii=False) + "\r\n" + upsert_code
 
 base = {"parameters": {}, "timeoutSeconds": 600, "continueOnError": False, "retryEnabled": False, "maxRetries": 0,
@@ -218,33 +232,6 @@ def sql(cs, script, desc, timeout=300):
             "sqlDropConnections": False, "type": "SqlStep", "description": desc}
 
 
-restore = "\r\n".join([
-    "DECLARE @bak nvarchar(500) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400)) + N'\\profisee_Matching_{{SizeLabel}}_{{RestoreSuffix}}.bak';",
-    "DECLARE @db sysname = N'{{ProfiseeDatabaseName}}';",
-    "DECLARE @disk nvarchar(600) = N'N''' + REPLACE(@bak, N'''', N'''''') + N'''';",
-    "DECLARE @sql nvarchar(max) = N'ALTER DATABASE ' + QUOTENAME(@db) + N' SET SINGLE_USER WITH ROLLBACK IMMEDIATE;';",
-    "EXEC (@sql);",
-    "BEGIN TRY",
-    "    SET @sql = N'RESTORE DATABASE ' + QUOTENAME(@db) + N' FROM DISK = ' + @disk + N' WITH REPLACE, CHECKSUM;';",
-    "    EXEC (@sql);",
-    "END TRY",
-    "BEGIN CATCH",
-    "    SET @sql = N'ALTER DATABASE ' + QUOTENAME(@db) + N' SET MULTI_USER;';",
-    "    EXEC (@sql);",
-    "    THROW;",
-    "END CATCH",
-    "SET @sql = N'ALTER DATABASE ' + QUOTENAME(@db) + N' SET MULTI_USER;';",
-    "EXEC (@sql);",
-    "PRINT CONCAT(N'Restored ', @db, N' from ', @bak, N'.');",
-])
-backup = "\r\n".join([
-    "DECLARE @bak nvarchar(500) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400)) + N'\\profisee_Matching_{{SizeLabel}}_{{BackupSuffix}}.bak';",
-    "DECLARE @sql nvarchar(max) = N'BACKUP DATABASE ' + QUOTENAME(N'{{ProfiseeDatabaseName}}') + N' TO DISK = N''' + REPLACE(@bak, N'''', N'''''') + N''' WITH INIT, COMPRESSION, CHECKSUM';",
-    "EXEC (@sql);",
-    "SET @sql = N'RESTORE VERIFYONLY FROM DISK = N''' + REPLACE(@bak, N'''', N'''''') + N''' WITH CHECKSUM';",
-    "EXEC (@sql);",
-    "PRINT CONCAT(N'Backed up {{ProfiseeDatabaseName}} to ', @bak, N' and verified it.');",
-])
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'monitor_quiet.sql'), encoding='utf-8') as _f:
     MONITOR_QUIET_SQL = _f.read().replace(chr(10), chr(13) + chr(10))
 check_matched = "\r\n".join([
@@ -276,10 +263,21 @@ def dbop(operation, file_name, desc):
 
 
 def service(action, desc):
-    return {**base, "serviceName": "{{$ref:matching/environment:MainServiceName}}", "action": action, "targetComputer": "{{ApplicationServerName}}",
+    return {**base, "serviceName": "{{MainServiceName}}", "action": action, "targetComputer": "{{ApplicationServerName}}",
             "credentialSecretName": None, "credentialUserId": "{{$config:UserCredentials:AdminUser}}",
             "credentialPassword": "{{$config:UserCredentials:AdminPassword}}", "remoteAuthentication": "CredSSP", "type": "ServiceControlStep",
-            "runWhen": "{{$ref:matching/environment:MainServiceName}}", "description": desc}
+            "runWhen": "{{MainServiceName}}", "description": desc}
+
+
+def key_set_step():
+    """Gene 11/09: every workload that restores a Profisee database sets AND verifies the API key itself (matching-api-key-set)."""
+    return {"label": "Set And Verify API Key", "inline": {**base, "workloadName": "matching-api-key-set", "type": "RunWorkloadStep",
+            "timeoutSeconds": 3600,
+            "description": ("What: Set the standard API key, restart IIS so every service reads it, and prove it through the gateway and the Data service. "
+                            "Why: the restore brought back the key of the backup; this workload always sets and verifies the key itself, so the run never "
+                            "depends on what the backup held. Runs the child workload 'matching-api-key-set' so its tested steps are reused here, not repeated. "
+                            "Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of "
+                            "'matching-api-key-set'; its first failed step says what to check.")}}
 
 
 SERVICE_FAIL = " If it fails: check the service name exists on the application server (services.msc) and the admin credential (UserCredentials secrets) can manage services there over CredSSP. Skipped when: matching/environment:MainServiceName is blank, normal on releases with no Profisee Windows service."
@@ -303,14 +301,15 @@ s1 = {
             "ignoreSslErrors": True, "type": "TestAutoWorkflowStep",
             "description": "What: Wait for any TestAuto run already in progress. Why: a restore under a running workflow corrupts both. Success: no run is active. If it fails: TestAuto is unreachable on port 8443."}},
         {"label": "Stop Profisee Service", "inline": service("Stop", "What: Stop the Profisee Windows service before the restore. Why: it holds connections and caches from before the restore. Success: the service is stopped." + SERVICE_FAIL)},
-        {"label": "Restore Loaded", "inline": dbop("RestoreDatabase", "profisee_Matching_{{SizeLabel}}_loaded.bak",
+        {"label": "Restore Loaded", "inline": dbop("RestoreDatabase", "profisee_Matching_{{SizeLabel}}_loaded_" + VER + ".bak",
             "What: Restore the 'loaded' checkpoint over the Profisee database WITH REPLACE. The executor takes the database OFFLINE WITH ROLLBACK IMMEDIATE first and brings it back ONLINE if the restore fails. Why: every Scenario 1 run starts from the same loaded, unmatched state. Success: restored. If it fails: the backup is missing from the SQL Server default backup folder (run matching-" + LOW + "-scenario1-load), or the CrewChief account is not sysadmin there.")},
-        {"label": "Recycle Instance Pools", "inline": {**base, "appPoolNames": ["{{ProfiseeInstanceName}}" + p for p in pools], "action": "Recycle",
+        {"label": "Recycle Instance Pools", "inline": {**base, "appPoolNames": ["{{AnalyticsPoolName}}" if p == "-analytics" else "{{ProfiseeInstanceName}}" + p for p in pools], "action": "Recycle",
             "staggerSeconds": None, "targetComputer": "{{ApplicationServerName}}", "credentialSecretName": None,
             "credentialUserId": "{{$config:UserCredentials:AdminUser}}", "credentialPassword": "{{$config:UserCredentials:AdminPassword}}",
             "remoteAuthentication": "CredSSP", "type": "AppPoolStep",
             "description": "What: Recycle every application pool of this instance. Why: services keep caches from before the restore; only this instance's pools are touched because other instances may share IIS. Success: every pool recycles. If it fails: a pool name does not exist; compare matching/instances:ProfiseeInstanceName with IIS Manager."}},
         {"label": "Start Profisee Service", "inline": service("Start", "What: Start the Profisee Windows service after the pools recycle. Why: it must read the restored database. Success: the service is running." + SERVICE_FAIL)},
+        key_set_step(),
         {"label": "Start Every Service", "inline": {**base, "executionPolicy": "Bypass", "preferWindowsPowerShell": False, "runAsAdministrator": False,
             "captureVerbose": False, "captureDebug": False, "treatStderrAsError": True, "scriptContent": health, "type": "PowerShellStep", "timeoutSeconds": 900,
             "description": "What: Wait until every health check is Healthy. Why: services stay cold after a restore and recycle. Success: all checks Healthy within 10 minutes. If it fails: open the health URL and fix the service it names."}},
@@ -321,13 +320,13 @@ s1 = {
             "Success: the monitor is quiet. If it fails: after 30 minutes a task is still outstanding; the error names it, check it "
             "in the portal's Activity Monitor.", timeout=1900)},
         {"label": f"Run Matching {SIZE_LABEL} Scenario 1", "inline": {**base, "baseUrl": "{{TestAutoBaseUrl}}", "workflowCode": "",
-            "workflowTag": "AUTO:{{$env:COMPUTERNAME}}:{{$ref:matching/environment:ProfiseeVersionCode}}:" + KEY, "executionCode": "",
+            "workflowTag": "AUTO:{{$env:COMPUTERNAME}}:" + VER + ":" + KEY, "executionCode": "",
             "attachToActiveRun": True, "waitOnly": False, "pollIntervalSeconds": 60, "waitIndefinitely": True, "maxConsecutivePollFailures": 30,
             "ignoreSslErrors": True, "type": "TestAutoWorkflowStep",
             "description": f"What: Run the TestAuto workflow tagged for Matching {SIZE_LABEL} Scenario 1 and wait for it. Why: TestAuto measures the scenario. Success: the workflow run Succeeded. If it fails: open the run in TestAuto; no workflow with the tag means matching-{LOW}-testauto-create has not run on this box."}},
         {"label": "Check Matching Ran", "inline": sql(H, check_matched,
             "What: Confirm matching ran over the load: {{RecordCount}} loaded rows, some with a match status and some golden records. Records with too few match fields stay without a match status by design; their count is printed. Why: Scenario 2 needs a matched starting point. Success: the counts line prints. If it fails: matching did not run or did not finish; check the RetailClient strategy and the matching service.")},
-        {"label": "Back Up After Scenario 1", "inline": dbop("BackupDatabase", "profisee_Matching_{{SizeLabel}}_after-1.bak",
+        {"label": "Back Up After Scenario 1", "inline": dbop("BackupDatabase", "profisee_Matching_{{SizeLabel}}_after-1_" + VER + ".bak",
             "What: Back up the Profisee database as the 'after-1' checkpoint (overwrites the previous one). Why: Scenario 2 restores it. Success: SQL Server writes the file in its default backup folder. If it fails: check disk space there and that the CrewChief account is sysadmin.")},
     ],
 }

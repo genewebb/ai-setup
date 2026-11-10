@@ -157,6 +157,9 @@ def run_child(name, what, timeout=172800):
 # server, so only the backup configured last works. Every load (the first run of each Matching test) restores the empty
 # baseline and runs Configuration on it; the scenario checkpoints it backs up later in the same test carry those ids.
 configure = run_child("install-configure-upgrade", "Run Profisee Configuration on the restored empty baseline", timeout=7500)
+# The three keys install-configure-upgrade takes (ProfiseeVersionNumber, ConfigurationManagerKind, MainServiceName) reach it
+# from the root that started the test (a lane's --param, or the root's reference default): the loads declare them as inputs
+# (declare_version_keys below) and the child merges them, so the step passes no parameters.
 configure["description"] = (
     "What: Run Profisee Configuration on the restored empty baseline (install pack building block install-configure-upgrade: "
     "upgrade, keeps the data). Why: Configuration writes this application server's service sign-in ids into the database; a "
@@ -214,7 +217,7 @@ for label, n in SIZES.items():
         f"arrived, and back up the {label} 'loaded' checkpoint. Why: Scenario 1 of this size starts from this backup; Scenario 2, 3b and 3c "
         "update records by these Codes. When: once per box and Profisee version for each size, and whenever the empty baseline "
         "changes; a rerun restores and configures the baseline itself. Needs: the install pack on this box "
-        "(install-configure-upgrade and its reference data); profisee_Matching_empty.bak (the model, the RetailClient matching "
+        "(install-configure-upgrade and its reference data); profisee_Matching_empty_<ProfiseeVersionCode>.bak (made by matching-base-create: the model, the RetailClient matching "
         "strategy, no records; the load re-creates the ModelSource service configuration) in the SQL Server default backup folder; the machine's "
         "API user exists in Profisee. Success: every step Succeeded. If it fails: the failed step's description says what to fix; rerun the whole workload.")
     g = load['globalParameters']
@@ -223,12 +226,12 @@ for label, n in SIZES.items():
               "TestAutoBaseUrl": s1['globalParameters']['TestAutoBaseUrl']})
     restore = copy.deepcopy(s1steps['Restore Loaded'])
     restore['label'] = "Restore Empty Baseline"
-    restore['inline']['backupFileName'] = "profisee_Matching_empty.bak"
+    restore['inline']['backupFileName'] = "profisee_Matching_empty_{{ProfiseeVersionCode}}.bak"
     restore['inline']['description'] = (
         "What: Restore the empty baseline over the Profisee database WITH REPLACE. The executor takes the database OFFLINE WITH "
         "ROLLBACK IMMEDIATE first and brings it back ONLINE if the restore fails. Why: every size loads into the same empty model. "
-        "Success: restored. If it fails: profisee_Matching_empty.bak is missing from the SQL Server default backup folder, or the "
-        "CrewChief account is not sysadmin there.")
+        "Success: restored. If it fails: profisee_Matching_empty_{{ProfiseeVersionCode}}.bak (the empty baseline of this version) is missing "
+        "from the SQL Server default backup folder (run matching-base-create on this lane), or the CrewChief account is not sysadmin there.")
     run_load = copy.deepcopy(tsteps['Run Scenario 1 Load'])
     wait_load = copy.deepcopy(tsteps['Wait For Scenario 1 Load'])
     wait_load['inline']['maxWaitMinutes'] = 1440
@@ -373,5 +376,135 @@ dump(os.path.join(wl_root, 'start', 'matching-setup.workload.json'), {
     "credentialUserId": None, "credentialPassword": None, "credentialNotes": "", "steps": setup_steps})
 print('sizes written:', ', '.join(SIZES))
 
+# ---- start/matching-base-create (D18): makes the empty baseline of one Profisee version: restore the seed (today's unversioned
+# baseline, the same or an older version), run Profisee Configuration on it, set and verify the API key, back it up under the
+# versioned name. Never overwrites an existing baseline. Not in the catalog (it indexes tests/ only).
+EMPTY = "profisee_Matching_empty_{{ProfiseeVersionCode}}.bak"
+MASTER_CS = "Server={{DatabaseServerName}};Database=master;Integrated Security=True;TrustServerCertificate=True"
+no_base_sql = "\r\n".join([
+    "DECLARE @dir nvarchar(400) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400));",
+    "DECLARE @exists int, @f nvarchar(600) = @dir + N'\\" + EMPTY + "';",
+    "EXEC master.dbo.xp_fileexist @f, @exists OUTPUT;",
+    "IF @exists = 1 BEGIN DECLARE @msg nvarchar(2048) = N'Matching base " + EMPTY + " for version {{ProfiseeVersionCode}} already exists on {{DatabaseServerName}}; matching-base-create never overwrites a base. Move or remove that file by hand to make it again.'; THROW 50014, @msg, 1; END",
+    "PRINT CONCAT(N'No Matching base of this version yet: ', @f, N' will be written.');"])
+refuse = {"label": "Refuse When The Base Exists", "inline": {**copy.deepcopy(tsteps['Check RetailClient Is Empty']['inline']),
+    "sqlSourceConnectionSecretName": MASTER_CS, "sqlDestinationConnectionSecretName": MASTER_CS, "sqlScript": no_base_sql,
+    "description": ("What: Check that the empty baseline of this version (" + EMPTY + ") is NOT in the SQL Server default backup folder of "
+                    "matching/machines:DatabaseServerName. Why: a base is made once and never overwritten; every Matching load restores it. "
+                    "Success: the line says no base exists yet. If it fails: the base already exists; use it, or move it by hand to make it again.")}}
+seed = copy.deepcopy(_s1k['Restore Loaded'])
+seed['label'] = "Restore Seed Backup"
+seed['inline']['backupFileName'] = "{{EmptySeedBackupFileName}}"
+seed['inline']['description'] = (
+    "What: Restore the seed backup (matching/databases:EmptySeedBackupFileName) over the Profisee database WITH REPLACE. The executor takes the "
+    "database OFFLINE WITH ROLLBACK IMMEDIATE first and brings it back ONLINE if the restore fails. Why: it holds the empty Matching model "
+    "(RetailClient matching strategy, API user, no records) of the same or an older Profisee version. Success: restored. If it fails: the seed is "
+    "missing from the SQL Server default backup folder of matching/machines:DatabaseServerName, or the CrewChief account is not sysadmin there.")
+create_configure = copy.deepcopy(configure)
+create_configure['description'] = (
+    "What: Run Profisee Configuration on the restored seed (install pack building block install-configure-upgrade: upgrade, keeps the data). "
+    "Why: the seed may come from an older Profisee version; Configuration upgrades it to the version under test and writes this application "
+    "server's service sign-in ids. Success: The child workload ends with every step Succeeded. If it fails: Open the run output of "
+    "'install-configure-upgrade'; Configuration's log is quoted there. A seed from a newer version than the installed Profisee cannot be used "
+    "(Configuration only upgrades).")
+state = copy.deepcopy(tsteps['Check RetailClient Is Empty'])
+state['label'] = "Check Base State"
+state['inline']['description'] = ("What: Confirm the configured database is the empty Matching model: RetailClient holds no rows. Why: the loads "
+                                  "fill an empty entity; a base with records would measure something else. Success: 0 rows. If it fails: the seed "
+                                  "was not the empty baseline; restore the right seed and run matching-base-create again.")
+back_up = copy.deepcopy(_s1k['Back Up After Scenario 1'])
+back_up['label'] = "Back Up The Empty Baseline"
+back_up['inline']['backupFileName'] = EMPTY
+back_up['inline']['description'] = (
+    "What: Back up the configured database as the empty baseline of this version (" + EMPTY + "). Why: every Matching load of this version "
+    "restores it. Success: written (file date now). If it fails: the SQL Server service account cannot write its default backup folder, or the disk is full.")
+dump(os.path.join(wl_root, 'start', 'matching-base-create.workload.json'), {
+    "name": "matching-base-create",
+    "description": ("What: Make the empty Matching baseline of one Profisee version: restore the seed backup (matching/databases:EmptySeedBackupFileName), "
+                    "run Profisee Configuration on it (install-configure-upgrade), wait for every service, set and verify the standard API key "
+                    "(matching-api-key-set), check the model is empty and back it up under the versioned name (" + EMPTY + "). It refuses to "
+                    "start when that base already exists and never overwrites one. Why: a lane of a new Profisee version has no baseline yet; "
+                    "every Matching load restores it. When: once per box and version, after the Profisee of that version is installed; "
+                    "matching-preflight says when the base is missing. Needs: the seed is the empty baseline of the same or an older version "
+                    "(Configuration only upgrades); the install pack on this box; no test running against this Profisee database. Success: "
+                    "Every step Succeeded or Skipped. If it fails: open the first failed step, whose If it fails text names what to check."),
+    "tags": ["matching", "start", "base-create"],
+    "globalParameters": {**{k: template['globalParameters'][k] for k in (
+        "ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName", "ProfiseeBaseUrl", "MainHealthUrl")},
+        "TestAutoBaseUrl": s1['globalParameters']['TestAutoBaseUrl'], "EmptySeedBackupFileName": "{{$ref:matching/databases:EmptySeedBackupFileName}}"},
+    "globalParametersNotes": "", "credentialUserId": None, "credentialPassword": None, "credentialNotes": "",
+    "steps": [copy.deepcopy(_s1k['Wait For Interrupted Runs']), refuse, copy.deepcopy(_s1k['Stop Profisee Service']), *copy.deepcopy(IIS_STOP),
+              seed, *copy.deepcopy(IIS_START), copy.deepcopy(_s1k['Start Profisee Service']),
+              {"label": "Configure The Restored Seed", "inline": create_configure}, after_configure, key_set_child(), state, back_up]})
+
 # ---- start/matching-preflight: checks only (gen_preflight.py)
 subprocess.run([sys.executable, os.path.join(here, 'gen_preflight.py'), root], check=True)
+
+# ---- version keys (decisions D11, D12): a root (no workload runs it) declares each key its tree uses as a global defaulting to
+# matching/environment; everything below a root declares the keys it or its children use as inputs and gets the value from its
+# parent (a lane passes them as --param on the root). Computed from the generated files, so no workload can miss one.
+VERSION_KEYS = ("ProfiseeVersionCode", "ProfiseeVersionNumber", "MainServiceName", "AnalyticsPoolName", "ConfigurationManagerKind")
+INPUT_TEXT = {
+    "ProfiseeVersionCode": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under; the automation tags and backup names carry it. Passed by the test that runs this one (matching/environment:ProfiseeVersionCode, or the lane's version).",
+    "ProfiseeVersionNumber": "Product version of the release under test (n.n.n), handed to install-configure-upgrade. Passed by the test that runs this one (matching/environment:ProfiseeVersionNumber, or the lane's version).",
+    "MainServiceName": "Profisee Windows service on the application server, stopped around a restore; blank = the release has no Windows service. Passed by the test that runs this one (matching/environment:MainServiceName, or the lane's service name).",
+    "AnalyticsPoolName": "Name of the analytics application pool of the instance; blank = the release has none. Passed by the test that runs this one (matching/environment:AnalyticsPoolName, or the lane's pool).",
+    "ConfigurationManagerKind": "classic or new: which Configuration program the release has, handed to install-configure-upgrade. Passed by the test that runs this one (matching/environment:ConfigurationManagerKind, or the lane's value).",
+}
+
+
+def declare_version_keys():
+    files = {}
+    for d, _, names in os.walk(wl_root):
+        for n in names:
+            if n.endswith('.workload.json'):
+                files[os.path.join(d, n)] = read(os.path.join(d, n))
+    by_name = {w['name']: (p, w) for p, w in files.items()}
+    outside = {}  # workloads of sibling packs this pack runs: their declared inputs are what this tree must carry
+    packs_dir = os.path.abspath(os.path.join(root, '..'))
+    for p in os.listdir(packs_dir):
+        od = os.path.join(packs_dir, p, 'workloads', p)
+        if os.path.abspath(os.path.join(packs_dir, p)) == os.path.abspath(root) or not os.path.isdir(od):
+            continue
+        for d, _, names in os.walk(od):
+            for n in names:
+                if n.endswith('.workload.json'):
+                    w = read(os.path.join(d, n))
+                    outside[w['name']] = [i['name'] for i in w.get('inputs', [])]
+    children = {name: [s['inline']['workloadName'] for s in w['steps'] if s['inline'].get('type') == 'RunWorkloadStep']
+                for name, (_, w) in by_name.items()}
+    run_by = {c for cs in children.values() for c in cs}
+
+    def own(w):
+        text = json.dumps(w['steps'])
+        return {k for k in VERSION_KEYS if '{{' + k + '}}' in text}
+
+    memo = {}
+
+    def needs(name):
+        if name in memo:
+            return memo[name]
+        if name not in by_name:
+            assert name in outside, f'{name} is neither in this pack nor in a sibling pack'
+            return {k for k in outside[name] if k in VERSION_KEYS}
+        memo[name] = set()
+        r = own(by_name[name][1])
+        for c in children[name]:
+            r |= needs(c)
+        memo[name] = r
+        return r
+
+    for name, (path, w) in by_name.items():
+        keys = [k for k in VERSION_KEYS if k in needs(name)]
+        if not keys:
+            continue
+        if name in run_by:
+            w['inputs'] = [{"name": k, "description": INPUT_TEXT[k]} for k in keys]
+        else:
+            for k in keys:
+                w['globalParameters'][k] = "{{$ref:matching/environment:%s}}" % k
+        dump(path, w)
+    return len(by_name)
+
+
+print('version keys declared in', declare_version_keys(), 'workloads')
