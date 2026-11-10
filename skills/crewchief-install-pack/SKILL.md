@@ -11,6 +11,8 @@ workloads (CORPVM31 setup / uninstall backups) on the pack blueprint (`crewchief
 `73`-`76_PackInstall*.md`. Plan and rulings ledger:
 `Q:\Work\Work\99 Documentation\speed-merchants\planning\2026-11-07-p1-install-pack-plan.md`.
 
+Every input carries a `"default"` (Gene 11/10, hand runs; `INPUT_DEFAULTS` in `gen_install.py`): `{{$ref:install/environment:<key>}}` for the version keys, `{{$ref:install/build:AdoBranch}}` for AdoBranch, blank for AdoBuildId (blank = latest build; the one name on the Test-Pack `$HandRunNoDefault` allow-list). A default is used only when no caller supplies the value. A new input needs an `INPUT_DEFAULTS` entry; Test-Pack rule R-handrun checks it.
+
 ## Regenerate (never hand-edit a workload)
 
 ```powershell
@@ -41,7 +43,7 @@ pack's health wait.
 | start | `install-preflight` | Secrets present, ADO token finds the latest build of install/build:AdoBranch, license + 10 GB on the app server, SQL answers, lists installed products |
 | tests | `install-clean` / `install-upgrade` / `install-clean-base-prep` | build-get, remove, programs, configure-new / -upgrade, verify (+ add-ons for clean-base-prep; name kept, no base upgrade since 11/08) |
 | internal | `install-build-get` | AdoBuildDownload (skipIfCurrent), unzip, verify >= 3 MSIs, publish to the app server, list MSIs |
-| internal | `install-remove(-preview)` | Stop service (runWhen MainServiceName) and IIS, remote PS uninstall (Server, FastApp Studio, utilities: the old workloads' order), delete IIS app + pools |
+| internal | `install-remove(-preview)` | Stop the Windows service(s) of the installed Profisee found on the app server itself (name or display name starts with Profisee, program under the installed Profisee folder; none = nothing to stop; independent of MainServiceName) and IIS, remote PS uninstall (Server, FastApp Studio, utilities: the old workloads' order), delete IIS app + pools |
 | internal | `install-programs` | CheckPort Free, three InstallSteps (CredSSP), start WAS, W3SVC |
 | internal | `install-configure-new` / `-upgrade` | first step "Configuration Manager Supported" refuses `ConfigurationManagerKind` = `new` (text from `install/environment:ConfigurationManagerNewRefusal`); then (DropDatabase) + ConfigureStep with the old CORPVM31 switch set; `-upgrade` Configure timeout 7200 s because `crud-run-start` and every Matching load run it on their restored base (11/08: Configuration writes new service sign-in ids into the DB and the app server, so only the backup configured last works; 400 DATA00030 otherwise). Test-Pack resolves this cross-pack child from the sibling install folder. Both end with a `RunWorkloadStep` of `install-api-key-set` (Gene 11/09: Test-Pack rule R-key, every family, no exceptions: a workload that runs Configuration or restores the Profisee database sets the API key itself afterwards); both take `MainServiceName` as an input for it |
 | internal | `install-api-key-set` | Same shape as `crud-api-key-set`: stop Main service (runWhen) + W3SVC + WAS, SetApiKeyStep (`RestKeys:ProfiseeRestKey` for `ConnectRuntime:ApiKeyUserName`), start WAS + W3SVC + Main service, health wait, verify through the gateway (`v1/Entities`) and the Data service (`v1/Rules?PageSize=1`). Reads `install/machines`, `install/instances`, `install/databases` keys already there; input `MainServiceName` |

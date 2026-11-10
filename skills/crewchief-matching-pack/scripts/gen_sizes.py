@@ -378,20 +378,73 @@ print('sizes written:', ', '.join(SIZES))
 
 # ---- start/matching-base-create (D18): makes the empty baseline of one Profisee version: restore the seed (today's unversioned
 # baseline, the same or an older version), run Profisee Configuration on it, set and verify the API key, back it up under the
-# versioned name. Never overwrites an existing baseline. Not in the catalog (it indexes tests/ only).
+# versioned name. When the baseline already exists it does nothing and ends green (P1, Gene 11/10). Not in the catalog (it indexes tests/ only).
 EMPTY = "profisee_Matching_empty_{{ProfiseeVersionCode}}.bak"
 MASTER_CS = "Server={{DatabaseServerName}};Database=master;Integrated Security=True;TrustServerCertificate=True"
-no_base_sql = "\r\n".join([
-    "DECLARE @dir nvarchar(400) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400));",
-    "DECLARE @exists int, @f nvarchar(600) = @dir + N'\\" + EMPTY + "';",
-    "EXEC master.dbo.xp_fileexist @f, @exists OUTPUT;",
-    "IF @exists = 1 BEGIN DECLARE @msg nvarchar(2048) = N'Matching base " + EMPTY + " for version {{ProfiseeVersionCode}} already exists on {{DatabaseServerName}}; matching-base-create never overwrites a base. Move or remove that file by hand to make it again.'; THROW 50014, @msg, 1; END",
-    "PRINT CONCAT(N'No Matching base of this version yet: ', @f, N' will be written.');"])
-refuse = {"label": "Refuse When The Base Exists", "inline": {**copy.deepcopy(tsteps['Check RetailClient Is Empty']['inline']),
-    "sqlSourceConnectionSecretName": MASTER_CS, "sqlDestinationConnectionSecretName": MASTER_CS, "sqlScript": no_base_sql,
-    "description": ("What: Check that the empty baseline of this version (" + EMPTY + ") is NOT in the SQL Server default backup folder of "
-                    "matching/machines:DatabaseServerName. Why: a base is made once and never overwritten; every Matching load restores it. "
-                    "Success: the line says no base exists yet. If it fails: the base already exists; use it, or move it by hand to make it again.")}}
+# P1 (Gene 11/10): when this version's baseline already exists the workload ends GREEN and touches nothing. Mechanism: a PowerShell
+# step captures "true" (baseline missing) or "false" into the run parameter BaseMissing (PowerShellStep outputParameterName: the
+# step's trimmed standard output becomes a run parameter later steps read as {{BaseMissing}}); every step after the check carries
+# runWhen {{BaseMissing}}, which the engine reads as blank or "false" = skip. runWhen is one token string (no AND), so a second
+# captured flag, ServiceStepsOn, is true only when the baseline is missing AND MainServiceName is set (the service steps already
+# skipped on a blank name). Both flags are declared as globals defaulting to "false": a capture that never happens can only skip
+# steps, never overwrite a baseline. Steps are found by label, never by index.
+check_base_ps = r"""$ErrorActionPreference = 'Stop'
+$file = '@EMPTY@'
+$c = New-Object System.Data.SqlClient.SqlConnection 'Server={{DatabaseServerName}};Database=master;Integrated Security=True;TrustServerCertificate=True;Connect Timeout=30'
+$c.Open()
+try {
+    $q = $c.CreateCommand()
+    $q.CommandText = "DECLARE @dir nvarchar(400) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400)); DECLARE @exists int, @f nvarchar(600) = @dir + N'\' + @file; EXEC master.dbo.xp_fileexist @f, @exists OUTPUT; SELECT @exists;"
+    [void]$q.Parameters.AddWithValue('@file', $file)
+    $exists = [int]$q.ExecuteScalar()
+}
+finally { $c.Close() }
+if ($exists -eq 1) { 'false' } else { 'true' }""".replace('@EMPTY@', EMPTY)
+report_base_ps = r"""if ('{{BaseMissing}}' -eq 'true') {
+    "No Matching base @EMPTY@ for version {{ProfiseeVersionCode}} on {{DatabaseServerName}} yet; it will be made."
+} else {
+    "Matching base @EMPTY@ for version {{ProfiseeVersionCode}} already exists; nothing done."
+}""".replace('@EMPTY@', EMPTY)
+service_gate_ps = r"""if ('{{BaseMissing}}' -eq 'true' -and -not [string]::IsNullOrWhiteSpace('{{MainServiceName}}')) { 'true' } else { 'false' }"""
+SKIP_BASE = "the Matching base of this version already exists (the check step found it), so there is nothing to make"
+
+
+def base_ps(label, script, what, why, success, fail, output=None, timeout=120):
+    inline = {k: v for k, v in copy.deepcopy(_s1k['Start Every Service']['inline']).items() if k not in ('scriptContent', 'description')}
+    inline.update({"scriptContent": script.replace('\n', '\r\n'), "timeoutSeconds": timeout,
+                   "description": f"What: {what} Why: {why} Success: {success} If it fails: {fail}"})
+    if output:
+        inline["outputParameterName"] = output
+    return {"label": label, "inline": inline}
+
+
+def gated(step, flag="BaseMissing"):
+    """Copy of step that runs only when run parameter `flag` is true; its description gets the reason (a step that already
+    has a 'Skipped when:' sentence, like the service steps, gets it added)."""
+    st = copy.deepcopy(step)
+    st["inline"]["runWhen"] = "{{%s}}" % flag
+    d = st["inline"]["description"]
+    st["inline"]["description"] = d + (f" Also skipped when {SKIP_BASE}." if "Skipped when:" in d else f" Skipped when: {SKIP_BASE}.")
+    return st
+
+
+check_base = base_ps("Check Whether The Base Exists", check_base_ps,
+    "Look for the empty baseline of this version (" + EMPTY + ") in the SQL Server default backup folder of matching/machines:DatabaseServerName "
+    "and keep the answer in the run parameter BaseMissing (true = no base yet).",
+    "a base is made once and never overwritten; every Matching load restores it, so when it exists every later step is skipped and the run ends green.",
+    "the step ends without an error (it does not fail when the base exists).",
+    "the database server does not answer, or the CrewChief account cannot connect to master there.", output="BaseMissing")
+report_base = base_ps("Report The Base State", report_base_ps,
+    "Print whether the empty baseline of this version already exists (nothing done) or will be made.",
+    "the run output then says plainly why every later step is Skipped.",
+    "one line is printed.",
+    "the script cannot fail by itself; open the run output of the check step before it.", timeout=60)
+decide_service = base_ps("Decide The Service Steps", service_gate_ps,
+    "Keep in the run parameter ServiceStepsOn whether the Profisee Windows service steps run: true only when the base is missing and "
+    "matching/environment:MainServiceName is set.",
+    "a step can test only one value, so the two conditions are combined here.",
+    "the line says true or false.",
+    "the script cannot fail by itself; open the run output of the check step before it.", output="ServiceStepsOn", timeout=60)
 seed = copy.deepcopy(_s1k['Restore Loaded'])
 seed['label'] = "Restore Seed Backup"
 seed['inline']['backupFileName'] = "{{EmptySeedBackupFileName}}"
@@ -422,20 +475,24 @@ dump(os.path.join(wl_root, 'start', 'matching-base-create.workload.json'), {
     "name": "matching-base-create",
     "description": ("What: Make the empty Matching baseline of one Profisee version: restore the seed backup (matching/databases:EmptySeedBackupFileName), "
                     "run Profisee Configuration on it (install-configure-upgrade), wait for every service, set and verify the standard API key "
-                    "(matching-api-key-set), check the model is empty and back it up under the versioned name (" + EMPTY + "). It refuses to "
-                    "start when that base already exists and never overwrites one. Why: a lane of a new Profisee version has no baseline yet; "
-                    "every Matching load restores it. When: once per box and version, after the Profisee of that version is installed; "
+                    "(matching-api-key-set), check the model is empty and back it up under the versioned name (" + EMPTY + "). When that base "
+                    "already exists it skips everything after the check, prints that nothing was done and ends green; it never overwrites a base. Why: a lane of a new Profisee version has no baseline yet; "
+                    "every Matching load restores it. When: once per box and version, after the Profisee of that version is installed (run it before matching-setup; a round starts it first); "
                     "matching-preflight says when the base is missing. Needs: the seed is the empty baseline of the same or an older version "
                     "(Configuration only upgrades); the install pack on this box; no test running against this Profisee database. Success: "
                     "Every step Succeeded or Skipped. If it fails: open the first failed step, whose If it fails text names what to check."),
     "tags": ["matching", "start", "base-create"],
     "globalParameters": {**{k: template['globalParameters'][k] for k in (
         "ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName", "ProfiseeBaseUrl", "MainHealthUrl")},
-        "TestAutoBaseUrl": s1['globalParameters']['TestAutoBaseUrl'], "EmptySeedBackupFileName": "{{$ref:matching/databases:EmptySeedBackupFileName}}"},
-    "globalParametersNotes": "", "credentialUserId": None, "credentialPassword": None, "credentialNotes": "",
-    "steps": [copy.deepcopy(_s1k['Wait For Interrupted Runs']), refuse, copy.deepcopy(_s1k['Stop Profisee Service']), *copy.deepcopy(IIS_STOP),
-              seed, *copy.deepcopy(IIS_START), copy.deepcopy(_s1k['Start Profisee Service']),
-              {"label": "Configure The Restored Seed", "inline": create_configure}, after_configure, key_set_child(), state, back_up]})
+        "TestAutoBaseUrl": s1['globalParameters']['TestAutoBaseUrl'], "EmptySeedBackupFileName": "{{$ref:matching/databases:EmptySeedBackupFileName}}",
+        "BaseMissing": "false", "ServiceStepsOn": "false"},
+    "globalParametersNotes": ("BaseMissing and ServiceStepsOn are set by the check steps during the run (true or false); they start as false so "
+                              "a step that never got its answer is skipped, never run."), "credentialUserId": None, "credentialPassword": None, "credentialNotes": "",
+    "steps": [copy.deepcopy(_s1k['Wait For Interrupted Runs']), check_base, report_base, decide_service,
+              gated(_s1k['Stop Profisee Service'], "ServiceStepsOn"), *[gated(x) for x in IIS_STOP],
+              gated(seed), *[gated(x) for x in IIS_START], gated(_s1k['Start Profisee Service'], "ServiceStepsOn"),
+              gated({"label": "Configure The Restored Seed", "inline": create_configure}), gated(after_configure),
+              gated(key_set_child()), gated(state), gated(back_up)]})
 
 # ---- start/matching-preflight: checks only (gen_preflight.py)
 subprocess.run([sys.executable, os.path.join(here, 'gen_preflight.py'), root], check=True)
@@ -499,7 +556,8 @@ def declare_version_keys():
         if not keys:
             continue
         if name in run_by:
-            w['inputs'] = [{"name": k, "description": INPUT_TEXT[k]} for k in keys]
+            # hand runs (Gene 11/10): the default is the reference value the roots read; used only when no caller supplies the key
+            w['inputs'] = [{"name": k, "description": INPUT_TEXT[k], "default": "{{$ref:matching/environment:%s}}" % k} for k in keys]
         else:
             for k in keys:
                 w['globalParameters'][k] = "{{$ref:matching/environment:%s}}" % k

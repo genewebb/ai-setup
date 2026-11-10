@@ -19,7 +19,7 @@ it and deletes them through REST (DqRuleCount 0 vs 10, as PROD records them).
 
 Usage: python gen_crud.py <packRoot>      (e.g. C:\\devops\\repos\\speed-merchants\\CrewChief\\packs\\crud)
 """
-import json, os, sys
+import copy, json, os, sys
 
 root = sys.argv[1]
 here = os.path.dirname(os.path.abspath(__file__))
@@ -74,6 +74,11 @@ INPUT_TEXT = {
     "BaseBackupFileName": "File name of the CRUD base backup of this version (crud/databases:BaseBackupStem, an underscore, the version code, .bak). Composed by the test that runs this one.",
     "RunStartBackupFileName": "File name of the run-start backup of this version (crud/databases:RunStartBackupStem, an underscore, the version code, .bak). Composed by the test that runs this one.",
 }
+
+
+# Hand runs (Gene 11/10): every input carries a "default" (used only when no caller supplies the value): the reference data the
+# roots read, and the same composition for the backup names (the version code inside resolves after the input itself).
+INPUT_DEFAULTS = {**VERSION_GLOBALS, **BACKUP_GLOBALS}
 
 
 def inputs_for(*names):
@@ -289,11 +294,15 @@ def sql(label, script, desc, conn=PROFISEE_DB, timeout=300):
             "autoWrapPassFailCode": True, "dryRun": False, "sqlDropConnections": False, "type": "SqlStep", "description": desc}}
 
 
-def ps(label, script, desc, timeout=600):
-    return {"label": label, "inline": {**base, "executionPolicy": "Bypass", "preferWindowsPowerShell": False,
+def ps(label, script, desc, timeout=600, output=None):
+    """output = name of the run parameter that receives the step's standard output (PowerShellStep outputParameterName)."""
+    step = {"label": label, "inline": {**base, "executionPolicy": "Bypass", "preferWindowsPowerShell": False,
             "runAsAdministrator": False, "captureVerbose": False, "captureDebug": False, "treatStderrAsError": True,
             "scriptContent": script.replace('\r\n', '\n').replace('\n', '\r\n'), "type": "PowerShellStep",
             "timeoutSeconds": timeout, "description": desc}}
+    if output:
+        step["inline"]["outputParameterName"] = output
+    return step
 
 
 def service(label, action, desc):
@@ -387,7 +396,7 @@ def workload(name, desc, tags, globals_, steps, notes="", inputs=None):
     w = {"name": name, "description": desc, "tags": tags, "globalParameters": globals_, "globalParametersNotes": notes,
          "credentialUserId": None, "credentialPassword": None, "credentialNotes": "", "steps": steps}
     if inputs:
-        w["inputs"] = [{"name": n, "description": d} for n, d in inputs]
+        w["inputs"] = [{"name": n, "description": d, "default": INPUT_DEFAULTS[n]} for n, d in inputs]
     return w
 
 
@@ -514,7 +523,7 @@ dump(os.path.join(wl_root, 'internal', 'shared', 'crud-base-reset.workload.json'
     ["crud", "internal", "shared"],
     g("ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName",
       "ProfiseeBaseUrl", "MainHealthUrl", "TestAutoBaseUrl", "ProfiseeApiKey", "ApiKeyUserName"),
-    reset_steps, inputs=inputs_for("RunStartBackupFileName", "MainServiceName")))
+    reset_steps, inputs=inputs_for("ProfiseeVersionCode", "RunStartBackupFileName", "MainServiceName")))
 
 # ---------------------------------------------------------------- internal/shared/crud-run-start (Gene 11/08)
 # Profisee Configuration writes new service sign-in ids into the database it runs on AND into the application server, so
@@ -564,7 +573,7 @@ dump(os.path.join(wl_root, 'internal', 'shared', 'crud-run-start.workload.json')
     ["crud", "internal", "shared", "run-start"],
     g("ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName",
       "ProfiseeBaseUrl", "MainHealthUrl", "TestAutoBaseUrl", "ProfiseeApiKey", "ApiKeyUserName"),
-    run_start_steps, inputs=inputs_for("BaseBackupFileName", "RunStartBackupFileName", "MainServiceName",
+    run_start_steps, inputs=inputs_for("ProfiseeVersionCode", "BaseBackupFileName", "RunStartBackupFileName", "MainServiceName",
                                        "ProfiseeVersionNumber", "ConfigurationManagerKind")))
 
 # ---------------------------------------------------------------- internal/shared/crud-rules-remove
@@ -964,12 +973,45 @@ dump(os.path.join(wl_root, 'start', 'crud-preflight.workload.json'), workload(
 
 # ---------------------------------------------------------------- start/crud-base-create (D18)
 # Makes the base of a Profisee version: restore the seed (today's base file, the same or an older version), run Profisee
-# Configuration on it, back it up under the versioned name. Never overwrites an existing base. Not in the catalog.
-no_base_sql = """DECLARE @dir nvarchar(400) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400));
-DECLARE @exists int, @f nvarchar(600) = @dir + N'\\{{BaseBackupFileName}}';
-EXEC master.dbo.xp_fileexist @f, @exists OUTPUT;
-IF @exists = 1 BEGIN DECLARE @msg nvarchar(2048) = N'CRUD base {{BaseBackupFileName}} for version {{ProfiseeVersionCode}} already exists on {{DatabaseServerName}}; crud-base-create never overwrites a base. Move or remove that file by hand to make it again.'; THROW 50025, @msg, 1; END
-PRINT CONCAT(N'No CRUD base of this version yet: ', @f, N' will be written.');"""
+# Configuration on it, back it up under the versioned name. When the base exists it does nothing and ends green (P1, below). Not in the catalog.
+# P1 (Gene 11/10): when this version's base already exists the workload ends GREEN and touches nothing. Mechanism: a PowerShell step
+# captures "true" (base missing) or "false" into the run parameter BaseMissing (PowerShellStep outputParameterName: the step's
+# trimmed standard output becomes a run parameter later steps read as {{BaseMissing}}); every step after the check carries
+# runWhen {{BaseMissing}}, which the engine reads as blank or "false" = skip. runWhen is one token string (no AND), so a second
+# captured flag, ServiceStepsOn, is true only when the base is missing AND MainServiceName is set (the service steps already
+# skipped on a blank name). Both flags are declared as globals defaulting to "false": a capture that never happens can only
+# skip steps, never overwrite a base. Steps are found by label, never by index.
+check_base_ps = r"""$ErrorActionPreference = 'Stop'
+$file = '{{BaseBackupFileName}}'
+$c = New-Object System.Data.SqlClient.SqlConnection 'Server={{DatabaseServerName}};Database=master;Integrated Security=True;TrustServerCertificate=True;Connect Timeout=30'
+$c.Open()
+try {
+    $q = $c.CreateCommand()
+    $q.CommandText = "DECLARE @dir nvarchar(400) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400)); DECLARE @exists int, @f nvarchar(600) = @dir + N'\' + @file; EXEC master.dbo.xp_fileexist @f, @exists OUTPUT; SELECT @exists;"
+    [void]$q.Parameters.AddWithValue('@file', $file)
+    $exists = [int]$q.ExecuteScalar()
+}
+finally { $c.Close() }
+if ($exists -eq 1) { 'false' } else { 'true' }"""
+report_base_ps = r"""if ('{{BaseMissing}}' -eq 'true') {
+    "No CRUD base {{BaseBackupFileName}} for version {{ProfiseeVersionCode}} on {{DatabaseServerName}} yet; it will be made."
+} else {
+    "CRUD base {{BaseBackupFileName}} for version {{ProfiseeVersionCode}} already exists; nothing done."
+}"""
+service_gate_ps = r"""if ('{{BaseMissing}}' -eq 'true' -and -not [string]::IsNullOrWhiteSpace('{{MainServiceName}}')) { 'true' } else { 'false' }"""
+SKIP_BASE = "the CRUD base of this version already exists (the check step found it), so there is nothing to make"
+
+
+def gated(step, flag="BaseMissing"):
+    """Copy of step that runs only when run parameter `flag` is true; its description gets the reason (a step that already
+    has a 'Skipped when:' sentence, like the service steps, gets it added)."""
+    st = copy.deepcopy(step)
+    st["inline"]["runWhen"] = "{{%s}}" % flag
+    d = st["inline"]["description"]
+    st["inline"]["description"] = d + (f" Also skipped when {SKIP_BASE}." if "Skipped when:" in d else f" Skipped when: {SKIP_BASE}.")
+    return st
+
+
 create_configure = run_child("Configure The Restored Seed", "install-configure-upgrade",
                              "Run Profisee Configuration on the restored seed", timeout=7500)
 create_configure["inline"]["description"] = (
@@ -980,45 +1022,59 @@ create_configure["inline"]["description"] = (
     "version than the installed Profisee cannot be used (Configuration only upgrades).")
 base_create_steps = [
     wait_runs(),
-    sql("Refuse When The Base Exists", no_base_sql,
-        "What: Check that the CRUD base of this version (crud/databases:BaseBackupStem, the version code, .bak) is NOT in the SQL Server "
-        "default backup folder of crud/machines:DatabaseServerName. Why: a base is made once and never overwritten; every test "
-        "restores it. Success: the line says no base exists yet. If it fails: the base already exists; use it, or move it by hand "
-        "to make it again.", conn=MASTER),
-    service("Stop Profisee Service", "Stop", "What: Stop the Profisee Windows service before the restore. Why: it holds connections and caches from before the restore. Success: the service is stopped."),
-    *IIS_STOP,
-    restore_step("Restore Seed Backup", "{{BaseSeedBackupFileName}}",
+    ps("Check Whether The Base Exists", check_base_ps,
+       "What: Look for the CRUD base of this version (crud/databases:BaseBackupStem, the version code, .bak) in the SQL Server default "
+       "backup folder of crud/machines:DatabaseServerName and keep the answer in the run parameter BaseMissing (true = no base yet). "
+       "Why: a base is made once and never overwritten; every test restores it, so when it exists every later step is skipped and the "
+       "run ends green. Success: the step ends without an error (it does not fail when the base exists). If it fails: the database "
+       "server does not answer, or the CrewChief account cannot connect to master there.", timeout=120, output="BaseMissing"),
+    ps("Report The Base State", report_base_ps,
+       "What: Print whether the CRUD base of this version already exists (nothing done) or will be made. Why: the run output then says "
+       "plainly why every later step is Skipped. Success: one line is printed. If it fails: the script cannot fail by itself; open the "
+       "run output of the check step before it.", timeout=60),
+    ps("Decide The Service Steps", service_gate_ps,
+       "What: Keep in the run parameter ServiceStepsOn whether the Profisee Windows service steps run: true only when the base is "
+       "missing and crud/environment:MainServiceName is set. Why: a step can test only one value, so the two conditions are combined "
+       "here. Success: the line says true or false. If it fails: the script cannot fail by itself; open the run output of the check "
+       "step before it.", timeout=60, output="ServiceStepsOn"),
+    gated(service("Stop Profisee Service", "Stop", "What: Stop the Profisee Windows service before the restore. Why: it holds connections and caches from before the restore. Success: the service is stopped."), "ServiceStepsOn"),
+    *[gated(x) for x in IIS_STOP],
+    gated(restore_step("Restore Seed Backup", "{{BaseSeedBackupFileName}}",
         "What: Restore the seed backup (crud/databases:BaseSeedBackupFileName) over the Profisee database WITH REPLACE. "
         "The executor takes the database OFFLINE WITH ROLLBACK IMMEDIATE first and brings it back ONLINE if the restore fails. "
         "Why: it holds the CRUD model (TDATA full, ZDATA empty, business rules on both) of the same or an older version. "
         "Success: restored (about 6 minutes). If it fails: the seed is missing from the SQL Server default backup folder of "
-        "crud/machines:DatabaseServerName, or the CrewChief account is not sysadmin there."),
-    *IIS_START,
-    service("Start Profisee Service", "Start", "What: Start the Profisee Windows service after the restore. Why: Configuration expects a running instance. Success: the service is running."),
-    create_configure,
-    health("Wait For Every Service After Configuration"),
-    key_set_child(),
-    reset_by_label["Check Base State"],
-    db_step("Back Up The Base", "BackupDatabase", "{{BaseBackupFileName}}",
+        "crud/machines:DatabaseServerName, or the CrewChief account is not sysadmin there.")),
+    *[gated(x) for x in IIS_START],
+    gated(service("Start Profisee Service", "Start", "What: Start the Profisee Windows service after the restore. Why: Configuration expects a running instance. Success: the service is running."), "ServiceStepsOn"),
+    gated(create_configure),
+    gated(health("Wait For Every Service After Configuration")),
+    gated(key_set_child()),
+    gated(reset_by_label["Check Base State"]),
+    gated(db_step("Back Up The Base", "BackupDatabase", "{{BaseBackupFileName}}",
         "What: Back up the configured database as the CRUD base of this version (crud/databases:BaseBackupStem, the version code, .bak). "
         "Why: every CRUD test of this version restores it. Success: written (file date now). If it fails: the SQL Server service "
-        "account cannot write its default backup folder, or the disk is full."),
+        "account cannot write its default backup folder, or the disk is full.")),
 ]
 dump(os.path.join(wl_root, 'start', 'crud-base-create.workload.json'), workload(
     "crud-base-create",
     ("What: Make the CRUD base of one Profisee version: restore the seed backup (crud/databases:BaseSeedBackupFileName), run "
      "Profisee Configuration on it (install-configure-upgrade), wait for every service, set and prove the API key (crud-api-key-set), check the base state and back it up "
-     "under the versioned name (crud/databases:BaseBackupStem, the version code, .bak). It refuses to start when that base "
-     "already exists and never overwrites one. Why: a lane of a new Profisee version has no base yet; every CRUD test restores "
-     "it. When: once per box and version, after the Profisee of that version is installed; crud-preflight says when the base is "
-     "missing. Needs: the seed is the CRUD base of the same or an older version (Configuration only upgrades); the install pack on "
-     "this box; no test running against this Profisee database. Success: Every step Succeeded or Skipped. If it fails: open the "
+     "under the versioned name (crud/databases:BaseBackupStem, the version code, .bak). When that base already exists it skips "
+     "everything after the check, prints that nothing was done and ends green; it never overwrites a base. Why: a lane of a new "
+     "Profisee version has no base yet; every CRUD test restores it. When: once per box and version, after the Profisee of that "
+     "version is installed (run it before crud-setup; a round starts it first); crud-preflight says when the base is missing. Needs: the seed is "
+     "the CRUD base of the same or an older version (Configuration only upgrades); the install pack on this box; no test running "
+     "against this Profisee database. Success: Every step Succeeded or Skipped. If it fails: open the "
      "first failed step, whose If it fails text names what to check."),
     ["crud", "start", "base-create"],
     g("ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName", "BaseSeedBackupFileName",
       "ProfiseeBaseUrl", "MainHealthUrl", "TestAutoBaseUrl",
-      **root_globals("ProfiseeVersionCode", "ProfiseeVersionNumber", "MainServiceName", "ConfigurationManagerKind", "BaseBackupFileName")),
-    base_create_steps))
+      **root_globals("ProfiseeVersionCode", "ProfiseeVersionNumber", "MainServiceName", "ConfigurationManagerKind", "BaseBackupFileName"),
+      BaseMissing="false", ServiceStepsOn="false"),
+    base_create_steps,
+    notes=("BaseMissing and ServiceStepsOn are set by the check steps during the run (true or false); they start as false so a step that "
+           "never got its answer is skipped, never run.")))
 
 # ---------------------------------------------------------------- rounds
 rounds = os.path.join(root, 'rounds')

@@ -25,3 +25,4 @@ Facts worth not re-deriving (read from the machine 11/09):
 **Why:** Gene wants variance between instances as near zero as possible, and the real number if not zero.
 **How to apply:** start from the three notes; do not reopen purchase options; nothing destructive on CORPSQL03 before the gates in note 1 section 4. Related: [[project-test-lab-topology-cadence]].
 Gene 2026-11-09: Windows app-server VMs = trial (evaluation) Windows Server; DB = Linux containers running SQL Server 2022. Gate 8 in note 1 updated. Open: eval length/rearm/expiry behaviour, SQL edition (assumed Developer).
+Gene 2026-11-10: install most likely in person at the server, USB key, all partitions on all drives removed, 100% clean Proxmox install. Means on-box backups/DBs/CORPVMHA1 VHDX are destroyed: gates in note 1 must be met first. BIOS values recorded at the console before wipe; BMC login optional.

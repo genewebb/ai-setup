@@ -145,12 +145,14 @@ Run profiles: `<ProfiseeVersionCode>-RetailClient-Scenario <x>-1000-0` (Incremen
   MainServiceName, AnalyticsPoolName, ConfigurationManagerKind); everything below declares inputs. `declare_version_keys()` at the end
   of `gen_sizes.py` computes both from the generated files (transitive over RunWorkload steps, including install-configure-upgrade's
   declared inputs), so no workload can miss one. Pools list `{{AnalyticsPoolName}}` (blank = dropped).
-- `matching-base-create` (D18): wait for runs, refuse when the versioned empty baseline exists (THROW 50014), stop service + IIS, restore the seed,
+- `matching-base-create` (D18): wait for runs, check whether the versioned empty baseline exists (PowerShell step, `outputParameterName` BaseMissing; when it exists every later step is Skipped through `runWhen {{BaseMissing}}` / `{{ServiceStepsOn}}`, a message says nothing was done and the run ends green), stop service + IIS, restore the seed,
   start, install-configure-upgrade, health, `matching-api-key-set`, check RetailClient empty, back up `profisee_Matching_empty_<code>.bak`.
 - API key (Gene 11/09): every workload that restores a database sets and verifies the key itself: base-create, every load, and
   every scenario workload (`key_set_step()` in `gen_s1.py` after Start Profisee Service; gen_all clones it).
 - Template `load-template-1k.workload.json` carries the loaded-backup SQL; its name ends `_<BackupSuffix>_{{ProfiseeVersionCode}}.bak`.
 - Lint: `Test-Pack.ps1` lists `matching` in `$VersionAwareFamilies` (R-tag, R-root, R-bak).
+
+Every input carries a `"default"` (Gene 11/10, hand runs): `declare_version_keys` in `gen_sizes.py` writes `{{$ref:matching/environment:<key>}}`, used only when no caller supplies the value. Test-Pack rule R-handrun checks that every input has one.
 
 ## Changing anything: use the generators
 

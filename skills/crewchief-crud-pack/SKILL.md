@@ -9,6 +9,8 @@ Repo: speed-merchants, `CrewChief/packs/crud` (Gene commits). Built 11/07/2026 o
 (`crewchief-workload-packs`, `crewchief-matching-pack`). Pack notes: `CrewChief/packs/crud/CLAUDE.md`. People docs:
 CrewChief help pages `69`-`72_PackCrud*.md`.
 
+Every input carries a `"default"` (Gene 11/10, hand runs; `INPUT_DEFAULTS` in `gen_crud.py`): version keys `{{$ref:crud/environment:<key>}}`, backup names composed as the roots compose them (`{{$ref:crud/databases:BaseBackupStem}}_{{ProfiseeVersionCode}}.bak`). A default is used only when no caller supplies the value, and a workload whose default uses `{{ProfiseeVersionCode}}` must declare it as an input too. A new input needs an `INPUT_DEFAULTS` entry (the generator fails without one); Test-Pack rule R-handrun checks it.
+
 ## Regenerate (never hand-edit a workload)
 
 ```powershell
@@ -68,7 +70,7 @@ SMVMTR1 (11/07/2026, 26R3T): workflows 10000470-10000489, count forms 10000490-1
   file) is the only unversioned backup key; Test-Pack R-bak exempts keys ending `SeedBackupFileName`.
 - The 20-pool lists use `{{AnalyticsPoolName}}` for the analytics pool (blank is dropped by the pool step).
 - Tags: `AUTO:{{$env:COMPUTERNAME}}:{{ProfiseeVersionCode}}:<key>`.
-- `start/crud-base-create` (D18): wait, refuse when the versioned base exists (never overwrites), stop Main + IIS, restore the seed,
+- `start/crud-base-create` (D18): wait, check whether the versioned base exists (PowerShell step, `outputParameterName` BaseMissing; when it exists every later step is Skipped through `runWhen {{BaseMissing}}` / `{{ServiceStepsOn}}`, a message says nothing was done and the run ends green; never overwrites), stop Main + IIS, restore the seed,
   IIS + Main start, `install-configure-upgrade`, health, `crud-api-key-set` (R-key: restore + configure are followed by the key set), Check Base State, back up as `BaseBackupFileName`. The seed must be the
   same or an older version (Configuration only upgrades). `crud-preflight` 'CRUD Base Backup Exists' names it when the base is missing.
 

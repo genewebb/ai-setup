@@ -131,9 +131,17 @@ def workload(name, desc, tags, globals_, steps, notes="", inputs=None):
     w = {"name": name, "description": desc, "tags": tags, "globalParameters": globals_, "globalParametersNotes": notes,
          "credentialUserId": None, "credentialPassword": None, "credentialNotes": "", "steps": steps}
     if inputs:
-        w["inputs"] = [{"name": n, "description": d} for n, d in inputs]
+        # Hand runs (Gene 11/10): every input carries a "default", used only when no caller supplies the value.
+        w["inputs"] = [{"name": n, "description": d, "default": INPUT_DEFAULTS[n]} for n, d in inputs]
     return w
 
+
+# Hand-run defaults of every input (a caller's --param, a parent's step parameters and inherited context all win; an explicitly
+# supplied blank counts as supplied). Same reference data the roots read; AdoBuildId blank = the latest build of AdoBranch.
+INPUT_DEFAULTS = {"AdoBranch": ref('build', 'AdoBranch'), "AdoBuildId": "",
+                  "ProfiseeVersionNumber": ref('environment', 'ProfiseeVersionNumber'),
+                  "MainServiceName": ref('environment', 'MainServiceName'),
+                  "ConfigurationManagerKind": ref('environment', 'ConfigurationManagerKind')}
 
 # Every parent of install-build-get passes the build to install: the reference-data branch and the latest build, unless
 # the caller (a TestAutoManager round, through CrewChief --param) passes AdoBranch / AdoBuildId of its own.
@@ -276,15 +284,49 @@ def iis_service(name, action, desc):
                 targetComputer="{{ApplicationServerName}}", **ADMIN)
 
 
-def profisee_service(action):
-    s = step(f"{action} The Profisee Service", "ServiceControlStep",
-             f"What: {action} the Profisee Windows service on the application server. Why: older releases run one; it "
-             "holds files the uninstall must replace. Success: the service is " + ("stopped" if action == 'Stop' else "running") +
-             ". If it fails: the service name in MainServiceName (install/environment:MainServiceName, or the lane's) is wrong. "
-             "Skipped when: it is blank (newer releases have no Profisee Windows service).",
-             serviceName="{{MainServiceName}}", action=action, targetComputer="{{ApplicationServerName}}", **ADMIN)
-    s["inline"]["runWhen"] = "{{MainServiceName}}"
-    return s
+# P2 (Gene 11/10): the Windows service(s) of the INSTALLED Profisee are found on the application server itself, never named by
+# MainServiceName (that value belongs to the lane's version, the installed one can be another). A service counts when its
+# name or display name starts with "Profisee" and its program sits under a folder an installed Profisee product lives in
+# (the InstallLocation the uninstall entries hold, plus the standard Program Files\Profisee folders). None found = nothing to stop.
+STOP_INSTALLED_SERVICES = r"""$ErrorActionPreference = 'Stop'
+$keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+$roots = @(Get-ItemProperty -Path $keys -ErrorAction SilentlyContinue |
+    Where-Object { $_.DisplayName -match '^Profisee (Server|FastApp Studio|Command Line Utilities)\b' -and $_.InstallLocation } |
+    ForEach-Object { $_.InstallLocation.TrimEnd('\') })
+$roots += (Join-Path $env:ProgramFiles 'Profisee')
+if (${env:ProgramFiles(x86)}) { $roots += (Join-Path ${env:ProgramFiles(x86)} 'Profisee') }
+$roots = @($roots | Sort-Object -Unique)
+function Get-ProgramPath([string]$commandLine) {
+    if ($commandLine -match '^\s*"([^"]+)"') { return $Matches[1] }
+    if ($commandLine -match '^\s*(.+?\.exe)(\s|$)') { return $Matches[1] }
+    return $commandLine.Trim()
+}
+$found = @(Get-CimInstance -ClassName Win32_Service | Where-Object {
+        $_.PathName -and ($_.Name -like 'Profisee*' -or $_.DisplayName -like 'Profisee*')
+    } | Where-Object {
+        $program = Get-ProgramPath $_.PathName
+        @($roots | Where-Object { $program.StartsWith($_ + '\', [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+    })
+if ($found.Count -eq 0) { Write-Output "${env:COMPUTERNAME}: no Windows service of an installed Profisee product found; nothing to stop."; return }
+foreach ($s in $found) {
+    if ($s.State -eq 'Stopped') { Write-Output ("{0}: service '{1}' ({2}) is already stopped." -f $env:COMPUTERNAME, $s.Name, $s.DisplayName); continue }
+    $svc = Get-Service -Name $s.Name
+    Stop-Service -InputObject $svc -Force
+    $svc.WaitForStatus('Stopped', [TimeSpan]::FromMinutes(3))
+    Write-Output ("{0}: stopped service '{1}' ({2})." -f $env:COMPUTERNAME, $s.Name, $s.DisplayName)
+}
+"""
+
+
+def stop_installed_services():
+    return remote_ps("Stop The Profisee Service", STOP_INSTALLED_SERVICES,
+        "What: On the application server, find every Windows service of the installed Profisee (a name or display name starting "
+        "with Profisee whose program sits under the folder of an installed Profisee product) and stop it. Why: older releases run "
+        "one and it holds files the uninstall must replace; it is found on the server, whatever MainServiceName says, because the "
+        "installed release can differ from the version under test. Success: every such service is stopped; none found is also a "
+        "success (the line says so). If it fails: the admin credential cannot manage services there over CredSSP, or a service did "
+        "not stop within 3 minutes (see its state in services.msc).", timeout=900)
 
 
 IIS_STOP = [
@@ -298,7 +340,7 @@ IIS_STOP = [
 
 def remove_steps(preview):
     mode = "List" if preview else "Remove"
-    steps = [] if preview else [profisee_service("Stop"), *IIS_STOP]
+    steps = [] if preview else [stop_installed_services(), *IIS_STOP]
     steps.append(remote_ps(f"{mode} Installed Profisee Products", REMOVE_PRODUCTS,
         ("What: On the application server, list every installed Profisee Server, FastApp Studio and Command Line Utilities "
          + ("product; change nothing. " if preview else "product and remove each with msiexec /x (Server first, then FastApp Studio, then the utilities, the order the old install workloads used). ")
@@ -324,15 +366,14 @@ for preview in (False, True):
         (("What: List what install-remove would remove on the application server (installed Profisee products), changing "
           "nothing. Why: see the old version before a destructive run. When: before the first install on a box, or any time. ")
          if preview else
-         ("What: Remove Profisee from the application server: stop the Profisee service (older releases) and IIS, uninstall "
+         ("What: Remove Profisee from the application server: stop every Windows service of the installed Profisee (found on the server, not named) and IIS, uninstall "
           "every installed Profisee Server, FastApp Studio and Command Line Utilities, delete the instance's IIS application "
           "and its pools. IIS stays stopped for the install that follows. Why: a clean install starts from nothing. When: "
           "from install-clean / install-upgrade; alone only to tear a box down. ")) +
         ("Needs: the shared admin credential is an administrator of the application server (WinRM, CredSSP). Success: Every "
          "step Succeeded or Skipped. If it fails: open the first failed step, whose If it fails text names what to check."),
         ["install", "internal", "remove"] + (["preview"] if preview else []),
-        g("ApplicationServerName", RemovePreview="true" if preview else "false"), remove_steps(preview),
-        inputs=None if preview else [IN_MAIN_SERVICE]))
+        g("ApplicationServerName", RemovePreview="true" if preview else "false"), remove_steps(preview)))
 
 # ---------------------------------------------------------------- internal/install-programs
 MSI_INSTALL = r"""$ErrorActionPreference = 'Stop'
