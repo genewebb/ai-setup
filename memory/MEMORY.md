@@ -11,6 +11,7 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [Gene doing steps by hand: ONE step per reply](feedback_one_step_at_a_time_when_troubleshooting.md) · [Asked "what is the command" = command only, run nothing](feedback_command_question_answer_only.md)
 - [Lucid MCP works: flowchart recipe + first doc 11/02](reference_lucid_mcp_flowcharts.md)
 - [Long runs self-drive with /loop](feedback_always_make_long_runs_unattended.md) · [run independent tasks in parallel](feedback_run_parallel_when_possible.md) · [Copy before probing; NEVER git checkout to undo](feedback_copy_before_probe_never_git_checkout.md)
+- **[Pack zip restore on existing box = workloads/<family> ONLY, never reference-kv](feedback_pack_restore_workloads_only.md)**
 - **[API key set+verified after EVERY Profisee restore/configure, no exceptions; Test-Pack R-key](feedback_api_key_after_every_restore_configure.md)**
 - [Rerun a Matching scenario = restore its start backup first, never on dirty state](feedback_rerun_scenario_from_its_start_backup.md)
 - [Mutation = TestData.Mutation engine, strategy fields only, never append text](feedback_use_testdata_mutation_engine.md)
