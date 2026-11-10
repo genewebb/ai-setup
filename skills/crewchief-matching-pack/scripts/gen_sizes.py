@@ -10,6 +10,9 @@ Usage: python gen_sizes.py <packRoot> <connectUpsertBody.ps1>
 import copy, json, os, subprocess, sys
 
 root, upsert_path = sys.argv[1], sys.argv[2]
+# Service and pool steps (Gene 11/10): found on the server, never named; one shared builder for every pack.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(root)), 'tools'))
+import instance_steps  # noqa: E402
 here = os.path.dirname(os.path.abspath(__file__))
 SIZES = {'1K': 1000, '10K': 10000, '100K': 100000, '1M': 1000000, '100M': 100000000}
 # Weekly start times (Sunday); each size's chain must finish before the next starts on the same Profisee database.
@@ -25,6 +28,8 @@ ref_dir = os.path.join(root, 'reference-kv', 'matching')
 
 
 def dump(path, obj):
+    if path.endswith('.workload.json'):
+        instance_steps.add_service_discovery(obj, 'matching')
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(obj, f, indent=2)
@@ -157,7 +162,7 @@ def run_child(name, what, timeout=172800):
 # server, so only the backup configured last works. Every load (the first run of each Matching test) restores the empty
 # baseline and runs Configuration on it; the scenario checkpoints it backs up later in the same test carry those ids.
 configure = run_child("install-configure-upgrade", "Run Profisee Configuration on the restored empty baseline", timeout=7500)
-# The three keys install-configure-upgrade takes (ProfiseeVersionNumber, ConfigurationManagerKind, MainServiceName) reach it
+# The two keys install-configure-upgrade takes (ProfiseeVersionNumber, ConfigurationManagerKind) reach it
 # from the root that started the test (a lane's --param, or the root's reference default): the loads declare them as inputs
 # (declare_version_keys below) and the child merges them, so the step passes no parameters.
 configure["description"] = (
@@ -385,8 +390,8 @@ MASTER_CS = "Server={{DatabaseServerName}};Database=master;Integrated Security=T
 # step captures "true" (baseline missing) or "false" into the run parameter BaseMissing (PowerShellStep outputParameterName: the
 # step's trimmed standard output becomes a run parameter later steps read as {{BaseMissing}}); every step after the check carries
 # runWhen {{BaseMissing}}, which the engine reads as blank or "false" = skip. runWhen is one token string (no AND), so a second
-# captured flag, ServiceStepsOn, is true only when the baseline is missing AND MainServiceName is set (the service steps already
-# skipped on a blank name). Both flags are declared as globals defaulting to "false": a capture that never happens can only skip
+# captured flag, ServiceStepsOn, is true only when the baseline is missing AND the step Find The Instance Service found a service
+# (InstanceServiceName; the service steps already skipped on a blank name). Both flags are declared as globals defaulting to "false": a capture that never happens can only skip
 # steps, never overwrite a baseline. Steps are found by label, never by index.
 check_base_ps = r"""$ErrorActionPreference = 'Stop'
 $file = '@EMPTY@'
@@ -405,7 +410,7 @@ report_base_ps = r"""if ('{{BaseMissing}}' -eq 'true') {
 } else {
     "Matching base @EMPTY@ for version {{ProfiseeVersionCode}} already exists; nothing done."
 }""".replace('@EMPTY@', EMPTY)
-service_gate_ps = r"""if ('{{BaseMissing}}' -eq 'true' -and -not [string]::IsNullOrWhiteSpace('{{MainServiceName}}')) { 'true' } else { 'false' }"""
+service_gate_ps = r"""if ('{{BaseMissing}}' -eq 'true' -and -not [string]::IsNullOrWhiteSpace('{{InstanceServiceName}}')) { 'true' } else { 'false' }"""
 SKIP_BASE = "the Matching base of this version already exists (the check step found it), so there is nothing to make"
 
 
@@ -441,7 +446,7 @@ report_base = base_ps("Report The Base State", report_base_ps,
     "the script cannot fail by itself; open the run output of the check step before it.", timeout=60)
 decide_service = base_ps("Decide The Service Steps", service_gate_ps,
     "Keep in the run parameter ServiceStepsOn whether the Profisee Windows service steps run: true only when the base is missing and "
-    "matching/environment:MainServiceName is set.",
+    "the step Find The Instance Service found the instance's Windows service.",
     "a step can test only one value, so the two conditions are combined here.",
     "the line says true or false.",
     "the script cannot fail by itself; open the run output of the check step before it.", output="ServiceStepsOn", timeout=60)
@@ -500,12 +505,10 @@ subprocess.run([sys.executable, os.path.join(here, 'gen_preflight.py'), root], c
 # ---- version keys (decisions D11, D12): a root (no workload runs it) declares each key its tree uses as a global defaulting to
 # matching/environment; everything below a root declares the keys it or its children use as inputs and gets the value from its
 # parent (a lane passes them as --param on the root). Computed from the generated files, so no workload can miss one.
-VERSION_KEYS = ("ProfiseeVersionCode", "ProfiseeVersionNumber", "MainServiceName", "AnalyticsPoolName", "ConfigurationManagerKind")
+VERSION_KEYS = ("ProfiseeVersionCode", "ProfiseeVersionNumber", "ConfigurationManagerKind")
 INPUT_TEXT = {
     "ProfiseeVersionCode": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under; the automation tags and backup names carry it. Passed by the test that runs this one (matching/environment:ProfiseeVersionCode, or the lane's version).",
     "ProfiseeVersionNumber": "Product version of the release under test (n.n.n), handed to install-configure-upgrade. Passed by the test that runs this one (matching/environment:ProfiseeVersionNumber, or the lane's version).",
-    "MainServiceName": "Profisee Windows service on the application server, stopped around a restore; blank = the release has no Windows service. Passed by the test that runs this one (matching/environment:MainServiceName, or the lane's service name).",
-    "AnalyticsPoolName": "Name of the analytics application pool of the instance; blank = the release has none. Passed by the test that runs this one (matching/environment:AnalyticsPoolName, or the lane's pool).",
     "ConfigurationManagerKind": "classic or new: which Configuration program the release has, handed to install-configure-upgrade. Passed by the test that runs this one (matching/environment:ConfigurationManagerKind, or the lane's value).",
 }
 

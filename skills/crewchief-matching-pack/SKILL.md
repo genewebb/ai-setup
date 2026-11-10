@@ -40,8 +40,9 @@ by Gene 11/06; changes nothing except Start on a stopped pool, as Connect's):
 
 | Step | Proves |
 |---|---|
-| Profisee Service Exists | ServiceControl Status; Skipped when `MainServiceName` blank |
-| Application Pools Exist | AppPoolStep Start on the 20 pools the resets recycle |
+| Find The Instance Service | remote PowerShell, prints the instance's service name or nothing (`InstanceServiceName`) |
+| Profisee Service Exists | ServiceControl Status; Skipped when the find step found none |
+| Application Pools Exist | `pools_step` Start: the instance's pools, found on the server |
 | Baseline Backup Exists | `profisee_Matching_empty.bak` in the default backup folder (fail); lists per-size scenario backups present / not made yet (stated) |
 | Source Tables Exist | `RetailClient<size>Scenario1/2/3b/3c` in `ModelSourceDB` with row counts; 1K-100K missing = fail, 1M missing = stated |
 | Connect Run-As User Is A Profisee User | `meta.tUser` has `ConnectRuntime:ConnectRunAsUser` |
@@ -118,9 +119,9 @@ Disabled, so a ConnExStep Enable follows. The id is kept, so it must match the e
 **Rule (Gene): a rerun always restores the scenario's start backup.** Rerun the whole workload; never rerun only the
 TestAuto workflow or continue on a dirty DB, or the monitor markers and timings are useless.
 
-Scenario workload steps: Wait For Interrupted Runs, Stop Profisee Service (Skipped when
-`matching/environment:MainServiceName` is blank, 26R3+), Restore (DatabaseOperationsStep, takes the DB OFFLINE, back
-ONLINE on failure), Recycle all 20 instance pools, Start service, health wait, [2+: Turn Continuous Matching On],
+Scenario workload steps: Wait For Interrupted Runs, Find The Instance Service, Stop Profisee Service (Skipped when
+none was found, 26R3+), Restore (DatabaseOperationsStep, takes the DB OFFLINE, back
+ONLINE on failure), Recycle the instance's pools (found on the server), Start service, health wait, [2+: Turn Continuous Matching On],
 Wait For Monitor Quiet (`scripts/monitor_quiet.sql`: no `monitor.tActivity` row outstanding and none started for
 `QuietSeconds` = 60 s, 30-minute limit), run the workflow by tag `AUTO:<box>:<ProfiseeVersionCode>:matching-1k-scenario<x>`, check, backup.
 
@@ -142,9 +143,9 @@ Run profiles: `<ProfiseeVersionCode>-RetailClient-Scenario <x>-1000-0` (Incremen
 
 - `<code>` = `{{ProfiseeVersionCode}}`. Roots (`matching-preflight`, `-setup`, `-base-create`, `matching-test-<size>`, `matching-<size>-all`)
   get the version keys as globals defaulting to `$ref:matching/environment:<key>` (ProfiseeVersionCode, ProfiseeVersionNumber,
-  MainServiceName, AnalyticsPoolName, ConfigurationManagerKind); everything below declares inputs. `declare_version_keys()` at the end
+  ConfigurationManagerKind); everything below declares inputs. `declare_version_keys()` at the end
   of `gen_sizes.py` computes both from the generated files (transitive over RunWorkload steps, including install-configure-upgrade's
-  declared inputs), so no workload can miss one. Pools list `{{AnalyticsPoolName}}` (blank = dropped).
+  declared inputs), so no workload can miss one.
 - `matching-base-create` (D18): wait for runs, check whether the versioned empty baseline exists (PowerShell step, `outputParameterName` BaseMissing; when it exists every later step is Skipped through `runWhen {{BaseMissing}}` / `{{ServiceStepsOn}}`, a message says nothing was done and the run ends green), stop service + IIS, restore the seed,
   start, install-configure-upgrade, health, `matching-api-key-set`, check RetailClient empty, back up `profisee_Matching_empty_<code>.bak`.
 - API key (Gene 11/09): every workload that restores a database sets and verifies the key itself: base-create, every load, and
@@ -163,6 +164,18 @@ The TestAuto step configs live as JSON strings inside PowerShell here-strings in
 python <skill>\scripts\gen_sizes.py C:\devops\repos\speed-merchants\CrewChief\packs\matching <skill>\scripts\connect_upsert_body.ps1.txt
 pwsh C:\devops\repos\speed-merchants\CrewChief\packs\tools\New-PackCatalog.ps1 -PackRoot C:\devops\repos\speed-merchants\CrewChief\packs\matching -Family matching
 ```
+
+Service and pools (Gene 11/10): the generator imports `CrewChief\packs\tools\instance_steps.py` (path from the pack
+root: `<packRoot>\..\tools`), so regenerate from a speed-merchants checkout that has it. No step names the Profisee
+service or a pool, and no reference key holds one (`MainServiceName`, `AnalyticsPoolName` are retired; Test-Pack rule
+R-instance refuses them, an `AppPoolStep`, a typed Profisee `serviceName`, and a discovery step whose text is not the
+current `packs\tools\instance-discovery.ps1.txt`). `instance_steps.add_service_discovery(workload, family)` puts the
+remote PowerShell step `Find The Instance Service` (outputParameterName `InstanceServiceName`, global `""`) right before
+the first step reading `{{InstanceServiceName}}`; service steps use `serviceName` and `runWhen` `{{InstanceServiceName}}`
+(none found = Skipped, two = red). Pools: `instance_steps.pools_step(label, 'Recycle'|'Start', target, family, what, why)`
+finds the pools of the IIS applications `/<instance>` and below on the server and recycles or starts exactly those
+(AppPoolStep cannot take a run-time list); no pool = red. A change to the fragment means: regenerate every pack and
+run `connect_instance_discovery.py` for Connect.
 
 `catalog-meta.json` (estimate per test) is hand-kept at the pack root; `New-PackCatalog.ps1` rewrites `catalog.json` from it, `tests/` and `rounds/`; the lint fails while it is stale.
 
@@ -207,7 +220,7 @@ rerun `matching-1k-testauto-create` if a TestAuto spec changed (upsert updates i
    scenario's start marker (`monitor.tActivity.StartedTime`, UTC). 3b run 1 (10000408) created 97 and matched 94 but
    failed a check that looked for source Codes. In 3b a few lookups hit twins created moments earlier in the same run;
    that is expected.
-6. **Pool recycle time**: recycling all 20 pools takes about 2 minutes per run; the health wait follows.
+6. **Pool recycle time**: recycling the instance's pools (the old typed list had 20) takes about 2 minutes per run; the health wait follows.
 7. `MatchingStrategyName` must be in the UnifiedMatchingScenario CustomParms for ScenarioTable mode (the mutator
    reads the strategy's fields); PROD's Scenario 2 config lacks it.
 8. **SourceSystemDistribution must sum to TestRecordLimit**: PROD's 3a config carries Seed/Apple/Credibly
@@ -269,7 +282,7 @@ board shows EST.
 
 Profisee Configuration writes new service sign-in ids into the database it runs on AND the application server, so only
 the backup configured last works (400 DATA00030 / 403 CNX00080 otherwise). Each `matching-<size>-scenario1-load` restores
-`profisee_Matching_empty_{{ProfiseeVersionCode}}.bak` (never overwritten), starts IIS, runs the install pack's `install-configure-upgrade` (its inputs ProfiseeVersionNumber, ConfigurationManagerKind, MainServiceName reach it from the root as passed-through inputs), waits
+`profisee_Matching_empty_{{ProfiseeVersionCode}}.bak` (never overwritten), starts IIS, runs the install pack's `install-configure-upgrade` (its inputs ProfiseeVersionNumber, ConfigurationManagerKind reach it from the root as passed-through inputs), waits
 for every service, then runs `matching-api-key-set`.
 
 **Key standard (Gene 11/08, help rule 10):** the API key is set before ANY gateway call; a clean Configuration issues a

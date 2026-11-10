@@ -55,33 +55,6 @@
     },
     {
       "inline": {
-        "appPoolNames": [
-          "{{ProfiseeInstanceName}}-auth",
-          "{{ProfiseeInstanceName}}-rest",
-          "{{ProfiseeInstanceName}}-connex"
-        ],
-        "action": "Recycle",
-        "staggerSeconds": null,
-        "targetComputer": "{{ApplicationServerName}}",
-        "credentialSecretName": null,
-        "credentialUserId": "{{$config:UserCredentials:AdminUser}}",
-        "credentialPassword": "{{$config:UserCredentials:AdminPassword}}",
-        "remoteAuthentication": "CredSSP",
-        "type": "AppPoolStep",
-        "parameters": {},
-        "timeoutSeconds": 600,
-        "continueOnError": false,
-        "retryEnabled": false,
-        "maxRetries": 0,
-        "retryDelaySeconds": 5,
-        "workingDirectory": null,
-        "description": "What: Recycle the auth, gateway and Connect pools of this instance. Why: they cache API clients, so a key written to meta.tUser is rejected (invalid_client) until they restart; only this instance's pools are touched because other instances may share IIS. Success: every named pool recycles. If it fails: a pool that does not exist fails the step; check matching/instances:ProfiseeInstanceName against IIS Manager.",
-        "notes": ""
-      },
-      "label": "Recycle Auth, Gateway And Connect Pools"
-    },
-    {
-      "inline": {
         "parameters": {},
         "timeoutSeconds": 900,
         "continueOnError": false,

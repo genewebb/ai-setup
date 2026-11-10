@@ -9,6 +9,9 @@ Usage: python gen_preflight.py <packRoot>     (gen_sizes.py runs it last)
 import json, os, sys
 
 root = sys.argv[1]
+# Service and pool steps (Gene 11/10): found on the server, never named; one shared builder for every pack.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(root)), 'tools'))
+import instance_steps  # noqa: E402
 SIZES = ['1K', '10K', '100K', '1M', '100M']
 # Test plan (Gene 11/06): 1K-100K every release mid-point and GA; 1M at GA only. 100M is in the pack, but its
 # tables (about 86 GB plus a 120M-row base) are built only on a box with room. Missing tables of these sizes are
@@ -16,9 +19,6 @@ SIZES = ['1K', '10K', '100K', '1M', '100M']
 GA_ONLY = {'1M', '100M'}
 SCENARIO_TABLES = ['Scenario1', 'Scenario2', 'Scenario3b', 'Scenario3c']
 BACKUP_SUFFIXES = ['loaded', 'after-1', 'after-2', 'after-3a', 'after-3b', 'after-3c']
-POOL_SUFFIXES = ['', '-api', '-attachments', '-workflows', '-auth', '-rest', '-mcp', '-governance', '-connex', '-monitor',
-                 '-matching', '-bulkscoring', '-data', '-modeling', '-chatbot', '-analytics', '-scriptrunner',
-                 '-portalartifacts', '-proflow', '-taskman']
 SCENARIOS = ['scenario1', 'scenario2', 'scenario3a', 'scenario3b', 'scenario3c']
 
 COMMON = {"workingDirectory": None, "maxRetries": 0, "retryDelaySeconds": 5, "retryEnabled": False, "notes": "",
@@ -58,25 +58,17 @@ steps = []
 
 steps.append({"label": "Profisee Service Exists", "inline": {
     "type": "ServiceControlStep", "action": "Status", "credentialSecretName": None,
-    "description": ("What: Ask the application server (matching/machines:ApplicationServerName) for the state of the Profisee "
-                    "Windows service named in matching/environment:MainServiceName. Why: The resets stop and start this service "
-                    "around every restore, so it must exist. Success: The step reports the service state. If it fails: Check the "
-                    "service name exists on the application server (services.msc) and the admin credential (UserCredentials "
-                    "secrets) can manage services there over CredSSP. Skipped when: matching/environment:MainServiceName is "
-                    "blank, which is normal on releases that have no Profisee Windows service; the step then "
-                    "reports Skipped, not Failed."),
-    "targetComputer": "{{ApplicationServerName}}", "serviceName": "{{MainServiceName}}",
-    "runWhen": "{{MainServiceName}}", **ADMIN, **COMMON}})
+    "description": ("What: Ask the application server (matching/machines:ApplicationServerName) for the state of the Windows "
+                    "service of this Profisee instance, as the step before found it. Why: The resets stop and start this service "
+                    "around every restore, so it must exist and run. Success: the service is running (Status changes nothing). "
+                    + instance_steps.SERVICE_FAILS + " " + instance_steps.SERVICE_SKIPPED),
+    "targetComputer": "{{ApplicationServerName}}", "serviceName": instance_steps.SERVICE_TOKEN,
+    "runWhen": instance_steps.SERVICE_TOKEN, **ADMIN, **COMMON}})
 
-steps.append({"label": "Application Pools Exist", "inline": {
-    "type": "AppPoolStep", "action": "Start", "credentialSecretName": None, "staggerSeconds": None,
-    "description": ("What: Start (a no-op when already running) the 20 IIS application pools of the instance "
-                    "(matching/instances:ProfiseeInstanceName) that every Matching reset recycles. Why: A reset fails half way "
-                    "if one of these pools is missing; this finds it first. Success: Every named pool is Started. If it fails: A "
-                    "pool that does not exist fails the step: compare matching/instances:ProfiseeInstanceName with IIS Manager on "
-                    "the application server (matching/machines:ApplicationServerName)."),
-    "appPoolNames": ["{{AnalyticsPoolName}}" if s == "-analytics" else "{{ProfiseeInstanceName}}" + s for s in POOL_SUFFIXES], "targetComputer": "{{ApplicationServerName}}",
-    **ADMIN, **COMMON}})
+steps.append(instance_steps.pools_step(
+    "Application Pools Exist", "Start", "{{ApplicationServerName}}", "matching",
+    "Start the IIS application pools of the instance (matching/instances:ProfiseeInstanceName), the ones every Matching reset recycles.",
+    "A reset fails half way when the instance has no pools or one will not start; this finds it first."))
 
 later = ', '.join(f"profisee_Matching_<size>_{s}_<code>.bak" for s in BACKUP_SUFFIXES)
 backup_sql = "\n".join([

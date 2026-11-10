@@ -9,6 +9,9 @@ Usage: python gen_all.py <packRoot> <connectUpsertBody.ps1> <SizeLabel: 1K|10K|1
 import copy, json, os, subprocess, sys
 
 root, upsert_path = sys.argv[1], sys.argv[2]
+# Service and pool steps (Gene 11/10): found on the server, never named; one shared builder for every pack.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(root)), 'tools'))
+import instance_steps  # noqa: E402
 SIZE_LABEL = sys.argv[3] if len(sys.argv) > 3 else '1K'
 SIZE_RECORDS = {'1K': 1000, '10K': 10000, '100K': 100000, '1M': 1000000, '100M': 100000000}[SIZE_LABEL]
 SLICE = SIZE_RECORDS // 10   # Scenario1 count; every later scenario = 10% (N/10)
@@ -449,6 +452,7 @@ for key, (start, end) in chain.items():
     w['steps'] = steps
     step_by(steps, 'Turn Continuous Matching On', 'PowerShellStep')
     assert [s['inline'].get('workloadName') for s in steps if s['inline'].get('type') == 'RunWorkloadStep'] == ['matching-api-key-set'], key
+    instance_steps.add_service_discovery(w, 'matching')
     with open(os.path.join(wl_dir, key + '.workload.json'), 'w', encoding='utf-8') as f:
         json.dump(w, f, indent=2)
 print('written', list(workflows))

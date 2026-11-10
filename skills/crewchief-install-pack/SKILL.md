@@ -24,6 +24,18 @@ pwsh C:\devops\repos\speed-merchants\CrewChief\packs\tools\Test-Pack.ps1 -PackRo
 
 `catalog-meta.json` (estimate per test) is hand-kept at the pack root; `New-PackCatalog.ps1` rewrites `catalog.json` from it, `tests/` and `rounds/`; the lint fails while it is stale.
 
+Service and pools (Gene 11/10): the generator imports `CrewChief\packs\tools\instance_steps.py` (path from the pack
+root: `<packRoot>\..\tools`), so regenerate from a speed-merchants checkout that has it. No step names the Profisee
+service or a pool, and no reference key holds one (`MainServiceName`, `AnalyticsPoolName` are retired; Test-Pack rule
+R-instance refuses them, an `AppPoolStep`, a typed Profisee `serviceName`, and a discovery step whose text is not the
+current `packs\tools\instance-discovery.ps1.txt`). `instance_steps.add_service_discovery(workload, family)` puts the
+remote PowerShell step `Find The Instance Service` (outputParameterName `InstanceServiceName`, global `""`) right before
+the first step reading `{{InstanceServiceName}}`; service steps use `serviceName` and `runWhen` `{{InstanceServiceName}}`
+(none found = Skipped, two = red). Pools: `instance_steps.pools_step(label, 'Recycle'|'Start', target, family, what, why)`
+finds the pools of the IIS applications `/<instance>` and below on the server and recycles or starts exactly those
+(AppPoolStep cannot take a run-time list); no pool = red. A change to the fragment means: regenerate every pack and
+run `connect_instance_discovery.py` for Connect.
+
 `rounds/`, `README.md` and `CLAUDE.md` are hand-written and survive a regenerate. `scripts/health.ps1` is the CRUD
 pack's health wait.
 
@@ -43,16 +55,16 @@ pack's health wait.
 | start | `install-preflight` | Secrets present, ADO token finds the latest build of install/build:AdoBranch, license + 10 GB on the app server, SQL answers, lists installed products |
 | tests | `install-clean` / `install-upgrade` / `install-clean-base-prep` | build-get, remove, programs, configure-new / -upgrade, verify (+ add-ons for clean-base-prep; name kept, no base upgrade since 11/08) |
 | internal | `install-build-get` | AdoBuildDownload (skipIfCurrent), unzip, verify >= 3 MSIs, publish to the app server, list MSIs |
-| internal | `install-remove(-preview)` | Stop the Windows service(s) of the installed Profisee found on the app server itself (name or display name starts with Profisee, program under the installed Profisee folder; none = nothing to stop; independent of MainServiceName) and IIS, remote PS uninstall (Server, FastApp Studio, utilities: the old workloads' order), delete IIS app + pools |
+| internal | `install-remove(-preview)` | Stop the Windows service(s) of the installed Profisee found on the app server itself (program under an installed Profisee folder, no name filter; none = nothing to stop) and IIS, remote PS uninstall (Server, FastApp Studio, utilities: the old workloads' order), delete IIS app + pools |
 | internal | `install-programs` | CheckPort Free, three InstallSteps (CredSSP), start WAS, W3SVC |
-| internal | `install-configure-new` / `-upgrade` | first step "Configuration Manager Supported" refuses `ConfigurationManagerKind` = `new` (text from `install/environment:ConfigurationManagerNewRefusal`); then (DropDatabase) + ConfigureStep with the old CORPVM31 switch set; `-upgrade` Configure timeout 7200 s because `crud-run-start` and every Matching load run it on their restored base (11/08: Configuration writes new service sign-in ids into the DB and the app server, so only the backup configured last works; 400 DATA00030 otherwise). Test-Pack resolves this cross-pack child from the sibling install folder. Both end with a `RunWorkloadStep` of `install-api-key-set` (Gene 11/09: Test-Pack rule R-key, every family, no exceptions: a workload that runs Configuration or restores the Profisee database sets the API key itself afterwards); both take `MainServiceName` as an input for it |
-| internal | `install-api-key-set` | Same shape as `crud-api-key-set`: stop Main service (runWhen) + W3SVC + WAS, SetApiKeyStep (`RestKeys:ProfiseeRestKey` for `ConnectRuntime:ApiKeyUserName`), start WAS + W3SVC + Main service, health wait, verify through the gateway (`v1/Entities`) and the Data service (`v1/Rules?PageSize=1`). Reads `install/machines`, `install/instances`, `install/databases` keys already there; input `MainServiceName` |
+| internal | `install-configure-new` / `-upgrade` | first step "Configuration Manager Supported" refuses `ConfigurationManagerKind` = `new` (text from `install/environment:ConfigurationManagerNewRefusal`); then (DropDatabase) + ConfigureStep with the old CORPVM31 switch set; `-upgrade` Configure timeout 7200 s because `crud-run-start` and every Matching load run it on their restored base (11/08: Configuration writes new service sign-in ids into the DB and the app server, so only the backup configured last works; 400 DATA00030 otherwise). Test-Pack resolves this cross-pack child from the sibling install folder. Both end with a `RunWorkloadStep` of `install-api-key-set` (Gene 11/09: Test-Pack rule R-key, every family, no exceptions: a workload that runs Configuration or restores the Profisee database sets the API key itself afterwards) |
+| internal | `install-api-key-set` | Same shape as `crud-api-key-set`: find the instance's service, stop it (runWhen) + W3SVC + WAS, SetApiKeyStep (`RestKeys:ProfiseeRestKey` for `ConnectRuntime:ApiKeyUserName`), start WAS + W3SVC + Main service, health wait, verify through the gateway (`v1/Entities`) and the Data service (`v1/Rules?PageSize=1`). Reads `install/machines`, `install/instances`, `install/databases` keys already there; the service is found by the step Find The Instance Service |
 | internal | `install-verify` | Health wait, exactly one Profisee Server whose DisplayVersion starts with the ProfiseeVersionNumber input |
 | internal | `install-addons` | Utilities exe on the app server: /Import model, /deploydata archive, /Import users (runWhen per file key) |
 
 ## Decisions (do not undo without asking)
 
-- Version keys (multi-version lanes, 11/09; decisions D6, D11, D12, D17): `ProfiseeVersionNumber`, `MainServiceName`,
+- Version keys (multi-version lanes, 11/09; decisions D6, D11, D12, D17): `ProfiseeVersionNumber`,
   `ConfigurationManagerKind` (`classic` default, `new` refused) are globals of the four roots (`install-preflight`
   has only `InstalledVersionMustBe`, default `""` = no check, plus the step "Installed Version Matches The Lane"),
   each `{{$ref:install/environment:<key>}}`; every workload below a root (`install-remove`, `install-configure-*`,

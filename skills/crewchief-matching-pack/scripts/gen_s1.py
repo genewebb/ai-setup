@@ -7,6 +7,9 @@ Source of the TestAuto step configs: PROD workflow 10000215 steps 5-11 (read 11/
 import json, os, sys
 
 root = sys.argv[1]
+# Service and pool steps (Gene 11/10): found on the server, never named; one shared builder for every pack.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(root)), 'tools'))
+import instance_steps  # noqa: E402
 SIZE_LABEL = sys.argv[3] if len(sys.argv) > 3 else '1K'
 SIZES = {'1K': 1000, '10K': 10000, '100K': 100000, '1M': 1000000, '100M': 100000000}
 N = SIZES[SIZE_LABEL]
@@ -45,17 +48,13 @@ save('urls', {"description": "Matching pack: REST addresses.", "includeInReplace
               "keyDescriptions": {"ScenarioMgtBaseUrl": "REST address of the TestAuto repository (ScenarioMgt) the local TestAuto reads; workflows and run profiles are written there."}})
 save('environment', {"description": "Matching pack: what differs between Profisee releases and boxes. Edit after every Profisee upgrade.",
                      "includeInReplacements": True,
-                     "entries": {"ProfiseeVersionCode": "26R3T", "MainMachineTag": "CORPLTR94", "MainServiceName": "",
-                                 "ProfiseeVersionNumber": "26.3.0", "ConfigurationManagerKind": "classic",
-                                 "AnalyticsPoolName": "profisee-analytics"},
+                     "entries": {"ProfiseeVersionCode": "26R3T", "MainMachineTag": "CORPLTR94",
+                                 "ProfiseeVersionNumber": "26.3.0", "ConfigurationManagerKind": "classic"},
                      "keyDescriptions": {
-                         "AnalyticsPoolName": "Name of the analytics application pool of the instance, recycled with the other pools. Blank on releases with no analytics pool: the pool lists then drop it. A TestAutoManager lane passes its own.",
                          "ProfiseeVersionNumber": "Product version of the release under test (n.n.n); every load passes it to the install pack's install-configure-upgrade, which finds the Configuration program under it.",
                          "ConfigurationManagerKind": "classic or new: which Configuration program the release has; every load passes it to install-configure-upgrade, which refuses new.",
                          "ProfiseeVersionCode": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under; also part of every automation tag and run profile code.",
-                         "MainMachineTag": "Plain tag naming the machine the runs measure.",
-                         "MainServiceName": "Profisee Windows service on the application server, stopped around a restore. Blank on releases with no Windows service; the stop and start steps then report Skipped."},
-                     "keyBlankAllowed": {"MainServiceName": True, "AnalyticsPoolName": True}})
+                         "MainMachineTag": "Plain tag naming the machine the runs measure."}})
 wfr = load('workflows')  # the driver (gen_sizes.py) empties the entries once; each size adds its own
 wfr['entries'][f"matching-{LOW}-scenario1"] = f"Matching {SIZE_LABEL} Scenario 1"
 wfr['keyDescriptions'][f"matching-{LOW}-scenario1"] = f"Display name of the TestAuto workflow for Matching Scenario 1 (match the full load), {SIZE_LABEL}. Its automation tag is AUTO:<this box>:<ProfiseeVersionCode>:matching-{LOW}-scenario1; the name is free text and only for people."
@@ -248,8 +247,6 @@ check_matched = "\r\n".join([
     "PRINT CONCAT(N'After Scenario 1: ', @loaded, N' loaded rows, ', @matched, N' with a match status, ', @golden, N' golden records, ', @skipped, N' left unmatched by the strategy (too few match fields).');",
 ])
 
-pools = ["", "-api", "-attachments", "-workflows", "-auth", "-rest", "-mcp", "-governance", "-connex", "-monitor", "-matching",
-         "-bulkscoring", "-data", "-modeling", "-chatbot", "-analytics", "-scriptrunner", "-portalartifacts", "-proflow", "-taskman"]
 health = None
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'health.ps1'), encoding='utf-8', newline='') as f:
     health = f.read()
@@ -263,10 +260,12 @@ def dbop(operation, file_name, desc):
 
 
 def service(action, desc):
-    return {**base, "serviceName": "{{MainServiceName}}", "action": action, "targetComputer": "{{ApplicationServerName}}",
+    """The instance's Windows service, as found by the step Find The Instance Service (instance_steps.add_service_discovery
+    before the workload is written). No service found = Skipped."""
+    return {**base, "serviceName": instance_steps.SERVICE_TOKEN, "action": action, "targetComputer": "{{ApplicationServerName}}",
             "credentialSecretName": None, "credentialUserId": "{{$config:UserCredentials:AdminUser}}",
             "credentialPassword": "{{$config:UserCredentials:AdminPassword}}", "remoteAuthentication": "CredSSP", "type": "ServiceControlStep",
-            "runWhen": "{{MainServiceName}}", "description": desc}
+            "runWhen": instance_steps.SERVICE_TOKEN, "description": desc}
 
 
 def key_set_step():
@@ -280,7 +279,7 @@ def key_set_step():
                             "'matching-api-key-set'; its first failed step says what to check.")}}
 
 
-SERVICE_FAIL = " If it fails: check the service name exists on the application server (services.msc) and the admin credential (UserCredentials secrets) can manage services there over CredSSP. Skipped when: matching/environment:MainServiceName is blank, normal on releases with no Profisee Windows service."
+SERVICE_FAIL = " " + instance_steps.SERVICE_FAILS + " " + instance_steps.SERVICE_SKIPPED
 
 s1 = {
     "name": KEY,
@@ -303,11 +302,8 @@ s1 = {
         {"label": "Stop Profisee Service", "inline": service("Stop", "What: Stop the Profisee Windows service before the restore. Why: it holds connections and caches from before the restore. Success: the service is stopped." + SERVICE_FAIL)},
         {"label": "Restore Loaded", "inline": dbop("RestoreDatabase", "profisee_Matching_{{SizeLabel}}_loaded_" + VER + ".bak",
             "What: Restore the 'loaded' checkpoint over the Profisee database WITH REPLACE. The executor takes the database OFFLINE WITH ROLLBACK IMMEDIATE first and brings it back ONLINE if the restore fails. Why: every Scenario 1 run starts from the same loaded, unmatched state. Success: restored. If it fails: the backup is missing from the SQL Server default backup folder (run matching-" + LOW + "-scenario1-load), or the CrewChief account is not sysadmin there.")},
-        {"label": "Recycle Instance Pools", "inline": {**base, "appPoolNames": ["{{AnalyticsPoolName}}" if p == "-analytics" else "{{ProfiseeInstanceName}}" + p for p in pools], "action": "Recycle",
-            "staggerSeconds": None, "targetComputer": "{{ApplicationServerName}}", "credentialSecretName": None,
-            "credentialUserId": "{{$config:UserCredentials:AdminUser}}", "credentialPassword": "{{$config:UserCredentials:AdminPassword}}",
-            "remoteAuthentication": "CredSSP", "type": "AppPoolStep",
-            "description": "What: Recycle every application pool of this instance. Why: services keep caches from before the restore; only this instance's pools are touched because other instances may share IIS. Success: every pool recycles. If it fails: a pool name does not exist; compare matching/instances:ProfiseeInstanceName with IIS Manager."}},
+        instance_steps.pools_step("Recycle Instance Pools", "Recycle", "{{ApplicationServerName}}", "matching",
+            "Recycle every application pool of this instance.", "services keep caches from before the restore."),
         {"label": "Start Profisee Service", "inline": service("Start", "What: Start the Profisee Windows service after the pools recycle. Why: it must read the restored database. Success: the service is running." + SERVICE_FAIL)},
         key_set_step(),
         {"label": "Start Every Service", "inline": {**base, "executionPolicy": "Bypass", "preferWindowsPowerShell": False, "runAsAdministrator": False,
@@ -331,6 +327,7 @@ s1 = {
     ],
 }
 
+instance_steps.add_service_discovery(s1, 'matching')
 for wobj in (create, s1):
     with open(os.path.join(wl, wobj['name'] + '.workload.json'), 'w', encoding='utf-8') as f:
         json.dump(wobj, f, indent=2)
