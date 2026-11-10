@@ -37,7 +37,7 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - **[Multi-version lanes 11/09: per-lane version/build/name/prep decided; 26R4 config waits on Gene's code pull](project_multi_version_lanes_2026-11-09.md)**
 - **[DATA00030/CNX00080 after restore = backup configured before last Configuration (stale service ids); every pack test configures its base at start; packs are GENERATED](reference_pack_base_backup_must_match_build.md)**
 - **[Manager nested step tree + focus UI + History tab, CrewChief live step file 11/07: built, uncommitted, not deployed](project_manager_step_tree_focus_ui_2026-11-07.md)**
-- **[Mid-release round runner plan 11/07: install pack + .NET TestAutoManager app (service on SMVMTR1, SQLite), lanes, status; D1-D21; 11/08 3-lane role tabs + after:all + {size} built](project_mid_release_round_runner_plan_2026-11-07.md)**
+- **[Mid-release round runner plan 11/07: install pack + .NET TestAutoManager app (service on SMVMTR1, SQLite), lanes, status; D1-D21; 11/08 3-lane role tabs + after:all + {size} built; 11/10 TAM 3.1.0 settings pages/lab profile/Teams by mail built, not deployed](project_mid_release_round_runner_plan_2026-11-07.md)**
 - **[Test lab + cadence: SMVM1-3 Connect/CRUD, CORPVMHA1/CORPSQL03 large, 26R3 now, 26R4 next](project_test_lab_topology_cadence.md)**
 - **[DBs to copy to shared repo for a FULL CLONE (SMVM2/SMVM3) + Profisee restore-configure-rebackup rule](project_pack_backup_inventory_new_machine_2026-11-07.md)**
 - **[CRUD pack 11/07: sizes, stewardship by time (1-60 min) or count (10-1000 it), full-restore reset, BR removal, schedules, proof test, 26R3T SMVM1](project_crud_pack_design_2026-11-07.md)**
