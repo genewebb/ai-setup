@@ -575,7 +575,7 @@ add("start", "connect-preflight",
 # ---------------------------------------------------------------- start/connect-source-size-create
 # Makes the source backup of a smaller size from a larger one. It works in its own scratch database and never
 # overwrites a file: an existing backup of the size stops it at the first step.
-SCRATCH_DB = "ModelSourceSizeBuild"
+SCRATCH_DB = "{{ScratchDatabaseName}}"
 SIZE_CREATE_SQL = """SET NOCOUNT ON;
 DECLARE @dir nvarchar(400) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400));
 DECLARE @from nvarchar(600) = @dir + N'\\ModelSourcePDATA{{SourceSize}}.bak', @to nvarchar(600) = @dir + N'\\ModelSourcePDATA{{Size}}.bak';
@@ -632,9 +632,9 @@ SIZE_CREATE_STEP = steps.sql(
 SIZE_CREATE_STEP["inline"]["timeoutSeconds"] = 7500  # the whole step may take as long as its SQL (a 1M restore, trim and backup)
 add("start", "connect-source-size-create",
     ("What: Make the source backup of a smaller size from a larger one: restore ModelSourcePDATA<SourceSize>.bak as the scratch "
-     f"database {SCRATCH_DB}, keep the first <record count of Size> PDATA rows in Code order, back it up as "
-     "ModelSourcePDATA<Size>.bak, verify the file and drop the scratch database. Example: add the row connect/sizes:100 = 100, "
-     "then connect-source-size-create --param Size=100 --param SourceSize=1K. Why: a new size needs its source data; this makes "
+     "database <ModelSource database name>SizeBuild, keep the first <record count of Size> PDATA rows in Code order, back it up as "
+     "ModelSourcePDATA<Size>.bak, verify the file and drop the scratch database. Example: add the row 100 = 100 to the set "
+     "connect/sizes, then connect-source-size-create --param Size=100 --param SourceSize=1K. Why: a new size needs its source data; this makes "
      "it from data already on the box, so a size is one row plus one run of this workload and connect-setup. When: once per "
      "new size and database server. It never overwrites: when the size's backup exists it stops at once. It does not touch the "
      "ModelSource database, the Profisee database or any other backup. Needs: the size's row in connect/sizes; the larger "
@@ -645,7 +645,8 @@ add("start", "connect-source-size-create",
     [SIZE_CREATE_STEP],
     inputs=[SIZE, RECORD_COUNT,
             value_input("SourceSize", "1K", "The larger size (a key of connect/sizes) whose source backup the new one is cut from.")],
-    globals_={"DatabaseServerName": MAIN["DatabaseServerName"]})
+    globals_={"DatabaseServerName": MAIN["DatabaseServerName"], "ScratchDatabaseName": ref('databases', 'ModelSourceDB') + "SizeBuild"},
+    notes="ScratchDatabaseName is this pack's ModelSource database name plus SizeBuild, so two packs on one SQL Server never share it.")
 
 # ---------------------------------------------------------------- schedule/schedule-connect
 def sched(field):
