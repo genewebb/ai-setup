@@ -57,22 +57,31 @@ pack's health wait.
 | internal | `install-build-get` | AdoBuildDownload (skipIfCurrent), unzip, verify >= 3 MSIs, publish to the app server, list MSIs |
 | internal | `install-remove(-preview)` | Stop the Windows service(s) of the installed Profisee found on the app server itself (program under an installed Profisee folder, no name filter; none = nothing to stop) and IIS, remote PS uninstall (Server, FastApp Studio, utilities: the old workloads' order), delete IIS app + pools |
 | internal | `install-programs` | CheckPort Free, three InstallSteps (CredSSP), start WAS, W3SVC |
-| internal | `install-configure-new` / `-upgrade` | first step "Configuration Manager Supported" refuses `ConfigurationManagerKind` = `new` (text from `install/environment:ConfigurationManagerNewRefusal`); then (DropDatabase) + ConfigureStep with the old CORPVM31 switch set; `-upgrade` Configure timeout 7200 s because `crud-run-start` and every Matching load run it on their restored base (11/08: Configuration writes new service sign-in ids into the DB and the app server, so only the backup configured last works; 400 DATA00030 otherwise). Test-Pack resolves this cross-pack child from the sibling install folder. Both end with a `RunWorkloadStep` of `install-api-key-set` (Gene 11/09: Test-Pack rule R-key, every family, no exceptions: a workload that runs Configuration or restores the Profisee database sets the API key itself afterwards) |
+| internal | `install-configure-new` / `-upgrade` | `-new`: Drop The Profisee Database, Create The Empty Profisee Database (`DatabaseOperationsStep` `CreateDatabase`), Give The Database To The System Administrator Login (`SqlStep` on master: `ALTER AUTHORIZATION` to `SUSER_SNAME(0x01)`, then an owner check), then the ConfigureStep (`dropMaestroDatabase` TRUE); `-upgrade`: the ConfigureStep only (FALSE). Both use the old CORPVM31 switch set; `-upgrade` Configure timeout 7200 s because `crud-run-start` and every Matching load run it on their restored base (11/08: Configuration writes new service sign-in ids into the DB and the app server, so only the backup configured last works; 400 DATA00030 otherwise). Test-Pack resolves this cross-pack child from the sibling install folder. Both end with a `RunWorkloadStep` of `install-api-key-set` (Gene 11/09: Test-Pack rule R-key, every family, no exceptions: a workload that runs Configuration or restores the Profisee database sets the API key itself afterwards) |
 | internal | `install-api-key-set` | Same shape as `crud-api-key-set`: find the instance's service, stop it (runWhen) + W3SVC + WAS, SetApiKeyStep (`RestKeys:ProfiseeRestKey` for `ConnectRuntime:ApiKeyUserName`), start WAS + W3SVC + Main service, health wait, verify through the gateway (`v1/Entities`) and the Data service (`v1/Rules?PageSize=1`). Reads `install/machines`, `install/instances`, `install/databases` keys already there; the service is found by the step Find The Instance Service |
 | internal | `install-verify` | Health wait, exactly one Profisee Server whose DisplayVersion starts with the ProfiseeVersionNumber input |
 | internal | `install-addons` | Utilities exe on the app server: /Import model, /deploydata archive, /Import users (runWhen per file key) |
 
 ## Decisions (do not undo without asking)
 
-- Version keys (multi-version lanes, 11/09; decisions D6, D11, D12, D17): `ProfiseeVersionNumber`,
-  `ConfigurationManagerKind` (`classic` default, `new` refused) are globals of the four roots (`install-preflight`
-  has only `InstalledVersionMustBe`, default `""` = no check, plus the step "Installed Version Matches The Lane"),
-  each `{{$ref:install/environment:<key>}}`; every workload below a root (`install-remove`, `install-configure-*`,
-  `install-verify`, `install-addons`) declares them as `inputs` and gets the value from its parent. A caller's `--param`
-  (TestAutoManager lane) beats the root's global. `Test-Pack.ps1` rule R-root enforces it (`install` is in
-  `$VersionAwareFamilies`). Release names cannot sit in a workload (lint), so the D17 refusal text lives in
-  `install/environment:ConfigurationManagerNewRefusal`. crud (`crud-run-start`) and matching (`*-scenario1-load`)
-  call `install-configure-upgrade` with these three as step parameters.
+- Version key (multi-version lanes, 11/09; decisions D6, D11, D12): `ProfiseeVersionNumber` is a global of the three
+  test roots (`install-preflight` has only `InstalledVersionMustBe`, default `""` = no check, plus the step "Installed
+  Version Matches The Lane"), `{{$ref:install/environment:ProfiseeVersionNumber}}`; every workload below a root that
+  uses it (`install-configure-*`, `install-verify`, `install-addons`) declares it as an input and gets the value from
+  its parent. A caller's `--param` (TestAutoManager lane) beats the root's global. `Test-Pack.ps1` rule R-root enforces
+  it. crud (`crud-run-start`), matching (`*-scenario1-load`) and connect (`connect-database-seed-restore`) call
+  `install-configure-upgrade`; the key reaches it as a passed-through input.
+- One Configuration path for every release (plan `2026-11-10-26r4-configuration-manager-plan.md`, decisions D1, D2):
+  the pack, not Configuration, creates the empty database in `install-configure-new` and gives it to the system
+  administrator login (`SUSER_SNAME(0x01)`, server default collation). Reason: the 26R4 Configuration program creates
+  a missing database as the account that runs it and then adds the application pool account as a database user; the
+  pack uses one account for both, and SQL Server refuses to add a database's owner as a user (error 15063). An empty
+  sa-owned database is accepted by 26R3 too. The Configuration manager kind key and its refusal step are gone from all
+  four packs; Test-Pack rule R-config fails a pack that names either removed key. Release names cannot sit in a
+  workload (lint), so step descriptions say "newer releases". Proven on the laptop 11/11 (clean install 26.4.0.435).
+  `install-configure-upgrade` starts with the same owner step (Gene 11/11, `owner_db(False)`, its own description): a
+  restored base is owned by the restoring account, and a base without a user for the pool account (the seed
+  `profisee_Matching_empty.bak`) would give 15063 where CrewChief runs as the pool account (inference).
 
 - No SetApiKey in verify (API user missing after clean install; pack resets set the key).
 - Uninstall by discovery in one remote PowerShell step, because UninstallStep needs exact versioned DisplayNames.

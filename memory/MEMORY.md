@@ -8,6 +8,7 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 ## How Gene wants me to work
 - [Voice = caveman + Truth format](feedback_voice_caveman_plus_truth_format.md) · **[EVERY decision = AskUserQuestion + recommendation](feedback_questions_via_askuserquestion.md)** · [prompts: FULL paths + Suggestion block](feedback_prompts_full_paths_with_suggestions.md)
 - Workstyle: [do it right, never patch](feedback_do_it_right_not_a_patch.md) · [plain English + before/after](feedback_explain_plain_english_with_example.md) · [verify, no guessing](feedback_verify_no_guessing.md) · [scope discipline](feedback_scope_discipline.md) · [implement autonomously](feedback_implement_autonomously.md) · [review whole subsystem](feedback_review_whole_subsystem_not_serially.md) · [full script every iteration](feedback_full_script_every_iteration.md) · [user rebuilds app](feedback_user_rebuilds_app.md)
+- **[Reuse, never copy per size/time/version: a size or time change is a tiny isolated change, tested workloads stay byte-identical; review 11/11](feedback_reuse_never_copy_per_size_or_version.md)**
 - [Gene doing steps by hand: ONE step per reply](feedback_one_step_at_a_time_when_troubleshooting.md) · [Asked "what is the command" = command only, run nothing](feedback_command_question_answer_only.md)
 - [Lucid MCP works: flowchart recipe + first doc 11/02](reference_lucid_mcp_flowcharts.md)
 - [Long runs self-drive with /loop](feedback_always_make_long_runs_unattended.md) · [run independent tasks in parallel](feedback_run_parallel_when_possible.md) · [Copy before probing; NEVER git checkout to undo](feedback_copy_before_probe_never_git_checkout.md)
@@ -29,12 +30,13 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 ## Environment
 - **[Laptop shell = CORP\agenewe, not genewe](reference_corp_dual_accounts.md)** · [runs Claude elevated by choice](feedback_runs_elevated_by_choice.md) · [Key repos](project_repos.md) · [workspace start](project_workspace_start_convention.md)
 - [vNext = SPEEDY, light speed humor](feedback_call_it_speedy_with_speed_humor.md) · [CDP = Common Data Platform, not Chrome DevTools](reference_cdp_is_common_data_platform.md)
+- [Obsidian: Sync on both vaults, obsidian-git unused; stay on Obsidian vs Trilium](reference_obsidian_setup.md)
 - [Seq events also in SQL: logging.tSystemLog (Profisee DB + PROD speedmerchants)](reference_systemlog_table.md)
 
 ## Active work (newest first; full status in each file)
 - **[CORPSQL03 to Proxmox 11/09: no new hardware, pilot Docker-in-VM vs LXC for DB, 3 design notes, gates before wipe](project_corpsql03_proxmox_conversion_2026-11-09.md)**
 - [QA Connect box 26R3QA 11/09: pack zip verified vs repo; doc gaps listed](project_qa_connect_box_26r3qa_2026-11-09.md)
-- **[Multi-version lanes 11/09: per-lane version/build/name/prep decided; 26R4 config waits on Gene's code pull](project_multi_version_lanes_2026-11-09.md)**
+- **[Multi-version lanes 11/09: per-lane version/build/name/prep decided; 26R4 Configuration support built + laptop-proven 11/11, uncommitted, lab deploy open](project_multi_version_lanes_2026-11-09.md)**
 - **[DATA00030/CNX00080 after restore = backup configured before last Configuration (stale service ids); every pack test configures its base at start; packs are GENERATED](reference_pack_base_backup_must_match_build.md)**
 - **[Manager nested step tree + focus UI + History tab, CrewChief live step file 11/07: built, uncommitted, not deployed](project_manager_step_tree_focus_ui_2026-11-07.md)**
 - **[Mid-release round runner plan 11/07: install pack + .NET TestAutoManager app (service on SMVMTR1, SQLite), lanes, status; D1-D21; 11/08 3-lane role tabs + after:all + {size} built; 11/10 TAM 3.1.0 settings pages/lab profile/Teams by mail built, not deployed](project_mid_release_round_runner_plan_2026-11-07.md)**

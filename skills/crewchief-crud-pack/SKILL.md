@@ -73,7 +73,7 @@ SMVMTR1 (11/07/2026, 26R3T): workflows 10000470-10000489, count forms 10000490-1
 
 ## Version-aware lanes (multi-version, 11/09)
 
-- Version keys ProfiseeVersionCode, ProfiseeVersionNumber, ConfigurationManagerKind are ROOT
+- Version keys ProfiseeVersionCode, ProfiseeVersionNumber are ROOT
   GLOBALS defaulting to `{{$ref:crud/environment:<key>}}` (a root = a workload no workload runs: crud-preflight, crud-setup,
   crud-base-create, crud-test-*); a TestAutoManager lane overrides them with `--param`. Every workload below declares the keys
   it or its callees use as `inputs` (`inputs_for`, `run_inputs`); a key read by `$ref` below a root fails Test-Pack (R-root).
@@ -93,7 +93,7 @@ SMVMTR1 (11/07/2026, 26R3T): workflows 10000470-10000489, count forms 10000490-1
   v1/Rules 400 DATA00030 (auth log: `No client with id ... found`). Seen 11/08: CRUD base configured 10:32, Matching
   10:38, CRUD failed. `auth.Clients` is empty in every base (not the cause).
 - So every `crud-test-*` (and smoke, proof) starts with `crud-run-start` (Gene: once per pack run): wait, stop Main, IIS
-  stop, restore `BaseBackupFileName` (never overwritten), IIS start, start Main, `install-configure-upgrade` (install pack; its two version inputs ProfiseeVersionNumber, ConfigurationManagerKind are inputs of `crud-run-start`, passed through from the root, no step parameters; timeout 7500 s,
+  stop, restore `BaseBackupFileName` (never overwritten), IIS start, start Main, `install-configure-upgrade` (install pack; its version input ProfiseeVersionNumber is an input of `crud-run-start`, passed through from the root, no step parameters; timeout 7500 s,
   Configure 7200 s), health, `crud-api-key-set`, Check Base State, BackupDatabase
   `RunStartBackupFileName`. `crud-setup` no longer touches the base.
 - `crud-base-reset`: wait, stop Main, stop W3SVC + WAS, restore the RUN-START copy, `crud-api-key-set`, Check Base State.

@@ -162,9 +162,9 @@ def run_child(name, what, timeout=172800):
 # server, so only the backup configured last works. Every load (the first run of each Matching test) restores the empty
 # baseline and runs Configuration on it; the scenario checkpoints it backs up later in the same test carry those ids.
 configure = run_child("install-configure-upgrade", "Run Profisee Configuration on the restored empty baseline", timeout=7500)
-# The two keys install-configure-upgrade takes (ProfiseeVersionNumber, ConfigurationManagerKind) reach it
-# from the root that started the test (a lane's --param, or the root's reference default): the loads declare them as inputs
-# (declare_version_keys below) and the child merges them, so the step passes no parameters.
+# The key install-configure-upgrade takes (ProfiseeVersionNumber) reaches it from the root that started the test (a lane's
+# --param, or the root's reference default): the loads declare it as an input (declare_version_keys below) and the child
+# merges it, so the step passes no parameters.
 configure["description"] = (
     "What: Run Profisee Configuration on the restored empty baseline (install pack building block install-configure-upgrade: "
     "upgrade, keeps the data). Why: Configuration writes this application server's service sign-in ids into the database; a "
@@ -505,11 +505,10 @@ subprocess.run([sys.executable, os.path.join(here, 'gen_preflight.py'), root], c
 # ---- version keys (decisions D11, D12): a root (no workload runs it) declares each key its tree uses as a global defaulting to
 # matching/environment; everything below a root declares the keys it or its children use as inputs and gets the value from its
 # parent (a lane passes them as --param on the root). Computed from the generated files, so no workload can miss one.
-VERSION_KEYS = ("ProfiseeVersionCode", "ProfiseeVersionNumber", "ConfigurationManagerKind")
+VERSION_KEYS = ("ProfiseeVersionCode", "ProfiseeVersionNumber")
 INPUT_TEXT = {
     "ProfiseeVersionCode": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under; the automation tags and backup names carry it. Passed by the test that runs this one (matching/environment:ProfiseeVersionCode, or the lane's version).",
     "ProfiseeVersionNumber": "Product version of the release under test (n.n.n), handed to install-configure-upgrade. Passed by the test that runs this one (matching/environment:ProfiseeVersionNumber, or the lane's version).",
-    "ConfigurationManagerKind": "classic or new: which Configuration program the release has, handed to install-configure-upgrade. Passed by the test that runs this one (matching/environment:ConfigurationManagerKind, or the lane's value).",
 }
 
 

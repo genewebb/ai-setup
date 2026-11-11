@@ -49,10 +49,9 @@ save('urls', {"description": "Matching pack: REST addresses.", "includeInReplace
 save('environment', {"description": "Matching pack: what differs between Profisee releases and boxes. Edit after every Profisee upgrade.",
                      "includeInReplacements": True,
                      "entries": {"ProfiseeVersionCode": "26R3T", "MainMachineTag": "CORPLTR94",
-                                 "ProfiseeVersionNumber": "26.3.0", "ConfigurationManagerKind": "classic"},
+                                 "ProfiseeVersionNumber": "26.3.0"},
                      "keyDescriptions": {
                          "ProfiseeVersionNumber": "Product version of the release under test (n.n.n); every load passes it to the install pack's install-configure-upgrade, which finds the Configuration program under it.",
-                         "ConfigurationManagerKind": "classic or new: which Configuration program the release has; every load passes it to install-configure-upgrade, which refuses new.",
                          "ProfiseeVersionCode": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under; also part of every automation tag and run profile code.",
                          "MainMachineTag": "Plain tag naming the machine the runs measure."}})
 wfr = load('workflows')  # the driver (gen_sizes.py) empties the entries once; each size adds its own

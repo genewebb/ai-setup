@@ -62,14 +62,13 @@ def ref(s, k):
 # of the same name, or takes it from the caller (a TestAutoManager lane passes it as --param); every workload below a root
 # declares the ones it uses as inputs and gets the value from its parent. Backup names are composed in the roots.
 VER = "{{ProfiseeVersionCode}}"
-ENV_KEYS = ("ProfiseeVersionCode", "ProfiseeVersionNumber", "ConfigurationManagerKind")
+ENV_KEYS = ("ProfiseeVersionCode", "ProfiseeVersionNumber")
 VERSION_GLOBALS = {k: ref('environment', k) for k in ENV_KEYS}
 BACKUP_GLOBALS = {"BaseBackupFileName": ref('databases', 'BaseBackupStem') + "_" + VER + ".bak",
                   "RunStartBackupFileName": ref('databases', 'RunStartBackupStem') + "_" + VER + ".bak"}
 INPUT_TEXT = {
     "ProfiseeVersionCode": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under and the automation tags carry. Passed by the test that runs this one (crud/environment:ProfiseeVersionCode, or the lane's version).",
     "ProfiseeVersionNumber": "Product version of the release under test (n.n.n), handed to install-configure-upgrade. Passed by the test that runs this one (crud/environment:ProfiseeVersionNumber, or the lane's version).",
-    "ConfigurationManagerKind": "classic or new: which Configuration program the release has, handed to install-configure-upgrade. Passed by the test that runs this one (crud/environment:ConfigurationManagerKind, or the lane's value).",
     "BaseBackupFileName": "File name of the CRUD base backup of this version (crud/databases:BaseBackupStem, an underscore, the version code, .bak). Composed by the test that runs this one.",
     "RunStartBackupFileName": "File name of the run-start backup of this version (crud/databases:RunStartBackupStem, an underscore, the version code, .bak). Composed by the test that runs this one.",
 }
@@ -146,10 +145,9 @@ REF_SETS = {
     'environment': {"description": "CRUD pack: what differs between Profisee releases and boxes. Edit after every Profisee upgrade.",
                     "includeInReplacements": True,
                     "entries": {"ProfiseeVersionCode": "26R3T", "MainMachineTag": "SMVM1",
-                                "ProfiseeVersionNumber": "26.3.0", "ConfigurationManagerKind": "classic"},
+                                "ProfiseeVersionNumber": "26.3.0"},
                     "keyDescriptions": {
                         "ProfiseeVersionNumber": "Product version of the release under test (n.n.n); crud-run-start passes it to the install pack's install-configure-upgrade, which finds the Configuration program under it. A TestAutoManager lane passes its own.",
-                        "ConfigurationManagerKind": "classic or new: which Configuration program the release has; crud-run-start passes it to install-configure-upgrade, which refuses new.",
                         "ProfiseeVersionCode": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under; also part of every automation tag.",
                         "MainMachineTag": "Plain tag naming the machine the runs measure; added to every CRUD TestAuto workflow."}},
     'urls': {"description": "CRUD pack: REST addresses.", "includeInReplacements": True,
@@ -527,8 +525,8 @@ dump(os.path.join(wl_root, 'internal', 'shared', 'crud-base-reset.workload.json'
 reset_by_label = {st["label"]: st for st in reset_steps}
 configure_child = run_child("Configure The Restored Base", "install-configure-upgrade",
                             "Run Profisee Configuration on the restored base", timeout=7500)
-# The two keys install-configure-upgrade takes (ProfiseeVersionNumber, ConfigurationManagerKind) reach it as
-# this workload's inputs: a child reads its parent's merged values, so the step passes nothing.
+# The key install-configure-upgrade takes (ProfiseeVersionNumber) reaches it as this workload's input: a child reads its
+# parent's merged values, so the step passes nothing.
 configure_child["inline"]["description"] = (
     "What: Run Profisee Configuration on the restored CRUD base (install pack building block install-configure-upgrade: "
     "upgrade, keeps the data). Why: Configuration writes this application server's service sign-in ids into the database; a "
@@ -569,7 +567,7 @@ dump(os.path.join(wl_root, 'internal', 'shared', 'crud-run-start.workload.json')
     g("ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName",
       "ProfiseeBaseUrl", "MainHealthUrl", "TestAutoBaseUrl", "ProfiseeApiKey", "ApiKeyUserName"),
     run_start_steps, inputs=inputs_for("ProfiseeVersionCode", "BaseBackupFileName", "RunStartBackupFileName",
-                                       "ProfiseeVersionNumber", "ConfigurationManagerKind")))
+                                       "ProfiseeVersionNumber")))
 
 # ---------------------------------------------------------------- internal/shared/crud-rules-remove
 rules_remove = r"""$ErrorActionPreference = 'Stop'
@@ -1060,7 +1058,7 @@ dump(os.path.join(wl_root, 'start', 'crud-base-create.workload.json'), workload(
     ["crud", "start", "base-create"],
     g("ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName", "BaseSeedBackupFileName",
       "ProfiseeBaseUrl", "MainHealthUrl", "TestAutoBaseUrl",
-      **root_globals("ProfiseeVersionCode", "ProfiseeVersionNumber", "ConfigurationManagerKind", "BaseBackupFileName"),
+      **root_globals("ProfiseeVersionCode", "ProfiseeVersionNumber", "BaseBackupFileName"),
       BaseMissing="false", ServiceStepsOn="false"),
     base_create_steps,
     notes=("BaseMissing and ServiceStepsOn are set by the check steps during the run (true or false); they start as false so a step that "

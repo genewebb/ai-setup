@@ -142,8 +142,8 @@ Run profiles: `<ProfiseeVersionCode>-RetailClient-Scenario <x>-1000-0` (Incremen
 ## Version-aware (multi-version lanes, Task 10)
 
 - `<code>` = `{{ProfiseeVersionCode}}`. Roots (`matching-preflight`, `-setup`, `-base-create`, `matching-test-<size>`, `matching-<size>-all`)
-  get the version keys as globals defaulting to `$ref:matching/environment:<key>` (ProfiseeVersionCode, ProfiseeVersionNumber,
-  ConfigurationManagerKind); everything below declares inputs. `declare_version_keys()` at the end
+  get the version keys as globals defaulting to `$ref:matching/environment:<key>` (ProfiseeVersionCode, ProfiseeVersionNumber);
+  everything below declares inputs. `declare_version_keys()` at the end
   of `gen_sizes.py` computes both from the generated files (transitive over RunWorkload steps, including install-configure-upgrade's
   declared inputs), so no workload can miss one.
 - `matching-base-create` (D18): wait for runs, check whether the versioned empty baseline exists (PowerShell step, `outputParameterName` BaseMissing; when it exists every later step is Skipped through `runWhen {{BaseMissing}}` / `{{ServiceStepsOn}}`, a message says nothing was done and the run ends green), stop service + IIS, restore the seed,
@@ -282,7 +282,7 @@ board shows EST.
 
 Profisee Configuration writes new service sign-in ids into the database it runs on AND the application server, so only
 the backup configured last works (400 DATA00030 / 403 CNX00080 otherwise). Each `matching-<size>-scenario1-load` restores
-`profisee_Matching_empty_{{ProfiseeVersionCode}}.bak` (never overwritten), starts IIS, runs the install pack's `install-configure-upgrade` (its inputs ProfiseeVersionNumber, ConfigurationManagerKind reach it from the root as passed-through inputs), waits
+`profisee_Matching_empty_{{ProfiseeVersionCode}}.bak` (never overwritten), starts IIS, runs the install pack's `install-configure-upgrade` (its input ProfiseeVersionNumber reaches it from the root as a passed-through input), waits
 for every service, then runs `matching-api-key-set`.
 
 **Key standard (Gene 11/08, help rule 10):** the API key is set before ANY gateway call; a clean Configuration issues a

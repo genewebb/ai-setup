@@ -49,15 +49,11 @@ REF_SETS = {
         "description": "Install pack: what differs between Profisee releases and boxes. Edit before installing a new release.",
         "includeInReplacements": True,
         "entries": {"ProfiseeVersionCode": "26R3T", "ProfiseeVersionNumber": "26.3.0",
-                    "ConfigurationManagerKind": "classic",
-                    "ConfigurationManagerNewRefusal": "Configuration manager 'new' is not supported yet (26R4 deferred).",
                     "LicenseFile": "C:\\Deploy\\License\\Prof_2020_3Inst_3Nodes_AllFeatures_AllConnectors_Production_@.corp.profisee.com_ConnexOn_AIOn_McpOn.plic",
                     "WebSiteName": "Default Web Site", "MetadataProvider": "None"},
         "keyDescriptions": {
             "ProfiseeVersionCode": "TestAuto version code of the release being installed (as in the other packs' environment sets). Hand runs of a root read it here; a TestAutoManager round passes it per lane.",
             "ProfiseeVersionNumber": "Product version of the release being installed, e.g. 26.4.0: the install is checked against it and the Configuration program is found under it.",
-            "ConfigurationManagerKind": "Which Profisee Configuration program the release has: classic (the Configuration.exe the install runs) or new. 'new' is refused by install-configure-new and install-configure-upgrade until the release that has it is supported.",
-            "ConfigurationManagerNewRefusal": "The text install-configure-new and install-configure-upgrade fail with when ConfigurationManagerKind is new (kept here because it names a release).",
             "LicenseFile": "Full path ON THE APPLICATION SERVER of the Profisee license file Configuration applies.",
             "WebSiteName": "IIS web site the instance lives under.",
             "MetadataProvider": "Configuration switch metadataProvider (None on the test lab)."}},
@@ -76,7 +72,7 @@ REF_SETS = {
         "includeInReplacements": True,
         "entries": {"ProfiseeDatabaseName": "Profisee"},
         "keyDescriptions": {
-            "ProfiseeDatabaseName": "The Profisee database of the instance. A clean install DROPS it and Configuration creates it empty; an upgrade keeps it. Pack base backups are not listed here: each pack run restores its own base, named <stem>_<ProfiseeVersionCode>.bak (one per release, in that pack's databases set), and runs Configuration on it (install-configure-upgrade) before it tests."}},
+            "ProfiseeDatabaseName": "The Profisee database of the instance. A clean install DROPS it, creates it again empty and gives it to the system administrator login (install-configure-new), then Configuration builds the Profisee model in it; an upgrade keeps it. Pack base backups are not listed here: each pack run restores its own base, named <stem>_<ProfiseeVersionCode>.bak (one per release, in that pack's databases set), and runs Configuration on it (install-configure-upgrade) before it tests."}},
     'build': {
         "description": "Install pack: where the build comes from (Gene 11/07: platform pipeline 293, master branch only) and where it is put.",
         "includeInReplacements": True,
@@ -141,8 +137,7 @@ def workload(name, desc, tags, globals_, steps, notes="", inputs=None):
 # Hand-run defaults of every input (a caller's --param, a parent's step parameters and inherited context all win; an explicitly
 # supplied blank counts as supplied). Same reference data the roots read; AdoBuildId blank = the latest build of AdoBranch.
 INPUT_DEFAULTS = {"AdoBranch": ref('build', 'AdoBranch'), "AdoBuildId": "",
-                  "ProfiseeVersionNumber": ref('environment', 'ProfiseeVersionNumber'),
-                  "ConfigurationManagerKind": ref('environment', 'ConfigurationManagerKind')}
+                  "ProfiseeVersionNumber": ref('environment', 'ProfiseeVersionNumber')}
 
 # Every parent of install-build-get passes the build to install: the reference-data branch and the latest build, unless
 # the caller (a TestAutoManager round, through CrewChief --param) passes AdoBranch / AdoBuildId of its own.
@@ -157,13 +152,10 @@ BUILD_INPUTS = [
 # Version keys (decision D12): a root (a workload no workload runs) reads each from reference data in its own global of
 # the same name, or takes it from the caller (a TestAutoManager lane passes it as --param); every workload below a
 # root declares the ones it uses as inputs and gets the value from its parent.
-VERSION_GLOBALS = {"ProfiseeVersionNumber": ref('environment', 'ProfiseeVersionNumber'),
-                   "ConfigurationManagerKind": ref('environment', 'ConfigurationManagerKind')}
+VERSION_GLOBALS = {"ProfiseeVersionNumber": ref('environment', 'ProfiseeVersionNumber')}
 IN_VERSION_NUMBER = ("ProfiseeVersionNumber", "Product version of the release being installed (n.n.n): the Configuration "
                      "and utilities programs are found under it. Passed by the test that runs this one "
                      "(install/environment:ProfiseeVersionNumber, or the lane's version).")
-IN_CONFIG_KIND = ("ConfigurationManagerKind", "classic or new: which Configuration program the release has. Passed by the test "
-                  "that runs this one (install/environment:ConfigurationManagerKind, or the lane's value); new is refused.")
 
 
 G = {
@@ -440,13 +432,6 @@ CONFIG_EXE = ("C:\\Program Files\\Profisee\\Master Data Maestro Server\\" + "{{P
 ADMIN_USER, ADMIN_PW = "{{$config:UserCredentials:AdminUser}}", "{{$config:UserCredentials:AdminPassword}}"
 
 
-CONFIG_KIND_CHECK = """$ErrorActionPreference = 'Stop'
-# The Configuration program of a release that has the 'new' manager is not driven yet: refuse before anything is touched.
-if ('{{ConfigurationManagerKind}}' -eq 'new') { throw "%s" }
-Write-Output 'Configuration manager kind: {{ConfigurationManagerKind}}'
-""" % ref('environment', 'ConfigurationManagerNewRefusal')
-
-
 def configure(drop_db):
     switches = {
         "licenseFile": ref('environment', 'LicenseFile'), "sqlServer": "{{DatabaseServerName}}",
@@ -464,9 +449,13 @@ def configure(drop_db):
         "AttachmentRepositoryLogonType": "Interactive", "authAdEnabled": "TRUE"}
     return step("Configure The Profisee Instance", "ConfigureStep",
                 ("What: Run Profisee Configuration on the application server: " +
-                 ("create the instance on a NEW, empty Profisee database. " if drop_db else
+                 ("create the instance on the empty Profisee database the two steps before made. Its switch dropMaestroDatabase "
+                  "stays TRUE: it only acts on a database that already holds a Profisee model, so it finds nothing to drop here. " if drop_db else
                   "create the instance on the EXISTING Profisee database, upgrading it to this release. ") +
-                 "Why: Configuration creates the IIS application, pools, services and database for this machine and version. "
+                 ("Why: Configuration creates the IIS application, pools and services for this machine and version and builds the "
+                  "Profisee model in the empty database; the pack, not Configuration, creates that database, so one path serves "
+                  "every supported release. " if drop_db else
+                  "Why: Configuration creates the IIS application, pools, services and database for this machine and version. ") +
                  "Success: Configuration ends without error (the executor reads its log, since it exits 0 on failure too). If "
                  "it fails: the step output quotes Configuration's log; the license file (install/environment:LicenseFile) "
                  "must exist on the application server, and the admin account must be sysadmin on the database server."),
@@ -477,12 +466,65 @@ def configure(drop_db):
 
 DROP_DB = step("Drop The Profisee Database", "DatabaseOperationsStep",
                "What: Drop the Profisee database named in install/databases:ProfiseeDatabaseName on the database server. Why: a "
-               "clean install starts from an empty database. Success: dropped, or it did not exist. If it fails: the CrewChief "
-               "account is not sysadmin on the database server.",
+               "clean install starts from an empty database; the next step creates it again. Success: dropped, or it did not "
+               "exist. If it fails: the CrewChief account is not sysadmin on the database server.",
                timeout=1800, serverName="{{DatabaseServerName}}", connectionSecretName="", authMode="Windows",
                credentialUserId="", credentialPassword="", databaseName="{{ProfiseeDatabaseName}}", operation="DropDatabase",
                snapshotName="", backupFileName=None, fileUncPath=None, overwrite=False, relocateFiles=False,
                waitIndefinitely=False, dryRun=False)
+# One path for every release: the pack creates the empty database and hands it to the system administrator login before
+# Configuration runs. A newer Configuration program creates a missing database under the account that runs it and then
+# adds the application pool account as a database user; here both are the same account, and SQL Server refuses to add a
+# database's owner as a user of it (error 15063). Every supported release accepts an existing empty database.
+# Gene 11/11: install-configure-upgrade starts with the same owner step. A restored base is owned by the account that
+# restored it (the CrewChief account); where that is also the application pool account and the base holds no user of
+# that name (the seed profisee_Matching_empty.bak holds none), the same 15063 follows.
+CREATE_DB = step("Create The Empty Profisee Database", "DatabaseOperationsStep",
+                 "What: Create the Profisee database named in install/databases:ProfiseeDatabaseName on the database server, empty, with "
+                 "the server's default collation and file folders. Why: Configuration must find an existing empty database, so it "
+                 "builds the Profisee model in it and does not create the database itself (the next step says why). Success: the "
+                 "database exists (it is created only when missing; the step before dropped it). If it fails: the CrewChief account "
+                 "is not sysadmin on the database server, or the server's default data folder is full or missing.",
+                 timeout=600, serverName="{{DatabaseServerName}}", connectionSecretName="", authMode="Windows",
+                 credentialUserId="", credentialPassword="", databaseName="{{ProfiseeDatabaseName}}", operation="CreateDatabase",
+                 snapshotName="", backupFileName=None, fileUncPath=None, overwrite=False, relocateFiles=False,
+                 waitIndefinitely=False, dryRun=False)
+MASTER = 'Server={{DatabaseServerName}};Database=master;Integrated Security=True;TrustServerCertificate=True'
+OWNER_SQL = """DECLARE @sa sysname = SUSER_SNAME(0x01);
+DECLARE @sql nvarchar(400) = N'ALTER AUTHORIZATION ON DATABASE::' + QUOTENAME(N'{{ProfiseeDatabaseName}}') + N' TO ' + QUOTENAME(@sa);
+EXEC (@sql);
+DECLARE @owner sysname = (SELECT SUSER_SNAME(owner_sid) FROM sys.databases WHERE name = N'{{ProfiseeDatabaseName}}');
+IF @owner IS NULL OR @owner <> @sa
+BEGIN
+    DECLARE @msg nvarchar(600) = CONCAT(N'Database {{ProfiseeDatabaseName}} is owned by ', ISNULL(@owner, N'nobody (the database is missing)'), N'; expected ', @sa, N'.');
+    THROW 50031, @msg, 1;
+END
+PRINT CONCAT(N'Database {{ProfiseeDatabaseName}} is owned by ', @owner, N'.');"""
+def owner_db(new_db):
+    return {"label": "Give The Database To The System Administrator Login", "inline": {
+        **base, "sqlSourceConnectionSecretName": MASTER, "sqlDestinationConnectionSecretName": MASTER,
+        "sqlCommandTimeoutSeconds": 120, "sqlAllowNonTransactionalBatches": False, "useTransaction": False,
+        "captureScalarResult": False, "sqlScript": OWNER_SQL.replace('\n', '\r\n'), "autoWrapPassFailCode": True, "dryRun": False,
+        "sqlDropConnections": False, "type": "SqlStep", "timeoutSeconds": 300,
+        "description": ((
+            "What: On the database server (master, Windows authentication as the CrewChief account), make the server's system "
+            "administrator login (the login with the fixed id 0x01, whatever its name) the owner of the new empty Profisee database, "
+            "then check the owner. Why: the CrewChief account created the database, so it owns it, and the same account is the "
+            "application pool account. The Configuration program of newer releases adds the application pool account as a user of "
+            "the database, and SQL Server refuses to add a database's owner as a user of it (SQL error 15063). An empty database "
+            "owned by the system administrator login is accepted by every supported release. Success: the step prints the "
+            "database and its owner, the system administrator login. If it fails: the database is missing (the step before did "
+            "not create it), or the CrewChief account is not sysadmin on the database server.") if new_db else (
+            "What: On the database server (master, Windows authentication as the CrewChief account), make the server's system "
+            "administrator login (the login with the fixed id 0x01, whatever its name) the owner of the existing Profisee database, "
+            "then check the owner. Why: a restored base is owned by the account that restored it, the CrewChief account, which may "
+            "also be the application pool account. The Configuration program of newer releases adds the application pool account "
+            "as a user of the database unless a user of that name exists, and SQL Server refuses to add a database's owner as a "
+            "user of it (SQL error 15063). A database owned by the system administrator login is accepted by every supported "
+            "release; the owner change touches no table. Success: the step prints the database and its owner, the system "
+            "administrator login. If it fails: the database is missing (the pack did not restore its base before this workload, "
+            "or install-programs ran without install-configure-new), or the CrewChief account is not sysadmin on the database "
+            "server."))}}
 G["ProfiseeDatabaseName"] = ref('databases', 'ProfiseeDatabaseName')
 with open(os.path.join(here, 'health.ps1'), encoding='utf-8', newline='') as f:
     HEALTH = f.read()
@@ -581,9 +623,11 @@ for drop_db in (True, False):
         conf["inline"]["timeoutSeconds"] = 7200
     dump(os.path.join(wl_root, 'internal', name + '.workload.json'), workload(
         name,
-        (("What: Drop the Profisee database and run Profisee Configuration to create the instance on a new, empty one. "
+        (("What: Drop the Profisee database, create it again empty, give it to the system administrator login of the database "
+          "server, and run Profisee Configuration to create the instance on it. "
           if drop_db else
-          "What: Run Profisee Configuration to create the instance on the existing Profisee database, upgrading it. ") +
+          "What: Give the existing Profisee database to the system administrator login of the database server, then run "
+          "Profisee Configuration to create the instance on it, upgrading it. ") +
          "Why: the installed programs do nothing until Configuration creates the instance for this machine. When: from "
          "install-clean / install-upgrade, after install-programs" +
          ("." if drop_db else
@@ -595,13 +639,8 @@ for drop_db in (True, False):
          "names what to check."),
         ["install", "internal", "configure", "new-db" if drop_db else "upgrade"],
         g("ApplicationServerName", "DatabaseServerName", "ProfiseeDatabaseName"),
-        [ps("Configuration Manager Supported", CONFIG_KIND_CHECK,
-            "What: Refuse the run when ConfigurationManagerKind is new. Why: only the classic Configuration program is driven by "
-            "this pack; the check runs first so nothing is dropped or changed for a release that cannot be configured. Success: "
-            "the kind is classic. If it fails: the lane or install/environment:ConfigurationManagerKind names the new "
-            "manager; run a release that has the classic one.", timeout=60)] +
-        ([DROP_DB] if drop_db else []) + [conf, key_set_child()],
-        inputs=[IN_VERSION_NUMBER, IN_CONFIG_KIND]))
+        ([DROP_DB, CREATE_DB, owner_db(True)] if drop_db else [owner_db(False)]) + [conf, key_set_child()],
+        inputs=[IN_VERSION_NUMBER]))
 
 # ---------------------------------------------------------------- internal/install-verify
 VERSION_CHECK = r"""$ErrorActionPreference = 'Stop'
