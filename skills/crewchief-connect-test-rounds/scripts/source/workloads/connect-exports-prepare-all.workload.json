@@ -1,0 +1,124 @@
+{
+  "name": "connect-1k-exports-prepare-all",
+  "description": "What: Reset Main to the baseline, load PDataSourceImport at the Size passed, then prepare every export at the Threads passed. connect-setup runs it once to prove every export prepares. Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: workloads it runs: connect-database-reset, connect-source-data-load, connect-sql-server-export-prepare, connect-databricks-export-prepare, connect-snowflake-export-prepare, connect-synapse-export-prepare. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "tags": [
+    "connect",
+    "1K",
+    "4T"
+  ],
+  "globalParameters": {
+    "SourceTableName": "PDATA",
+    "RecordCount": "1000",
+    "WorkerThreadCount": "4",
+    "ModelSourceSize": "1K"
+  },
+  "globalParametersNotes": "SourceTableName is the table every size's source backup holds; every shared child reads it from here.",
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "workloadName": "connect-database-reset",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Restore the PDATA baseline and check the source data load strategy reads PDATA. Why: Runs the child workload 'connect-database-reset' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-database-reset'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Reset To Baseline"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-source-data-load",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Restore the source backup of the Size passed as ModelSource, check PDATA holds its record count, load PDataSourceImport from it. Why: Runs the child workload 'connect-source-data-load' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-source-data-load'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Source Data Load"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-sql-server-export-prepare",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Empty the SQL Server export target. Why: Runs the child workload 'connect-sql-server-export-prepare' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-sql-server-export-prepare'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Prepare SQL Server Export"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-databricks-export-prepare",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Empty the Databricks export target. Why: Runs the child workload 'connect-databricks-export-prepare' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-databricks-export-prepare'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Prepare Databricks Export"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-snowflake-export-prepare",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Empty the Snowflake export target. Why: Runs the child workload 'connect-snowflake-export-prepare' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-snowflake-export-prepare'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Prepare Snowflake Export"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-synapse-export-prepare",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Empty the Synapse export target. Why: Runs the child workload 'connect-synapse-export-prepare' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-synapse-export-prepare'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Prepare Synapse Export"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "ProfiseeVersionCode",
+      "description": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under; the automation tags, run profile codes and backup names carry it. Passed by the test that runs this one (connect/environment:ProfiseeVersionCode, or the lane's version).",
+      "default": "{{$ref:connect/environment:ProfiseeVersionCode}}"
+    }
+  ]
+}

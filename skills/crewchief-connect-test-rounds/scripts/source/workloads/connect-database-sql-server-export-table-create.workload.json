@@ -1,0 +1,78 @@
+{
+  "name": "connect-database-sql-server-export-table-create",
+  "description": "What: Create the ConnectExport database when it is missing (some database servers have none), then the empty SQL Server export table with the same columns as the ModelSource PData table and a primary key on Code, so Strategy SQL Server Export has a target Connect accepts. Idempotent. Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: reference values: connect/databases:ConnectExportDB, connect/databases:MasterConnectionString, connect/databases:ModelSourceDB. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "tags": [
+    "connect",
+    "providers",
+    "sql-server"
+  ],
+  "globalParameters": {
+    "ConnectExportDatabaseName": "{{$ref:connect/databases:ConnectExportDB}}",
+    "ModelSourceDatabaseName": "{{$ref:connect/databases:ModelSourceDB}}",
+    "RemoteTableName": "PDataSqlServerExport",
+    "ExportKeyColumn": "Code"
+  },
+  "globalParametersNotes": "",
+  "inputs": [
+    {
+      "name": "SourceTableName",
+      "description": "Source table label of the run size (PDATA), passed by the workload that runs this one.",
+      "default": "{{$ref:connect/environment:SourceTableName}}"
+    }
+  ],
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "sqlSourceConnectionSecretName": "{{$ref:connect/databases:MasterConnectionString}}",
+        "sqlDestinationConnectionSecretName": "{{$ref:connect/databases:MasterConnectionString}}",
+        "sqlCommandTimeoutSeconds": 300,
+        "sqlAllowNonTransactionalBatches": false,
+        "useTransaction": false,
+        "captureScalarResult": false,
+        "sqlScript": "IF DB_ID(N'{{ConnectExportDatabaseName}}') IS NULL\r\nBEGIN\r\n    CREATE DATABASE [{{ConnectExportDatabaseName}}];\r\n    PRINT 'Created database [{{ConnectExportDatabaseName}}].';\r\nEND\r\nELSE PRINT 'Database [{{ConnectExportDatabaseName}}] already exists.';",
+        "autoWrapPassFailCode": true,
+        "dryRun": false,
+        "sqlDropConnections": false,
+        "type": "SqlStep",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Create [{{ConnectExportDatabaseName}}] on the Main database server when it does not exist (no transaction: CREATE DATABASE cannot run in one). Why: Checks or changes the database directly, where the Profisee API has no call for it or a check must be exact. Success: The SQL finishes without an error; a THROW in the script fails the step with its own message. If it fails: Read the SQL error text first; then check the database server (connect/machines:DatabaseServerName) is reachable from this box with Windows authentication and the database named in the connection exists.",
+        "notes": ""
+      },
+      "label": "Create Connect Export Database"
+    },
+    {
+      "inline": {
+        "sqlSourceConnectionSecretName": "{{$ref:connect/databases:MasterConnectionString}}",
+        "sqlDestinationConnectionSecretName": "{{$ref:connect/databases:MasterConnectionString}}",
+        "sqlCommandTimeoutSeconds": 120,
+        "sqlAllowNonTransactionalBatches": false,
+        "useTransaction": true,
+        "captureScalarResult": false,
+        "sqlScript": "IF OBJECT_ID(N'[{{ConnectExportDatabaseName}}].[dbo].[{{RemoteTableName}}]') IS NULL\r\n    SELECT TOP (0) * INTO [{{ConnectExportDatabaseName}}].[dbo].[{{RemoteTableName}}]\r\n    FROM [{{ModelSourceDatabaseName}}].[dbo].[{{SourceTableName}}];IF NOT EXISTS (SELECT 1 FROM [{{ConnectExportDatabaseName}}].sys.key_constraints\r\n               WHERE [type] = 'PK' AND parent_object_id = OBJECT_ID(N'[{{ConnectExportDatabaseName}}].[dbo].[{{RemoteTableName}}]'))\r\nBEGIN\r\n    ALTER TABLE [{{ConnectExportDatabaseName}}].[dbo].[{{RemoteTableName}}] ADD CONSTRAINT [PK_{{RemoteTableName}}] PRIMARY KEY ([{{ExportKeyColumn}}]);\r\n    PRINT 'Added primary key ([{{ExportKeyColumn}}]) to [{{ConnectExportDatabaseName}}].[dbo].[{{RemoteTableName}}].';\r\nEND\r\nELSE PRINT '[{{ConnectExportDatabaseName}}].[dbo].[{{RemoteTableName}}] already has a primary key.';",
+        "autoWrapPassFailCode": true,
+        "dryRun": false,
+        "sqlDropConnections": false,
+        "type": "SqlStep",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Create [{{ConnectExportDatabaseName}}].[dbo].[{{RemoteTableName}}] from the shape of [{{ModelSourceDatabaseName}}].[dbo].[{{SourceTableName}}] when it does not exist yet, then add its primary key on [{{ExportKeyColumn}}] when it has none. Why: Checks or changes the database directly, where the Profisee API has no call for it or a check must be exact. Success: The SQL finishes without an error; a THROW in the script fails the step with its own message. If it fails: Read the SQL error text first; then check the database server (connect/machines:DatabaseServerName) is reachable from this box with Windows authentication and the database named in the connection exists.",
+        "notes": ""
+      },
+      "label": "Create SQL Server Export Table"
+    }
+  ]
+}

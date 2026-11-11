@@ -1,0 +1,41 @@
+{
+  "name": "connect-model-connect-objects-cleanup",
+  "description": "What: Delete EVERY Connect strategy (template- and portal-built) and every service configuration except 'Profisee File Repository Service Configuration' on the Main instance, so connect-objects-reset recreates them from a clean slate. Never deletes an entity. Portal-built strategies must be rebuilt afterwards. Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: reference values: connect/urls:ConnectBaseUrl. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "tags": [
+    "connect",
+    "shared",
+    "model"
+  ],
+  "globalParameters": {
+    "ConnExBaseUrl": "{{$ref:connect/urls:ConnectBaseUrl}}",
+    "ConnExApiKey": "{{$config:RestClients:Connect:ApiKey}}"
+  },
+  "globalParametersNotes": "",
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "executionPolicy": "Bypass",
+        "preferWindowsPowerShell": false,
+        "runAsAdministrator": false,
+        "captureVerbose": false,
+        "captureDebug": false,
+        "treatStderrAsError": true,
+        "scriptContent": "$ErrorActionPreference = 'Stop'\r\n$preview = $false\r\n$connect = '{{ConnExBaseUrl}}'.TrimEnd('/') + '/'\r\n$connectHeaders = @{ 'x-api-key' = '{{ConnExApiKey}}'; accept = 'application/json' }\r\nfunction Split-List([string]$Text) { @($Text -split '\\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }\r\n\r\nfunction Get-Rows($Response) {\r\n    if ($null -eq $Response) { return @() }\r\n    if ($Response -is [array]) { return $Response }\r\n    if ($Response.PSObject.Properties.Name -contains 'data') { return @($Response.data) }\r\n    @($Response)\r\n}\r\nfunction Get-Field($Row, [string[]]$Names) { foreach ($n in $Names) { $v = $Row.$n; if ($v) { return [string]$v } }; $null }\r\n# Returns the status code plus a short reason. A 401 body echoes the API key, so for 401 only the code is kept;\r\n# any other failure body is reduced to its error text, with the API key masked in case the service echoes it.\r\n$secretValues = @('{{ConnExApiKey}}') | Where-Object { $_ }\r\nfunction Get-Reason([string]$Body) {\r\n    if (-not $Body) { return '' }\r\n    $text = $Body\r\n    try {\r\n        $json = $Body | ConvertFrom-Json -ErrorAction Stop\r\n        $parts = @(foreach ($n in 'message', 'Message', 'title', 'detail', 'errors', 'Errors') {\r\n            $v = $json.$n; if ($v) { if ($v -is [string]) { $v } else { ConvertTo-Json -Compress -Depth 5 -InputObject $v } } })\r\n        if ($parts.Count) { $text = $parts -join ' | ' }\r\n    } catch { }\r\n    foreach ($s in $secretValues) { $text = $text.Replace($s, '***') }\r\n    $text = ($text -replace '\\s+', ' ').Trim()\r\n    if ($text.Length -gt 400) { $text = $text.Substring(0, 400) + '...' }\r\n    $text\r\n}\r\nfunction Invoke-Delete([string]$Uri, [hashtable]$Headers) {\r\n    try {\r\n        $r = Invoke-WebRequest -Method Delete -Uri $Uri -Headers $Headers -SkipHttpErrorCheck -TimeoutSec 300\r\n        $code = [int]$r.StatusCode\r\n        $reason = if ($code -in 200, 204, 404, 401) { '' } else { Get-Reason ([string]$r.Content) }\r\n        [pscustomobject]@{ Code = $code; Reason = $reason }\r\n    } catch { [pscustomobject]@{ Code = -1; Reason = (Get-Reason $_.Exception.Message) } }\r\n}\r\nfunction Format-Failure([string]$What, $Result) { if ($Result.Reason) { \"$What -> $($Result.Code): $($Result.Reason)\" } else { \"$What -> $($Result.Code)\" } }\r\n\r\n$strategies = @(Get-Rows (Invoke-RestMethod -Uri \"${connect}v1/Connect/Strategies\" -Headers $connectHeaders -TimeoutSec 120) |\r\n    ForEach-Object { [pscustomobject]@{ Id = (Get-Field $_ 'id', 'Id', 'uid', 'Uid'); Name = (Get-Field $_ 'name', 'Name') } })\r\n$configurations = @(Get-Rows (Invoke-RestMethod -Uri \"${connect}v1/Connect/Configurations\" -Headers $connectHeaders -TimeoutSec 120) |\r\n    ForEach-Object { [pscustomobject]@{ Id = (Get-Field $_ 'id', 'Id', 'uid', 'Uid'); Name = (Get-Field $_ 'name', 'Name') } })\r\nif (@($strategies | Where-Object { -not $_.Id }).Count -or @($configurations | Where-Object { -not $_.Id }).Count) { throw 'A Connect strategy or service configuration came back without an id; the response shape changed.' }\r\n\r\n$deleteStrategies = @($strategies | Where-Object { $true })\r\n$deleteConfigurations = @($configurations | Where-Object { $_.Name -ne 'Profisee File Repository Service Configuration' })\r\n\"Strategies: $($strategies.Count) found, $($deleteStrategies.Count) to delete: $(($deleteStrategies.Name | Sort-Object) -join '; ')\"\r\n\"Service configurations: $($configurations.Count) found, $($deleteConfigurations.Count) to delete: $(($deleteConfigurations.Name | Sort-Object) -join '; ')\"\r\n'Entities: none are deleted by this cleanup.'\r\nif ($preview) { 'PREVIEW ONLY: nothing was deleted.'; return }\r\n\r\n$failures = [System.Collections.Generic.List[string]]::new()\r\nforeach ($s in $deleteStrategies) {\r\n    $r = Invoke-Delete \"${connect}v1/Connect/Strategies?IntegrationStrategyUids=$($s.Id)\" $connectHeaders\r\n    if ($r.Code -notin 200, 204, 404) { $failures.Add((Format-Failure \"strategy '$($s.Name)'\" $r)) }\r\n}\r\nforeach ($c in $deleteConfigurations) {\r\n    $r = Invoke-Delete \"${connect}v1/Connect/Configurations?ConfigurationUids=$($c.Id)\" $connectHeaders\r\n    if ($r.Code -notin 200, 204, 404) { $failures.Add((Format-Failure \"service configuration '$($c.Name)'\" $r)) }\r\n}\r\n\"Deleted $($deleteStrategies.Count) strategies and $($deleteConfigurations.Count) service configurations ($($failures.Count) failed).\"\r\nif ($failures.Count) { throw \"Cleanup left $($failures.Count) item(s): $($failures -join '; ')\" }\r\n'Cleanup complete.'",
+        "type": "PowerShellStep",
+        "parameters": {},
+        "timeoutSeconds": 3600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete every Connect strategy, then every service configuration except 'Profisee File Repository Service Configuration'. Fails listing anything it could not delete. Why: Does work no single built-in step does (several calls, waits or checks in one place) and stops at the first problem. Success: The script finishes without an error; its output lines say what it did. If it fails: Read the last output line and the error text: the script names the value, server or record it could not handle.",
+        "notes": ""
+      },
+      "label": "Delete All Connect Objects"
+    }
+  ]
+}

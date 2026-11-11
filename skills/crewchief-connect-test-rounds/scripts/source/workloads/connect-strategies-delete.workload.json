@@ -1,0 +1,329 @@
+{
+  "name": "connect-strategies-delete",
+  "description": "What: Delete the template-built Connect strategies from the Main instance. Portal-built strategies are deleted in the portal. Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: reference values: connect/urls:ConnectBaseUrl. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "tags": [
+    "connect",
+    "shared",
+    "strategies"
+  ],
+  "globalParameters": {
+    "ConnExBaseUrl": "{{$ref:connect/urls:ConnectBaseUrl}}",
+    "ConnExApiKey": "{{$config:RestClients:Connect:ApiKey}}"
+  },
+  "globalParametersNotes": "",
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Strategies?IntegrationStrategyUids=8ec9491f-b256-9c50-8c9a-948148d867f5",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Strategy Source Data Load'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Strategy Source Data Load"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Strategies?IntegrationStrategyUids=41bf9892-0c84-925b-0b7f-2a14e74930ec",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Strategy SQL Server Export'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Strategy SQL Server Export"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Strategies?IntegrationStrategyUids=ecd43540-2d2e-a91d-f7f6-6725b5904e44",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Strategy SQL Server Import'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Strategy SQL Server Import"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Strategies?IntegrationStrategyUids=bbb98218-fb48-0517-771b-f3bd3b07164c",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Strategy Profisee To Profisee Export'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Strategy Profisee To Profisee Export"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Strategies?IntegrationStrategyUids=76da56f6-acea-a143-0892-6c7a2e3e7765",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Strategy Databricks Export'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Strategy Databricks Export"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Strategies?IntegrationStrategyUids=ade7ab0a-20ae-bedd-27da-70c5d8996072",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Strategy Databricks Import'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Strategy Databricks Import"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Strategies?IntegrationStrategyUids=cd808705-f916-8874-1b02-2519a0f951f6",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Strategy Snowflake Export'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Strategy Snowflake Export"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Strategies?IntegrationStrategyUids=62356651-ff86-40c9-7ff4-42c2a5df04d7",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Strategy Snowflake Import'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Strategy Snowflake Import"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Strategies?IntegrationStrategyUids=eb2f43e7-3af0-0fac-6735-d7b7ad68869b",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Strategy Synapse Export'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Strategy Synapse Export"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Strategies?IntegrationStrategyUids=1409507d-41c7-630d-08cd-ea6615474b74",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Strategy Synapse Import'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Strategy Synapse Import"
+    }
+  ]
+}

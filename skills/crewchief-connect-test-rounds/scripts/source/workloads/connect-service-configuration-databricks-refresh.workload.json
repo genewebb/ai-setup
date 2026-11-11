@@ -1,0 +1,96 @@
+{
+  "name": "connect-service-configuration-databricks-refresh",
+  "description": "What: Re-import 'Service Configuration Databricks' on the Main instance so it picks up the current CrewChief secrets (delete, then import: a Connect import never updates). Sequence after a credential change: connect-database-reset, this, connect-database-backup (the baseline). Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: reference values: connect/urls:ConnectBaseUrl. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "tags": [
+    "connect",
+    "providers",
+    "databricks"
+  ],
+  "globalParameters": {
+    "ConnExBaseUrl": "{{$ref:connect/urls:ConnectBaseUrl}}",
+    "ConnExApiKey": "{{$config:RestClients:Connect:ApiKey}}"
+  },
+  "globalParametersNotes": "",
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Configurations?ConfigurationUids=23a03bbd-06ba-61af-c4ec-0745856781a7",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Service Configuration Databricks'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Service Configuration Databricks"
+    },
+    {
+      "inline": {
+        "artifactFile": "",
+        "artifactJson": "{\r\n  \"$type\": \"Profisee.Platform.ConnEx.Contracts.Administration.ServiceConfigurationArtifact, Profisee.Platform.ConnEx\",\r\n  \"artifactVersion\": \"1.7.1.0\",\r\n  \"serviceConfigurationRecord\": {\r\n    \"$type\": \"Profisee.Platform.ConnEx.Contracts.Administration.ServiceConfigurationRecord, Profisee.Platform.ConnEx\",\r\n    \"Configuration\": {\r\n      \"$type\": \"Profisee.Platform.ConnEx.Contracts.Administration.DatabaseServiceConfiguration, Profisee.Platform.ConnEx\",\r\n      \"description\": null,\r\n      \"serviceProviderId\": {\r\n        \"$type\": \"Profisee.Platform.Cdp.Contracts.Identifier, Profisee.Platform.Cdp\",\r\n        \"id\": \"{{ServiceProviderId}}\",\r\n        \"name\": \"{{ServiceProviderName}}\"\r\n      },\r\n      \"databaseType\": \"Databricks\",\r\n      \"settings\": {\r\n        \"$type\": \"System.Collections.Generic.Dictionary`2[[System.String, System.Private.CoreLib],[Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx]], System.Private.CoreLib\",\r\n        \"AuthenticationScheme\": {\r\n          \"$type\": \"Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx\",\r\n          \"assignmentType\": \"Literal\",\r\n          \"value\": \"{{AuthenticationScheme}}\",\r\n          \"dataType\": 8\r\n        },\r\n        \"TokenVault\": {\r\n          \"$type\": \"Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx\",\r\n          \"assignmentType\": \"Credential\",\r\n          \"dataType\": 1,\r\n          \"name\": \"TokenVault\",\r\n          \"value\": {\r\n            \"name\": \"TokenVault Credential\",\r\n            \"providerType\": \"LocalVault\",\r\n            \"configuration\": {\r\n              \"value\": \"{{TokenVault}}\"\r\n            }\r\n          }\r\n        },\r\n        \"ServerName\": {\r\n          \"$type\": \"Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx\",\r\n          \"assignmentType\": \"Literal\",\r\n          \"value\": \"{{DbServer}}\",\r\n          \"dataType\": 8\r\n        },\r\n        \"WarehouseId\": {\r\n          \"$type\": \"Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx\",\r\n          \"assignmentType\": \"Literal\",\r\n          \"value\": \"{{WarehouseId}}\",\r\n          \"dataType\": 8\r\n        },\r\n        \"Database\": {\r\n          \"$type\": \"Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx\",\r\n          \"assignmentType\": \"Literal\",\r\n          \"value\": \"{{DatabaseName}}\",\r\n          \"dataType\": 8\r\n        },\r\n        \"CommandTimeout\": {\r\n          \"$type\": \"Profisee.Platform.ConnEx.Contracts.Administration.ParameterAssignmentConfiguration, Profisee.Platform.ConnEx\",\r\n          \"assignmentType\": \"Literal\",\r\n          \"value\": \"{{CommandTimeout}}\",\r\n          \"dataType\": 6\r\n        }\r\n      },\r\n      \"artifactVersion\": \"1.7.1.0\"\r\n    },\r\n    \"Id\": \"{{ServiceConfigId}}\",\r\n    \"Name\": \"{{ServiceConfigName}}\",\r\n    \"Type\": \"Database\"\r\n  }\r\n}",
+        "resourceType": "ServiceConfiguration",
+        "operation": "Import",
+        "baseUrl": "{{ConnExBaseUrl}}",
+        "apiKey": "{{ConnExApiKey}}",
+        "returnResult": true,
+        "expectedStatusCodes": [
+          200,
+          201,
+          204
+        ],
+        "resourceId": "",
+        "outputFile": "",
+        "dryRun": false,
+        "skipFileWrite": false,
+        "pollIntervalSeconds": 30,
+        "maxWaitMinutes": 720,
+        "pollFailureLimit": 3,
+        "batchCode": "",
+        "type": "ConnExStep",
+        "parameters": {
+          "AuthenticationScheme": "ApiKey",
+          "CommandTimeout": "120",
+          "DatabaseName": "rnddatabricksworkspace",
+          "DbServer": "https://adb-2647326535672130.10.azuredatabricks.net/",
+          "ServiceConfigId": "23a03bbd-06ba-61af-c4ec-0745856781a7",
+          "ServiceConfigName": "Service Configuration Databricks",
+          "ServiceProviderId": "5defe3b7-b875-4308-b62f-6400e6f228b1",
+          "ServiceProviderName": "Databricks Service Provider",
+          "TokenVault": "{{$config:Databricks Service Provider:DATABRICKS_APIKEY}}",
+          "WarehouseId": "ff6259b61ed4de41"
+        },
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Import 'Service Configuration Databricks' (copied from QA 'SC_Databricks_APIKey', id 23a03bbd-06ba-61af-c4ec-0745856781a7). Why: Drives Connect (strategies, service configurations, batches) through its REST API for ''. Success: Connect accepts the Import call with an expected status code. If it fails: Check the Connect address (connect/urls:ConnectBaseUrl) answers and the Connect API key works; 400 or 409 usually means the object already exists or the artifact does not fit this Profisee release.",
+        "notes": ""
+      },
+      "label": "Import Service Configuration Databricks"
+    }
+  ]
+}

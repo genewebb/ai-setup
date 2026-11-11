@@ -1,0 +1,186 @@
+{
+  "name": "connect-source-data-load",
+  "description": "What: Load the single export source PDataSourceImport from the local ModelSource PData table of the run size. Setup, not a measured run. Starts from the baseline (run connect-database-reset first); fails first when the strategy reads another table than the run size. Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: reference values: connect/databases:MasterConnectionString, connect/databases:ProfiseeDatabaseName, connect/instances:ProfiseeInstanceName, connect/machines:ApplicationServerName, connect/machines:DatabaseServerName, connect/urls:ConnectBaseUrl. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "tags": [
+    "connect",
+    "shared",
+    "source-data"
+  ],
+  "globalParameters": {
+    "ConnExBaseUrl": "{{$ref:connect/urls:ConnectBaseUrl}}",
+    "ConnExApiKey": "{{$config:RestClients:Connect:ApiKey}}",
+    "DatabaseServerName": "{{$ref:connect/machines:DatabaseServerName}}",
+    "ProfiseeDatabaseName": "{{$ref:connect/databases:ProfiseeDatabaseName}}",
+    "ProfiseeInstanceName": "{{$ref:connect/instances:ProfiseeInstanceName}}",
+    "ApplicationServerName": "{{$ref:connect/machines:ApplicationServerName}}",
+    "StrategyName": "Strategy Source Data Load"
+  },
+  "globalParametersNotes": "",
+  "inputs": [
+    {
+      "name": "ModelSourceSize",
+      "description": "Source data size label (1K or 1M), passed by the workload that runs this one.",
+      "default": "{{$ref:connect/environment:ModelSourceSize}}"
+    },
+    {
+      "name": "RecordCount",
+      "description": "Records to load for the run size (1000 or 1000000), passed by the workload that runs this one.",
+      "default": "{{$ref:connect/environment:RecordCount}}"
+    },
+    {
+      "name": "SourceTableName",
+      "description": "Source table label of the run size (PDATA), passed by the workload that runs this one.",
+      "default": "{{$ref:connect/environment:SourceTableName}}"
+    }
+  ],
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "sqlSourceConnectionSecretName": "{{$ref:connect/databases:MasterConnectionString}}",
+        "sqlDestinationConnectionSecretName": "{{$ref:connect/databases:MasterConnectionString}}",
+        "sqlCommandTimeoutSeconds": 3600,
+        "sqlAllowNonTransactionalBatches": false,
+        "useTransaction": false,
+        "captureScalarResult": false,
+        "sqlScript": "DECLARE @bak nvarchar(500) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400)) + N'\\ModelSourcePDATA{{ModelSourceSize}}.bak';\r\nDECLARE @dataDir nvarchar(400) = CAST(SERVERPROPERTY('InstanceDefaultDataPath') AS nvarchar(400));\r\nDECLARE @logDir nvarchar(400) = CAST(SERVERPROPERTY('InstanceDefaultLogPath') AS nvarchar(400));\r\nDECLARE @files TABLE (\r\n    LogicalName nvarchar(128), PhysicalName nvarchar(260), Type char(1), FileGroupName nvarchar(128),\r\n    Size numeric(20,0), MaxSize numeric(20,0), FileId bigint, CreateLSN numeric(25,0), DropLSN numeric(25,0),\r\n    UniqueId uniqueidentifier, ReadOnlyLSN numeric(25,0), ReadWriteLSN numeric(25,0), BackupSizeInBytes bigint,\r\n    SourceBlockSize int, FileGroupId int, LogGroupGUID uniqueidentifier, DifferentialBaseLSN numeric(25,0),\r\n    DifferentialBaseGUID uniqueidentifier, IsReadOnly bit, IsPresent bit, TDEThumbprint varbinary(32), SnapshotUrl nvarchar(360));\r\nDECLARE @disk nvarchar(600) = N'N''' + REPLACE(@bak, N'''', N'''''') + N'''';\r\nDECLARE @sql nvarchar(max) = N'RESTORE FILELISTONLY FROM DISK = ' + @disk;\r\nINSERT @files EXEC (@sql);\r\nDECLARE @move nvarchar(max) = (\r\n    SELECT STRING_AGG(CONVERT(nvarchar(max), N'MOVE N''' + REPLACE(LogicalName, N'''', N'''''') + N''' TO N'''\r\n        + REPLACE(CASE WHEN Type = 'L' THEN @logDir ELSE @dataDir END\r\n            + CASE WHEN RIGHT(CASE WHEN Type = 'L' THEN @logDir ELSE @dataDir END, 1) = N'\\' THEN N'' ELSE N'\\' END\r\n            + N'{{$ref:connect/databases:ModelSourceDB}}' + CASE WHEN CHARINDEX(N'_', fn) > 0 THEN SUBSTRING(fn, CHARINDEX(N'_', fn), 260) ELSE N'_' + fn END, N'''', N'''''') + N''''), N', ')\r\n    FROM (SELECT LogicalName, Type, RIGHT(PhysicalName, CHARINDEX(N'\\', REVERSE(PhysicalName)) - 1) AS fn FROM @files) f);\r\nIF DB_ID(N'{{$ref:connect/databases:ModelSourceDB}}') IS NOT NULL ALTER DATABASE [{{$ref:connect/databases:ModelSourceDB}}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;\r\nSET @sql = N'RESTORE DATABASE [{{$ref:connect/databases:ModelSourceDB}}] FROM DISK = ' + @disk + N' WITH REPLACE, ' + @move;\r\nEXEC (@sql);\r\nALTER DATABASE [{{$ref:connect/databases:ModelSourceDB}}] SET MULTI_USER;\r\nPRINT CONCAT(N'Restored {{$ref:connect/databases:ModelSourceDB}} from ', @bak);",
+        "autoWrapPassFailCode": true,
+        "dryRun": false,
+        "sqlDropConnections": false,
+        "type": "SqlStep",
+        "parameters": {},
+        "timeoutSeconds": 3660,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Restore ModelSourcePDATA{{ModelSourceSize}}.bak (default backup directory of the database server) over the database in connect/databases:ModelSourceDB WITH REPLACE, so dbo.PDATA holds the run size. Disconnects that database's users first. Why: Checks or changes the database directly, where the Profisee API has no call for it or a check must be exact. Success: The SQL finishes without an error; a THROW in the script fails the step with its own message. If it fails: Read the SQL error text first; then check the database server (connect/machines:DatabaseServerName) is reachable from this box with Windows authentication and the database named in the connection exists.",
+        "notes": ""
+      },
+      "label": "Restore ModelSource For Run Size"
+    },
+    {
+      "inline": {
+        "sqlSourceConnectionSecretName": "{{$ref:connect/databases:MasterConnectionString}}",
+        "sqlDestinationConnectionSecretName": "{{$ref:connect/databases:MasterConnectionString}}",
+        "sqlCommandTimeoutSeconds": 300,
+        "sqlAllowNonTransactionalBatches": false,
+        "useTransaction": false,
+        "captureScalarResult": false,
+        "sqlScript": "DECLARE @n bigint = (SELECT COUNT_BIG(*) FROM [{{$ref:connect/databases:ModelSourceDB}}].dbo.PDATA);\r\nIF @n <> {{RecordCount}}\r\nBEGIN\r\n    DECLARE @msg nvarchar(400) = CONCAT(N'{{$ref:connect/databases:ModelSourceDB}}.dbo.PDATA holds ', @n, N' rows; the {{ModelSourceSize}} run needs {{RecordCount}}.');\r\n    THROW 50005, @msg, 1;\r\nEND\r\nPRINT CONCAT(N'{{$ref:connect/databases:ModelSourceDB}}.dbo.PDATA holds ', @n, N' rows ({{ModelSourceSize}}).');",
+        "autoWrapPassFailCode": true,
+        "dryRun": false,
+        "sqlDropConnections": false,
+        "type": "SqlStep",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Fail unless dbo.PDATA in connect/databases:ModelSourceDB holds {{RecordCount}} rows. Why: Checks or changes the database directly, where the Profisee API has no call for it or a check must be exact. Success: The SQL finishes without an error; a THROW in the script fails the step with its own message. If it fails: Read the SQL error text first; then check the database server (connect/machines:DatabaseServerName) is reachable from this box with Windows authentication and the database named in the connection exists.",
+        "notes": ""
+      },
+      "label": "Check ModelSource Size"
+    },
+    {
+      "inline": {
+        "sqlSourceConnectionSecretName": "Server={{DatabaseServerName}};Database={{ProfiseeDatabaseName}};Integrated Security=True;TrustServerCertificate=True",
+        "sqlDestinationConnectionSecretName": "Server={{DatabaseServerName}};Database={{ProfiseeDatabaseName}};Integrated Security=True;TrustServerCertificate=True",
+        "sqlCommandTimeoutSeconds": 300,
+        "sqlAllowNonTransactionalBatches": false,
+        "useTransaction": false,
+        "captureScalarResult": false,
+        "sqlScript": "DECLARE @actual nvarchar(256) = (SELECT JSON_VALUE([Configuration], '$.RemoteObjectName')\r\n                                 FROM connex.tIntegrationStrategyConfiguration WHERE [Name] = N'Strategy Source Data Load');\r\nIF @actual IS NULL\r\n    THROW 50002, 'Strategy Source Data Load is missing on {{ProfiseeDatabaseName}}.', 1;\r\nIF @actual <> N'{{SourceTableName}}'\r\nBEGIN\r\n    DECLARE @msg nvarchar(2048) = CONCAT(N'Strategy Source Data Load reads ', @actual, N' but the run size is {{SourceTableName}}. Rebuild the baseline with connect-bootstrap-main.');\r\n    THROW 50003, @msg, 1;\r\nEND\r\nPRINT CONCAT(N'Strategy Source Data Load reads ', @actual, N' (run size {{SourceTableName}}).');",
+        "autoWrapPassFailCode": true,
+        "dryRun": false,
+        "sqlDropConnections": false,
+        "type": "SqlStep",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Fail unless 'Strategy Source Data Load' reads {{SourceTableName}}, the table the run settings name. Why: Checks or changes the database directly, where the Profisee API has no call for it or a check must be exact. Success: The SQL finishes without an error; a THROW in the script fails the step with its own message. If it fails: Read the SQL error text first; then check the database server (connect/machines:DatabaseServerName) is reachable from this box with Windows authentication and the database named in the connection exists.",
+        "notes": ""
+      },
+      "label": "Check Source Data Load Size"
+    },
+    {
+      "inline": {
+        "artifactFile": "",
+        "artifactJson": "",
+        "resourceType": "IntegrationStrategy",
+        "operation": "Execute",
+        "baseUrl": "{{ConnExBaseUrl}}",
+        "apiKey": "{{ConnExApiKey}}",
+        "returnResult": true,
+        "expectedStatusCodes": [
+          200,
+          201,
+          204
+        ],
+        "resourceId": "{{StrategyName}}",
+        "outputFile": "",
+        "dryRun": false,
+        "skipFileWrite": false,
+        "pollIntervalSeconds": 30,
+        "maxWaitMinutes": 720,
+        "pollFailureLimit": 3,
+        "batchCode": "",
+        "type": "ConnExStep",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Start a batch of '{{StrategyName}}'. Why: Drives Connect (strategies, service configurations, batches) through its REST API for '{{StrategyName}}'. Success: Connect accepts the Execute call with an expected status code. If it fails: Check the Connect address (connect/urls:ConnectBaseUrl) answers and the Connect API key works; 400 or 409 usually means the object already exists or the artifact does not fit this Profisee release.",
+        "notes": ""
+      },
+      "label": "Execute Strategy Source Data Load"
+    },
+    {
+      "inline": {
+        "artifactFile": "",
+        "artifactJson": "",
+        "resourceType": "",
+        "operation": "WaitForBatch",
+        "baseUrl": "{{ConnExBaseUrl}}",
+        "apiKey": "{{ConnExApiKey}}",
+        "returnResult": true,
+        "expectedStatusCodes": [
+          200,
+          201,
+          204
+        ],
+        "resourceId": "{{StrategyName}}",
+        "outputFile": "",
+        "dryRun": false,
+        "skipFileWrite": false,
+        "pollIntervalSeconds": 30,
+        "maxWaitMinutes": 720,
+        "pollFailureLimit": 3,
+        "batchCode": "",
+        "type": "ConnExStep",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Wait for the '{{StrategyName}}' batch to finish (polls every 30 s, up to 12 h). Why: Drives Connect (strategies, service configurations, batches) through its REST API for '{{StrategyName}}'. Success: Connect accepts the WaitForBatch call with an expected status code. If it fails: Check the Connect address (connect/urls:ConnectBaseUrl) answers and the Connect API key works; 400 or 409 usually means the object already exists or the artifact does not fit this Profisee release.",
+        "notes": ""
+      },
+      "label": "Wait For Strategy Source Data Load"
+    }
+  ]
+}

@@ -1,0 +1,217 @@
+{
+  "name": "connect-database-seed-restore",
+  "description": "What: Put the Main Profisee database into a known, empty state: check the seed backup exists, stop the Profisee Windows service, restore the seed (connect/databases:BaseSeedBackupFileName) over the Main database, recycle every Main application pool, start the service, run Profisee Configuration on the restored seed (install-configure-upgrade), then set and prove the Main API key (connect-api-key-set-main). Why: A building block of the Connect pack; the bootstrap runs it first so the Main model is always built on a clean, empty database, whatever another pack left on the server. When: Never run directly once the pack is tested; the bootstrap runs it. Running it alone replaces the Main Profisee database with the seed. Needs: the seed backup in the SQL Server default backup folder of connect/machines:DatabaseServerName: a configured, empty Profisee database of the same or an older version than the one under test, holding the API user; the install pack on this box; reference values: connect/databases:BaseSeedBackupFileName, connect/databases:MasterConnectionString, connect/databases:ProfiseeDatabaseName, connect/instances:ProfiseeInstanceName, connect/machines:ApplicationServerName, connect/machines:DatabaseServerName; no test running against this Profisee database. Success: Every step Succeeded or Skipped. If it fails: open the first failed step, whose If it fails text names what to check; when the seed check fails nothing was changed.",
+  "tags": [
+    "connect",
+    "shared",
+    "database"
+  ],
+  "globalParameters": {
+    "DatabaseServerName": "{{$ref:connect/machines:DatabaseServerName}}",
+    "ProfiseeDatabaseName": "{{$ref:connect/databases:ProfiseeDatabaseName}}",
+    "ProfiseeInstanceName": "{{$ref:connect/instances:ProfiseeInstanceName}}",
+    "ApplicationServerName": "{{$ref:connect/machines:ApplicationServerName}}",
+    "BaseSeedBackupFileName": "{{$ref:connect/databases:BaseSeedBackupFileName}}",
+    "InstanceServiceName": ""
+  },
+  "globalParametersNotes": "",
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "sqlDestinationConnectionSecretName": "{{$ref:connect/databases:MasterConnectionString}}",
+        "type": "SqlStep",
+        "description": "What: Check the seed backup (connect/databases:BaseSeedBackupFileName) sits in the SQL Server default backup folder of the database server (connect/machines:DatabaseServerName), before anything is stopped or restored. Why: the restore below replaces the Main Profisee database; a missing seed must stop the run while the database is still untouched. Success: The seed backup is found. If it fails: copy the seed backup into the SQL Server default backup folder of the database server (the message names the folder), or correct connect/databases:BaseSeedBackupFileName; or check the database server is reachable from this box with Windows authentication.",
+        "autoWrapPassFailCode": true,
+        "sqlSourceConnectionSecretName": "{{$ref:connect/databases:MasterConnectionString}}",
+        "sqlCommandTimeoutSeconds": 120,
+        "sqlDropConnections": false,
+        "useTransaction": false,
+        "sqlScript": "DECLARE @dir nvarchar(400) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400));\r\nDECLARE @exists int, @f nvarchar(600) = @dir + N'\\{{BaseSeedBackupFileName}}';\r\nEXEC master.dbo.xp_fileexist @f, @exists OUTPUT;\r\nIF @exists = 0 BEGIN DECLARE @msg nvarchar(2048) = CONCAT(N'Connect seed backup {{BaseSeedBackupFileName}} is missing from ', @dir, N' on {{DatabaseServerName}}. Copy the seed there (connect/databases:BaseSeedBackupFileName names it); nothing was changed.'); THROW 50012, @msg, 1; END\r\nPRINT CONCAT(N'Connect seed backup found: ', @f);",
+        "captureScalarResult": false,
+        "dryRun": false,
+        "sqlAllowNonTransactionalBatches": false,
+        "workingDirectory": null,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "retryEnabled": false,
+        "notes": "",
+        "parameters": {},
+        "continueOnError": false,
+        "timeoutSeconds": 600
+      },
+      "label": "Seed Backup Exists"
+    },
+    {
+      "label": "Find The Instance Service",
+      "inline": {
+        "executionPolicy": "Bypass",
+        "preferWindowsPowerShell": true,
+        "runAsAdministrator": false,
+        "captureVerbose": false,
+        "captureDebug": false,
+        "treatStderrAsError": true,
+        "scriptContent": "$Instance = '{{ProfiseeInstanceName}}'\r\n$Action = 'FindService'\r\n$AppFilter = ''\r\n# Profisee instance discovery (CrewChief packs). Every step that finds the Windows service of a Profisee instance or acts\r\n# on its IIS application pools carries this same text after three lines naming the instance, the action and the\r\n# application filter. It is generated from packs\\tools\\instance-discovery.ps1.txt (instance_steps.py); never edit it in\r\n# a workload. It runs ON the application server in Windows PowerShell (the WebAdministration module).\r\n# Several Profisee instances (and versions) can live side by side on one server, so nothing is matched on a name or a\r\n# name prefix alone:\r\n#   - the instance's applications are /<instance> and everything under /<instance>/ (whole path segments, so instance\r\n#     'Profisee' never catches /Profisee2 or /Profisee-qa);\r\n#   - its pools are the application pools those applications use; a built-in pool, or a pool that also serves an\r\n#     application of something else, is never touched (and is named in the output);\r\n#   - its Windows service is the one whose program lies in the installed Profisee folder that holds the instance's\r\n#     IIS application (the deepest product folder of the uninstall entries, or a version folder under\r\n#     Program Files\\Profisee\\Master Data Maestro Server, that contains /<instance>'s physical path); when another\r\n#     instance shares that folder, the installer's name form '... (<instance>)' decides; when no product folder holds\r\n#     the instance, only that name form is used.\r\n$ErrorActionPreference = 'Stop'\r\n$CcBuiltInPools = @('DefaultAppPool', 'Classic .NET AppPool', '.NET v2.0', '.NET v2.0 Classic', '.NET v4.5', '.NET v4.5 Classic',\r\n    'ASP.NET v4.0', 'ASP.NET v4.0 Classic')\r\n$CcIc = [StringComparison]::OrdinalIgnoreCase\r\n\r\nfunction Test-CcUnder([string]$Path, [string]$Folder) {\r\n    if (-not $Path -or -not $Folder) { return $false }\r\n    $f = $Folder.TrimEnd('\\')\r\n    return $Path.TrimEnd('\\').Equals($f, $CcIc) -or $Path.StartsWith($f + '\\', $CcIc)\r\n}\r\n\r\nfunction Get-CcCommonDepth([string]$A, [string]$B) {\r\n    $x = $A.TrimEnd('\\').Split('\\')\r\n    $y = $B.TrimEnd('\\').Split('\\')\r\n    $n = 0\r\n    while ($n -lt $x.Count -and $n -lt $y.Count -and $x[$n].Equals($y[$n], $CcIc)) { $n++ }\r\n    return $n\r\n}\r\n\r\nfunction Get-CcProgramPath([string]$CommandLine) {\r\n    if (-not $CommandLine) { return '' }\r\n    if ($CommandLine -match '^\\s*\"([^\"]+)\"') { return $Matches[1] }\r\n    if ($CommandLine -match '^\\s*(.+?\\.exe)(\\s|$)') { return $Matches[1] }\r\n    return $CommandLine.Trim()\r\n}\r\n\r\nfunction Test-CcNamedFor($Service, [string]$Instance) {\r\n    $rx = '\\(' + [regex]::Escape($Instance) + '\\)\\s*$'\r\n    return ([string]$Service.Name -match $rx) -or ([string]$Service.DisplayName -match $rx)\r\n}\r\n\r\nfunction Test-CcInstancePath([string]$AppPath, [string]$Instance) {\r\n    $root = '/' + $Instance\r\n    return $AppPath.Equals($root, $CcIc) -or $AppPath.StartsWith($root + '/', $CcIc)\r\n}\r\n\r\nfunction Get-CcInstanceNames($Inventory) {\r\n    @($Inventory.Apps | Where-Object { [string]$_.Path -match '^/[^/]+$' } | ForEach-Object { ([string]$_.Path).Substring(1) } | Sort-Object -Unique)\r\n}\r\n\r\nfunction Get-CcInventory {\r\n    # The real server: IIS applications (site root '/' included, for the shared-pool check), Windows services and the\r\n    # folders installed Profisee products live in.\r\n    Import-Module WebAdministration\r\n    $apps = New-Object System.Collections.Generic.List[object]\r\n    foreach ($site in @(Get-ChildItem 'IIS:\\Sites')) {\r\n        $sitePool = [string]$site.applicationPool\r\n        $apps.Add([pscustomobject]@{ Site = [string]$site.Name; Path = '/'; Pool = $sitePool\r\n                PhysicalPath = [Environment]::ExpandEnvironmentVariables([string]$site.physicalPath) })\r\n        foreach ($a in @(Get-WebApplication -Site $site.Name)) {\r\n            $pool = [string]$a.applicationPool\r\n            if (-not $pool) { $pool = $sitePool }\r\n            $apps.Add([pscustomobject]@{ Site = [string]$site.Name; Path = [string]$a.path; Pool = $pool\r\n                    PhysicalPath = [Environment]::ExpandEnvironmentVariables([string]$a.PhysicalPath) })\r\n        }\r\n    }\r\n    $services = @(Get-CimInstance -ClassName Win32_Service | ForEach-Object {\r\n            [pscustomobject]@{ Name = [string]$_.Name; DisplayName = [string]$_.DisplayName; PathName = [string]$_.PathName; State = [string]$_.State } })\r\n    $keys = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', 'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'\r\n    $folders = @(Get-ItemProperty -Path $keys -ErrorAction SilentlyContinue |\r\n        Where-Object { [string]$_.DisplayName -match 'Profisee|Maestro' -and $_.InstallLocation } |\r\n        ForEach-Object { ([string]$_.InstallLocation).TrimEnd('\\') })\r\n    foreach ($pf in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {\r\n        if (-not $pf) { continue }\r\n        $server = Join-Path $pf 'Profisee\\Master Data Maestro Server'\r\n        if (Test-Path -LiteralPath $server) { $folders += @(Get-ChildItem -LiteralPath $server -Directory | ForEach-Object { $_.FullName }) }\r\n    }\r\n    [pscustomobject]@{ Computer = $env:COMPUTERNAME; Apps = $apps.ToArray(); Services = $services\r\n        InstallFolders = @($folders | Where-Object { $_ } | Sort-Object -Unique) }\r\n}\r\n\r\nfunction Select-CcInstanceService($Inventory, [string]$Instance) {\r\n    # Returns the instance's one Windows service, $null when it has none, or throws (instance missing, more than one\r\n    # service, or a service another instance in the same folder may own).\r\n    $roots = @($Inventory.Apps | Where-Object { ([string]$_.Path).Equals('/' + $Instance, $CcIc) })\r\n    if ($roots.Count -eq 0) {\r\n        throw \"No IIS application /$Instance on $($Inventory.Computer) (instances there: $((Get-CcInstanceNames $Inventory) -join ', ')). Check the instance name in reference data.\"\r\n    }\r\n    $folders = @($roots | ForEach-Object { [string]$_.PhysicalPath } | Where-Object { $_ } | Sort-Object -Unique)\r\n    if ($folders.Count -ne 1) {\r\n        throw \"IIS application /$Instance on $($Inventory.Computer) has $($folders.Count) physical folders ($($folders -join '; ')); cannot tell which install it belongs to.\"\r\n    }\r\n    $instFolder = $folders[0]\r\n    $installed = @($Inventory.InstallFolders | Where-Object { Test-CcUnder $instFolder $_ } | Sort-Object { $_.TrimEnd('\\').Length } -Descending)\r\n    $mine = @()\r\n    $unsure = @()\r\n    if ($installed.Count -gt 0) {\r\n        $folder = $installed[0]\r\n        $rivals = @($Inventory.Apps | Where-Object {\r\n                ([string]$_.Path) -match '^/[^/]+$' -and -not ([string]$_.Path).Equals('/' + $Instance, $CcIc) -and (Test-CcUnder ([string]$_.PhysicalPath) $folder)\r\n            } | ForEach-Object { [pscustomobject]@{ Name = ([string]$_.Path).Substring(1); Folder = [string]$_.PhysicalPath } })\r\n        foreach ($s in @($Inventory.Services)) {\r\n            $program = Get-CcProgramPath $s.PathName\r\n            if (-not (Test-CcUnder $program $folder)) { continue }\r\n            $depth = Get-CcCommonDepth $program $instFolder\r\n            if (@($rivals | Where-Object { (Get-CcCommonDepth $program $_.Folder) -gt $depth }).Count -gt 0) { continue }\r\n            $tied = @($rivals | Where-Object { (Get-CcCommonDepth $program $_.Folder) -eq $depth })\r\n            if ($tied.Count -eq 0 -or (Test-CcNamedFor $s $Instance)) { $mine += $s; continue }\r\n            if (@($tied | Where-Object { Test-CcNamedFor $s $_.Name }).Count -gt 0) { continue }\r\n            $unsure += $s\r\n        }\r\n    }\r\n    else {\r\n        $mine = @($Inventory.Services | Where-Object { Test-CcNamedFor $_ $Instance })\r\n    }\r\n    if ($unsure.Count -gt 0) {\r\n        throw \"Instance $Instance on $($Inventory.Computer) shares its installed folder with other instances and these services could belong to either: $(($unsure | ForEach-Object { \"'$($_.Name)' ($($_.PathName))\" }) -join ', ').\"\r\n    }\r\n    if ($mine.Count -gt 1) {\r\n        $named = @($mine | Where-Object { Test-CcNamedFor $_ $Instance })\r\n        if ($named.Count -eq 1) { $mine = $named }\r\n    }\r\n    if ($mine.Count -gt 1) {\r\n        throw \"More than one Windows service belongs to instance $Instance on $($Inventory.Computer): $(($mine | ForEach-Object { \"'$($_.Name)' ($($_.PathName))\" }) -join ', '). Remove the stale one.\"\r\n    }\r\n    if ($mine.Count -eq 1) { return $mine[0] }\r\n    return $null\r\n}\r\n\r\nfunction Select-CcInstancePools($Inventory, [string]$Instance, [string]$AppFilter) {\r\n    # One object per pool the instance's applications use: Pool, Apps (paths), Skip (why it is not touched, or blank).\r\n    $ours = @($Inventory.Apps | Where-Object { Test-CcInstancePath ([string]$_.Path) $Instance })\r\n    $chosen = $ours\r\n    if ($AppFilter) { $chosen = @($ours | Where-Object { ([string]$_.Path).Equals('/' + $Instance + '/' + $AppFilter, $CcIc) }) }\r\n    if ($chosen.Count -eq 0) {\r\n        $what = if ($AppFilter) { \"/$Instance/$AppFilter\" } else { \"/$Instance\" }\r\n        throw \"No IIS application $what on $($Inventory.Computer) (instances there: $((Get-CcInstanceNames $Inventory) -join ', ')). Check the instance name in reference data.\"\r\n    }\r\n    foreach ($name in @($chosen | ForEach-Object { [string]$_.Pool } | Where-Object { $_ } | Sort-Object -Unique)) {\r\n        $paths = @($chosen | Where-Object { ([string]$_.Pool).Equals($name, $CcIc) } | ForEach-Object { [string]$_.Path })\r\n        $others = @($Inventory.Apps | Where-Object { ([string]$_.Pool).Equals($name, $CcIc) -and -not (Test-CcInstancePath ([string]$_.Path) $Instance) } |\r\n            ForEach-Object { \"$($_.Site)$($_.Path)\" })\r\n        $skip = ''\r\n        if (@($CcBuiltInPools | Where-Object { $_.Equals($name, $CcIc) }).Count -gt 0) { $skip = 'a built-in IIS pool' }\r\n        elseif ($others.Count -gt 0) { $skip = \"also serves $($others -join ', ')\" }\r\n        [pscustomobject]@{ Pool = $name; Apps = $paths; Skip = $skip }\r\n    }\r\n}\r\n\r\nfunction Invoke-CcPoolAction([string]$Name, [string]$Action) {\r\n    $prev = [string](Get-WebAppPoolState -Name $Name).Value\r\n    if ($Action -eq 'Recycle') {\r\n        if ($prev -eq 'Stopped') { Start-WebAppPool -Name $Name } else { Restart-WebAppPool -Name $Name }\r\n    }\r\n    elseif ($prev -ne 'Started') { Start-WebAppPool -Name $Name }\r\n    $deadline = (Get-Date).AddSeconds(120)\r\n    while ([string](Get-WebAppPoolState -Name $Name).Value -ne 'Started') {\r\n        if ((Get-Date) -gt $deadline) { throw \"Application pool '$Name' did not reach Started within 120 seconds (it was $prev).\" }\r\n        Start-Sleep -Milliseconds 500\r\n    }\r\n    \"$prev -> Started\"\r\n}\r\n\r\nfunction Invoke-CcInstanceStep([string]$Instance, [string]$Action, [string]$AppFilter, $Inventory, [scriptblock]$PoolAction) {\r\n    $Instance = $Instance.Trim().Trim('/')\r\n    if (-not $Instance) { throw 'The instance name resolved blank (ProfiseeInstanceName).' }\r\n    if (-not $Inventory) { $Inventory = Get-CcInventory }\r\n    if ($Action -eq 'FindService') {\r\n        # The output IS the run parameter (outputParameterName): the service's short name, or nothing.\r\n        $s = Select-CcInstanceService $Inventory $Instance\r\n        if ($s) { Write-Output ([string]$s.Name) }\r\n        return\r\n    }\r\n    if ($Action -ne 'Recycle' -and $Action -ne 'Start') { throw \"Unknown action '$Action' (FindService, Recycle or Start).\" }\r\n    if (-not $PoolAction) { $PoolAction = { param($Name, $Act) Invoke-CcPoolAction $Name $Act } }\r\n    $pools = @(Select-CcInstancePools $Inventory $Instance $AppFilter)\r\n    $use = @($pools | Where-Object { -not $_.Skip })\r\n    $scope = if ($AppFilter) { \"application /$Instance/$AppFilter\" } else { \"instance /$Instance\" }\r\n    \"$($Inventory.Computer): $scope uses $($pools.Count) application pool(s); $($Action.ToLower()) $($use.Count):\"\r\n    foreach ($p in @($pools | Where-Object { $_.Skip })) { \"  not touched: '$($p.Pool)' ($($p.Skip))\" }\r\n    if ($use.Count -eq 0) { throw \"No application pool of $scope on $($Inventory.Computer) may be touched (see the lines above).\" }\r\n    foreach ($p in $use) {\r\n        $state = & $PoolAction $p.Pool $Action\r\n        \"  $($Action.ToLower()) '$($p.Pool)' (serves $($p.Apps -join ', ')): $state\"\r\n    }\r\n}\r\n\r\n# ---- run ----\r\nInvoke-CcInstanceStep -Instance $Instance -Action $Action -AppFilter $AppFilter\r\n",
+        "targetComputer": "{{ApplicationServerName}}",
+        "credentialSecretName": null,
+        "credentialUserId": "{{$config:UserCredentials:AdminUser}}",
+        "credentialPassword": "{{$config:UserCredentials:AdminPassword}}",
+        "remoteAuthentication": "CredSSP",
+        "outputParameterName": "InstanceServiceName",
+        "type": "PowerShellStep",
+        "parameters": {},
+        "timeoutSeconds": 300,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: On the application server, find the Windows service of this Profisee instance (connect/instances:ProfiseeInstanceName, or the instance this workload targets): the service whose program lies in the installed Profisee folder that holds the instance's IIS application, never a typed name or a name prefix, because several instances and versions can share one server and the installer lets a person name the service anything. Only its short name is printed (nothing when the instance has none), into the run parameter InstanceServiceName that the service steps below read. Why: the service is stopped around a restore or a key change on releases that have one. Success: one name or nothing is printed; with nothing the service steps report Skipped, normal on releases without a Profisee Windows service. If it fails: the message says what was found: no IIS application for the instance (check the instance name in reference data), more than one service for the instance (names and programs listed: remove the stale one), or a service another instance in the same folder could own; or the admin credential (UserCredentials secrets) cannot reach the server over CredSSP.",
+        "notes": ""
+      }
+    },
+    {
+      "inline": {
+        "serviceName": "{{InstanceServiceName}}",
+        "action": "Stop",
+        "targetComputer": "{{ApplicationServerName}}",
+        "credentialSecretName": null,
+        "credentialUserId": "{{$config:UserCredentials:AdminUser}}",
+        "credentialPassword": "{{$config:UserCredentials:AdminPassword}}",
+        "remoteAuthentication": "CredSSP",
+        "type": "ServiceControlStep",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "runWhen": "{{InstanceServiceName}}",
+        "description": "What: Stop the Profisee Windows service on {{ApplicationServerName}} before IIS is stopped, recycled or restored under, so it holds no connection or cached state (skipped when this release has no Profisee Windows service). Why: Stop the Windows service so the next steps work on a quiet or a running Profisee instance, as they need. Success: The service on the target machine ends in the state the action asks for (Stop). If it fails: the admin credential (UserCredentials secrets) cannot manage services on that server over CredSSP, or the service did not reach the state in time (check it in services.msc there). Skipped when: the step Find The Instance Service found no Windows service for this instance, which is normal on releases without a Profisee Windows service.",
+        "notes": ""
+      },
+      "label": "Stop Profisee Service"
+    },
+    {
+      "inline": {
+        "serverName": "{{DatabaseServerName}}",
+        "connectionSecretName": "",
+        "authMode": "Windows",
+        "credentialUserId": "",
+        "credentialPassword": "",
+        "databaseName": "{{ProfiseeDatabaseName}}",
+        "operation": "RestoreDatabase",
+        "snapshotName": "",
+        "backupFileName": "{{BaseSeedBackupFileName}}",
+        "fileUncPath": null,
+        "overwrite": true,
+        "relocateFiles": false,
+        "waitIndefinitely": true,
+        "dryRun": false,
+        "type": "DatabaseOperationsStep",
+        "parameters": {},
+        "timeoutSeconds": 7200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Restore the seed backup (connect/databases:BaseSeedBackupFileName) over {{ProfiseeDatabaseName}} WITH REPLACE. The executor takes the database OFFLINE WITH ROLLBACK IMMEDIATE first (disconnects the application server), and brings it back ONLINE if the restore fails. Why: the Main model is built on a clean, empty Profisee database, never on whatever another pack or an older run left there (entities outside the Connect family that use its domains stop the model build). Success: SQL Server finishes the restore of the database from the seed in its default backup folder. If it fails: Check the disk has room and the CrewChief account is sysadmin on the database server; the step before proved the file exists.",
+        "notes": ""
+      },
+      "label": "Restore Seed Backup"
+    },
+    {
+      "label": "Recycle Instance Application Pools",
+      "inline": {
+        "executionPolicy": "Bypass",
+        "preferWindowsPowerShell": true,
+        "runAsAdministrator": false,
+        "captureVerbose": false,
+        "captureDebug": false,
+        "treatStderrAsError": true,
+        "scriptContent": "$Instance = '{{ProfiseeInstanceName}}'\r\n$Action = 'Recycle'\r\n$AppFilter = ''\r\n# Profisee instance discovery (CrewChief packs). Every step that finds the Windows service of a Profisee instance or acts\r\n# on its IIS application pools carries this same text after three lines naming the instance, the action and the\r\n# application filter. It is generated from packs\\tools\\instance-discovery.ps1.txt (instance_steps.py); never edit it in\r\n# a workload. It runs ON the application server in Windows PowerShell (the WebAdministration module).\r\n# Several Profisee instances (and versions) can live side by side on one server, so nothing is matched on a name or a\r\n# name prefix alone:\r\n#   - the instance's applications are /<instance> and everything under /<instance>/ (whole path segments, so instance\r\n#     'Profisee' never catches /Profisee2 or /Profisee-qa);\r\n#   - its pools are the application pools those applications use; a built-in pool, or a pool that also serves an\r\n#     application of something else, is never touched (and is named in the output);\r\n#   - its Windows service is the one whose program lies in the installed Profisee folder that holds the instance's\r\n#     IIS application (the deepest product folder of the uninstall entries, or a version folder under\r\n#     Program Files\\Profisee\\Master Data Maestro Server, that contains /<instance>'s physical path); when another\r\n#     instance shares that folder, the installer's name form '... (<instance>)' decides; when no product folder holds\r\n#     the instance, only that name form is used.\r\n$ErrorActionPreference = 'Stop'\r\n$CcBuiltInPools = @('DefaultAppPool', 'Classic .NET AppPool', '.NET v2.0', '.NET v2.0 Classic', '.NET v4.5', '.NET v4.5 Classic',\r\n    'ASP.NET v4.0', 'ASP.NET v4.0 Classic')\r\n$CcIc = [StringComparison]::OrdinalIgnoreCase\r\n\r\nfunction Test-CcUnder([string]$Path, [string]$Folder) {\r\n    if (-not $Path -or -not $Folder) { return $false }\r\n    $f = $Folder.TrimEnd('\\')\r\n    return $Path.TrimEnd('\\').Equals($f, $CcIc) -or $Path.StartsWith($f + '\\', $CcIc)\r\n}\r\n\r\nfunction Get-CcCommonDepth([string]$A, [string]$B) {\r\n    $x = $A.TrimEnd('\\').Split('\\')\r\n    $y = $B.TrimEnd('\\').Split('\\')\r\n    $n = 0\r\n    while ($n -lt $x.Count -and $n -lt $y.Count -and $x[$n].Equals($y[$n], $CcIc)) { $n++ }\r\n    return $n\r\n}\r\n\r\nfunction Get-CcProgramPath([string]$CommandLine) {\r\n    if (-not $CommandLine) { return '' }\r\n    if ($CommandLine -match '^\\s*\"([^\"]+)\"') { return $Matches[1] }\r\n    if ($CommandLine -match '^\\s*(.+?\\.exe)(\\s|$)') { return $Matches[1] }\r\n    return $CommandLine.Trim()\r\n}\r\n\r\nfunction Test-CcNamedFor($Service, [string]$Instance) {\r\n    $rx = '\\(' + [regex]::Escape($Instance) + '\\)\\s*$'\r\n    return ([string]$Service.Name -match $rx) -or ([string]$Service.DisplayName -match $rx)\r\n}\r\n\r\nfunction Test-CcInstancePath([string]$AppPath, [string]$Instance) {\r\n    $root = '/' + $Instance\r\n    return $AppPath.Equals($root, $CcIc) -or $AppPath.StartsWith($root + '/', $CcIc)\r\n}\r\n\r\nfunction Get-CcInstanceNames($Inventory) {\r\n    @($Inventory.Apps | Where-Object { [string]$_.Path -match '^/[^/]+$' } | ForEach-Object { ([string]$_.Path).Substring(1) } | Sort-Object -Unique)\r\n}\r\n\r\nfunction Get-CcInventory {\r\n    # The real server: IIS applications (site root '/' included, for the shared-pool check), Windows services and the\r\n    # folders installed Profisee products live in.\r\n    Import-Module WebAdministration\r\n    $apps = New-Object System.Collections.Generic.List[object]\r\n    foreach ($site in @(Get-ChildItem 'IIS:\\Sites')) {\r\n        $sitePool = [string]$site.applicationPool\r\n        $apps.Add([pscustomobject]@{ Site = [string]$site.Name; Path = '/'; Pool = $sitePool\r\n                PhysicalPath = [Environment]::ExpandEnvironmentVariables([string]$site.physicalPath) })\r\n        foreach ($a in @(Get-WebApplication -Site $site.Name)) {\r\n            $pool = [string]$a.applicationPool\r\n            if (-not $pool) { $pool = $sitePool }\r\n            $apps.Add([pscustomobject]@{ Site = [string]$site.Name; Path = [string]$a.path; Pool = $pool\r\n                    PhysicalPath = [Environment]::ExpandEnvironmentVariables([string]$a.PhysicalPath) })\r\n        }\r\n    }\r\n    $services = @(Get-CimInstance -ClassName Win32_Service | ForEach-Object {\r\n            [pscustomobject]@{ Name = [string]$_.Name; DisplayName = [string]$_.DisplayName; PathName = [string]$_.PathName; State = [string]$_.State } })\r\n    $keys = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', 'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'\r\n    $folders = @(Get-ItemProperty -Path $keys -ErrorAction SilentlyContinue |\r\n        Where-Object { [string]$_.DisplayName -match 'Profisee|Maestro' -and $_.InstallLocation } |\r\n        ForEach-Object { ([string]$_.InstallLocation).TrimEnd('\\') })\r\n    foreach ($pf in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {\r\n        if (-not $pf) { continue }\r\n        $server = Join-Path $pf 'Profisee\\Master Data Maestro Server'\r\n        if (Test-Path -LiteralPath $server) { $folders += @(Get-ChildItem -LiteralPath $server -Directory | ForEach-Object { $_.FullName }) }\r\n    }\r\n    [pscustomobject]@{ Computer = $env:COMPUTERNAME; Apps = $apps.ToArray(); Services = $services\r\n        InstallFolders = @($folders | Where-Object { $_ } | Sort-Object -Unique) }\r\n}\r\n\r\nfunction Select-CcInstanceService($Inventory, [string]$Instance) {\r\n    # Returns the instance's one Windows service, $null when it has none, or throws (instance missing, more than one\r\n    # service, or a service another instance in the same folder may own).\r\n    $roots = @($Inventory.Apps | Where-Object { ([string]$_.Path).Equals('/' + $Instance, $CcIc) })\r\n    if ($roots.Count -eq 0) {\r\n        throw \"No IIS application /$Instance on $($Inventory.Computer) (instances there: $((Get-CcInstanceNames $Inventory) -join ', ')). Check the instance name in reference data.\"\r\n    }\r\n    $folders = @($roots | ForEach-Object { [string]$_.PhysicalPath } | Where-Object { $_ } | Sort-Object -Unique)\r\n    if ($folders.Count -ne 1) {\r\n        throw \"IIS application /$Instance on $($Inventory.Computer) has $($folders.Count) physical folders ($($folders -join '; ')); cannot tell which install it belongs to.\"\r\n    }\r\n    $instFolder = $folders[0]\r\n    $installed = @($Inventory.InstallFolders | Where-Object { Test-CcUnder $instFolder $_ } | Sort-Object { $_.TrimEnd('\\').Length } -Descending)\r\n    $mine = @()\r\n    $unsure = @()\r\n    if ($installed.Count -gt 0) {\r\n        $folder = $installed[0]\r\n        $rivals = @($Inventory.Apps | Where-Object {\r\n                ([string]$_.Path) -match '^/[^/]+$' -and -not ([string]$_.Path).Equals('/' + $Instance, $CcIc) -and (Test-CcUnder ([string]$_.PhysicalPath) $folder)\r\n            } | ForEach-Object { [pscustomobject]@{ Name = ([string]$_.Path).Substring(1); Folder = [string]$_.PhysicalPath } })\r\n        foreach ($s in @($Inventory.Services)) {\r\n            $program = Get-CcProgramPath $s.PathName\r\n            if (-not (Test-CcUnder $program $folder)) { continue }\r\n            $depth = Get-CcCommonDepth $program $instFolder\r\n            if (@($rivals | Where-Object { (Get-CcCommonDepth $program $_.Folder) -gt $depth }).Count -gt 0) { continue }\r\n            $tied = @($rivals | Where-Object { (Get-CcCommonDepth $program $_.Folder) -eq $depth })\r\n            if ($tied.Count -eq 0 -or (Test-CcNamedFor $s $Instance)) { $mine += $s; continue }\r\n            if (@($tied | Where-Object { Test-CcNamedFor $s $_.Name }).Count -gt 0) { continue }\r\n            $unsure += $s\r\n        }\r\n    }\r\n    else {\r\n        $mine = @($Inventory.Services | Where-Object { Test-CcNamedFor $_ $Instance })\r\n    }\r\n    if ($unsure.Count -gt 0) {\r\n        throw \"Instance $Instance on $($Inventory.Computer) shares its installed folder with other instances and these services could belong to either: $(($unsure | ForEach-Object { \"'$($_.Name)' ($($_.PathName))\" }) -join ', ').\"\r\n    }\r\n    if ($mine.Count -gt 1) {\r\n        $named = @($mine | Where-Object { Test-CcNamedFor $_ $Instance })\r\n        if ($named.Count -eq 1) { $mine = $named }\r\n    }\r\n    if ($mine.Count -gt 1) {\r\n        throw \"More than one Windows service belongs to instance $Instance on $($Inventory.Computer): $(($mine | ForEach-Object { \"'$($_.Name)' ($($_.PathName))\" }) -join ', '). Remove the stale one.\"\r\n    }\r\n    if ($mine.Count -eq 1) { return $mine[0] }\r\n    return $null\r\n}\r\n\r\nfunction Select-CcInstancePools($Inventory, [string]$Instance, [string]$AppFilter) {\r\n    # One object per pool the instance's applications use: Pool, Apps (paths), Skip (why it is not touched, or blank).\r\n    $ours = @($Inventory.Apps | Where-Object { Test-CcInstancePath ([string]$_.Path) $Instance })\r\n    $chosen = $ours\r\n    if ($AppFilter) { $chosen = @($ours | Where-Object { ([string]$_.Path).Equals('/' + $Instance + '/' + $AppFilter, $CcIc) }) }\r\n    if ($chosen.Count -eq 0) {\r\n        $what = if ($AppFilter) { \"/$Instance/$AppFilter\" } else { \"/$Instance\" }\r\n        throw \"No IIS application $what on $($Inventory.Computer) (instances there: $((Get-CcInstanceNames $Inventory) -join ', ')). Check the instance name in reference data.\"\r\n    }\r\n    foreach ($name in @($chosen | ForEach-Object { [string]$_.Pool } | Where-Object { $_ } | Sort-Object -Unique)) {\r\n        $paths = @($chosen | Where-Object { ([string]$_.Pool).Equals($name, $CcIc) } | ForEach-Object { [string]$_.Path })\r\n        $others = @($Inventory.Apps | Where-Object { ([string]$_.Pool).Equals($name, $CcIc) -and -not (Test-CcInstancePath ([string]$_.Path) $Instance) } |\r\n            ForEach-Object { \"$($_.Site)$($_.Path)\" })\r\n        $skip = ''\r\n        if (@($CcBuiltInPools | Where-Object { $_.Equals($name, $CcIc) }).Count -gt 0) { $skip = 'a built-in IIS pool' }\r\n        elseif ($others.Count -gt 0) { $skip = \"also serves $($others -join ', ')\" }\r\n        [pscustomobject]@{ Pool = $name; Apps = $paths; Skip = $skip }\r\n    }\r\n}\r\n\r\nfunction Invoke-CcPoolAction([string]$Name, [string]$Action) {\r\n    $prev = [string](Get-WebAppPoolState -Name $Name).Value\r\n    if ($Action -eq 'Recycle') {\r\n        if ($prev -eq 'Stopped') { Start-WebAppPool -Name $Name } else { Restart-WebAppPool -Name $Name }\r\n    }\r\n    elseif ($prev -ne 'Started') { Start-WebAppPool -Name $Name }\r\n    $deadline = (Get-Date).AddSeconds(120)\r\n    while ([string](Get-WebAppPoolState -Name $Name).Value -ne 'Started') {\r\n        if ((Get-Date) -gt $deadline) { throw \"Application pool '$Name' did not reach Started within 120 seconds (it was $prev).\" }\r\n        Start-Sleep -Milliseconds 500\r\n    }\r\n    \"$prev -> Started\"\r\n}\r\n\r\nfunction Invoke-CcInstanceStep([string]$Instance, [string]$Action, [string]$AppFilter, $Inventory, [scriptblock]$PoolAction) {\r\n    $Instance = $Instance.Trim().Trim('/')\r\n    if (-not $Instance) { throw 'The instance name resolved blank (ProfiseeInstanceName).' }\r\n    if (-not $Inventory) { $Inventory = Get-CcInventory }\r\n    if ($Action -eq 'FindService') {\r\n        # The output IS the run parameter (outputParameterName): the service's short name, or nothing.\r\n        $s = Select-CcInstanceService $Inventory $Instance\r\n        if ($s) { Write-Output ([string]$s.Name) }\r\n        return\r\n    }\r\n    if ($Action -ne 'Recycle' -and $Action -ne 'Start') { throw \"Unknown action '$Action' (FindService, Recycle or Start).\" }\r\n    if (-not $PoolAction) { $PoolAction = { param($Name, $Act) Invoke-CcPoolAction $Name $Act } }\r\n    $pools = @(Select-CcInstancePools $Inventory $Instance $AppFilter)\r\n    $use = @($pools | Where-Object { -not $_.Skip })\r\n    $scope = if ($AppFilter) { \"application /$Instance/$AppFilter\" } else { \"instance /$Instance\" }\r\n    \"$($Inventory.Computer): $scope uses $($pools.Count) application pool(s); $($Action.ToLower()) $($use.Count):\"\r\n    foreach ($p in @($pools | Where-Object { $_.Skip })) { \"  not touched: '$($p.Pool)' ($($p.Skip))\" }\r\n    if ($use.Count -eq 0) { throw \"No application pool of $scope on $($Inventory.Computer) may be touched (see the lines above).\" }\r\n    foreach ($p in $use) {\r\n        $state = & $PoolAction $p.Pool $Action\r\n        \"  $($Action.ToLower()) '$($p.Pool)' (serves $($p.Apps -join ', ')): $state\"\r\n    }\r\n}\r\n\r\n# ---- run ----\r\nInvoke-CcInstanceStep -Instance $Instance -Action $Action -AppFilter $AppFilter\r\n",
+        "targetComputer": "{{ApplicationServerName}}",
+        "credentialSecretName": null,
+        "credentialUserId": "{{$config:UserCredentials:AdminUser}}",
+        "credentialPassword": "{{$config:UserCredentials:AdminPassword}}",
+        "remoteAuthentication": "CredSSP",
+        "type": "PowerShellStep",
+        "parameters": {},
+        "timeoutSeconds": 900,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Recycle every application pool of {{ProfiseeInstanceName}} so no service keeps metadata or record caches from before the restore. The pools are found on the server at run time: the application pools that the IIS applications /<instance> and below use (whole path segments, so another instance whose name starts the same is never caught), never a typed list; recycle each of them. A built-in pool, or one that also serves something outside the instance, is never touched and is named in the output; the output lists every pool and what it serves. Why: Recycles or starts the IIS application pools so no service keeps caches from before a restore or a configuration change. Success: every pool found reaches Started. If it fails: the instance has no such IIS application on the server (check connect/instances:ProfiseeInstanceName, or the instance this workload targets, against IIS Manager), no pool may be touched, a pool did not reach Started within 120 seconds, or the admin credential (UserCredentials secrets) cannot reach the server over CredSSP.",
+        "notes": ""
+      }
+    },
+    {
+      "inline": {
+        "serviceName": "{{InstanceServiceName}}",
+        "action": "Start",
+        "targetComputer": "{{ApplicationServerName}}",
+        "credentialSecretName": null,
+        "credentialUserId": "{{$config:UserCredentials:AdminUser}}",
+        "credentialPassword": "{{$config:UserCredentials:AdminPassword}}",
+        "remoteAuthentication": "CredSSP",
+        "type": "ServiceControlStep",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "runWhen": "{{InstanceServiceName}}",
+        "description": "What: Start the Profisee Windows service on {{ApplicationServerName}} after IIS is back, so it reads the current database and key (skipped when this release has no Profisee Windows service). Why: Start the Windows service so the next steps work on a quiet or a running Profisee instance, as they need. Success: The service on the target machine ends in the state the action asks for (Start). If it fails: the admin credential (UserCredentials secrets) cannot manage services on that server over CredSSP, or the service did not reach the state in time (check it in services.msc there). Skipped when: the step Find The Instance Service found no Windows service for this instance, which is normal on releases without a Profisee Windows service.",
+        "notes": ""
+      },
+      "label": "Start Profisee Service"
+    },
+    {
+      "inline": {
+        "workloadName": "install-configure-upgrade",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 7500,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Run Profisee Configuration on the restored seed (install pack building block install-configure-upgrade: upgrade, keeps the data). The seed may come from an older Profisee version, and only the database Configuration ran on last carries service sign-in ids this application server accepts; Configuration upgrades the seed to the version under test and writes new ids. A seed from a newer version than the installed Profisee cannot be used (Configuration only upgrades). Why: Runs the child workload 'install-configure-upgrade' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'install-configure-upgrade'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Configure The Restored Seed"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-api-key-set-main",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Set the standard API key on the Main instance after the restore and Configuration (a clean Configuration issues a new key), restart IIS so every service reads it, and prove it through the gateway (pack rule: a workload that restores the Profisee database sets and verifies the key itself). Why: Runs the child workload 'connect-api-key-set-main' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-api-key-set-main'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Set And Verify Main API Key"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "ProfiseeVersionNumber",
+      "description": "Product version of the release under test (n.n.n): the Configuration program is found under it. Passed by the workload that runs this one (connect/environment:ProfiseeVersionNumber, or the lane's version).",
+      "default": "{{$ref:connect/environment:ProfiseeVersionNumber}}"
+    }
+  ]
+}

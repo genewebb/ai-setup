@@ -11,29 +11,27 @@ Run-As every pack uses; build = pipeline 293, master only).
 
 Usage: python gen_install.py <packRoot>      (e.g. C:\\devops\\repos\\speed-merchants\\CrewChief\\packs\\install)
 """
-import json, os, sys
+import os
+import sys
 
-root = sys.argv[1]
-here = os.path.dirname(os.path.abspath(__file__))
+root = os.path.abspath(sys.argv[1])
 FAM = 'install'
 ref_dir = os.path.join(root, 'reference-kv', FAM)
 wl_root = os.path.join(root, 'workloads', FAM)
-# Service and pool steps (Gene 11/10): found on the server, never named; one shared builder for every pack.
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(root)), 'tools'))
-import instance_steps  # noqa: E402
-
-
-def dump(path, obj):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(obj, f, indent=2)
+# Shared builders of every pack generator (Gene 11/11): step shapes, inputs, the workload dictionary, the common pack's children.
+sys.path.insert(0, os.environ.get('PACKGEN_TOOLS') or os.path.join(os.path.dirname(root), 'tools'))
+from packgen import steps  # noqa: E402
+from packgen.values import ref as _ref, value_input, version_inputs  # noqa: E402
+from packgen.workloads import clear_workloads, dump, workload as _workload  # noqa: E402
 
 
 def ref(s, k):
-    return "{{$ref:%s/%s:%s}}" % (FAM, s, k)
+    return _ref(FAM, s, k)
 
 
 # ---------------------------------------------------------------- reference sets
+# Box facts: a person edits them on each box. A set is written ONLY when its file is missing (a first generation); an
+# existing file is never touched, so a run of this generator cannot put one box's values over another's.
 REF_SETS = {
     'machines': {
         "description": "Install pack: the machines an install touches. Profisee is removed and installed on the application server; its database lives on the database server; CrewChief runs on the test server.",
@@ -103,59 +101,38 @@ REF_SETS = {
         "keyBlankAllowed": {"ModelFile": True, "ArchiveFile": True, "UsersFile": True}},
 }
 for name, obj in REF_SETS.items():
-    dump(os.path.join(ref_dir, name + '.json'), obj)
+    if not os.path.exists(os.path.join(ref_dir, name + '.json')):
+        dump(os.path.join(ref_dir, name + '.json'), obj)
 
-# ---------------------------------------------------------------- step helpers (same shapes as the CRUD pack)
-base = {"parameters": {}, "timeoutSeconds": 600, "continueOnError": False, "retryEnabled": False, "maxRetries": 0,
-        "retryDelaySeconds": 5, "workingDirectory": None, "notes": ""}
-ADMIN = {"credentialSecretName": None, "credentialUserId": "{{$config:UserCredentials:AdminUser}}",
-         "credentialPassword": "{{$config:UserCredentials:AdminPassword}}", "remoteAuthentication": "CredSSP"}
-LOCAL = {"targetComputer": None, "remoteAuthentication": None}
-
-
-def ps(label, script, desc, timeout=600):
-    return {"label": label, "inline": {**base, "executionPolicy": "Bypass", "preferWindowsPowerShell": False,
-            "runAsAdministrator": False, "captureVerbose": False, "captureDebug": False, "treatStderrAsError": True,
-            "scriptContent": script.replace('\r\n', '\n').replace('\n', '\r\n'), "type": "PowerShellStep",
-            "timeoutSeconds": timeout, "description": desc}}
+# ---------------------------------------------------------------- step helpers (packgen shapes, the same in every pack)
+base = steps.BASE
+ADMIN = steps.ADMIN
+ps = steps.ps
 
 
 def step(label, type_, desc, timeout=600, **fields):
     return {"label": label, "inline": {**base, **fields, "type": type_, "timeoutSeconds": timeout, "description": desc}}
 
 
-def workload(name, desc, tags, globals_, steps, notes="", inputs=None):
-    w = {"name": name, "description": desc, "tags": tags, "globalParameters": globals_, "globalParametersNotes": notes,
-         "credentialUserId": None, "credentialPassword": None, "credentialNotes": "", "steps": steps}
-    instance_steps.add_service_discovery(w, FAM)
-    if inputs:
-        # Hand runs (Gene 11/10): every input carries a "default", used only when no caller supplies the value.
-        w["inputs"] = [{"name": n, "description": d, "default": INPUT_DEFAULTS[n]} for n, d in inputs]
-    return w
+def workload(name, desc, tags, globals_, step_list, notes="", inputs=None):
+    return _workload(name, desc, tags, step_list, inputs=inputs, globals_=globals_, notes=notes, family=FAM)
 
 
-# Hand-run defaults of every input (a caller's --param, a parent's step parameters and inherited context all win; an explicitly
-# supplied blank counts as supplied). Same reference data the roots read; AdoBuildId blank = the latest build of AdoBranch.
-INPUT_DEFAULTS = {"AdoBranch": ref('build', 'AdoBranch'), "AdoBuildId": "",
-                  "ProfiseeVersionNumber": ref('environment', 'ProfiseeVersionNumber')}
-
-# Every parent of install-build-get passes the build to install: the reference-data branch and the latest build, unless
-# the caller (a TestAutoManager round, through CrewChief --param) passes AdoBranch / AdoBuildId of its own.
-BUILD_GLOBALS = {"AdoBranch": ref('build', 'AdoBranch'), "AdoBuildId": ""}
+# The build to install and the version are values a caller passes (a TestAutoManager lane, through CrewChief --param), so
+# they are INPUTS with a default in every workload that uses them, the tests included, never globals: a child's own global
+# would beat the value its parent passes; an input default fills only a gap (a hand run). AdoBuildId blank = the latest
+# successful build of AdoBranch.
 BUILD_INPUTS = [
-    ("AdoBranch", "Branch of the platform pipeline to install from (refs/heads/...), passed by the test that runs this "
-                  "one: install/build:AdoBranch, or the branch of a TestAutoManager round."),
-    ("AdoBuildId", "Exact Azure DevOps build id to install, passed by the test that runs this one; blank = the latest "
-                   "successful build of AdoBranch."),
+    value_input("AdoBranch", ref('build', 'AdoBranch'),
+                "Branch of the platform pipeline to install from (refs/heads/...). Default: install/build:AdoBranch; a "
+                "TestAutoManager round passes its own."),
+    value_input("AdoBuildId", "",
+                "Exact Azure DevOps build id to install; blank (the default) = the latest successful build of AdoBranch. A "
+                "TestAutoManager round passes its own."),
 ]
+IN_VERSION_NUMBER = version_inputs(FAM, 'ProfiseeVersionNumber')[0]
 
-# Version keys (decision D12): a root (a workload no workload runs) reads each from reference data in its own global of
-# the same name, or takes it from the caller (a TestAutoManager lane passes it as --param); every workload below a
-# root declares the ones it uses as inputs and gets the value from its parent.
-VERSION_GLOBALS = {"ProfiseeVersionNumber": ref('environment', 'ProfiseeVersionNumber')}
-IN_VERSION_NUMBER = ("ProfiseeVersionNumber", "Product version of the release being installed (n.n.n): the Configuration "
-                     "and utilities programs are found under it. Passed by the test that runs this one "
-                     "(install/environment:ProfiseeVersionNumber, or the lane's version).")
+clear_workloads(wl_root)
 
 
 G = {
@@ -526,94 +503,23 @@ def owner_db(new_db):
             "or install-programs ran without install-configure-new), or the CrewChief account is not sysadmin on the database "
             "server."))}}
 G["ProfiseeDatabaseName"] = ref('databases', 'ProfiseeDatabaseName')
-with open(os.path.join(here, 'health.ps1'), encoding='utf-8', newline='') as f:
-    HEALTH = f.read()
-G["MainHealthUrl"] = ("https://" + ref('machines', 'ApplicationServerNameFQDN') + "/" + ref('instances', 'ProfiseeInstanceName')
-                      + "/rest/health")
 G["ProfiseeInstanceName"] = ref('instances', 'ProfiseeInstanceName')
 G["ProfiseeBaseUrl"] = ("https://" + ref('machines', 'ApplicationServerNameFQDN') + "/" + ref('instances', 'ProfiseeInstanceName')
                         + "/rest")
-G["ProfiseeApiKey"] = "{{$config:RestKeys:ProfiseeRestKey}}"
-G["ApiKeyUserName"] = "{{$config:ConnectRuntime:ApiKeyUserName}}"
 
-# ---------------------------------------------------------------- internal/install-api-key-set (Gene 11/09)
+# ---------------------------------------------------------------- the API key (Gene 11/09, shared since 11/11)
 # Rule of every pack: a workload that runs Profisee Configuration (or restores the Profisee database) sets the standard API
-# key itself afterwards and proves it through the gateway and the Data service (Test-Pack rule R-key). A Configuration run
-# issues a new key, and the services read a key change only after IIS restarts. Same shape as crud-api-key-set and
-# matching-api-key-set; the reference keys it reads are this pack's (machines, instances, databases) and the key comes from
-# the RestKeys:ProfiseeRestKey secret.
-def key_service(action, what):
-    # The service name comes from the step Find The Instance Service (instance_steps.add_service_discovery in workload()).
-    return instance_steps.service_step(f"{action} The Profisee Service", action, "{{ApplicationServerName}}", what,
-                                       "it caches the user it signed in with and must read the new key.")
-
-
-def key_http(label, path, what, why):
-    return step(label, "HTTP", f"What: {what} Why: {why} Success: HTTP 200. If it fails: 401, 400 DATA00030 or 403 means the key did not "
-                "take: check the API user in meta.tUser and that IIS restarted after the key change; then rerun this workload.",
-                timeout=600, retryEnabled=True, maxRetries=4, retryDelaySeconds=30, url="{{ProfiseeBaseUrl}}" + path, method="GET",
-                headers={"x-api-key": "{{ProfiseeApiKey}}", "accept": "application/json"}, body="", outputFile="",
-                expectedStatusCodes=[200], followRedirects=True, verifySsl=True, maxTimeSeconds=300)
-
-
-key_set_steps = [
-    key_service("Stop", "Stop the Profisee Windows service before the key change."),
-    *IIS_STOP,
-    step("Set API Key", "SetApiKeyStep",
-         "What: Write the standard API key for the machine's API user (ConnectRuntime:ApiKeyUserName) into meta.tUser. Why: TestAuto, "
-         "the rule removal and every check call the gateway with that key; Profisee Configuration issues a new key and a restored "
-         "backup may carry another one. Success: the user row is updated. If it fails: the user is missing from meta.tUser; add it "
-         "in Profisee as a super administrator.",
-         username="{{ApiKeyUserName}}", key="{{ProfiseeApiKey}}", serverName="{{DatabaseServerName}}",
-         databaseName="{{ProfiseeDatabaseName}}", authMode="Windows", credentialUserId="", credentialPassword="",
-         sqlDestinationConnectionSecretName="", stripHyphens=True),
-    iis_service("WAS", "Start", "What: Start the Windows Process Activation Service on the application server. Why: IIS must run again "
-                "so the application pools start and read the new key. Success: running. If it fails: the admin credential cannot manage "
-                "services there over CredSSP."),
-    iis_service("W3SVC", "Start", "What: Start the World Wide Web Publishing Service on the application server. Why: as the step before. "
-                "Success: running. If it fails: as the step before."),
-    key_service("Start", "Start the Profisee Windows service after IIS starts."),
-    ps("Start Every Service", HEALTH,
-       "What: Wait until every health check of the instance is Healthy. Why: services stay cold after a recycle; the key checks "
-       "below must not meet a cold service. Success: all checks Healthy within 10 minutes. If it fails: open the health URL "
-       "({{MainHealthUrl}}) and fix the service it names.", timeout=900),
-    key_http("Verify API Key Through Gateway", "/v1/Entities", "Call the gateway with the standard key.",
-             "proves the key took before anything else uses it."),
-    key_http("Verify API Key Through Data Service", "/v1/Rules?PageSize=1",
-             "Prove the Data service accepts the API key as a real user: GET v1/Rules?PageSize=1.",
-             "the gateway check can pass while the Data and Connect services still reject the user (400 DATA00030, 403 CNX00080)."),
-]
-dump(os.path.join(wl_root, 'internal', 'install-api-key-set.workload.json'), workload(
-    "install-api-key-set",
-    ("What: Stop the Profisee service and IIS on the application server, write the standard API key (RestKeys:ProfiseeRestKey) for "
-     "the API user (ConnectRuntime:ApiKeyUserName) into the Profisee database, start IIS and the service, wait for every service, "
-     "and prove the key through the gateway and the Data service. Why: the pack standard (Test-Pack rule R-key): whatever runs "
-     "Profisee Configuration sets the key itself afterwards, so no later step meets a 401. When: Never run directly; "
-     "install-configure-new and install-configure-upgrade run it right after Configuration. Running it alone is safe when no test "
-     "uses this Profisee instance. Needs: the instance is configured and the API user exists in the Profisee database; secrets "
-     "RestKeys:ProfiseeRestKey and ConnectRuntime:ApiKeyUserName; no test running on this application server. Success: Every step "
-     "Succeeded or Skipped. If it fails: open the first failed step, whose If it fails text names what to check."),
-    ["install", "internal", "api-key"],
-    g("ApplicationServerName", "DatabaseServerName", "ProfiseeInstanceName", "ProfiseeDatabaseName", "ProfiseeBaseUrl", "MainHealthUrl",
-      "ProfiseeApiKey", "ApiKeyUserName"),
-    key_set_steps))
+# key itself afterwards and proves it through the gateway and the Data service (Test-Pack rule R-key). The steps live once,
+# in the common pack (common-api-key-set); it reads the box from this workload's values: ApplicationServerName,
+# DatabaseServerName, ProfiseeDatabaseName, ProfiseeInstanceName and ProfiseeBaseUrl.
+KEY_BOX = ("ApplicationServerName", "DatabaseServerName", "ProfiseeDatabaseName", "ProfiseeInstanceName", "ProfiseeBaseUrl")
 
 
 def run_child(label, name, what, timeout=21600):
-    return step(label, "RunWorkloadStep",
-                (f"What: {what}. Why: Runs the child workload '{name}' so its tested steps are reused here, not repeated. "
-                 "Success: The child workload ends with every step Succeeded or Skipped. "
-                 f"If it fails: Open the run output of '{name}'; its first failed step says what to check."),
-                timeout=timeout, workloadName=name)
+    return steps.run_child(label, name, what, timeout=timeout)
 
 
-def key_set_child():
-    return run_child("Set And Verify API Key", "install-api-key-set",
-                     "Set the standard API key, restart IIS so every service reads it, and prove it through the gateway and the Data service",
-                     timeout=3600)
-
-
-# Gene 11/08: every pack run restores its base and runs install-configure-upgrade on it. Configuration writes new service
+# # Gene 11/08: every pack run restores its base and runs install-configure-upgrade on it. Configuration writes new service
 # sign-in ids into the database AND the application server, so a base configured before another one is rejected
 # (400 DATA00030). A full pack base (CRUD: 47 GB) configures far slower than an empty database.
 for drop_db in (True, False):
@@ -633,13 +539,13 @@ for drop_db in (True, False):
          ("." if drop_db else
           "; and at the start of every pack run, right after the pack restores its base backup (crud-run-start, "
           "matching-*-scenario1-load), so the base carries this application server's service sign-in ids.") +
-         " Then it sets the standard API key and proves it (install-api-key-set), because Configuration issues a new key. Needs: the programs of this release "
+         " Then it sets the standard API key and proves it (common-api-key-set), because Configuration issues a new key. Needs: the programs of this release "
          "installed; the license file on the application server; secrets UserCredentials:AdminUser, AdminPassword and "
          "ProfAdminClientId. Success: Every step Succeeded. If it fails: open the first failed step, whose If it fails text "
          "names what to check."),
         ["install", "internal", "configure", "new-db" if drop_db else "upgrade"],
-        g("ApplicationServerName", "DatabaseServerName", "ProfiseeDatabaseName"),
-        ([DROP_DB, CREATE_DB, owner_db(True)] if drop_db else [owner_db(False)]) + [conf, key_set_child()],
+        g(*KEY_BOX),
+        ([DROP_DB, CREATE_DB, owner_db(True)] if drop_db else [owner_db(False)]) + [conf, steps.key_set_child()],
         inputs=[IN_VERSION_NUMBER]))
 
 # ---------------------------------------------------------------- internal/install-verify
@@ -653,10 +559,7 @@ if (-not "$($p[0].DisplayVersion)".StartsWith($want)) { throw "$env:COMPUTERNAME
 Write-Output "$env:COMPUTERNAME runs $($p[0].DisplayName) version $($p[0].DisplayVersion) (expected $want)."
 """
 verify_steps = [
-    ps("Wait For Every Service", HEALTH,
-       "What: Wait until every health check of the new instance is Healthy. Why: proves Configuration produced a working "
-       "instance (it can exit 0 on failure). Success: all checks Healthy within 10 minutes. If it fails: open the health URL "
-       "({{MainHealthUrl}}) and the Configuration log on the application server.", timeout=900),
+    steps.health_child(),
     remote_ps("Check The Installed Version", VERSION_CHECK,
               "What: Check exactly one Profisee Server is installed on the application server and its version starts with "
               "ProfiseeVersionNumber. Why: a run must never measure the old version by mistake. Success: "
@@ -667,10 +570,10 @@ dump(os.path.join(wl_root, 'internal', 'install-verify.workload.json'), workload
     "install-verify",
     ("What: Check the new instance answers (every health check Healthy) and the installed Profisee Server version is the one "
      "in ProfiseeVersionNumber (the lane's, or install/environment:ProfiseeVersionNumber). Why: the proof an install worked before any pack measures it. When: last "
-     "part of every install; alone any time (then pass ProfiseeVersionNumber). Needs: the instance exists. Success: Every step Succeeded. If it fails: open the "
+     "part of every install; alone any time. Needs: the instance exists; the common pack on this box. Success: Every step Succeeded. If it fails: open the "
      "first failed step, whose If it fails text names what to check."),
     ["install", "internal", "verify"],
-    g("ApplicationServerName", "MainHealthUrl"), verify_steps, inputs=[IN_VERSION_NUMBER]))
+    g("ApplicationServerName", "ProfiseeBaseUrl"), verify_steps, inputs=[IN_VERSION_NUMBER]))
 
 
 # ---------------------------------------------------------------- tests and preflight
@@ -692,7 +595,8 @@ for name, (what, kids) in TESTS.items():
          "round starts from a known install of the build under test. When: at the start of a round on that box, never while "
          "a test runs against it. Needs: install-preflight green. Success: every child Succeeded and install-verify printed the "
          "expected version. If it fails: it stops at the first failed child; open that run's output."),
-        ["install", "tests"], {**BUILD_GLOBALS, **VERSION_GLOBALS}, [run_child(l, w, f"{l}: {w}") for l, w in kids]))
+        ["install", "tests"], {}, [run_child(l, w, f"{l}: {w}") for l, w in kids],
+        inputs=BUILD_INPUTS + [IN_VERSION_NUMBER]))
 
 PREFLIGHT = r"""$ErrorActionPreference = 'Stop'
 $problems = @()
@@ -819,6 +723,7 @@ dump(os.path.join(wl_root, 'tests', name + '.workload.json'), workload(
      "a test round: the build under test installed. When: at the start of a round on that box, never while a test runs "
      "against it; run each pack's setup after it. Needs: install-preflight green. Success: every child Succeeded or Skipped. If it fails: it stops at the first failed "
      "child; open that run's output."),
-    ["install", "tests"], {**BUILD_GLOBALS, **VERSION_GLOBALS}, [run_child(l, w, f"{l}: {w}") for l, w in kids]))
+    ["install", "tests"], {}, [run_child(l, w, f"{l}: {w}") for l, w in kids],
+        inputs=BUILD_INPUTS + [IN_VERSION_NUMBER]))
 
 print("install pack written")

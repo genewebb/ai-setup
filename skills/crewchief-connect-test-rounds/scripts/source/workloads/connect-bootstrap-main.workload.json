@@ -1,0 +1,144 @@
+{
+  "name": "connect-1k-bootstrap-main-only",
+  "description": "What: Build the Main side of the Connect pack: seed restore with Profisee Configuration, API key, legacy cleanup, Main model build, SQL export table, Connect setup, then the baseline backup of Main. NEVER touches the Profisee to Profisee target. Connect setup removes the Profisee to Profisee service configuration and strategy from Main; the Profisee to Profisee prepares recreate them. Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: workloads it runs: connect-database-seed-restore, connect-api-key-set-all, connect-model-legacy-cleanup, connect-model-main-build, connect-database-sql-server-export-table-create, connect-objects-reset, connect-database-backup. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "tags": [
+    "connect",
+    "1K"
+  ],
+  "globalParameters": {
+    "SourceTableName": "PDATA",
+    "RecordCount": "1000",
+    "WorkerThreadCount": "4",
+    "ModelSourceSize": "1K"
+  },
+  "globalParametersNotes": "SourceTableName is the table every size's source backup holds; every shared child reads it from here.",
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "workloadName": "connect-database-seed-restore",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Restore the seed backup over the Main Profisee database, run Profisee Configuration on it and set the Main API key, so everything below builds on a clean, empty database. Why: Runs the child workload 'connect-database-seed-restore' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-database-seed-restore'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Restore The Seed Database"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-api-key-set-all",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Set the standard API key on Main. Why: Runs the child workload 'connect-api-key-set-all' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-api-key-set-all'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "API Keys"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-model-legacy-cleanup",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Back up, then remove non-family Connect strategies and service configurations. Never deletes an entity. Why: Runs the child workload 'connect-model-legacy-cleanup' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-model-legacy-cleanup'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Legacy Cleanup"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-model-main-build",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Build the Connect model on Main from the spec: 50 Dba domains with their rows, the 5 PData entities, verify. Why: Runs the child workload 'connect-model-main-build' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-model-main-build'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Main Model Build"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-database-sql-server-export-table-create",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Create the ConnectExport database and table. Why: Runs the child workload 'connect-database-sql-server-export-table-create' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-database-sql-server-export-table-create'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "SQL Server Export Table"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-objects-reset",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Create service configurations and strategies. Why: Runs the child workload 'connect-objects-reset' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-setup'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Connect Setup"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-database-backup",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Back up the clean baseline. Why: Runs the child workload 'connect-database-backup' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-database-backup'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Baseline Backup"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "ProfiseeVersionCode",
+      "description": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under; the automation tags, run profile codes and backup names carry it. Passed by the test that runs this one (connect/environment:ProfiseeVersionCode, or the lane's version).",
+      "default": "{{$ref:connect/environment:ProfiseeVersionCode}}"
+    },
+    {
+      "name": "ProfiseeVersionNumber",
+      "description": "Product version of the release under test (n.n.n): the Configuration program is found under it. Passed by the workload that runs this one (connect/environment:ProfiseeVersionNumber, or the lane's version).",
+      "default": "{{$ref:connect/environment:ProfiseeVersionNumber}}"
+    }
+  ]
+}

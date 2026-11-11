@@ -1,0 +1,2490 @@
+{
+ "workflows": {
+  "connect-1k-profisee-to-profisee-export-4t": {
+   "Name": "Connect Profisee To Profisee Export 1K",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Profisee To Profisee Export",
+     "Description": "Start a batch of 'Strategy Profisee To Profisee Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "618c93b88348aafb79b926fa8840758eb1007e3d5ed3d6445d27e05d5c444eaf",
+     "ConfigLength": 3304
+    },
+    {
+     "Name": "Poll Strategy Profisee To Profisee Export",
+     "Description": "Wait for the 'Strategy Profisee To Profisee Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "39cf717cfee9fa3734bd3debe8fceed8d57be69e28d69f19a170cf01f0df7a9f",
+     "ConfigLength": 2537
+    },
+    {
+     "Name": "Collect Strategy Profisee To Profisee Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-PROFISEE-E-1000-1000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5485cd24979c80d10be031051581c0d3832a6b86daa97113f7a5b4b9e1d56c35",
+     "ConfigLength": 2810
+    }
+   ]
+  },
+  "connect-1k-sql-server-export-4t": {
+   "Name": "Connect SQL Server Export 1K",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy SQL Server Export",
+     "Description": "Start a batch of 'Strategy SQL Server Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "0a41f0ab77fd7e906029c100ef8b8e7b3170764e010def0a03632df71475c400",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy SQL Server Export",
+     "Description": "Wait for the 'Strategy SQL Server Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c586301b790dda059d93c5540a6ad9609e70e33a6faaa4704815be85d883bcb7",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy SQL Server Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SQLSERVER-E-1000-1000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "27ac8a061c7556b17e1ec10558ba2e784943c6666ed79d3eb888062c010ca795",
+     "ConfigLength": 2801
+    }
+   ]
+  },
+  "connect-1k-databricks-export-4t": {
+   "Name": "Connect Databricks Export 1K",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Databricks Export",
+     "Description": "Start a batch of 'Strategy Databricks Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b35c765751385532f0cc8c7544fac6eaf3e7d369a722c9ee09ce3ad850fea85a",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy Databricks Export",
+     "Description": "Wait for the 'Strategy Databricks Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2394827bb2d4ad46a655490fbb4fb3cf5c6a0d7d9e5494f7ddb7a9bdc0bd039a",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy Databricks Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-DATABRICKS-E-1000-1000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "a61425839c820002517b3032a322bc5bdd2cae1ea0359e618efb5dd7687c3c4a",
+     "ConfigLength": 2802
+    }
+   ]
+  },
+  "connect-1k-snowflake-export-4t": {
+   "Name": "Connect Snowflake Export 1K",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Snowflake Export",
+     "Description": "Start a batch of 'Strategy Snowflake Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "bcea0bcd9006e1603754f575546fac354d3964291517f8815bbd8e03f35e257a",
+     "ConfigLength": 3282
+    },
+    {
+     "Name": "Poll Strategy Snowflake Export",
+     "Description": "Wait for the 'Strategy Snowflake Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c60819b9326283bf2b6e7839b41528b16b488f404210f7cb773f6ebdaefaf6fe",
+     "ConfigLength": 2526
+    },
+    {
+     "Name": "Collect Strategy Snowflake Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SNOWFLAKE-E-1000-1000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "a60270379eb8da119f60089ff0f16864f0d3dba12ade4a643fe219e513465a3f",
+     "ConfigLength": 2800
+    }
+   ]
+  },
+  "connect-1k-synapse-export-4t": {
+   "Name": "Connect Synapse Export 1K",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Synapse Export",
+     "Description": "Start a batch of 'Strategy Synapse Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dc9e92bad915421c9efd83a919d8114c6208bc77b4fc86be411018b8be69e997",
+     "ConfigLength": 3278
+    },
+    {
+     "Name": "Poll Strategy Synapse Export",
+     "Description": "Wait for the 'Strategy Synapse Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ced0c2f803749b6ebd2730a24475a5a332ac104a27f244180c8f4c65a1272594",
+     "ConfigLength": 2524
+    },
+    {
+     "Name": "Collect Strategy Synapse Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SYNAPSE-E-1000-1000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "51f6a00fcb45f89782256ccb047c515571da76a37e91ded07669fdc024c1d588",
+     "ConfigLength": 2796
+    }
+   ]
+  },
+  "connect-1k-sql-server-import-4t": {
+   "Name": "Connect SQL Server Import 1K",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy SQL Server Import",
+     "Description": "Start a batch of 'Strategy SQL Server Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "8cce3d03f923445d5462057aac6ebc1825796bfcad74c62c789253173f88ecd9",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy SQL Server Import",
+     "Description": "Wait for the 'Strategy SQL Server Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "7fa962f24de14e51aada6d5a93f39dcb0a3edffcc1fa11a8e5f740364a23128a",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy SQL Server Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SQLSERVER-PROFISEE-I-1000-1000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b4ba6d870534fadc055e97c44be68904577452918bfdef79d90964a48658d3d3",
+     "ConfigLength": 2804
+    }
+   ]
+  },
+  "connect-1k-databricks-import-4t": {
+   "Name": "Connect Databricks Import 1K",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Databricks Import",
+     "Description": "Start a batch of 'Strategy Databricks Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "a6a0a6fdce4ecab324f4d117be38fd44e82098ee428a3ede8028b3640e2505ce",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy Databricks Import",
+     "Description": "Wait for the 'Strategy Databricks Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fae1620451ad903dc8f29821d5b4f9fc73d45f2d9f31cd7c64ccb8c435d410c4",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy Databricks Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-DATABRICKS-PROFISEE-I-1000-1000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "75e9c752c8dea525068a6c3a64384acde4949dec7ce45ce7b22ba036e362672c",
+     "ConfigLength": 2806
+    }
+   ]
+  },
+  "connect-1k-snowflake-import-4t": {
+   "Name": "Connect Snowflake Import 1K",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Snowflake Import",
+     "Description": "Start a batch of 'Strategy Snowflake Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "17a50c32626eb0d2ff5d6a8e89922c371d2ed2a516fb233f4937f119c3162d59",
+     "ConfigLength": 3282
+    },
+    {
+     "Name": "Poll Strategy Snowflake Import",
+     "Description": "Wait for the 'Strategy Snowflake Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6aa62a3e8270a97d9bd129a52e25156399c51adf5281194be96b31508cdd8d58",
+     "ConfigLength": 2526
+    },
+    {
+     "Name": "Collect Strategy Snowflake Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SNOWFLAKE-PROFISEE-I-1000-1000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "66236c8f2b3e108aece1f430d98c78e3ae25b44a72e9bad0cc28c537d9725af6",
+     "ConfigLength": 2803
+    }
+   ]
+  },
+  "connect-1k-synapse-import-4t": {
+   "Name": "Connect Synapse Import 1K",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Synapse Import",
+     "Description": "Start a batch of 'Strategy Synapse Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b1e7b86dfbb566d6cf57c25da7d585ee127a1846bdd2e545bfd5b4fa73e7a029",
+     "ConfigLength": 3278
+    },
+    {
+     "Name": "Poll Strategy Synapse Import",
+     "Description": "Wait for the 'Strategy Synapse Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "34a3204c36a0496affd20aa7332293e264756bf07d9a6e56c97780678d80d9d0",
+     "ConfigLength": 2524
+    },
+    {
+     "Name": "Collect Strategy Synapse Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SYNAPSE-PROFISEE-I-1000-1000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "3d6717da72b21a791fb57778ce45f13a23651bd2c6de56ba8b74c898a968a851",
+     "ConfigLength": 2797
+    }
+   ]
+  },
+  "connect-1k-profisee-to-profisee-export-8t": {
+   "Name": "Connect Profisee To Profisee Export 1K 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Profisee To Profisee Export",
+     "Description": "Start a batch of 'Strategy Profisee To Profisee Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "618c93b88348aafb79b926fa8840758eb1007e3d5ed3d6445d27e05d5c444eaf",
+     "ConfigLength": 3304
+    },
+    {
+     "Name": "Poll Strategy Profisee To Profisee Export",
+     "Description": "Wait for the 'Strategy Profisee To Profisee Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "39cf717cfee9fa3734bd3debe8fceed8d57be69e28d69f19a170cf01f0df7a9f",
+     "ConfigLength": 2537
+    },
+    {
+     "Name": "Collect Strategy Profisee To Profisee Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-PROFISEE-E-1000-1000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dc38d3201180588dbc92b222478906536ac4af9b812d16680dbe51d96c18768e",
+     "ConfigLength": 2810
+    }
+   ]
+  },
+  "connect-1k-sql-server-export-8t": {
+   "Name": "Connect SQL Server Export 1K 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy SQL Server Export",
+     "Description": "Start a batch of 'Strategy SQL Server Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "0a41f0ab77fd7e906029c100ef8b8e7b3170764e010def0a03632df71475c400",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy SQL Server Export",
+     "Description": "Wait for the 'Strategy SQL Server Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c586301b790dda059d93c5540a6ad9609e70e33a6faaa4704815be85d883bcb7",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy SQL Server Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SQLSERVER-E-1000-1000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ea018cae72b55e9b744be93d3b3b9b5b547bb16604ff64e82ce460429dd85fa1",
+     "ConfigLength": 2801
+    }
+   ]
+  },
+  "connect-1k-databricks-export-8t": {
+   "Name": "Connect Databricks Export 1K 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Databricks Export",
+     "Description": "Start a batch of 'Strategy Databricks Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b35c765751385532f0cc8c7544fac6eaf3e7d369a722c9ee09ce3ad850fea85a",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy Databricks Export",
+     "Description": "Wait for the 'Strategy Databricks Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2394827bb2d4ad46a655490fbb4fb3cf5c6a0d7d9e5494f7ddb7a9bdc0bd039a",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy Databricks Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-DATABRICKS-E-1000-1000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ae8c9074561f6e65813358562501c6eea873cda79c9dd83b74d9d6e7303612ae",
+     "ConfigLength": 2802
+    }
+   ]
+  },
+  "connect-1k-snowflake-export-8t": {
+   "Name": "Connect Snowflake Export 1K 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Snowflake Export",
+     "Description": "Start a batch of 'Strategy Snowflake Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "bcea0bcd9006e1603754f575546fac354d3964291517f8815bbd8e03f35e257a",
+     "ConfigLength": 3282
+    },
+    {
+     "Name": "Poll Strategy Snowflake Export",
+     "Description": "Wait for the 'Strategy Snowflake Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c60819b9326283bf2b6e7839b41528b16b488f404210f7cb773f6ebdaefaf6fe",
+     "ConfigLength": 2526
+    },
+    {
+     "Name": "Collect Strategy Snowflake Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SNOWFLAKE-E-1000-1000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "9f5dc1b379901cbbb27478b4b3957186bdd484fa7d5b3842de3a2bc62583fea4",
+     "ConfigLength": 2800
+    }
+   ]
+  },
+  "connect-1k-synapse-export-8t": {
+   "Name": "Connect Synapse Export 1K 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Synapse Export",
+     "Description": "Start a batch of 'Strategy Synapse Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dc9e92bad915421c9efd83a919d8114c6208bc77b4fc86be411018b8be69e997",
+     "ConfigLength": 3278
+    },
+    {
+     "Name": "Poll Strategy Synapse Export",
+     "Description": "Wait for the 'Strategy Synapse Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ced0c2f803749b6ebd2730a24475a5a332ac104a27f244180c8f4c65a1272594",
+     "ConfigLength": 2524
+    },
+    {
+     "Name": "Collect Strategy Synapse Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SYNAPSE-E-1000-1000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "8e9d0bc1c7cd1fb2f842bd40dd89864d70d3dcda9b2f42a0dbe1675137a243db",
+     "ConfigLength": 2796
+    }
+   ]
+  },
+  "connect-1k-sql-server-import-8t": {
+   "Name": "Connect SQL Server Import 1K 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy SQL Server Import",
+     "Description": "Start a batch of 'Strategy SQL Server Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "8cce3d03f923445d5462057aac6ebc1825796bfcad74c62c789253173f88ecd9",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy SQL Server Import",
+     "Description": "Wait for the 'Strategy SQL Server Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "7fa962f24de14e51aada6d5a93f39dcb0a3edffcc1fa11a8e5f740364a23128a",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy SQL Server Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SQLSERVER-PROFISEE-I-1000-1000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ff2294f9efeae69bbbfd1636cae5db07cc04f832b56307a5dd73d4292b00e738",
+     "ConfigLength": 2804
+    }
+   ]
+  },
+  "connect-1k-databricks-import-8t": {
+   "Name": "Connect Databricks Import 1K 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Databricks Import",
+     "Description": "Start a batch of 'Strategy Databricks Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "a6a0a6fdce4ecab324f4d117be38fd44e82098ee428a3ede8028b3640e2505ce",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy Databricks Import",
+     "Description": "Wait for the 'Strategy Databricks Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fae1620451ad903dc8f29821d5b4f9fc73d45f2d9f31cd7c64ccb8c435d410c4",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy Databricks Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-DATABRICKS-PROFISEE-I-1000-1000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "55b99f6395dec75a8d4caa508cdb5a0cd228d96f87462ff3784b3eed3700d45e",
+     "ConfigLength": 2806
+    }
+   ]
+  },
+  "connect-1k-snowflake-import-8t": {
+   "Name": "Connect Snowflake Import 1K 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Snowflake Import",
+     "Description": "Start a batch of 'Strategy Snowflake Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "17a50c32626eb0d2ff5d6a8e89922c371d2ed2a516fb233f4937f119c3162d59",
+     "ConfigLength": 3282
+    },
+    {
+     "Name": "Poll Strategy Snowflake Import",
+     "Description": "Wait for the 'Strategy Snowflake Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6aa62a3e8270a97d9bd129a52e25156399c51adf5281194be96b31508cdd8d58",
+     "ConfigLength": 2526
+    },
+    {
+     "Name": "Collect Strategy Snowflake Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SNOWFLAKE-PROFISEE-I-1000-1000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "76f6c65023b657e809d2cb5bd19e3e1666ab51c40fa619ec6c70cfa0c66311a7",
+     "ConfigLength": 2803
+    }
+   ]
+  },
+  "connect-1k-synapse-import-8t": {
+   "Name": "Connect Synapse Import 1K 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Synapse Import",
+     "Description": "Start a batch of 'Strategy Synapse Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b1e7b86dfbb566d6cf57c25da7d585ee127a1846bdd2e545bfd5b4fa73e7a029",
+     "ConfigLength": 3278
+    },
+    {
+     "Name": "Poll Strategy Synapse Import",
+     "Description": "Wait for the 'Strategy Synapse Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "34a3204c36a0496affd20aa7332293e264756bf07d9a6e56c97780678d80d9d0",
+     "ConfigLength": 2524
+    },
+    {
+     "Name": "Collect Strategy Synapse Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SYNAPSE-PROFISEE-I-1000-1000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "aeb123dbd160e6b5422fdd3f080047047133bb28b85394018b8b0ecb522fe753",
+     "ConfigLength": 2797
+    }
+   ]
+  },
+  "connect-1k-profisee-to-profisee-export-12t": {
+   "Name": "Connect Profisee To Profisee Export 1K 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Profisee To Profisee Export",
+     "Description": "Start a batch of 'Strategy Profisee To Profisee Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "618c93b88348aafb79b926fa8840758eb1007e3d5ed3d6445d27e05d5c444eaf",
+     "ConfigLength": 3304
+    },
+    {
+     "Name": "Poll Strategy Profisee To Profisee Export",
+     "Description": "Wait for the 'Strategy Profisee To Profisee Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "39cf717cfee9fa3734bd3debe8fceed8d57be69e28d69f19a170cf01f0df7a9f",
+     "ConfigLength": 2537
+    },
+    {
+     "Name": "Collect Strategy Profisee To Profisee Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-PROFISEE-E-1000-1000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "adc7618ac3e43e93e4e53edd04a98fe89a4cd4c292ea8863387bd130e716c1ea",
+     "ConfigLength": 2811
+    }
+   ]
+  },
+  "connect-1k-sql-server-export-12t": {
+   "Name": "Connect SQL Server Export 1K 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy SQL Server Export",
+     "Description": "Start a batch of 'Strategy SQL Server Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "0a41f0ab77fd7e906029c100ef8b8e7b3170764e010def0a03632df71475c400",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy SQL Server Export",
+     "Description": "Wait for the 'Strategy SQL Server Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c586301b790dda059d93c5540a6ad9609e70e33a6faaa4704815be85d883bcb7",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy SQL Server Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SQLSERVER-E-1000-1000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "313725bdcccf54f9b584ba5053d31938f41c297bb7af7ad1696068d4dce2b982",
+     "ConfigLength": 2802
+    }
+   ]
+  },
+  "connect-1k-databricks-export-12t": {
+   "Name": "Connect Databricks Export 1K 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Databricks Export",
+     "Description": "Start a batch of 'Strategy Databricks Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b35c765751385532f0cc8c7544fac6eaf3e7d369a722c9ee09ce3ad850fea85a",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy Databricks Export",
+     "Description": "Wait for the 'Strategy Databricks Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2394827bb2d4ad46a655490fbb4fb3cf5c6a0d7d9e5494f7ddb7a9bdc0bd039a",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy Databricks Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-DATABRICKS-E-1000-1000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "bf57356614c5283507d7b49aa0cb1e14b7c53bf02c28be59d82226a403ad67e3",
+     "ConfigLength": 2803
+    }
+   ]
+  },
+  "connect-1k-snowflake-export-12t": {
+   "Name": "Connect Snowflake Export 1K 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Snowflake Export",
+     "Description": "Start a batch of 'Strategy Snowflake Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "bcea0bcd9006e1603754f575546fac354d3964291517f8815bbd8e03f35e257a",
+     "ConfigLength": 3282
+    },
+    {
+     "Name": "Poll Strategy Snowflake Export",
+     "Description": "Wait for the 'Strategy Snowflake Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c60819b9326283bf2b6e7839b41528b16b488f404210f7cb773f6ebdaefaf6fe",
+     "ConfigLength": 2526
+    },
+    {
+     "Name": "Collect Strategy Snowflake Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SNOWFLAKE-E-1000-1000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "acde18114b6e391016d3566ef4be6848fd72f1cf7c155fd3d578b232774146b3",
+     "ConfigLength": 2801
+    }
+   ]
+  },
+  "connect-1k-synapse-export-12t": {
+   "Name": "Connect Synapse Export 1K 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Synapse Export",
+     "Description": "Start a batch of 'Strategy Synapse Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dc9e92bad915421c9efd83a919d8114c6208bc77b4fc86be411018b8be69e997",
+     "ConfigLength": 3278
+    },
+    {
+     "Name": "Poll Strategy Synapse Export",
+     "Description": "Wait for the 'Strategy Synapse Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ced0c2f803749b6ebd2730a24475a5a332ac104a27f244180c8f4c65a1272594",
+     "ConfigLength": 2524
+    },
+    {
+     "Name": "Collect Strategy Synapse Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SYNAPSE-E-1000-1000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c780ba37f479ee5a63626c59029cd3e58066b1da1020af829074efa950696977",
+     "ConfigLength": 2797
+    }
+   ]
+  },
+  "connect-1k-sql-server-import-12t": {
+   "Name": "Connect SQL Server Import 1K 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy SQL Server Import",
+     "Description": "Start a batch of 'Strategy SQL Server Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "8cce3d03f923445d5462057aac6ebc1825796bfcad74c62c789253173f88ecd9",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy SQL Server Import",
+     "Description": "Wait for the 'Strategy SQL Server Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "7fa962f24de14e51aada6d5a93f39dcb0a3edffcc1fa11a8e5f740364a23128a",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy SQL Server Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SQLSERVER-PROFISEE-I-1000-1000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ec18caec8f2b3a8d2d42c271e95f40a7413b484d75ae0d0e0837a24ade1a081a",
+     "ConfigLength": 2805
+    }
+   ]
+  },
+  "connect-1k-databricks-import-12t": {
+   "Name": "Connect Databricks Import 1K 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Databricks Import",
+     "Description": "Start a batch of 'Strategy Databricks Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "a6a0a6fdce4ecab324f4d117be38fd44e82098ee428a3ede8028b3640e2505ce",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy Databricks Import",
+     "Description": "Wait for the 'Strategy Databricks Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fae1620451ad903dc8f29821d5b4f9fc73d45f2d9f31cd7c64ccb8c435d410c4",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy Databricks Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-DATABRICKS-PROFISEE-I-1000-1000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "8eb74b3360b8ef3e83e5e6d1b55e88369f25848ab5d01a740351a2e794281ec6",
+     "ConfigLength": 2807
+    }
+   ]
+  },
+  "connect-1k-snowflake-import-12t": {
+   "Name": "Connect Snowflake Import 1K 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Snowflake Import",
+     "Description": "Start a batch of 'Strategy Snowflake Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "17a50c32626eb0d2ff5d6a8e89922c371d2ed2a516fb233f4937f119c3162d59",
+     "ConfigLength": 3282
+    },
+    {
+     "Name": "Poll Strategy Snowflake Import",
+     "Description": "Wait for the 'Strategy Snowflake Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6aa62a3e8270a97d9bd129a52e25156399c51adf5281194be96b31508cdd8d58",
+     "ConfigLength": 2526
+    },
+    {
+     "Name": "Collect Strategy Snowflake Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SNOWFLAKE-PROFISEE-I-1000-1000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "7e572b95764dbdd0129a56062f041763aba9ab64af5c1dc33e85a8f596612536",
+     "ConfigLength": 2804
+    }
+   ]
+  },
+  "connect-1k-synapse-import-12t": {
+   "Name": "Connect Synapse Import 1K 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1K,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Synapse Import",
+     "Description": "Start a batch of 'Strategy Synapse Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b1e7b86dfbb566d6cf57c25da7d585ee127a1846bdd2e545bfd5b4fa73e7a029",
+     "ConfigLength": 3278
+    },
+    {
+     "Name": "Poll Strategy Synapse Import",
+     "Description": "Wait for the 'Strategy Synapse Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "34a3204c36a0496affd20aa7332293e264756bf07d9a6e56c97780678d80d9d0",
+     "ConfigLength": 2524
+    },
+    {
+     "Name": "Collect Strategy Synapse Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SYNAPSE-PROFISEE-I-1000-1000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c7f3b05290b3ed8029f0cf1fa75a068b3c71b1e1cbe9d19312be11568090be6c",
+     "ConfigLength": 2798
+    }
+   ]
+  },
+  "connect-1m-profisee-to-profisee-export-4t": {
+   "Name": "Connect Profisee To Profisee Export 1M",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Profisee To Profisee Export",
+     "Description": "Start a batch of 'Strategy Profisee To Profisee Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "618c93b88348aafb79b926fa8840758eb1007e3d5ed3d6445d27e05d5c444eaf",
+     "ConfigLength": 3304
+    },
+    {
+     "Name": "Poll Strategy Profisee To Profisee Export",
+     "Description": "Wait for the 'Strategy Profisee To Profisee Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "39cf717cfee9fa3734bd3debe8fceed8d57be69e28d69f19a170cf01f0df7a9f",
+     "ConfigLength": 2537
+    },
+    {
+     "Name": "Collect Strategy Profisee To Profisee Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-PROFISEE-E-1000000-1000000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d58560db7d633184fba20a0f8bf56fb1c5e51161c40e317cd2bcff32922273a0",
+     "ConfigLength": 2816
+    }
+   ]
+  },
+  "connect-1m-sql-server-export-4t": {
+   "Name": "Connect SQL Server Export 1M",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy SQL Server Export",
+     "Description": "Start a batch of 'Strategy SQL Server Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "0a41f0ab77fd7e906029c100ef8b8e7b3170764e010def0a03632df71475c400",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy SQL Server Export",
+     "Description": "Wait for the 'Strategy SQL Server Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c586301b790dda059d93c5540a6ad9609e70e33a6faaa4704815be85d883bcb7",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy SQL Server Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SQLSERVER-E-1000000-1000000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "a024b9a76d08737285008784de1d94386eb3034781fd1d06237e0d197d6d5345",
+     "ConfigLength": 2807
+    }
+   ]
+  },
+  "connect-1m-databricks-export-4t": {
+   "Name": "Connect Databricks Export 1M",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Databricks Export",
+     "Description": "Start a batch of 'Strategy Databricks Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b35c765751385532f0cc8c7544fac6eaf3e7d369a722c9ee09ce3ad850fea85a",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy Databricks Export",
+     "Description": "Wait for the 'Strategy Databricks Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2394827bb2d4ad46a655490fbb4fb3cf5c6a0d7d9e5494f7ddb7a9bdc0bd039a",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy Databricks Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-DATABRICKS-E-1000000-1000000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b04ecf3a759029a69cb1b7accd95d8980cd4ff5aaa5a1ffc83616508daaace71",
+     "ConfigLength": 2808
+    }
+   ]
+  },
+  "connect-1m-snowflake-export-4t": {
+   "Name": "Connect Snowflake Export 1M",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Snowflake Export",
+     "Description": "Start a batch of 'Strategy Snowflake Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "bcea0bcd9006e1603754f575546fac354d3964291517f8815bbd8e03f35e257a",
+     "ConfigLength": 3282
+    },
+    {
+     "Name": "Poll Strategy Snowflake Export",
+     "Description": "Wait for the 'Strategy Snowflake Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c60819b9326283bf2b6e7839b41528b16b488f404210f7cb773f6ebdaefaf6fe",
+     "ConfigLength": 2526
+    },
+    {
+     "Name": "Collect Strategy Snowflake Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SNOWFLAKE-E-1000000-1000000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2c98318b69664c068a7875e3ca6dd9cca6c6c3e6b4e64422a302ec5846d63df9",
+     "ConfigLength": 2806
+    }
+   ]
+  },
+  "connect-1m-synapse-export-4t": {
+   "Name": "Connect Synapse Export 1M",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Synapse Export",
+     "Description": "Start a batch of 'Strategy Synapse Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dc9e92bad915421c9efd83a919d8114c6208bc77b4fc86be411018b8be69e997",
+     "ConfigLength": 3278
+    },
+    {
+     "Name": "Poll Strategy Synapse Export",
+     "Description": "Wait for the 'Strategy Synapse Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ced0c2f803749b6ebd2730a24475a5a332ac104a27f244180c8f4c65a1272594",
+     "ConfigLength": 2524
+    },
+    {
+     "Name": "Collect Strategy Synapse Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SYNAPSE-E-1000000-1000000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ee7c48024f09167aace5a2b62175bd3ff4c5ecdabe9be5de1a150affecd7d9f5",
+     "ConfigLength": 2802
+    }
+   ]
+  },
+  "connect-1m-sql-server-import-4t": {
+   "Name": "Connect SQL Server Import 1M",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy SQL Server Import",
+     "Description": "Start a batch of 'Strategy SQL Server Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "8cce3d03f923445d5462057aac6ebc1825796bfcad74c62c789253173f88ecd9",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy SQL Server Import",
+     "Description": "Wait for the 'Strategy SQL Server Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "7fa962f24de14e51aada6d5a93f39dcb0a3edffcc1fa11a8e5f740364a23128a",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy SQL Server Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SQLSERVER-PROFISEE-I-1000000-1000000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "934fdad938e2695a868f16783daeae47c11fedf5856a85309a94538044e46c0b",
+     "ConfigLength": 2810
+    }
+   ]
+  },
+  "connect-1m-databricks-import-4t": {
+   "Name": "Connect Databricks Import 1M",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Databricks Import",
+     "Description": "Start a batch of 'Strategy Databricks Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "a6a0a6fdce4ecab324f4d117be38fd44e82098ee428a3ede8028b3640e2505ce",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy Databricks Import",
+     "Description": "Wait for the 'Strategy Databricks Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fae1620451ad903dc8f29821d5b4f9fc73d45f2d9f31cd7c64ccb8c435d410c4",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy Databricks Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-DATABRICKS-PROFISEE-I-1000000-1000000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c3084985e78e6085d361453dacf3648fe114cce74a8a825fcc58d4eec88521cb",
+     "ConfigLength": 2812
+    }
+   ]
+  },
+  "connect-1m-snowflake-import-4t": {
+   "Name": "Connect Snowflake Import 1M",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Snowflake Import",
+     "Description": "Start a batch of 'Strategy Snowflake Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "17a50c32626eb0d2ff5d6a8e89922c371d2ed2a516fb233f4937f119c3162d59",
+     "ConfigLength": 3282
+    },
+    {
+     "Name": "Poll Strategy Snowflake Import",
+     "Description": "Wait for the 'Strategy Snowflake Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6aa62a3e8270a97d9bd129a52e25156399c51adf5281194be96b31508cdd8d58",
+     "ConfigLength": 2526
+    },
+    {
+     "Name": "Collect Strategy Snowflake Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SNOWFLAKE-PROFISEE-I-1000000-1000000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6222aa0b5474c23b706f749d8bd6bb0b672c281c4f62ee03a6da1eb0c0152a4d",
+     "ConfigLength": 2809
+    }
+   ]
+  },
+  "connect-1m-synapse-import-4t": {
+   "Name": "Connect Synapse Import 1M",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,4T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Synapse Import",
+     "Description": "Start a batch of 'Strategy Synapse Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b1e7b86dfbb566d6cf57c25da7d585ee127a1846bdd2e545bfd5b4fa73e7a029",
+     "ConfigLength": 3278
+    },
+    {
+     "Name": "Poll Strategy Synapse Import",
+     "Description": "Wait for the 'Strategy Synapse Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "34a3204c36a0496affd20aa7332293e264756bf07d9a6e56c97780678d80d9d0",
+     "ConfigLength": 2524
+    },
+    {
+     "Name": "Collect Strategy Synapse Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SYNAPSE-PROFISEE-I-1000000-1000000-0-4.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "30b702c1a432b75601823acd6773fe30a0f42fde569da8a7f1f542f1957658fd",
+     "ConfigLength": 2803
+    }
+   ]
+  },
+  "connect-1m-profisee-to-profisee-export-8t": {
+   "Name": "Connect Profisee To Profisee Export 1M 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Profisee To Profisee Export",
+     "Description": "Start a batch of 'Strategy Profisee To Profisee Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "618c93b88348aafb79b926fa8840758eb1007e3d5ed3d6445d27e05d5c444eaf",
+     "ConfigLength": 3304
+    },
+    {
+     "Name": "Poll Strategy Profisee To Profisee Export",
+     "Description": "Wait for the 'Strategy Profisee To Profisee Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "39cf717cfee9fa3734bd3debe8fceed8d57be69e28d69f19a170cf01f0df7a9f",
+     "ConfigLength": 2537
+    },
+    {
+     "Name": "Collect Strategy Profisee To Profisee Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-PROFISEE-E-1000000-1000000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "56d26ff7c858d14719a457ea4107c28445645e791cc0eeb8b6df61e52cd0aae1",
+     "ConfigLength": 2816
+    }
+   ]
+  },
+  "connect-1m-sql-server-export-8t": {
+   "Name": "Connect SQL Server Export 1M 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy SQL Server Export",
+     "Description": "Start a batch of 'Strategy SQL Server Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "0a41f0ab77fd7e906029c100ef8b8e7b3170764e010def0a03632df71475c400",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy SQL Server Export",
+     "Description": "Wait for the 'Strategy SQL Server Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c586301b790dda059d93c5540a6ad9609e70e33a6faaa4704815be85d883bcb7",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy SQL Server Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SQLSERVER-E-1000000-1000000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "3b3572ba8cd49b1c8b06c2cd28d13fc573b890aba84f4e506a879749f2da2940",
+     "ConfigLength": 2807
+    }
+   ]
+  },
+  "connect-1m-databricks-export-8t": {
+   "Name": "Connect Databricks Export 1M 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Databricks Export",
+     "Description": "Start a batch of 'Strategy Databricks Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b35c765751385532f0cc8c7544fac6eaf3e7d369a722c9ee09ce3ad850fea85a",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy Databricks Export",
+     "Description": "Wait for the 'Strategy Databricks Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2394827bb2d4ad46a655490fbb4fb3cf5c6a0d7d9e5494f7ddb7a9bdc0bd039a",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy Databricks Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-DATABRICKS-E-1000000-1000000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c9d60c091b363a70a1ce516330e8139cb5a665b4befc8a8a8b6d403105957da4",
+     "ConfigLength": 2808
+    }
+   ]
+  },
+  "connect-1m-snowflake-export-8t": {
+   "Name": "Connect Snowflake Export 1M 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Snowflake Export",
+     "Description": "Start a batch of 'Strategy Snowflake Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "bcea0bcd9006e1603754f575546fac354d3964291517f8815bbd8e03f35e257a",
+     "ConfigLength": 3282
+    },
+    {
+     "Name": "Poll Strategy Snowflake Export",
+     "Description": "Wait for the 'Strategy Snowflake Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c60819b9326283bf2b6e7839b41528b16b488f404210f7cb773f6ebdaefaf6fe",
+     "ConfigLength": 2526
+    },
+    {
+     "Name": "Collect Strategy Snowflake Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SNOWFLAKE-E-1000000-1000000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2bb96f8d34207d5e787a09bceca9e482bdc8942cd39874b78458e339b9077db6",
+     "ConfigLength": 2806
+    }
+   ]
+  },
+  "connect-1m-synapse-export-8t": {
+   "Name": "Connect Synapse Export 1M 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Synapse Export",
+     "Description": "Start a batch of 'Strategy Synapse Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dc9e92bad915421c9efd83a919d8114c6208bc77b4fc86be411018b8be69e997",
+     "ConfigLength": 3278
+    },
+    {
+     "Name": "Poll Strategy Synapse Export",
+     "Description": "Wait for the 'Strategy Synapse Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ced0c2f803749b6ebd2730a24475a5a332ac104a27f244180c8f4c65a1272594",
+     "ConfigLength": 2524
+    },
+    {
+     "Name": "Collect Strategy Synapse Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SYNAPSE-E-1000000-1000000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "cec0999fb8ed4335ff001bcfafd9f981816cb36a629812cd493b64ded7f2c849",
+     "ConfigLength": 2802
+    }
+   ]
+  },
+  "connect-1m-sql-server-import-8t": {
+   "Name": "Connect SQL Server Import 1M 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy SQL Server Import",
+     "Description": "Start a batch of 'Strategy SQL Server Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "8cce3d03f923445d5462057aac6ebc1825796bfcad74c62c789253173f88ecd9",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy SQL Server Import",
+     "Description": "Wait for the 'Strategy SQL Server Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "7fa962f24de14e51aada6d5a93f39dcb0a3edffcc1fa11a8e5f740364a23128a",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy SQL Server Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SQLSERVER-PROFISEE-I-1000000-1000000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "4aa673da0514de82e1f1e0a5c2f0fe2996dc959f8b35cc4329b4ad1515eaabd9",
+     "ConfigLength": 2810
+    }
+   ]
+  },
+  "connect-1m-databricks-import-8t": {
+   "Name": "Connect Databricks Import 1M 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Databricks Import",
+     "Description": "Start a batch of 'Strategy Databricks Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "a6a0a6fdce4ecab324f4d117be38fd44e82098ee428a3ede8028b3640e2505ce",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy Databricks Import",
+     "Description": "Wait for the 'Strategy Databricks Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fae1620451ad903dc8f29821d5b4f9fc73d45f2d9f31cd7c64ccb8c435d410c4",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy Databricks Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-DATABRICKS-PROFISEE-I-1000000-1000000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "52849511909c1eeada62fa3080dd7637ae3b1d621727b118154dc1d7479a18d3",
+     "ConfigLength": 2812
+    }
+   ]
+  },
+  "connect-1m-snowflake-import-8t": {
+   "Name": "Connect Snowflake Import 1M 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Snowflake Import",
+     "Description": "Start a batch of 'Strategy Snowflake Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "17a50c32626eb0d2ff5d6a8e89922c371d2ed2a516fb233f4937f119c3162d59",
+     "ConfigLength": 3282
+    },
+    {
+     "Name": "Poll Strategy Snowflake Import",
+     "Description": "Wait for the 'Strategy Snowflake Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6aa62a3e8270a97d9bd129a52e25156399c51adf5281194be96b31508cdd8d58",
+     "ConfigLength": 2526
+    },
+    {
+     "Name": "Collect Strategy Snowflake Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SNOWFLAKE-PROFISEE-I-1000000-1000000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "9d860574e07b7712ca38995b4755f5f4121b892e892825ae83858ba1c04d6407",
+     "ConfigLength": 2809
+    }
+   ]
+  },
+  "connect-1m-synapse-import-8t": {
+   "Name": "Connect Synapse Import 1M 8T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,8T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Synapse Import",
+     "Description": "Start a batch of 'Strategy Synapse Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b1e7b86dfbb566d6cf57c25da7d585ee127a1846bdd2e545bfd5b4fa73e7a029",
+     "ConfigLength": 3278
+    },
+    {
+     "Name": "Poll Strategy Synapse Import",
+     "Description": "Wait for the 'Strategy Synapse Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "34a3204c36a0496affd20aa7332293e264756bf07d9a6e56c97780678d80d9d0",
+     "ConfigLength": 2524
+    },
+    {
+     "Name": "Collect Strategy Synapse Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SYNAPSE-PROFISEE-I-1000000-1000000-0-8.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5ac29585006a08a8e7728db79f80996a5241d94205a374a80e3f0ed5382b3d2b",
+     "ConfigLength": 2803
+    }
+   ]
+  },
+  "connect-1m-profisee-to-profisee-export-12t": {
+   "Name": "Connect Profisee To Profisee Export 1M 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Profisee To Profisee Export",
+     "Description": "Start a batch of 'Strategy Profisee To Profisee Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "618c93b88348aafb79b926fa8840758eb1007e3d5ed3d6445d27e05d5c444eaf",
+     "ConfigLength": 3304
+    },
+    {
+     "Name": "Poll Strategy Profisee To Profisee Export",
+     "Description": "Wait for the 'Strategy Profisee To Profisee Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "39cf717cfee9fa3734bd3debe8fceed8d57be69e28d69f19a170cf01f0df7a9f",
+     "ConfigLength": 2537
+    },
+    {
+     "Name": "Collect Strategy Profisee To Profisee Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-PROFISEE-E-1000000-1000000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "87d1357638910a73ef3c42a128bc2e9071612dbfb04cd181b6c9293b0cc55039",
+     "ConfigLength": 2817
+    }
+   ]
+  },
+  "connect-1m-sql-server-export-12t": {
+   "Name": "Connect SQL Server Export 1M 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy SQL Server Export",
+     "Description": "Start a batch of 'Strategy SQL Server Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "0a41f0ab77fd7e906029c100ef8b8e7b3170764e010def0a03632df71475c400",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy SQL Server Export",
+     "Description": "Wait for the 'Strategy SQL Server Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c586301b790dda059d93c5540a6ad9609e70e33a6faaa4704815be85d883bcb7",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy SQL Server Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SQLSERVER-E-1000000-1000000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "a4279ab3b63f33c2e96dc5dd36561132c39162dd771cf93ae85415760ea5f87d",
+     "ConfigLength": 2808
+    }
+   ]
+  },
+  "connect-1m-databricks-export-12t": {
+   "Name": "Connect Databricks Export 1M 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Databricks Export",
+     "Description": "Start a batch of 'Strategy Databricks Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b35c765751385532f0cc8c7544fac6eaf3e7d369a722c9ee09ce3ad850fea85a",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy Databricks Export",
+     "Description": "Wait for the 'Strategy Databricks Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2394827bb2d4ad46a655490fbb4fb3cf5c6a0d7d9e5494f7ddb7a9bdc0bd039a",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy Databricks Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-DATABRICKS-E-1000000-1000000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fe24091e8d5f8020bc15351bc3adca4c4a9de821801d5a0cf98830a46ac3f140",
+     "ConfigLength": 2809
+    }
+   ]
+  },
+  "connect-1m-snowflake-export-12t": {
+   "Name": "Connect Snowflake Export 1M 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Snowflake Export",
+     "Description": "Start a batch of 'Strategy Snowflake Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "bcea0bcd9006e1603754f575546fac354d3964291517f8815bbd8e03f35e257a",
+     "ConfigLength": 3282
+    },
+    {
+     "Name": "Poll Strategy Snowflake Export",
+     "Description": "Wait for the 'Strategy Snowflake Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c60819b9326283bf2b6e7839b41528b16b488f404210f7cb773f6ebdaefaf6fe",
+     "ConfigLength": 2526
+    },
+    {
+     "Name": "Collect Strategy Snowflake Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SNOWFLAKE-E-1000000-1000000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8015db72cf8f63998f3f9141c0f2d25ee0c4a42363fa992e832ecf6e20413f2",
+     "ConfigLength": 2807
+    }
+   ]
+  },
+  "connect-1m-synapse-export-12t": {
+   "Name": "Connect Synapse Export 1M 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Synapse Export",
+     "Description": "Start a batch of 'Strategy Synapse Export'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dc9e92bad915421c9efd83a919d8114c6208bc77b4fc86be411018b8be69e997",
+     "ConfigLength": 3278
+    },
+    {
+     "Name": "Poll Strategy Synapse Export",
+     "Description": "Wait for the 'Strategy Synapse Export' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ced0c2f803749b6ebd2730a24475a5a332ac104a27f244180c8f4c65a1272594",
+     "ConfigLength": 2524
+    },
+    {
+     "Name": "Collect Strategy Synapse Export Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-PROFISEE-SYNAPSE-E-1000000-1000000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "a62d1b22c94eee5e4830377904fa2364340a6d560a498f5bfdff8dcbcd09c91c",
+     "ConfigLength": 2803
+    }
+   ]
+  },
+  "connect-1m-sql-server-import-12t": {
+   "Name": "Connect SQL Server Import 1M 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy SQL Server Import",
+     "Description": "Start a batch of 'Strategy SQL Server Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "8cce3d03f923445d5462057aac6ebc1825796bfcad74c62c789253173f88ecd9",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy SQL Server Import",
+     "Description": "Wait for the 'Strategy SQL Server Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "7fa962f24de14e51aada6d5a93f39dcb0a3edffcc1fa11a8e5f740364a23128a",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy SQL Server Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SQLSERVER-PROFISEE-I-1000000-1000000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d0c789c2333a80acc1a0432b80aaca531b1367c1f39d4906f0feaef0d88b8ad3",
+     "ConfigLength": 2811
+    }
+   ]
+  },
+  "connect-1m-databricks-import-12t": {
+   "Name": "Connect Databricks Import 1M 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Databricks Import",
+     "Description": "Start a batch of 'Strategy Databricks Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "a6a0a6fdce4ecab324f4d117be38fd44e82098ee428a3ede8028b3640e2505ce",
+     "ConfigLength": 3284
+    },
+    {
+     "Name": "Poll Strategy Databricks Import",
+     "Description": "Wait for the 'Strategy Databricks Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fae1620451ad903dc8f29821d5b4f9fc73d45f2d9f31cd7c64ccb8c435d410c4",
+     "ConfigLength": 2527
+    },
+    {
+     "Name": "Collect Strategy Databricks Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-DATABRICKS-PROFISEE-I-1000000-1000000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d75f438b78a864f391321cc0a579efa4b2a8ed237aa38a59cc40e1c5d07c3d4b",
+     "ConfigLength": 2813
+    }
+   ]
+  },
+  "connect-1m-snowflake-import-12t": {
+   "Name": "Connect Snowflake Import 1M 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Snowflake Import",
+     "Description": "Start a batch of 'Strategy Snowflake Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "17a50c32626eb0d2ff5d6a8e89922c371d2ed2a516fb233f4937f119c3162d59",
+     "ConfigLength": 3282
+    },
+    {
+     "Name": "Poll Strategy Snowflake Import",
+     "Description": "Wait for the 'Strategy Snowflake Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6aa62a3e8270a97d9bd129a52e25156399c51adf5281194be96b31508cdd8d58",
+     "ConfigLength": 2526
+    },
+    {
+     "Name": "Collect Strategy Snowflake Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SNOWFLAKE-PROFISEE-I-1000000-1000000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "692a07ee51eb5c5685c50381e453b3e35748288d40144691e982ed67274bfc27",
+     "ConfigLength": 2810
+    }
+   ]
+  },
+  "connect-1m-synapse-import-12t": {
+   "Name": "Connect Synapse Import 1M 12T",
+   "Category": "Connect",
+   "PlainTags": "Connect,{{ProfiseeVersionCode}},{{$ref:connect/environment:MainMachineTag}},1M,12T",
+   "Details": [
+    {
+     "Name": "Execute Strategy Synapse Import",
+     "Description": "Start a batch of 'Strategy Synapse Import'.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b1e7b86dfbb566d6cf57c25da7d585ee127a1846bdd2e545bfd5b4fa73e7a029",
+     "ConfigLength": 3278
+    },
+    {
+     "Name": "Poll Strategy Synapse Import",
+     "Description": "Wait for the 'Strategy Synapse Import' batch to reach a terminal state (every 30 s, up to 12 h).",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "34a3204c36a0496affd20aa7332293e264756bf07d9a6e56c97780678d80d9d0",
+     "ConfigLength": 2524
+    },
+    {
+     "Name": "Collect Strategy Synapse Import Metrics",
+     "Description": "Write one ConnectApiExecution row per connex job page of the batch, run profile {{ProfiseeVersionCode}}-SYNAPSE-PROFISEE-I-1000000-1000000-0-12.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "140b6918c984d330d846ea2b2c447de5bf30145518e1923f38f8c1f647bef6c1",
+     "ConfigLength": 2804
+    }
+   ]
+  }
+ },
+ "profiles": {
+  "{{ProfiseeVersionCode}}-PROFISEE-PROFISEE-E-1000-1000-0-4": {
+   "Name": "Connect Profisee To Profisee Export (1000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Profisee To Profisee Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SQLSERVER-E-1000-1000-0-4": {
+   "Name": "Connect SQL Server Export (1000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy SQL Server Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SQLSERVER",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-DATABRICKS-E-1000-1000-0-4": {
+   "Name": "Connect Databricks Export (1000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Databricks Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "DATABRICKS",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SNOWFLAKE-E-1000-1000-0-4": {
+   "Name": "Connect Snowflake Export (1000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Snowflake Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SNOWFLAKE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SYNAPSE-E-1000-1000-0-4": {
+   "Name": "Connect Synapse Export (1000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Synapse Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SYNAPSE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-SQLSERVER-PROFISEE-I-1000-1000-0-4": {
+   "Name": "Connect SQL Server Import (1000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy SQL Server Import",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SQLSERVER",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-DATABRICKS-PROFISEE-I-1000-1000-0-4": {
+   "Name": "Connect Databricks Import (1000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Databricks Import",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "DATABRICKS",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-SNOWFLAKE-PROFISEE-I-1000-1000-0-4": {
+   "Name": "Connect Snowflake Import (1000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Snowflake Import",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SNOWFLAKE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-SYNAPSE-PROFISEE-I-1000-1000-0-4": {
+   "Name": "Connect Synapse Import (1000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Synapse Import",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SYNAPSE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-PROFISEE-E-1000-1000-0-8": {
+   "Name": "Connect Profisee To Profisee Export (1000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Profisee To Profisee Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SQLSERVER-E-1000-1000-0-8": {
+   "Name": "Connect SQL Server Export (1000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy SQL Server Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SQLSERVER",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-DATABRICKS-E-1000-1000-0-8": {
+   "Name": "Connect Databricks Export (1000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Databricks Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "DATABRICKS",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SNOWFLAKE-E-1000-1000-0-8": {
+   "Name": "Connect Snowflake Export (1000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Snowflake Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SNOWFLAKE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SYNAPSE-E-1000-1000-0-8": {
+   "Name": "Connect Synapse Export (1000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Synapse Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SYNAPSE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-SQLSERVER-PROFISEE-I-1000-1000-0-8": {
+   "Name": "Connect SQL Server Import (1000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy SQL Server Import",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SQLSERVER",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-DATABRICKS-PROFISEE-I-1000-1000-0-8": {
+   "Name": "Connect Databricks Import (1000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Databricks Import",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "DATABRICKS",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-SNOWFLAKE-PROFISEE-I-1000-1000-0-8": {
+   "Name": "Connect Snowflake Import (1000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Snowflake Import",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SNOWFLAKE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-SYNAPSE-PROFISEE-I-1000-1000-0-8": {
+   "Name": "Connect Synapse Import (1000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Synapse Import",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SYNAPSE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-PROFISEE-E-1000-1000-0-12": {
+   "Name": "Connect Profisee To Profisee Export (1000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Profisee To Profisee Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SQLSERVER-E-1000-1000-0-12": {
+   "Name": "Connect SQL Server Export (1000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy SQL Server Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SQLSERVER",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-DATABRICKS-E-1000-1000-0-12": {
+   "Name": "Connect Databricks Export (1000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Databricks Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "DATABRICKS",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SNOWFLAKE-E-1000-1000-0-12": {
+   "Name": "Connect Snowflake Export (1000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Snowflake Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SNOWFLAKE",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SYNAPSE-E-1000-1000-0-12": {
+   "Name": "Connect Synapse Export (1000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Synapse Export",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SYNAPSE",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-SQLSERVER-PROFISEE-I-1000-1000-0-12": {
+   "Name": "Connect SQL Server Import (1000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy SQL Server Import",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SQLSERVER",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-DATABRICKS-PROFISEE-I-1000-1000-0-12": {
+   "Name": "Connect Databricks Import (1000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Databricks Import",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "DATABRICKS",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-SNOWFLAKE-PROFISEE-I-1000-1000-0-12": {
+   "Name": "Connect Snowflake Import (1000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Snowflake Import",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SNOWFLAKE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-SYNAPSE-PROFISEE-I-1000-1000-0-12": {
+   "Name": "Connect Synapse Import (1000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Synapse Import",
+   "SourceRecordCount": 1000,
+   "TargetRecordCount": 1000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SYNAPSE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-PROFISEE-E-1000000-1000000-0-4": {
+   "Name": "Connect Profisee To Profisee Export (1000000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Profisee To Profisee Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SQLSERVER-E-1000000-1000000-0-4": {
+   "Name": "Connect SQL Server Export (1000000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy SQL Server Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SQLSERVER",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-DATABRICKS-E-1000000-1000000-0-4": {
+   "Name": "Connect Databricks Export (1000000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Databricks Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "DATABRICKS",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SNOWFLAKE-E-1000000-1000000-0-4": {
+   "Name": "Connect Snowflake Export (1000000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Snowflake Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SNOWFLAKE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SYNAPSE-E-1000000-1000000-0-4": {
+   "Name": "Connect Synapse Export (1000000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Synapse Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SYNAPSE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-SQLSERVER-PROFISEE-I-1000000-1000000-0-4": {
+   "Name": "Connect SQL Server Import (1000000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy SQL Server Import",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SQLSERVER",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-DATABRICKS-PROFISEE-I-1000000-1000000-0-4": {
+   "Name": "Connect Databricks Import (1000000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Databricks Import",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "DATABRICKS",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-SNOWFLAKE-PROFISEE-I-1000000-1000000-0-4": {
+   "Name": "Connect Snowflake Import (1000000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Snowflake Import",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SNOWFLAKE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-SYNAPSE-PROFISEE-I-1000000-1000000-0-4": {
+   "Name": "Connect Synapse Import (1000000 records, 4 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Synapse Import",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SYNAPSE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 4
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-PROFISEE-E-1000000-1000000-0-8": {
+   "Name": "Connect Profisee To Profisee Export (1000000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Profisee To Profisee Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SQLSERVER-E-1000000-1000000-0-8": {
+   "Name": "Connect SQL Server Export (1000000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy SQL Server Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SQLSERVER",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-DATABRICKS-E-1000000-1000000-0-8": {
+   "Name": "Connect Databricks Export (1000000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Databricks Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "DATABRICKS",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SNOWFLAKE-E-1000000-1000000-0-8": {
+   "Name": "Connect Snowflake Export (1000000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Snowflake Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SNOWFLAKE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SYNAPSE-E-1000000-1000000-0-8": {
+   "Name": "Connect Synapse Export (1000000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Synapse Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SYNAPSE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-SQLSERVER-PROFISEE-I-1000000-1000000-0-8": {
+   "Name": "Connect SQL Server Import (1000000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy SQL Server Import",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SQLSERVER",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-DATABRICKS-PROFISEE-I-1000000-1000000-0-8": {
+   "Name": "Connect Databricks Import (1000000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Databricks Import",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "DATABRICKS",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-SNOWFLAKE-PROFISEE-I-1000000-1000000-0-8": {
+   "Name": "Connect Snowflake Import (1000000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Snowflake Import",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SNOWFLAKE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-SYNAPSE-PROFISEE-I-1000000-1000000-0-8": {
+   "Name": "Connect Synapse Import (1000000 records, 8 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Synapse Import",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SYNAPSE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 8
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-PROFISEE-E-1000000-1000000-0-12": {
+   "Name": "Connect Profisee To Profisee Export (1000000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Profisee To Profisee Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SQLSERVER-E-1000000-1000000-0-12": {
+   "Name": "Connect SQL Server Export (1000000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy SQL Server Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SQLSERVER",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-DATABRICKS-E-1000000-1000000-0-12": {
+   "Name": "Connect Databricks Export (1000000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Databricks Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "DATABRICKS",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SNOWFLAKE-E-1000000-1000000-0-12": {
+   "Name": "Connect Snowflake Export (1000000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Snowflake Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SNOWFLAKE",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-PROFISEE-SYNAPSE-E-1000000-1000000-0-12": {
+   "Name": "Connect Synapse Export (1000000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "E",
+   "ConnectStrategyName": "Strategy Synapse Export",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "PROFISEE",
+   "ConnectTargetServiceProvider": "SYNAPSE",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-SQLSERVER-PROFISEE-I-1000000-1000000-0-12": {
+   "Name": "Connect SQL Server Import (1000000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy SQL Server Import",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SQLSERVER",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-DATABRICKS-PROFISEE-I-1000000-1000000-0-12": {
+   "Name": "Connect Databricks Import (1000000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Databricks Import",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "DATABRICKS",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-SNOWFLAKE-PROFISEE-I-1000000-1000000-0-12": {
+   "Name": "Connect Snowflake Import (1000000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Snowflake Import",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SNOWFLAKE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 12
+  },
+  "{{ProfiseeVersionCode}}-SYNAPSE-PROFISEE-I-1000000-1000000-0-12": {
+   "Name": "Connect Synapse Import (1000000 records, 12 threads, {{ProfiseeVersionCode}})",
+   "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+   "ConnectStrategyType": "I",
+   "ConnectStrategyName": "Strategy Synapse Import",
+   "SourceRecordCount": 1000000,
+   "TargetRecordCount": 1000000,
+   "TotalAttributesCount": 122,
+   "DBACount": 50,
+   "FreeformCount": 72,
+   "RuleCount": 0,
+   "ConnectSourceServiceProvider": "SYNAPSE",
+   "ConnectTargetServiceProvider": "PROFISEE",
+   "WorkerThreadCount": 12
+  }
+ }
+}

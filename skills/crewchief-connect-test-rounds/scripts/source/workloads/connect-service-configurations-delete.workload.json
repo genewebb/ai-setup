@@ -1,0 +1,205 @@
+{
+  "name": "connect-service-configurations-delete",
+  "description": "What: Delete the six Connect service configurations from the Main instance. Delete the strategies first. Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: reference values: connect/urls:ConnectBaseUrl. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "tags": [
+    "connect",
+    "shared",
+    "service-configurations"
+  ],
+  "globalParameters": {
+    "ConnExBaseUrl": "{{$ref:connect/urls:ConnectBaseUrl}}",
+    "ConnExApiKey": "{{$config:RestClients:Connect:ApiKey}}"
+  },
+  "globalParametersNotes": "",
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Configurations?ConfigurationUids=602caf62-1ebb-8426-7487-d38a3a32f282",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Service Configuration SQL Server Model Source'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Service Configuration SQL Server Model Source"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Configurations?ConfigurationUids=48e55c39-17aa-ca89-ba4c-4f5a9d9146b2",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Service Configuration SQL Server Connect Export'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Service Configuration SQL Server Connect Export"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Configurations?ConfigurationUids=f1a12a5f-d06c-272b-a2e8-78e4decaf346",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Service Configuration Profisee To Profisee'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Service Configuration Profisee To Profisee"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Configurations?ConfigurationUids=23a03bbd-06ba-61af-c4ec-0745856781a7",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Service Configuration Databricks'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Service Configuration Databricks"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Configurations?ConfigurationUids=823c5f8e-a2e1-2374-d694-1ff622393e71",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Service Configuration Snowflake'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Service Configuration Snowflake"
+    },
+    {
+      "inline": {
+        "url": "{{ConnExBaseUrl}}v1/Connect/Configurations?ConfigurationUids=3806410d-d129-044d-20d0-b0430dd25d05",
+        "method": "DELETE",
+        "headers": {
+          "x-api-key": "{{ConnExApiKey}}",
+          "accept": "application/json"
+        },
+        "body": "",
+        "outputFile": "",
+        "expectedStatusCodes": [
+          200,
+          204,
+          404
+        ],
+        "followRedirects": true,
+        "verifySsl": true,
+        "maxTimeSeconds": 300,
+        "type": "HTTP",
+        "parameters": {},
+        "timeoutSeconds": 600,
+        "continueOnError": true,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete 'Service Configuration Synapse'. 404 means already absent. Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 204, 404). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
+        "notes": ""
+      },
+      "label": "Delete Service Configuration Synapse"
+    }
+  ]
+}

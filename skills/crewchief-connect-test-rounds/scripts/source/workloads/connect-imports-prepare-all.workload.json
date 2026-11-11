@@ -1,0 +1,108 @@
+{
+  "name": "connect-1k-imports-prepare-all",
+  "description": "What: Reset Main to the baseline, then prepare every import at the Threads passed. connect-setup runs it once to prove every import prepares. Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: workloads it runs: connect-database-reset, connect-sql-server-import-prepare, connect-databricks-import-prepare, connect-snowflake-import-prepare, connect-synapse-import-prepare. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "tags": [
+    "connect",
+    "1K",
+    "4T"
+  ],
+  "globalParameters": {
+    "SourceTableName": "PDATA",
+    "RecordCount": "1000",
+    "WorkerThreadCount": "4",
+    "ModelSourceSize": "1K"
+  },
+  "globalParametersNotes": "SourceTableName is the table every size's source backup holds; every shared child reads it from here.",
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "workloadName": "connect-database-reset",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Restore the PDATA baseline and check the source data load strategy reads PDATA. Why: Runs the child workload 'connect-database-reset' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-database-reset'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Reset To Baseline"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-sql-server-import-prepare",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Empty PDataSqlServerImport. Why: Runs the child workload 'connect-sql-server-import-prepare' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-sql-server-import-prepare'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Prepare SQL Server Import"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-databricks-import-prepare",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Empty PDataDatabricksImport. Why: Runs the child workload 'connect-databricks-import-prepare' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-databricks-import-prepare'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Prepare Databricks Import"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-snowflake-import-prepare",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Empty PDataSnowflakeImport. Why: Runs the child workload 'connect-snowflake-import-prepare' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-snowflake-import-prepare'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Prepare Snowflake Import"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-synapse-import-prepare",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Empty PDataSynapseImport. Why: Runs the child workload 'connect-synapse-import-prepare' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-synapse-import-prepare'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Prepare Synapse Import"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "ProfiseeVersionCode",
+      "description": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under; the automation tags, run profile codes and backup names carry it. Passed by the test that runs this one (connect/environment:ProfiseeVersionCode, or the lane's version).",
+      "default": "{{$ref:connect/environment:ProfiseeVersionCode}}"
+    }
+  ]
+}

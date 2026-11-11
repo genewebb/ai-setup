@@ -1,0 +1,107 @@
+{
+  "name": "connect-base-create",
+  "description": "What: Make the Connect baseline of one Profisee version on this box: wait for any TestAuto run, check whether this version's baseline already exists (when it does, skip everything else and end green: nothing is overwritten), then run connect-1k-bootstrap-main-only (it REPLACES the Main Profisee database with the seed backup connect/databases:BaseSeedBackupFileName and runs Profisee Configuration on it, then API key, legacy cleanup, Main model build, SQL export table, Connect setup), which ends with the baseline backup profisee_ConnectBaseline_PDATA_<version code>.bak of Main. Why: every Connect test run resets Main to the baseline of its version; connect-preflight fails until it exists. When: once per box and version, after the Profisee of that version is installed. For a new version run connect-setup (it creates this version's TestAuto workflows) and connect-base-create: setup also writes the baseline, so run this workload before connect-setup (a round starts it first); once setup has made the baseline this workload skips the bootstrap and ends green. Needs: the connect/* reference sets (or a lane's version parameters) and the box's secrets; the seed backup in the SQL Server default backup folder of connect/machines:DatabaseServerName; the install pack on this box; no test running against this Profisee database. It never touches the Profisee to Profisee target and never overwrites a baseline. Success: Every step Succeeded or Skipped. If it fails: open the first failed step; for the bootstrap, the run output of connect-1k-bootstrap-main-only names what to check.",
+  "tags": [
+    "connect",
+    "start",
+    "base-create"
+  ],
+  "globalParameters": {
+    "TestAutoBaseUrl": "https://{{$ref:connect/machines:TestServerNameFQDN}}:8443",
+    "BaseMissing": "false",
+    "ProfiseeVersionCode": "{{$ref:connect/environment:ProfiseeVersionCode}}",
+    "ProfiseeVersionNumber": "{{$ref:connect/environment:ProfiseeVersionNumber}}"
+  },
+  "globalParametersNotes": "BaseMissing is set by the check step during the run (true or false); it starts as false so the bootstrap is skipped, never run, when the answer is missing.",
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "label": "Wait For Interrupted Runs",
+      "inline": {
+        "parameters": {},
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "notes": "",
+        "timeoutSeconds": 600,
+        "type": "TestAutoWorkflowStep",
+        "baseUrl": "{{TestAutoBaseUrl}}",
+        "workflowCode": "",
+        "executionCode": "",
+        "attachToActiveRun": true,
+        "waitOnly": true,
+        "pollIntervalSeconds": 60,
+        "waitIndefinitely": true,
+        "maxConsecutivePollFailures": 30,
+        "ignoreSslErrors": true,
+        "description": "What: Wait for any TestAuto run already in progress on this box. Why: the bootstrap restarts IIS on the Main application server and rebuilds the Main model, which would break a running test. Success: no run is active. If it fails: TestAuto is unreachable on port 8443."
+      }
+    },
+    {
+      "label": "Check Whether The Base Exists",
+      "inline": {
+        "parameters": {},
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "notes": "",
+        "timeoutSeconds": 120,
+        "executionPolicy": "Bypass",
+        "preferWindowsPowerShell": false,
+        "runAsAdministrator": false,
+        "captureVerbose": false,
+        "captureDebug": false,
+        "treatStderrAsError": true,
+        "scriptContent": "$ErrorActionPreference = 'Stop'\r\n$file = 'profisee_ConnectBaseline_PDATA_{{ProfiseeVersionCode}}.bak'\r\n$c = New-Object System.Data.SqlClient.SqlConnection '{{$ref:connect/databases:MasterConnectionString}};Connect Timeout=30'\r\n$c.Open()\r\ntry {\r\n    $q = $c.CreateCommand()\r\n    $q.CommandText = \"DECLARE @dir nvarchar(400) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400)); DECLARE @exists int, @f nvarchar(600) = @dir + N'\\' + @file; EXEC master.dbo.xp_fileexist @f, @exists OUTPUT; SELECT @exists;\"\r\n    [void]$q.Parameters.AddWithValue('@file', $file)\r\n    $exists = [int]$q.ExecuteScalar()\r\n}\r\nfinally { $c.Close() }\r\nif ($exists -eq 1) { 'false' } else { 'true' }",
+        "type": "PowerShellStep",
+        "description": "What: Look for the Connect baseline of this version (profisee_ConnectBaseline_PDATA_<version code>.bak) in the SQL Server default backup folder of connect/machines:DatabaseServerName and keep the answer in the run parameter BaseMissing (true = no baseline yet). Why: this workload makes a baseline once and never overwrites one; every test run resets Main to it, so when it exists the bootstrap step is skipped and the run ends green. Success: the step ends without an error (it does not fail when the baseline exists). If it fails: the database server does not answer, or the CrewChief account cannot connect to master there.",
+        "outputParameterName": "BaseMissing"
+      }
+    },
+    {
+      "label": "Report The Base State",
+      "inline": {
+        "parameters": {},
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "notes": "",
+        "timeoutSeconds": 60,
+        "executionPolicy": "Bypass",
+        "preferWindowsPowerShell": false,
+        "runAsAdministrator": false,
+        "captureVerbose": false,
+        "captureDebug": false,
+        "treatStderrAsError": true,
+        "scriptContent": "if ('{{BaseMissing}}' -eq 'true') {\r\n    \"No Connect baseline profisee_ConnectBaseline_PDATA_{{ProfiseeVersionCode}}.bak for version {{ProfiseeVersionCode}} on {{$ref:connect/machines:DatabaseServerName}} yet; it will be made.\"\r\n} else {\r\n    \"Connect baseline profisee_ConnectBaseline_PDATA_{{ProfiseeVersionCode}}.bak for version {{ProfiseeVersionCode}} already exists; nothing done.\"\r\n}",
+        "type": "PowerShellStep",
+        "description": "What: Print whether the Connect baseline of this version already exists (nothing done) or will be made. Why: the run output then says plainly why the bootstrap step is Skipped. Success: one line is printed. If it fails: the script cannot fail by itself; open the run output of the check step before it."
+      }
+    },
+    {
+      "inline": {
+        "workloadName": "connect-1k-bootstrap-main-only",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Build the Main side of the Connect pack and back it up as the baseline of this version (profisee_ConnectBaseline_PDATA_<version code>.bak). Why: Runs the child workload 'connect-1k-bootstrap-main-only' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-1k-bootstrap-main-only'; its first failed step says what to check. Skipped when: the Connect baseline of this version already exists (the check step found it), so there is nothing to make.",
+        "notes": "",
+        "runWhen": "{{BaseMissing}}"
+      },
+      "label": "Bootstrap Main And Back Up The Baseline"
+    }
+  ]
+}

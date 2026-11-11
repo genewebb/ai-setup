@@ -1,0 +1,1896 @@
+{
+ "workflows": {
+  "matching-1k-scenario1": {
+   "Name": "Matching 1K Scenario 1",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},1K,Scenario 1",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 1 Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "151cb2b213badefa673de07f0cb17d8d02e225f099e1388d91e501f27cbedeed",
+     "ConfigLength": 2863
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 1",
+     "Description": "Match status counts before matching runs.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "654b6a5545e4026a1fc6f95a10e50dc57ab60313ee047b2124679120e83df085",
+     "ConfigLength": 2803
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy and runs it with survivorship over the loaded records.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Wait for Matching Scenario To Finish",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "aa521474ab2e769add96d1072ea0592c6311988da9bc7d24552ad5be9f0490a0",
+     "ConfigLength": 2368
+    },
+    {
+     "Name": "Write End of Scenario 1 Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dc2cfcc99e53f68a22508f12d408226bca5da62d2fa38d29ff174e2fe12eb4cd",
+     "ConfigLength": 2857
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 1",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "714769289245e0488a87c10f3444994e5985cd47f6b7cb510e29e0246dec1945",
+     "ConfigLength": 2804
+    },
+    {
+     "Name": "Matching Timing Results Scenario 1",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6c62e186d88bcc099996940380fa82a8c467e881e1cb81bbfc9a34c34b2994c3",
+     "ConfigLength": 2911
+    }
+   ]
+  },
+  "matching-1k-scenario2": {
+   "Name": "Matching 1K Scenario 2",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},1K,Scenario 2",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 2 Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "1b16ea91972f7507cc9bcd41346b999379f8c1ae8ee57c990611dff7cf92300a",
+     "ConfigLength": 2863
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 2",
+     "Description": "Match status counts before the batch.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "a7a75bd57565a7495d7bb87a86f58ca3a98d712bf8d92bfc679e6af8c62c887f",
+     "ConfigLength": 2803
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 2 markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 2 Incremental Batch Load",
+     "Description": "Sends every row of RetailClient1KScenario2 as a batch load: New rows create, Changed rows are mutated on their strategy fields and PATCHed by Code, NoChange rows are PATCHed as they are.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "f8e01b4840f444c480760bb53b903ab9fbba3acc24482499530cde63238b4532",
+     "ConfigLength": 3502
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 2 Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "e1abc5e8ac48a99fe0b1715d9624a3ef2de58dc79fc3796b8afd79acf67a5b9d",
+     "ConfigLength": 2857
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 2",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "4eb8501a9eaf17a219433efe9b0485d09257074742aced51ad0bf758fc980735",
+     "ConfigLength": 2804
+    },
+    {
+     "Name": "Matching Timing Results Scenario 2",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "02de2637e1163058e4792fb200a836c7f0d3e238134ea3a67e8c618ead809293",
+     "ConfigLength": 2911
+    }
+   ]
+  },
+  "matching-1k-scenario3a": {
+   "Name": "Matching 1K Scenario 3a",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},1K,Scenario 3a",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3a Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d4d04720dc551a9f63ff3a835ffdcb6305d04c5fe0adec7a69664fc7c7837e78",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3a markers as the production workflow does.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2ca67dddeaa80a6629eae077494fc794ac39aa83a2be54245d64909ec0834cb2",
+     "ConfigLength": 3004
+    },
+    {
+     "Name": "Matching Scenario 3a Lookup Before Create",
+     "Description": "Looks up 100 existing AutoApproved records through the matching lookup; creates nothing.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "11c1c8440fa64d71086cee00915547e93d5bfccac6dacc4a76b4ab72975b8c00",
+     "ConfigLength": 3423
+    },
+    {
+     "Name": "Write End of Scenario 3a Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "64f23f5573a98ecf3bd814bb7e028a41225c0e44169829275ac6724fd5bb14e6",
+     "ConfigLength": 2859
+    }
+   ]
+  },
+  "matching-1k-scenario3b": {
+   "Name": "Matching 1K Scenario 3b",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},1K,Scenario 3b",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3b Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "e72784c2d43a6beab9dce5166cbc95a1cecd015aa0ecde8762692723d9e877d6",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 3b",
+     "Description": "Match status counts before the run.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fe1d9b70098f374b28671e7613da50a622ba586a8bc6422248daba9b76629685",
+     "ConfigLength": 2779
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3b markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 3b Continuous Matching",
+     "Description": "Sends every row of RetailClient1KScenario3b: a timed lookup, then a create when nothing matches.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b08f9617ea560baa68ad679010a25da1410d42775617d812c8788e4b278d5276",
+     "ConfigLength": 3869
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 3b Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ef3ba4ea58a10044edc6388b32c51bf2c9bf60c384e1eb9da3fb4f7198217de7",
+     "ConfigLength": 2859
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 3b",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "4f12f897f733eaa6d8155564f891a1cb789a96de425df1d81e4d5188c565d3ed",
+     "ConfigLength": 2780
+    },
+    {
+     "Name": "Matching Timing Results Scenario 3b",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "f4cc0a63e42d6d6cb422faf87cca516be986346fbc44aa2f1b16b2763e8cbd70",
+     "ConfigLength": 2915
+    }
+   ]
+  },
+  "matching-1k-scenario3c": {
+   "Name": "Matching 1K Scenario 3c",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},1K,Scenario 3c",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3c Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "491f347ec766066b2eca9a047362f1e0db62e81f7e89d9e68884a59a2256caf4",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 3c",
+     "Description": "Match status counts before the run.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fb902d28c1519a5cde2c4c10a6e9ed8806975ccd89de1b8b06289229d404baf8",
+     "ConfigLength": 2779
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3c markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 3c Continuous Matching",
+     "Description": "Creates every row of RetailClient1KScenario3c one record per call with continuous matching on.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "4c00ae1ef5954f0850cc3778c88e9f0194f8111ce43a7a5ec30a7f28612f5fdf",
+     "ConfigLength": 3628
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 3c Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fba9fff836483405bca63639ee7a7654581574689867fccce8773349fbe1faf8",
+     "ConfigLength": 2859
+    },
+    {
+     "Name": "Matching Scenario 3c Post-Run Metric Collection",
+     "Description": "Collects golden record times for the records the run created.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6844251fdf96207b37ac0f48605f69c4717cb67ff59c4b8ad1f09eec09ab6352",
+     "ConfigLength": 2636
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 3c",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5130b8fa21ddfa6aefae7d0d71c9698181267412d6b3e17cfb947923d18e8c48",
+     "ConfigLength": 2780
+    },
+    {
+     "Name": "Matching Timing Results Scenario 3c",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 9,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5a51c2d4585001c506102c69701e659e194680fc3d2439aabef9b8991639d0f5",
+     "ConfigLength": 2915
+    }
+   ]
+  },
+  "matching-10k-scenario1": {
+   "Name": "Matching 10K Scenario 1",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},10K,Scenario 1",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 1 Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "151cb2b213badefa673de07f0cb17d8d02e225f099e1388d91e501f27cbedeed",
+     "ConfigLength": 2863
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 1",
+     "Description": "Match status counts before matching runs.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d33d1798cbf86d1e7f152d355ec952d3ad94dd6934700f7420eb17200e90a74a",
+     "ConfigLength": 2805
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy and runs it with survivorship over the loaded records.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Wait for Matching Scenario To Finish",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "aa521474ab2e769add96d1072ea0592c6311988da9bc7d24552ad5be9f0490a0",
+     "ConfigLength": 2368
+    },
+    {
+     "Name": "Write End of Scenario 1 Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dc2cfcc99e53f68a22508f12d408226bca5da62d2fa38d29ff174e2fe12eb4cd",
+     "ConfigLength": 2857
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 1",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "41554860c2e298943ae278a9acdb215c282273c76ea1fbe4167a3204ab29d295",
+     "ConfigLength": 2806
+    },
+    {
+     "Name": "Matching Timing Results Scenario 1",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "b6dfe285768c2bc3da82f33144a67ada0e29846c7ef32cfa88852897b6753762",
+     "ConfigLength": 2912
+    }
+   ]
+  },
+  "matching-10k-scenario2": {
+   "Name": "Matching 10K Scenario 2",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},10K,Scenario 2",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 2 Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "1b16ea91972f7507cc9bcd41346b999379f8c1ae8ee57c990611dff7cf92300a",
+     "ConfigLength": 2863
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 2",
+     "Description": "Match status counts before the batch.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "577a694955b70ee42eb43843fed5aef8594c7042f5c4ed6327ba87138c3e0a47",
+     "ConfigLength": 2805
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 2 markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 2 Incremental Batch Load",
+     "Description": "Sends every row of RetailClient10KScenario2 as a batch load: New rows create, Changed rows are mutated on their strategy fields and PATCHed by Code, NoChange rows are PATCHed as they are.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "68ad062a07654474e51a3fd80314f7a3f923d4841b6d824f6566a3b01fd01966",
+     "ConfigLength": 3505
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 2 Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "e1abc5e8ac48a99fe0b1715d9624a3ef2de58dc79fc3796b8afd79acf67a5b9d",
+     "ConfigLength": 2857
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 2",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fbefa97452548c03c4700e150bd1eff114239224f116c91b6fab097e72ffda41",
+     "ConfigLength": 2806
+    },
+    {
+     "Name": "Matching Timing Results Scenario 2",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "633f3e3591b3362f47f0411cc2d5832a871c6b25b31d112cb29457d73c2e5149",
+     "ConfigLength": 2912
+    }
+   ]
+  },
+  "matching-10k-scenario3a": {
+   "Name": "Matching 10K Scenario 3a",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},10K,Scenario 3a",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3a Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d4d04720dc551a9f63ff3a835ffdcb6305d04c5fe0adec7a69664fc7c7837e78",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3a markers as the production workflow does.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2ca67dddeaa80a6629eae077494fc794ac39aa83a2be54245d64909ec0834cb2",
+     "ConfigLength": 3004
+    },
+    {
+     "Name": "Matching Scenario 3a Lookup Before Create",
+     "Description": "Looks up 1000 existing AutoApproved records through the matching lookup; creates nothing.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "0d2fb35369d04507210ff1d5226670ee5708913f8d45787ef168c518fb151e6a",
+     "ConfigLength": 3429
+    },
+    {
+     "Name": "Write End of Scenario 3a Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "64f23f5573a98ecf3bd814bb7e028a41225c0e44169829275ac6724fd5bb14e6",
+     "ConfigLength": 2859
+    }
+   ]
+  },
+  "matching-10k-scenario3b": {
+   "Name": "Matching 10K Scenario 3b",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},10K,Scenario 3b",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3b Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "e72784c2d43a6beab9dce5166cbc95a1cecd015aa0ecde8762692723d9e877d6",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 3b",
+     "Description": "Match status counts before the run.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dd6dd4ae6413aad47ddd98586fb50e3e887c624f9bdfa421f047347688a64f19",
+     "ConfigLength": 2781
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3b markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 3b Continuous Matching",
+     "Description": "Sends every row of RetailClient10KScenario3b: a timed lookup, then a create when nothing matches.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6d926bb16407ec03434944172ea5a9c8bbde8e3bd5c15e2a129d32b8b05c0649",
+     "ConfigLength": 3873
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 3b Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ef3ba4ea58a10044edc6388b32c51bf2c9bf60c384e1eb9da3fb4f7198217de7",
+     "ConfigLength": 2859
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 3b",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "cd2212828cdb73215233e8cbcfcc7d0dfd61ac7a009369872d52a4847fff06c5",
+     "ConfigLength": 2782
+    },
+    {
+     "Name": "Matching Timing Results Scenario 3b",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ae654fbd0352fb07bd9fc82af504136bc5958d75fcd89c228b7e0cb0732304bc",
+     "ConfigLength": 2916
+    }
+   ]
+  },
+  "matching-10k-scenario3c": {
+   "Name": "Matching 10K Scenario 3c",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},10K,Scenario 3c",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3c Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "491f347ec766066b2eca9a047362f1e0db62e81f7e89d9e68884a59a2256caf4",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 3c",
+     "Description": "Match status counts before the run.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "580f259a01dd072ac96e053f9679e7294d8c8492f46ec2dcd87b2c0c80e43f53",
+     "ConfigLength": 2781
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3c markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 3c Continuous Matching",
+     "Description": "Creates every row of RetailClient10KScenario3c one record per call with continuous matching on.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "eb59b22e28d649cff1ce7c083f1804be9f49d82ba76d4e937e85795ad32efff3",
+     "ConfigLength": 3632
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 3c Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fba9fff836483405bca63639ee7a7654581574689867fccce8773349fbe1faf8",
+     "ConfigLength": 2859
+    },
+    {
+     "Name": "Matching Scenario 3c Post-Run Metric Collection",
+     "Description": "Collects golden record times for the records the run created.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6844251fdf96207b37ac0f48605f69c4717cb67ff59c4b8ad1f09eec09ab6352",
+     "ConfigLength": 2636
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 3c",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6d8facdc6c88b4d87029dc8c76ff5a1829d005c18e591b0760a31445b86a0277",
+     "ConfigLength": 2782
+    },
+    {
+     "Name": "Matching Timing Results Scenario 3c",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 9,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "672b2a4669078c47a786f4f5d85d8ac2a0a535ec9f3a75d51d4e65510cd992ca",
+     "ConfigLength": 2916
+    }
+   ]
+  },
+  "matching-100k-scenario1": {
+   "Name": "Matching 100K Scenario 1",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},100K,Scenario 1",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 1 Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "151cb2b213badefa673de07f0cb17d8d02e225f099e1388d91e501f27cbedeed",
+     "ConfigLength": 2863
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 1",
+     "Description": "Match status counts before matching runs.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "8fa94379e65d2920df8fbfd0b5123cb6b54fe78034a9f90e05d5585b056ea7e0",
+     "ConfigLength": 2807
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy and runs it with survivorship over the loaded records.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Wait for Matching Scenario To Finish",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "aa521474ab2e769add96d1072ea0592c6311988da9bc7d24552ad5be9f0490a0",
+     "ConfigLength": 2368
+    },
+    {
+     "Name": "Write End of Scenario 1 Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dc2cfcc99e53f68a22508f12d408226bca5da62d2fa38d29ff174e2fe12eb4cd",
+     "ConfigLength": 2857
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 1",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "0efa0062febe7cc3ee9490aca25440155af4ab46db5baa68e93a39ff6a726027",
+     "ConfigLength": 2808
+    },
+    {
+     "Name": "Matching Timing Results Scenario 1",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "487c5ac3fedfa43f906366ef7dcfc10429f3daca92e2d500ef7bfb32b8e33155",
+     "ConfigLength": 2913
+    }
+   ]
+  },
+  "matching-100k-scenario2": {
+   "Name": "Matching 100K Scenario 2",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},100K,Scenario 2",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 2 Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "1b16ea91972f7507cc9bcd41346b999379f8c1ae8ee57c990611dff7cf92300a",
+     "ConfigLength": 2863
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 2",
+     "Description": "Match status counts before the batch.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "e0fbc413d6d78e879f169e537b2b34025990356eb2e11df2616f8541a4ed84d0",
+     "ConfigLength": 2807
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 2 markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 2 Incremental Batch Load",
+     "Description": "Sends every row of RetailClient100KScenario2 as a batch load: New rows create, Changed rows are mutated on their strategy fields and PATCHed by Code, NoChange rows are PATCHed as they are.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "cc75f8f0d073c11c5f35cdac9bd66e6a45fd706c59ffd3fa71068d1ef8938fcd",
+     "ConfigLength": 3508
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 2 Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "e1abc5e8ac48a99fe0b1715d9624a3ef2de58dc79fc3796b8afd79acf67a5b9d",
+     "ConfigLength": 2857
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 2",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "53ac7c5fc717b9dc1e3ad06baf93db8cdf147843f94430fff301cdf7ea8d1cc1",
+     "ConfigLength": 2808
+    },
+    {
+     "Name": "Matching Timing Results Scenario 2",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "505aaa2b414ce151d82efc7dc02acfec945de049bcb59725bb79bea6a0dfec77",
+     "ConfigLength": 2913
+    }
+   ]
+  },
+  "matching-100k-scenario3a": {
+   "Name": "Matching 100K Scenario 3a",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},100K,Scenario 3a",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3a Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d4d04720dc551a9f63ff3a835ffdcb6305d04c5fe0adec7a69664fc7c7837e78",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3a markers as the production workflow does.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2ca67dddeaa80a6629eae077494fc794ac39aa83a2be54245d64909ec0834cb2",
+     "ConfigLength": 3004
+    },
+    {
+     "Name": "Matching Scenario 3a Lookup Before Create",
+     "Description": "Looks up 10000 existing AutoApproved records through the matching lookup; creates nothing.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d38f2c2d24a4463f730c5846c420a7c862800700f8967d9dcbd17ebeb8fafa3a",
+     "ConfigLength": 3435
+    },
+    {
+     "Name": "Write End of Scenario 3a Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "64f23f5573a98ecf3bd814bb7e028a41225c0e44169829275ac6724fd5bb14e6",
+     "ConfigLength": 2859
+    }
+   ]
+  },
+  "matching-100k-scenario3b": {
+   "Name": "Matching 100K Scenario 3b",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},100K,Scenario 3b",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3b Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "e72784c2d43a6beab9dce5166cbc95a1cecd015aa0ecde8762692723d9e877d6",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 3b",
+     "Description": "Match status counts before the run.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "8b160b746b961a3afafefeb0a1692ba17dad93a7f4f9b9a9fad68b66977ebe3d",
+     "ConfigLength": 2783
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3b markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 3b Continuous Matching",
+     "Description": "Sends every row of RetailClient100KScenario3b: a timed lookup, then a create when nothing matches.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2cf37b58fd2f13f8f05f5a9697cea1a953d34982845aae72214b4d24390acd4c",
+     "ConfigLength": 3877
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 3b Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ef3ba4ea58a10044edc6388b32c51bf2c9bf60c384e1eb9da3fb4f7198217de7",
+     "ConfigLength": 2859
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 3b",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "7b560d6a336f947e436f61aa6660d3a4e620a171c7dc331203c3e2978e5eefc2",
+     "ConfigLength": 2784
+    },
+    {
+     "Name": "Matching Timing Results Scenario 3b",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "e884d602ab9fe4317fe68845e5bd705efb9e1f4e30c9fd1560350f27a3a58c2a",
+     "ConfigLength": 2917
+    }
+   ]
+  },
+  "matching-100k-scenario3c": {
+   "Name": "Matching 100K Scenario 3c",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},100K,Scenario 3c",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3c Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "491f347ec766066b2eca9a047362f1e0db62e81f7e89d9e68884a59a2256caf4",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 3c",
+     "Description": "Match status counts before the run.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "345672ae8f06b6e0bd8cee57591fff1c34c5ba0022c9f54c5e95cbfaf88d80ef",
+     "ConfigLength": 2783
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3c markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 3c Continuous Matching",
+     "Description": "Creates every row of RetailClient100KScenario3c one record per call with continuous matching on.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6c28ee70e3525d8cfb53631e4118242fa0d80935f04359b5bb0d446267106c48",
+     "ConfigLength": 3636
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 3c Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fba9fff836483405bca63639ee7a7654581574689867fccce8773349fbe1faf8",
+     "ConfigLength": 2859
+    },
+    {
+     "Name": "Matching Scenario 3c Post-Run Metric Collection",
+     "Description": "Collects golden record times for the records the run created.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6844251fdf96207b37ac0f48605f69c4717cb67ff59c4b8ad1f09eec09ab6352",
+     "ConfigLength": 2636
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 3c",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "4649d4d72d343e9813093b8b343d1a318f6fe7c9c4593a30595132e60234f835",
+     "ConfigLength": 2784
+    },
+    {
+     "Name": "Matching Timing Results Scenario 3c",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 9,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d12a4d91ea89e349384d2c2bf9d14d372324d0e3182b9f3ac8edd774acc416c1",
+     "ConfigLength": 2917
+    }
+   ]
+  },
+  "matching-1m-scenario1": {
+   "Name": "Matching 1M Scenario 1",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},1M,Scenario 1",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 1 Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "151cb2b213badefa673de07f0cb17d8d02e225f099e1388d91e501f27cbedeed",
+     "ConfigLength": 2863
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 1",
+     "Description": "Match status counts before matching runs.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "3bc81c9d368265e0cdeb4cee3c30b9867a846fb076c5ae05aeb8ab3ca87ec3a6",
+     "ConfigLength": 2809
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy and runs it with survivorship over the loaded records.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Wait for Matching Scenario To Finish",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "aa521474ab2e769add96d1072ea0592c6311988da9bc7d24552ad5be9f0490a0",
+     "ConfigLength": 2368
+    },
+    {
+     "Name": "Write End of Scenario 1 Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dc2cfcc99e53f68a22508f12d408226bca5da62d2fa38d29ff174e2fe12eb4cd",
+     "ConfigLength": 2857
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 1",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "80fee69e80254e6d6208540bb69daf219f6936f87a8528378dea1a78c5994d73",
+     "ConfigLength": 2810
+    },
+    {
+     "Name": "Matching Timing Results Scenario 1",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "70f78ac1418bd5ab19b787b720f9128da02c4bc18d7149872716d0c28ca09c14",
+     "ConfigLength": 2914
+    }
+   ]
+  },
+  "matching-1m-scenario2": {
+   "Name": "Matching 1M Scenario 2",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},1M,Scenario 2",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 2 Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "1b16ea91972f7507cc9bcd41346b999379f8c1ae8ee57c990611dff7cf92300a",
+     "ConfigLength": 2863
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 2",
+     "Description": "Match status counts before the batch.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "9556221b75d198531918072c2df48dff5ee73e8e369d9f1f75a49c5b263e0b64",
+     "ConfigLength": 2809
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 2 markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 2 Incremental Batch Load",
+     "Description": "Sends every row of RetailClient1MScenario2 as a batch load: New rows create, Changed rows are mutated on their strategy fields and PATCHed by Code, NoChange rows are PATCHed as they are.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "7fa2de167e403f438a50c30979d29aaefb3c4c82c4a2e1a0867e9b7b0367b52a",
+     "ConfigLength": 3508
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 2 Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "e1abc5e8ac48a99fe0b1715d9624a3ef2de58dc79fc3796b8afd79acf67a5b9d",
+     "ConfigLength": 2857
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 2",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "f68b57a0beda732b00b4b2bfda50f34a5864006654fe0656bb3e0da1d029ff55",
+     "ConfigLength": 2810
+    },
+    {
+     "Name": "Matching Timing Results Scenario 2",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "9aadd637e537538d6fcbd2403cd45b24ec04f64e25a1f382c0a153aed993398b",
+     "ConfigLength": 2914
+    }
+   ]
+  },
+  "matching-1m-scenario3a": {
+   "Name": "Matching 1M Scenario 3a",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},1M,Scenario 3a",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3a Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d4d04720dc551a9f63ff3a835ffdcb6305d04c5fe0adec7a69664fc7c7837e78",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3a markers as the production workflow does.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2ca67dddeaa80a6629eae077494fc794ac39aa83a2be54245d64909ec0834cb2",
+     "ConfigLength": 3004
+    },
+    {
+     "Name": "Matching Scenario 3a Lookup Before Create",
+     "Description": "Looks up 100000 existing AutoApproved records through the matching lookup; creates nothing.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "f7e41ee8b7fb91f4acd352068717743649819dc47203581683a771128473dead",
+     "ConfigLength": 3441
+    },
+    {
+     "Name": "Write End of Scenario 3a Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "64f23f5573a98ecf3bd814bb7e028a41225c0e44169829275ac6724fd5bb14e6",
+     "ConfigLength": 2859
+    }
+   ]
+  },
+  "matching-1m-scenario3b": {
+   "Name": "Matching 1M Scenario 3b",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},1M,Scenario 3b",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3b Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "e72784c2d43a6beab9dce5166cbc95a1cecd015aa0ecde8762692723d9e877d6",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 3b",
+     "Description": "Match status counts before the run.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "20240d27fb97ba5cc019ffa8303a2d24a19551e9352e6f967d2dc3b09b4c6977",
+     "ConfigLength": 2785
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3b markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 3b Continuous Matching",
+     "Description": "Sends every row of RetailClient1MScenario3b: a timed lookup, then a create when nothing matches.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ef031d848b1307a947ec164fe74ba246dbba4fdd504f0b19a20d0582a0abd085",
+     "ConfigLength": 3878
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 3b Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ef3ba4ea58a10044edc6388b32c51bf2c9bf60c384e1eb9da3fb4f7198217de7",
+     "ConfigLength": 2859
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 3b",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "87ae713d193da26a857cf36b98405001f56186fbf5d6dda5234748ed329cb659",
+     "ConfigLength": 2786
+    },
+    {
+     "Name": "Matching Timing Results Scenario 3b",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "8e9253705354b7adb596a6b8f6d37cda664aac8a55903aa258b7ac050682f8db",
+     "ConfigLength": 2918
+    }
+   ]
+  },
+  "matching-1m-scenario3c": {
+   "Name": "Matching 1M Scenario 3c",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},1M,Scenario 3c",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3c Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "491f347ec766066b2eca9a047362f1e0db62e81f7e89d9e68884a59a2256caf4",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 3c",
+     "Description": "Match status counts before the run.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6e6e8bf1f1f38218f0e716b76482f50570aafd74b4f71be7db57ce7945d96f08",
+     "ConfigLength": 2785
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3c markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 3c Continuous Matching",
+     "Description": "Creates every row of RetailClient1MScenario3c one record per call with continuous matching on.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "cae86ddf2acc92ed5bf25db98ade655dc658174950445b7212164965060c352a",
+     "ConfigLength": 3637
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 3c Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fba9fff836483405bca63639ee7a7654581574689867fccce8773349fbe1faf8",
+     "ConfigLength": 2859
+    },
+    {
+     "Name": "Matching Scenario 3c Post-Run Metric Collection",
+     "Description": "Collects golden record times for the records the run created.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6844251fdf96207b37ac0f48605f69c4717cb67ff59c4b8ad1f09eec09ab6352",
+     "ConfigLength": 2636
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 3c",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "c123bac47acd1d06eeeec17d9e50c625d3b4224d6bfde78ae4f4002e521985af",
+     "ConfigLength": 2786
+    },
+    {
+     "Name": "Matching Timing Results Scenario 3c",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 9,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "18ac00fe8d7aa81ac9891dddccaa2985fe17785e2c8b7182dc9ecc24acab0351",
+     "ConfigLength": 2918
+    }
+   ]
+  },
+  "matching-100m-scenario1": {
+   "Name": "Matching 100M Scenario 1",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},100M,Scenario 1",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 1 Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "151cb2b213badefa673de07f0cb17d8d02e225f099e1388d91e501f27cbedeed",
+     "ConfigLength": 2863
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 1",
+     "Description": "Match status counts before matching runs.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "4ae777302a6f6360e0bea3e6e5f504df02bc8b205a481dcdfaf35650d33efb2e",
+     "ConfigLength": 2813
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy and runs it with survivorship over the loaded records.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Wait for Matching Scenario To Finish",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "aa521474ab2e769add96d1072ea0592c6311988da9bc7d24552ad5be9f0490a0",
+     "ConfigLength": 2368
+    },
+    {
+     "Name": "Write End of Scenario 1 Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dc2cfcc99e53f68a22508f12d408226bca5da62d2fa38d29ff174e2fe12eb4cd",
+     "ConfigLength": 2857
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 1",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6365ffff7abbfffdcea739d733c0828aa76a55352a774f2c06dd2db41dd2981e",
+     "ConfigLength": 2814
+    },
+    {
+     "Name": "Matching Timing Results Scenario 1",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "3be4ef4c8552f050f3e30ead40218add5b835aede4caa0d97ec051685a4a9e9b",
+     "ConfigLength": 2916
+    }
+   ]
+  },
+  "matching-100m-scenario2": {
+   "Name": "Matching 100M Scenario 2",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},100M,Scenario 2",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 2 Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "1b16ea91972f7507cc9bcd41346b999379f8c1ae8ee57c990611dff7cf92300a",
+     "ConfigLength": 2863
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 2",
+     "Description": "Match status counts before the batch.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "a09fa3b4508ff21b1725b6cbf7e848dfa1a100a69c7497a2dbe163cf476c3e01",
+     "ConfigLength": 2813
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 2 markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 2 Incremental Batch Load",
+     "Description": "Sends every row of RetailClient100MScenario2 as a batch load: New rows create, Changed rows are mutated on their strategy fields and PATCHed by Code, NoChange rows are PATCHed as they are.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "169962ea009662693e7f63c01ae79bdaf3508ed64350f5ce1cb73d1c54da5135",
+     "ConfigLength": 3514
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 2 Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "e1abc5e8ac48a99fe0b1715d9624a3ef2de58dc79fc3796b8afd79acf67a5b9d",
+     "ConfigLength": 2857
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 2",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6883bda93dcd5fc29d0fb0e2a65507c6586f38921b104b5ced660eedef6f8bd0",
+     "ConfigLength": 2814
+    },
+    {
+     "Name": "Matching Timing Results Scenario 2",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "58b45c4f729f6044e4d847a5edd8bfc50cf883a71d004872d408f2df7ec5b125",
+     "ConfigLength": 2916
+    }
+   ]
+  },
+  "matching-100m-scenario3a": {
+   "Name": "Matching 100M Scenario 3a",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},100M,Scenario 3a",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3a Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d4d04720dc551a9f63ff3a835ffdcb6305d04c5fe0adec7a69664fc7c7837e78",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3a markers as the production workflow does.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "2ca67dddeaa80a6629eae077494fc794ac39aa83a2be54245d64909ec0834cb2",
+     "ConfigLength": 3004
+    },
+    {
+     "Name": "Matching Scenario 3a Lookup Before Create",
+     "Description": "Looks up 10000000 existing AutoApproved records through the matching lookup; creates nothing.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "dfad9a6956ea3cffd3de58361b0cff079edffef416a1a1495ff647bbab659509",
+     "ConfigLength": 3453
+    },
+    {
+     "Name": "Write End of Scenario 3a Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "64f23f5573a98ecf3bd814bb7e028a41225c0e44169829275ac6724fd5bb14e6",
+     "ConfigLength": 2859
+    }
+   ]
+  },
+  "matching-100m-scenario3b": {
+   "Name": "Matching 100M Scenario 3b",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},100M,Scenario 3b",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3b Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "e72784c2d43a6beab9dce5166cbc95a1cecd015aa0ecde8762692723d9e877d6",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 3b",
+     "Description": "Match status counts before the run.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d1dae4ebc38a79cab44094373af5114a6d496826f21aa18fcc5009e0e29dfbf7",
+     "ConfigLength": 2789
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3b markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 3b Continuous Matching",
+     "Description": "Sends every row of RetailClient100MScenario3b: a timed lookup, then a create when nothing matches.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5fd3f2882af5f53310652a2b33cf6678accf41b3621e29e33c2d375e38cbba87",
+     "ConfigLength": 3886
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 3b Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "ef3ba4ea58a10044edc6388b32c51bf2c9bf60c384e1eb9da3fb4f7198217de7",
+     "ConfigLength": 2859
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 3b",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "1b3b99bc0bf6825223503527266bc078ba045ceeaed5cc203d9beeebd8b592e2",
+     "ConfigLength": 2790
+    },
+    {
+     "Name": "Matching Timing Results Scenario 3b",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "55f71e67c677611cedf440d5b1db25fc59ae0144a00cfa027d983b767035ab34",
+     "ConfigLength": 2920
+    }
+   ]
+  },
+  "matching-100m-scenario3c": {
+   "Name": "Matching 100M Scenario 3c",
+   "Category": "Matching",
+   "PlainTags": "Matching,{{ProfiseeVersionCode}},{{$ref:matching/environment:MainMachineTag}},100M,Scenario 3c",
+   "Details": [
+    {
+     "Name": "Write Start of Scenario 3c Monitor Message",
+     "Description": "Writes the start marker the timing step measures from.",
+     "ExecutionOrder": 1,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "491f347ec766066b2eca9a047362f1e0db62e81f7e89d9e68884a59a2256caf4",
+     "ConfigLength": 2865
+    },
+    {
+     "Name": "Capture Matching Status Counts for Start of Scenario 3c",
+     "Description": "Match status counts before the run.",
+     "ExecutionOrder": 2,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "601e7e9e195ed91f490248fc8974ecd89feec199505c3d7443a8c95f06dc246b",
+     "ConfigLength": 2789
+    },
+    {
+     "Name": "Enable RetailClient Matching Strategy Then Run",
+     "Description": "Enables the RetailClient strategy (saving it with continuous matching on disabled it) and runs it with survivorship, inside the Scenario 3c markers as the production workflow does.",
+     "ExecutionOrder": 3,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "d8bb67dd3ca064053114e4073696b3b6f4c3892231e38c460cb3460f01d4b92b",
+     "ConfigLength": 2996
+    },
+    {
+     "Name": "Matching Scenario 3c Continuous Matching",
+     "Description": "Creates every row of RetailClient100MScenario3c one record per call with continuous matching on.",
+     "ExecutionOrder": 4,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "4f598821091a923a108a68e01c40a4ab3b34658ea222da43377f44cafa02f13c",
+     "ConfigLength": 3645
+    },
+    {
+     "Name": "Wait for Matching To Be Idle",
+     "Description": "Polls the RetailClient strategy until matching is idle.",
+     "ExecutionOrder": 5,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5bfbbe90b00016cedd7f027f71648b6628dcd5a40b7e3d37538b7ac65073368e",
+     "ConfigLength": 2366
+    },
+    {
+     "Name": "Write End of Scenario 3c Monitor Message",
+     "Description": "Writes the end marker the timing step measures to.",
+     "ExecutionOrder": 6,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "fba9fff836483405bca63639ee7a7654581574689867fccce8773349fbe1faf8",
+     "ConfigLength": 2859
+    },
+    {
+     "Name": "Matching Scenario 3c Post-Run Metric Collection",
+     "Description": "Collects golden record times for the records the run created.",
+     "ExecutionOrder": 7,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "6844251fdf96207b37ac0f48605f69c4717cb67ff59c4b8ad1f09eec09ab6352",
+     "ConfigLength": 2636
+    },
+    {
+     "Name": "Capture Matching Status Counts for End of Scenario 3c",
+     "Description": "Match status counts after matching finished.",
+     "ExecutionOrder": 8,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "bc037fcf74c2df037079d87996256992b39cfb334c130d2cd144792a433b8682",
+     "ConfigLength": 2790
+    },
+    {
+     "Name": "Matching Timing Results Scenario 3c",
+     "Description": "Collects matching timings between the start and end markers.",
+     "ExecutionOrder": 9,
+     "ProfiseeVersion": "{{ProfiseeVersionCode}}",
+     "ConfigSha256": "5d8ab0841b91ffe0c020a9c45f90e1729cca714dd51b761c96d81261fb69fd18",
+     "ConfigLength": 2920
+    }
+   ]
+  }
+ },
+ "profiles": {
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 1-1000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 1",
+   "SourceRecordCount": "1000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "0",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 2-1000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 2",
+   "SourceRecordCount": "1000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "100",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3a-1000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3a",
+   "SourceRecordCount": "1000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "0",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3b-1000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3b",
+   "SourceRecordCount": "1000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "100",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3c-1000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3c",
+   "SourceRecordCount": "1000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "100",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 1-10000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 1",
+   "SourceRecordCount": "10000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "0",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 2-10000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 2",
+   "SourceRecordCount": "10000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "1000",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3a-10000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3a",
+   "SourceRecordCount": "10000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "0",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3b-10000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3b",
+   "SourceRecordCount": "10000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "1000",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3c-10000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3c",
+   "SourceRecordCount": "10000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "1000",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 1-100000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 1",
+   "SourceRecordCount": "100000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "0",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 2-100000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 2",
+   "SourceRecordCount": "100000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "10000",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3a-100000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3a",
+   "SourceRecordCount": "100000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "0",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3b-100000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3b",
+   "SourceRecordCount": "100000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "10000",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3c-100000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3c",
+   "SourceRecordCount": "100000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "10000",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 1-1000000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 1",
+   "SourceRecordCount": "1000000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "0",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 2-1000000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 2",
+   "SourceRecordCount": "1000000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "100000",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3a-1000000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3a",
+   "SourceRecordCount": "1000000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "0",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3b-1000000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3b",
+   "SourceRecordCount": "1000000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "100000",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3c-1000000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3c",
+   "SourceRecordCount": "1000000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "100000",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 1-100000000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 1",
+   "SourceRecordCount": "100000000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "0",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 2-100000000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 2",
+   "SourceRecordCount": "100000000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "10000000",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3a-100000000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3a",
+   "SourceRecordCount": "100000000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "0",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3b-100000000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3b",
+   "SourceRecordCount": "100000000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "10000000",
+   "RuleCount": "0"
+  },
+  "{{ProfiseeVersionCode}}-RetailClient-Scenario 3c-100000000-0": {
+   "Scenario": "UnifiedMatchingScenario",
+   "MatchingStrategy": "RetailClient",
+   "MatchingScenarioName": "Scenario 3c",
+   "SourceRecordCount": "100000000",
+   "AttributeCount": "42",
+   "DBACount": "5",
+   "FreeformCount": "37",
+   "IncrementalVolumeCount": "10000000",
+   "RuleCount": "0"
+  }
+ }
+}

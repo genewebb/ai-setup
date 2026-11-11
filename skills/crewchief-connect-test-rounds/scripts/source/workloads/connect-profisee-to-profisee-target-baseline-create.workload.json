@@ -1,0 +1,78 @@
+{
+  "name": "connect-profisee-to-profisee-target-baseline-create",
+  "description": "What: Back up the Profisee to Profisee target database as its Connect baseline (profisee_ConnectTarget_<CrewChief box>_<version code>.bak, overwritten): the 50 Dba domains with their rows and an empty PDataProfiseeToProfiseeImport. Run once after connect-model-profisee-to-profisee-target-build (part of connect-profisee-to-profisee-bootstrap). Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: reference values: connect/databases:ProfiseeToProfiseeDatabaseName, connect/instances:ProfiseeToProfiseeInstanceName, connect/machines:ProfiseeToProfiseeDatabaseServerName, connect/machines:ProfiseeToProfiseeServerName. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "tags": [
+    "connect",
+    "providers",
+    "profisee-to-profisee"
+  ],
+  "globalParameters": {
+    "DatabaseServerName": "{{ProfiseeToProfiseeDatabaseServerName}}",
+    "ProfiseeDatabaseName": "{{ProfiseeToProfiseeDatabaseName}}",
+    "ProfiseeInstanceName": "{{ProfiseeToProfiseeInstanceName}}",
+    "ApplicationServerName": "{{ProfiseeToProfiseeServerName}}",
+    "BackupFileName": "profisee_ConnectTarget_{{$env:COMPUTERNAME}}_{{ProfiseeVersionCode}}.bak"
+  },
+  "globalParametersNotes": "",
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "serverName": "{{DatabaseServerName}}",
+        "connectionSecretName": "",
+        "authMode": "Windows",
+        "credentialUserId": "",
+        "credentialPassword": "",
+        "databaseName": "{{ProfiseeDatabaseName}}",
+        "operation": "BackupDatabase",
+        "snapshotName": "",
+        "backupFileName": "{{BackupFileName}}",
+        "fileUncPath": null,
+        "overwrite": true,
+        "relocateFiles": false,
+        "waitIndefinitely": true,
+        "dryRun": false,
+        "type": "DatabaseOperationsStep",
+        "parameters": {},
+        "timeoutSeconds": 7200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Back up {{ProfiseeDatabaseName}} on {{DatabaseServerName}} to {{BackupFileName}} (overwrites the previous target baseline). Why: Backs up or restores the database so every run starts from the same known state (BackupDatabase). Success: SQL Server finishes the BackupDatabase of the database with the named file in its default backup folder. If it fails: Check the backup file exists in the SQL Server default backup folder of the database server, the disk has room, and the CrewChief account is sysadmin there.",
+        "notes": ""
+      },
+      "label": "Back Up Target Baseline"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "ProfiseeToProfiseeDatabaseName",
+      "description": "Profisee database name on the Profisee-to-Profisee target. Passed by the test that runs this one: connect reference data, or the CRUD lab set of a TestAutoManager round.",
+      "default": "{{$ref:connect/databases:ProfiseeToProfiseeDatabaseName}}"
+    },
+    {
+      "name": "ProfiseeToProfiseeDatabaseServerName",
+      "description": "SQL Server of the Profisee-to-Profisee target. Passed by the test that runs this one: connect reference data, or the CRUD lab set of a TestAutoManager round.",
+      "default": "{{$ref:connect/machines:ProfiseeToProfiseeDatabaseServerName}}"
+    },
+    {
+      "name": "ProfiseeToProfiseeInstanceName",
+      "description": "Profisee instance name on the Profisee-to-Profisee target. Passed by the test that runs this one: connect reference data, or the CRUD lab set of a TestAutoManager round.",
+      "default": "{{$ref:connect/instances:ProfiseeToProfiseeInstanceName}}"
+    },
+    {
+      "name": "ProfiseeToProfiseeServerName",
+      "description": "Profisee-to-Profisee target application server (short name). Passed by the test that runs this one: connect reference data, or the CRUD lab set of a TestAutoManager round.",
+      "default": "{{$ref:connect/machines:ProfiseeToProfiseeServerName}}"
+    },
+    {
+      "name": "ProfiseeVersionCode",
+      "description": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under; the automation tags, run profile codes and backup names carry it. Passed by the test that runs this one (connect/environment:ProfiseeVersionCode, or the lane's version).",
+      "default": "{{$ref:connect/environment:ProfiseeVersionCode}}"
+    }
+  ]
+}

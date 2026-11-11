@@ -1,0 +1,70 @@
+{
+  "name": "connect-objects-reset",
+  "description": "What: Atomic Connect setup on the Main instance: delete EVERY Connect strategy and service configuration (except the built-in File Repository one), then create the Main-track service configurations and the shared template-built strategies. Each remote provider's strategies are created by its own prepare (connect-strategies-<provider>-create); the Profisee to Profisee ones by connect-profisee-to-profisee-connect-objects-reset. Portal-built strategies must be rebuilt after it. Part of the one-time bootstrap: prepares do NOT run it (they start from the baseline). Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: workloads it runs: connect-model-connect-objects-cleanup, connect-service-configurations-create, connect-strategies-create. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "tags": [
+    "connect",
+    "shared"
+  ],
+  "globalParameters": {},
+  "globalParametersNotes": "Each child owns its globals (a child global beats a parent global), so every child also runs on its own.",
+  "inputs": [
+    {
+      "name": "SourceTableName",
+      "description": "Source table label of the run size (PDATA), passed by the workload that runs this one; handed on to connect-strategies-create.",
+      "default": "{{$ref:connect/environment:SourceTableName}}"
+    }
+  ],
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "workloadName": "connect-model-connect-objects-cleanup",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Delete every Connect strategy and service configuration (except File Repository). Why: Runs the child workload 'connect-model-connect-objects-cleanup' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-model-connect-objects-cleanup'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Clean Up Connect Objects"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-service-configurations-create",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Create the service configurations. Why: Runs the child workload 'connect-service-configurations-create' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-service-configurations-create'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Service Configurations"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-strategies-create",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Create or update and enable the shared strategies. Why: Runs the child workload 'connect-strategies-create' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-strategies-create'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Strategies"
+    }
+  ]
+}

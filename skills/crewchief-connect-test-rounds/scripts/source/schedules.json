@@ -1,0 +1,52 @@
+{
+ "1k-databricks": {
+  "Days": "Sat",
+  "Time": "02:00",
+  "OldTarget": "connect-1k-databricks-all"
+ },
+ "1k-profisee-to-profisee": {
+  "Days": "Sat",
+  "Time": "02:00",
+  "OldTarget": "connect-1k-profisee-to-profisee-all"
+ },
+ "1k-snowflake": {
+  "Days": "Sat",
+  "Time": "02:00",
+  "OldTarget": "connect-1k-snowflake-all"
+ },
+ "1k-sql-server": {
+  "Days": "Sat",
+  "Time": "02:00",
+  "OldTarget": "connect-1k-sql-server-all"
+ },
+ "1k-synapse": {
+  "Days": "Sat",
+  "Time": "02:00",
+  "OldTarget": "connect-1k-synapse-all"
+ },
+ "1m-databricks": {
+  "Days": "Sat",
+  "Time": "02:00",
+  "OldTarget": "connect-1m-databricks-all"
+ },
+ "1m-profisee-to-profisee": {
+  "Days": "Sat",
+  "Time": "02:00",
+  "OldTarget": "connect-1m-profisee-to-profisee-all"
+ },
+ "1m-snowflake": {
+  "Days": "Sat",
+  "Time": "02:00",
+  "OldTarget": "connect-1m-snowflake-all"
+ },
+ "1m-sql-server": {
+  "Days": "Sat",
+  "Time": "02:00",
+  "OldTarget": "connect-1m-sql-server-all"
+ },
+ "1m-synapse": {
+  "Days": "Sat",
+  "Time": "02:00",
+  "OldTarget": "connect-1m-synapse-all"
+ }
+}

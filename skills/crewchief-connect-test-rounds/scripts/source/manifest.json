@@ -1,0 +1,166 @@
+{
+ "connect-bootstrap-main": {
+  "from": "connect-1k-bootstrap-main-only",
+  "folder": "internal"
+ },
+ "connect-databricks-credentials-refresh": {
+  "from": "connect-1k-databricks-credentials-refresh",
+  "folder": "internal/providers/databricks"
+ },
+ "connect-exports-prepare-all": {
+  "from": "connect-1k-exports-prepare-all",
+  "folder": "internal"
+ },
+ "connect-imports-prepare-all": {
+  "from": "connect-1k-imports-prepare-all",
+  "folder": "internal"
+ },
+ "connect-snowflake-credentials-refresh": {
+  "from": "connect-1k-snowflake-credentials-refresh",
+  "folder": "internal/providers/snowflake"
+ },
+ "connect-synapse-credentials-refresh": {
+  "from": "connect-1k-synapse-credentials-refresh",
+  "folder": "internal/providers/synapse"
+ },
+ "connect-base-create": {
+  "from": "connect-base-create",
+  "folder": "start"
+ },
+ "connect-database-backup": {
+  "from": "connect-database-backup",
+  "folder": "internal/shared/database"
+ },
+ "connect-database-reset": {
+  "from": "connect-database-reset",
+  "folder": "internal/shared/database"
+ },
+ "connect-database-seed-restore": {
+  "from": "connect-database-seed-restore",
+  "folder": "internal/shared/database"
+ },
+ "connect-database-sql-server-export-table-create": {
+  "from": "connect-database-sql-server-export-table-create",
+  "folder": "internal/providers/sql-server"
+ },
+ "connect-databricks-export-prepare": {
+  "from": "connect-databricks-export-prepare",
+  "folder": "internal/providers/databricks"
+ },
+ "connect-databricks-import-prepare": {
+  "from": "connect-databricks-import-prepare",
+  "folder": "internal/providers/databricks"
+ },
+ "connect-model-connect-objects-cleanup": {
+  "from": "connect-model-connect-objects-cleanup",
+  "folder": "internal/shared/model"
+ },
+ "connect-model-legacy-cleanup": {
+  "from": "connect-model-legacy-cleanup",
+  "folder": "internal/shared/model"
+ },
+ "connect-model-legacy-cleanup-preview": {
+  "from": "connect-model-legacy-cleanup-preview",
+  "folder": "internal/shared/model"
+ },
+ "connect-model-main-build": {
+  "from": "connect-model-main-build",
+  "folder": "internal/shared/model"
+ },
+ "connect-model-profisee-to-profisee-target-build": {
+  "from": "connect-model-profisee-to-profisee-target-build",
+  "folder": "internal/providers/profisee-to-profisee"
+ },
+ "connect-objects-reset": {
+  "from": "connect-objects-reset",
+  "folder": "internal/shared"
+ },
+ "connect-profisee-to-profisee-bootstrap": {
+  "from": "connect-profisee-to-profisee-bootstrap",
+  "folder": "internal/providers/profisee-to-profisee"
+ },
+ "connect-profisee-to-profisee-connect-setup": {
+  "from": "connect-profisee-to-profisee-connect-setup",
+  "folder": "internal/providers/profisee-to-profisee"
+ },
+ "connect-profisee-to-profisee-export-prepare": {
+  "from": "connect-profisee-to-profisee-export-prepare",
+  "folder": "internal/providers/profisee-to-profisee"
+ },
+ "connect-profisee-to-profisee-target-baseline-create": {
+  "from": "connect-profisee-to-profisee-target-baseline-create",
+  "folder": "internal/providers/profisee-to-profisee"
+ },
+ "connect-profisee-to-profisee-target-reset": {
+  "from": "connect-profisee-to-profisee-target-reset",
+  "folder": "internal/providers/profisee-to-profisee"
+ },
+ "connect-service-configuration-databricks-refresh": {
+  "from": "connect-service-configuration-databricks-refresh",
+  "folder": "internal/providers/databricks"
+ },
+ "connect-service-configuration-snowflake-refresh": {
+  "from": "connect-service-configuration-snowflake-refresh",
+  "folder": "internal/providers/snowflake"
+ },
+ "connect-service-configuration-synapse-refresh": {
+  "from": "connect-service-configuration-synapse-refresh",
+  "folder": "internal/providers/synapse"
+ },
+ "connect-service-configurations-create": {
+  "from": "connect-service-configurations-create",
+  "folder": "internal/shared/service-configurations"
+ },
+ "connect-service-configurations-delete": {
+  "from": "connect-service-configurations-delete",
+  "folder": "internal/shared/service-configurations"
+ },
+ "connect-snowflake-export-prepare": {
+  "from": "connect-snowflake-export-prepare",
+  "folder": "internal/providers/snowflake"
+ },
+ "connect-snowflake-import-prepare": {
+  "from": "connect-snowflake-import-prepare",
+  "folder": "internal/providers/snowflake"
+ },
+ "connect-source-data-load": {
+  "from": "connect-source-data-load",
+  "folder": "internal/shared/source-data"
+ },
+ "connect-sql-server-export-prepare": {
+  "from": "connect-sql-server-export-prepare",
+  "folder": "internal/providers/sql-server"
+ },
+ "connect-sql-server-import-prepare": {
+  "from": "connect-sql-server-import-prepare",
+  "folder": "internal/providers/sql-server"
+ },
+ "connect-strategies-create": {
+  "from": "connect-strategies-create",
+  "folder": "internal/shared/strategies"
+ },
+ "connect-strategies-databricks-create": {
+  "from": "connect-strategies-databricks-create",
+  "folder": "internal/providers/databricks"
+ },
+ "connect-strategies-delete": {
+  "from": "connect-strategies-delete",
+  "folder": "internal/shared/strategies"
+ },
+ "connect-strategies-snowflake-create": {
+  "from": "connect-strategies-snowflake-create",
+  "folder": "internal/providers/snowflake"
+ },
+ "connect-strategies-synapse-create": {
+  "from": "connect-strategies-synapse-create",
+  "folder": "internal/providers/synapse"
+ },
+ "connect-synapse-export-prepare": {
+  "from": "connect-synapse-export-prepare",
+  "folder": "internal/providers/synapse"
+ },
+ "connect-synapse-import-prepare": {
+  "from": "connect-synapse-import-prepare",
+  "folder": "internal/providers/synapse"
+ }
+}

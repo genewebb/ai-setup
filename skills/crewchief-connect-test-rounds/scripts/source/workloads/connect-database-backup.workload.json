@@ -1,0 +1,63 @@
+{
+  "name": "connect-database-backup",
+  "description": "What: Back up the Main database as the clean Connect baseline of the current run size (model, service configurations and strategies, no PData records). A bare file name lands in the SQL Server default backup directory. Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: reference values: connect/databases:ProfiseeDatabaseName, connect/instances:ProfiseeInstanceName, connect/machines:ApplicationServerName, connect/machines:DatabaseServerName. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "tags": [
+    "connect",
+    "shared",
+    "database"
+  ],
+  "globalParameters": {
+    "DatabaseServerName": "{{$ref:connect/machines:DatabaseServerName}}",
+    "ProfiseeDatabaseName": "{{$ref:connect/databases:ProfiseeDatabaseName}}",
+    "ProfiseeInstanceName": "{{$ref:connect/instances:ProfiseeInstanceName}}",
+    "ApplicationServerName": "{{$ref:connect/machines:ApplicationServerName}}",
+    "BackupFileName": "profisee_ConnectBaseline_{{SourceTableName}}_{{ProfiseeVersionCode}}.bak"
+  },
+  "globalParametersNotes": "",
+  "inputs": [
+    {
+      "name": "SourceTableName",
+      "description": "Source table label of the run size (PDATA), passed by the workload that runs this one.",
+      "default": "{{$ref:connect/environment:SourceTableName}}"
+    },
+    {
+      "name": "ProfiseeVersionCode",
+      "description": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under; the automation tags, run profile codes and backup names carry it. Passed by the test that runs this one (connect/environment:ProfiseeVersionCode, or the lane's version).",
+      "default": "{{$ref:connect/environment:ProfiseeVersionCode}}"
+    }
+  ],
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "serverName": "{{DatabaseServerName}}",
+        "connectionSecretName": "",
+        "authMode": "Windows",
+        "credentialUserId": "",
+        "credentialPassword": "",
+        "databaseName": "{{ProfiseeDatabaseName}}",
+        "operation": "BackupDatabase",
+        "snapshotName": "",
+        "backupFileName": "{{BackupFileName}}",
+        "fileUncPath": null,
+        "overwrite": true,
+        "relocateFiles": false,
+        "waitIndefinitely": true,
+        "dryRun": false,
+        "type": "DatabaseOperationsStep",
+        "parameters": {},
+        "timeoutSeconds": 7200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Back up {{ProfiseeDatabaseName}} to {{BackupFileName}} (overwrites the previous baseline of this version). Why: Backs up or restores the database so every run starts from the same known state (BackupDatabase). Success: SQL Server finishes the BackupDatabase of the database with the named file in its default backup folder. If it fails: Check the backup file exists in the SQL Server default backup folder of the database server, the disk has room, and the CrewChief account is sysadmin there.",
+        "notes": ""
+      },
+      "label": "Back Up Baseline"
+    }
+  ]
+}

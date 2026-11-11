@@ -1,0 +1,1538 @@
+{
+ "crud-100k-core-br": {
+  "Name": "CRUD 100K Core With Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},100K",
+  "Details": [
+   {
+    "Name": "CreateRecordsByPageAndBatch",
+    "Order": 1,
+    "Sha256": "5c4c025aee55b57febc19621bafe52e61e3248240463d58751b3b9e260c31181"
+   },
+   {
+    "Name": "UpdateRecordsByPageAndBatch",
+    "Order": 2,
+    "Sha256": "339def98102b7f9b3c167126dac086359c0a26de8a1047e5d068917beb015ebc"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 1 User With Business Rules",
+    "Order": 3,
+    "Sha256": "bd4c740b5e633b041ea76b0cc98e5ba4ac0bf9769ccdec5cc3977147707c51ae"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 10 Users With Business Rules",
+    "Order": 4,
+    "Sha256": "1c4084dc69aed48ed7e5db1ba869d358b777386578fc88df0b99bf1cee73faf5"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 100 Users With Business Rules",
+    "Order": 5,
+    "Sha256": "f8e5f8a9822b5f4d01cb2803f6fade41ad13dbba3fbe8ca7432e53eb6cde8a42"
+   },
+   {
+    "Name": "DeleteRecordsByPageAndBatch",
+    "Order": 6,
+    "Sha256": "3730edb52c63024ec7f50a37e8c3d86b78e835aa9d246ecdd31df4e726737c63"
+   }
+  ]
+ },
+ "crud-100k-core-nobr": {
+  "Name": "CRUD 100K Core No Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},100K",
+  "Details": [
+   {
+    "Name": "CreateRecordsByPageAndBatch",
+    "Order": 1,
+    "Sha256": "efb4a0ac50a29ed350f4da786cce5179b784b759d5ee9e33375f823d5d8560a7"
+   },
+   {
+    "Name": "UpdateRecordsByPageAndBatch",
+    "Order": 2,
+    "Sha256": "15e340891b31932ca88d9cc283d85658ce3c078debee307bf30bf0c88f80e40e"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 1 User No Business Rules",
+    "Order": 3,
+    "Sha256": "a57be23ceacf38b836be480a7753acc6b2f521fe3a071ea796beb865da15811e"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 10 Users No Business Rules",
+    "Order": 4,
+    "Sha256": "35e8f836a31f242de8ea12d0a64aa36ae48af4f4abc59a1a4b89d4e7e961a732"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 100 Users No Business Rules",
+    "Order": 5,
+    "Sha256": "4364bf63e8c5eaa8df364dbe9e0af197f11d2e8a7aeae8e4e19a8ddf70982ed3"
+   },
+   {
+    "Name": "DeleteRecordsByPageAndBatch",
+    "Order": 6,
+    "Sha256": "54c77cbbe3c9c31fe298849dee6c0d7e8cd9cbbd4d43115a879e4874aed38e22"
+   }
+  ]
+ },
+ "crud-10k-core-br": {
+  "Name": "CRUD 10K Core With Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},10K",
+  "Details": [
+   {
+    "Name": "CreateRecordsByPageAndBatch",
+    "Order": 1,
+    "Sha256": "965e4ea738057f20354761058787b3f3a983f5bc5e3e119e25ee127f197d2d42"
+   },
+   {
+    "Name": "UpdateRecordsByPageAndBatch",
+    "Order": 2,
+    "Sha256": "7da7ef0565d608de59d1d8fca5bf92faf6c23c4f63cce7d5d6f3e40e7328ecc5"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 1 User With Business Rules",
+    "Order": 3,
+    "Sha256": "473f137231c5665dda7a42e0523725191b173258f89f6368c98e3d1b0b050f06"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 10 Users With Business Rules",
+    "Order": 4,
+    "Sha256": "bb80ad7ece7f1e96407c554cb9d5bfd8416f0e0380330276578025894c4d648c"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 100 Users With Business Rules",
+    "Order": 5,
+    "Sha256": "948732512b6a3542b849ffedcf88192225b7ae9e6242297494ebf36262abcdd2"
+   },
+   {
+    "Name": "DeleteRecordsByPageAndBatch",
+    "Order": 6,
+    "Sha256": "cb368875a33c5f3846ec2e20dc3f4bb880f6bcce2f16e7cbbceb60de64fc9028"
+   }
+  ]
+ },
+ "crud-10k-core-nobr": {
+  "Name": "CRUD 10K Core No Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},10K",
+  "Details": [
+   {
+    "Name": "CreateRecordsByPageAndBatch",
+    "Order": 1,
+    "Sha256": "87abebc65b1fbe1251887d649f25432c33dbeff2499d75dc5fd740bb524dc9c2"
+   },
+   {
+    "Name": "UpdateRecordsByPageAndBatch",
+    "Order": 2,
+    "Sha256": "dd3f32166395904b6b288720143a65136bbe059049d9474439401f420105a2cb"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 1 User No Business Rules",
+    "Order": 3,
+    "Sha256": "dfb937ca750166a15b6504a82a66743a071cdfa2766ecd2ad791cfc8646c17da"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 10 Users No Business Rules",
+    "Order": 4,
+    "Sha256": "1e4986ef3f510c7f6fc4287b95fdb0c8a250bb5cd8ff416fcd35f1517947cb3a"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 100 Users No Business Rules",
+    "Order": 5,
+    "Sha256": "15dd84a4f08b43a4c2008db94090fbb3112154ff953d78915c9d748b6047f171"
+   },
+   {
+    "Name": "DeleteRecordsByPageAndBatch",
+    "Order": 6,
+    "Sha256": "ecc2d878d4960238fbc1d45056c12cc3f06750159b8eb23d27916200833b3665"
+   }
+  ]
+ },
+ "crud-1k-core-br": {
+  "Name": "CRUD 1K Core With Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},1K",
+  "Details": [
+   {
+    "Name": "CreateRecordsByPageAndBatch",
+    "Order": 1,
+    "Sha256": "4873e3c7a1e4a0d16e012917d8184dcacd12ba92da7fe8208f8d12d35e9e54a3"
+   },
+   {
+    "Name": "UpdateRecordsByPageAndBatch",
+    "Order": 2,
+    "Sha256": "7bd02ad5de40020f91c42cd8d62c12b1caec6437e18d74e443c046007ee95249"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 1 User With Business Rules",
+    "Order": 3,
+    "Sha256": "50cbf77d4f4bbbe9a3c02c60036a0f371f8350e009685186ce50064a6496de5a"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 10 Users With Business Rules",
+    "Order": 4,
+    "Sha256": "2a2f6d15eb94c721019ebf0f2f1f867e6886396009984fc2e36ad2358f5b8a75"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 100 Users With Business Rules",
+    "Order": 5,
+    "Sha256": "01e4654eca1a1099f011e7c969dfe2b55db26799c60579b74397c5de6148eaa4"
+   },
+   {
+    "Name": "DeleteRecordsByPageAndBatch",
+    "Order": 6,
+    "Sha256": "c61740b472ba537209895c757a9f9b4db5092bf31d077c4e98527e08014399ff"
+   }
+  ]
+ },
+ "crud-1k-core-nobr": {
+  "Name": "CRUD 1K Core No Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},1K",
+  "Details": [
+   {
+    "Name": "CreateRecordsByPageAndBatch",
+    "Order": 1,
+    "Sha256": "f0c190e89878a74d5d481127d9911da640113af0cf1da9db43e56210bc96425e"
+   },
+   {
+    "Name": "UpdateRecordsByPageAndBatch",
+    "Order": 2,
+    "Sha256": "00d89300dcdb4e574690d1e2e8e2f036344b2ce6177c7261823e7276c04ad322"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 1 User No Business Rules",
+    "Order": 3,
+    "Sha256": "dde47bbec113a5ae41a9b4db0ab1bd7e7d58c08c2443158cb27508d59cac4469"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 10 Users No Business Rules",
+    "Order": 4,
+    "Sha256": "9db5dc5cede00f489d1662043e0a7ddd998402e4126c0abcb27e3e8089c75efd"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 100 Users No Business Rules",
+    "Order": 5,
+    "Sha256": "ef6beab64ce52d6a7a45edb40d4d7ef6e9fae730e743789bdbb67c86ad95ad21"
+   },
+   {
+    "Name": "DeleteRecordsByPageAndBatch",
+    "Order": 6,
+    "Sha256": "74c004b0178008ac21c97d79d3dabea3608b38e5e34f4669b40a1fe1c43bae74"
+   }
+  ]
+ },
+ "crud-1m-core-br": {
+  "Name": "CRUD 1M Core With Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},1M",
+  "Details": [
+   {
+    "Name": "CreateRecordsByPageAndBatch",
+    "Order": 1,
+    "Sha256": "e42f406e6be3cb5a61d8ee743b244aa5cd2068ecba74405eb651fa9aac41762d"
+   },
+   {
+    "Name": "UpdateRecordsByPageAndBatch",
+    "Order": 2,
+    "Sha256": "e8925985b7faeac6705268fec42a768baecbbc6713ea60b246f187d62b0dd265"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 1 User With Business Rules",
+    "Order": 3,
+    "Sha256": "9c617ec557304a016bd06d9e991f715bf19f51faa4a2ad77ce3620dc95d18bb0"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 10 Users With Business Rules",
+    "Order": 4,
+    "Sha256": "0e53eb099e6d066f90e2357e4ba232c67b35fc82daff352090b7846eb5cf71a0"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 100 Users With Business Rules",
+    "Order": 5,
+    "Sha256": "fcd44307f3899af04d9cb39f33d3f2ac87765c6da3f949307c687770f5beb4ad"
+   },
+   {
+    "Name": "DeleteRecordsByPageAndBatch",
+    "Order": 6,
+    "Sha256": "ae311b8b70fc9aff7f8ee36d6cef3247ae460c0486249adc7c48d2594af1166d"
+   }
+  ]
+ },
+ "crud-1m-core-nobr": {
+  "Name": "CRUD 1M Core No Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},1M",
+  "Details": [
+   {
+    "Name": "CreateRecordsByPageAndBatch",
+    "Order": 1,
+    "Sha256": "6c3be4346cb434ebde8c1d371a0c6a77df130dcbbbc42ddd5e23ca49b1d7e6de"
+   },
+   {
+    "Name": "UpdateRecordsByPageAndBatch",
+    "Order": 2,
+    "Sha256": "067f2fb34be4257ad0d33cc167a1865bcbf45500f0f8a9404db43cee5fc2fca6"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 1 User No Business Rules",
+    "Order": 3,
+    "Sha256": "607d9c07ba1b47704b3275a4163561570b045929d9bf2383f4a192b8d8f79ace"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 10 Users No Business Rules",
+    "Order": 4,
+    "Sha256": "512350e0d5e87a5c7710e3fd660aced07826813e9e376e257d3d6b2791a43e08"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 100 Users No Business Rules",
+    "Order": 5,
+    "Sha256": "3d18d0256d820be9979edb8453f71fa87a33406e1132a2e9f95beaec7d9559e7"
+   },
+   {
+    "Name": "DeleteRecordsByPageAndBatch",
+    "Order": 6,
+    "Sha256": "581ad89354c0f2817a1eb3c19613bc5dfdbee86f16281c0de28aebb344c553cf"
+   }
+  ]
+ },
+ "crud-1m-release-br": {
+  "Name": "CRUD 1M Release With Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},1M,Release",
+  "Details": [
+   {
+    "Name": "CreateRecordsByPageAndBatch",
+    "Order": 1,
+    "Sha256": "e42f406e6be3cb5a61d8ee743b244aa5cd2068ecba74405eb651fa9aac41762d"
+   },
+   {
+    "Name": "UpdateRecordsByPageAndBatch",
+    "Order": 2,
+    "Sha256": "e8925985b7faeac6705268fec42a768baecbbc6713ea60b246f187d62b0dd265"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 1 User With Business Rules",
+    "Order": 3,
+    "Sha256": "9c617ec557304a016bd06d9e991f715bf19f51faa4a2ad77ce3620dc95d18bb0"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 10 Users With Business Rules",
+    "Order": 4,
+    "Sha256": "0e53eb099e6d066f90e2357e4ba232c67b35fc82daff352090b7846eb5cf71a0"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 100 Users With Business Rules",
+    "Order": 5,
+    "Sha256": "fcd44307f3899af04d9cb39f33d3f2ac87765c6da3f949307c687770f5beb4ad"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 1 User",
+    "Order": 6,
+    "Sha256": "55f1081fec9171dfe089672e6da00f235bbe8e09ab63bd5092f096662bccf184"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 1 User",
+    "Order": 7,
+    "Sha256": "69c3a9865aec98b49b1b63105bdcee9fd489cab94fbd7e2d0bbc5b86209f72bc"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 1 User",
+    "Order": 8,
+    "Sha256": "27cb91a6f9af1a06bff205488f3ef0b2309c9d2d577c4651a381f51bd1398989"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 1 User",
+    "Order": 9,
+    "Sha256": "83da484be1a897a429b7b2ea7eaa183a75215af138da094e7f32333b0191dc83"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 10 Users",
+    "Order": 10,
+    "Sha256": "76002a5ea218c407ac601420e26c9dddb791e70a7254dd7a139bb8fa32a02e48"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 10 Users",
+    "Order": 11,
+    "Sha256": "4968c75b926dceeec844fea7bc081ccd6c6f0a48d868d6229778fbd1eeb3dc4b"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 10 Users",
+    "Order": 12,
+    "Sha256": "99d9594ce43a981e1945578f934dd960b7b2e460d094e1b6e5f8601b79b1cdea"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 10 Users",
+    "Order": 13,
+    "Sha256": "31c99c6c8fdc416429872cd5d3d4dfea88eeb4034eedd4e59614f81bbbfa5bc2"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 100 Users",
+    "Order": 14,
+    "Sha256": "9dc7f30513fe7ac054cc8c7b22e1d65b4b9dbe54cf403083c2a704cd0c9b30a2"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 100 Users",
+    "Order": 15,
+    "Sha256": "a512117f69de1fddabeffe6f5b4109978d519a9f55864a36fd6ec234b8023c46"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 100 Users",
+    "Order": 16,
+    "Sha256": "911a628cf9a147463cef0828207358358d38597ffb0bb31104b450faf5615fbe"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 100 Users",
+    "Order": 17,
+    "Sha256": "53de47d739820cf2572ed0d23794242a438adec88d6c646b6beac1e9be59333c"
+   },
+   {
+    "Name": "DeleteRecordsByPageAndBatch",
+    "Order": 18,
+    "Sha256": "ae311b8b70fc9aff7f8ee36d6cef3247ae460c0486249adc7c48d2594af1166d"
+   }
+  ]
+ },
+ "crud-1m-release-nobr": {
+  "Name": "CRUD 1M Release No Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},1M,Release",
+  "Details": [
+   {
+    "Name": "CreateRecordsByPageAndBatch",
+    "Order": 1,
+    "Sha256": "6c3be4346cb434ebde8c1d371a0c6a77df130dcbbbc42ddd5e23ca49b1d7e6de"
+   },
+   {
+    "Name": "UpdateRecordsByPageAndBatch",
+    "Order": 2,
+    "Sha256": "067f2fb34be4257ad0d33cc167a1865bcbf45500f0f8a9404db43cee5fc2fca6"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 1 User No Business Rules",
+    "Order": 3,
+    "Sha256": "607d9c07ba1b47704b3275a4163561570b045929d9bf2383f4a192b8d8f79ace"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 10 Users No Business Rules",
+    "Order": 4,
+    "Sha256": "512350e0d5e87a5c7710e3fd660aced07826813e9e376e257d3d6b2791a43e08"
+   },
+   {
+    "Name": "GetRecordsByPageAndBatchSeqScenario 100 Users No Business Rules",
+    "Order": 5,
+    "Sha256": "3d18d0256d820be9979edb8453f71fa87a33406e1132a2e9f95beaec7d9559e7"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 1 User",
+    "Order": 6,
+    "Sha256": "0e45372cf9f705134c03dcf6a2cf12580ac751819f891dc4e330799f29e54703"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 1 User",
+    "Order": 7,
+    "Sha256": "e44a07edf25f4a55c0dc0590513cbabdfc898655ed738ae204f7015a6e432e3c"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 1 User",
+    "Order": 8,
+    "Sha256": "045a1aedd28fb189188524376aeebc8f0799cb0aa647829bcbc4637aefe6b1c4"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 1 User",
+    "Order": 9,
+    "Sha256": "5e1e7ac3706862f05ea5f573f5de0d33ff9d89d6058c16ce9e75e4c691c82468"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 10 Users",
+    "Order": 10,
+    "Sha256": "35adadfa26bde7482bf6b2f077448e925192e7254622da21ba49a228123cef42"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 10 Users",
+    "Order": 11,
+    "Sha256": "41bcb02f9804a31aa9eb5f156203b456c331b5677150cb9323d82ce86e95a577"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 10 Users",
+    "Order": 12,
+    "Sha256": "afaaa61fcd301ab6ed64eb747ba1492ab62413fbb8b640d801de12fc60aa3aa0"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 10 Users",
+    "Order": 13,
+    "Sha256": "a4fbb198b4b0902d56b54d303b63acf4e3c7923a65ba575451259d3c8a08e374"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 100 Users",
+    "Order": 14,
+    "Sha256": "f3b09d330a52a5a3d2bd931a45a4b6afbdfb0028c56d98ead8d8ac3331769c70"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 100 Users",
+    "Order": 15,
+    "Sha256": "2a29cdb841955a920f52352f07c8f854c8232425595904d2dc9c3d8027bb078e"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 100 Users",
+    "Order": 16,
+    "Sha256": "96a1fdf5c2c531069bc69ca5200d9086cde86f75dfde6c025767e08f42e352bb"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 100 Users",
+    "Order": 17,
+    "Sha256": "6fc5cd2d345cf83d0852ecc3a93b4851cb16991fbe8f075900599f07e912d8af"
+   },
+   {
+    "Name": "DeleteRecordsByPageAndBatch",
+    "Order": 18,
+    "Sha256": "581ad89354c0f2817a1eb3c19613bc5dfdbee86f16281c0de28aebb344c553cf"
+   }
+  ]
+ },
+ "crud-steward-1000it-br": {
+  "Name": "CRUD Stewardship 1000 iterations With Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "ee6613f03df8d7ad6d0c2c77dc9d45fce0f4d341af031a517ab9e340a71c88ef"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "317cba51b42bfb42e003f42c96e96a3a5aff209dc29997e47005face009378f8"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "e28ce959991120c079596dbb98ad8ea418a412930a902d0601c4d8563f94d42d"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "a114337822a6fbf9eff329eae715cf716f2abc417c6caaeff2669e550ae6232a"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "2c248a581add3c127418efdb53529b259f73c69b28a2070fdf4da8d4fc82145a"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "4861cc218522245fe84d99347ab274f9a30707fb930c91284dd7dbe759557646"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "e85ff4eef6ee02f8bf891c78885a94aad269cfa8bbf9c20c3f71283726d31b47"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "38b6b92d02dedd0b05201a7e4c7a20430c92b67dc8bffa5e6c549c87dbf3e2eb"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "8d0ec869f0c5c8a1470a27cf7e86860c1b0e1519aacde89511c1c3a88baacff8"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "976918f4f031df060c401809662a3bc4fc90242295bdd6d0ea92b578aee60241"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "797cadacbdfa7e2084d26a7c27accd8f7137e2c1dfe61ea82adcd6f85eaca12f"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "bcc3d2e7196a95b39d260765384976c4ec383d5883e77faf134c354a04d5b91e"
+   }
+  ]
+ },
+ "crud-steward-1000it-nobr": {
+  "Name": "CRUD Stewardship 1000 iterations No Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "ad17cbf876a7ed689c896a04375a708c7ad797842c4ace35191fe222de309bc2"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "f5dedd135f5794c1e968d74899809042aae9bfa1ca4d009e1ad412d76f76b8c8"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "43786426575dca282893995aaedf56e342f53d5af0d7b4e6b1d23fb6845c4bcb"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "ff813ec654c7bb77eafef5a3cb89fa891231a6659655a8e6b1c309562d2ba5b0"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "a61cc3ec0a72327670a1e2ded3cfa31930381cf06da0db22f835422bc67218e5"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "db327fd14f17c5d3d97dc78e632957c4d8dc02ff3c0c0fac10df6796f963655e"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "d18360aa11f1110fc9717012457655b0df8227c16f8bf53f8497d4726a488388"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "a9fdfd0833547be7786a34ff1d75956862a78cb477e483ca56e1217aaef73a36"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "85878a27526b268abcf1dfecce100d034b5c5f65194e341d31b64b5851900474"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "ba36eb6fe38dd5bae988a2dbf77d243deffaf5d1b0f12972ef88f0b6987f5625"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "2a88e329972167ea42142435e513daf8ea67bfb4299fbe981840a54cbc7388cd"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "08e4894f89607832dca9fb18a73a0e7f9a715f64b87f163c538a6ac80d194a7f"
+   }
+  ]
+ },
+ "crud-steward-100it-br": {
+  "Name": "CRUD Stewardship 100 iterations With Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "4a1681b18b30afd17568b025607036cca483e686897e635e2ae01437fbc4c4cb"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "ea02532c6d5b363aeaa32f43987325ea64726a1adf378896d05c56b5f0cf2c2c"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "95e87f8a772ce30545da48648c82f8985493f287bbfca617c3dfe2320a23984a"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "1205aaf2731cd4457b03a3e867d4a0ec0c450dec1008691d5001d5e51d0da682"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "66b4a4ffe3c36e0eb0a6fb48ac483d7feb8169f32275764cf23c9dcf163515f7"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "0ccea94b350416ffb7b3db4a282419f301f2250569c181671a06d2192226ffa9"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "b022d0582879838cb82be81c0cd5176fb6260530ede0d1621a5b303c669445e2"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "0583f3cd5e768fc57dbfca558c90d3539949fdf12143eea23f978eadf0b9ac1b"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "f61fdeafaa3185f8302312895065889afce0272d2399dc3a6fd9a0d96328e86f"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "61a31b31b26de94bf8320d15696d0861c5ddc88bc3d0dae7a40817a4810eff64"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "a0888903dc9ce83174b1c0fa6dca988480a016a56925148bfceda6062c480ad9"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "7c537bff20adb945088b318242e74398ab512237b437830d735883d4c4889ed9"
+   }
+  ]
+ },
+ "crud-steward-100it-nobr": {
+  "Name": "CRUD Stewardship 100 iterations No Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "84909c6b11a82ef2c9853fb5057198f773d07f38bc91650becd33273b31baac6"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "8f8c5d3d121e77a905a2c59752d40809b56a2eb7cd530f9fc4ea71d656e98303"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "119762e5a6b95dc9d5af14fbd5fffeae9f78810eca7637fab1a1b26c528e9b7d"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "cc393cd8bf32c8ce0ab2ac6cc781f4f6ecd8fb328eb9925f46b4a0d789c5d690"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "cbeff2222b2a7178dfa24d4b100fd39231313ff7a7856660b83b9063061e1b00"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "1e0b331c78122b660ad50a66459c8904fe7b45848b266be9d30ea16148e7d391"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "16ac68d8fb9d8fe8e87e32fb7a0e17c5b8f9a37c3e9c9eac3090be3935d8a600"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "4ff3603520dde577fdd9a5ceaa36610084b1f5a945efba9113fbe1ba1a06207a"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "d391e89dc9dbabf5380ca945d32e4aba1e8e1ba8b0e9da37015226169e2d96c4"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "d0a78eb0e3ff1886ff6880c4b90d51bcc25db201d58530e77121d21000e9c140"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "2c9e21ea28f847ecd8b48a7c2980afc2d301973862d29635aa1c8f8553d95093"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "bdcd5ae7a7b6163ebdb18ef071759df988851f8f40c64c7ee07ed2687762c8ba"
+   }
+  ]
+ },
+ "crud-steward-10it-br": {
+  "Name": "CRUD Stewardship 10 iterations With Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "2427311c1568f71002e9e2b9f00bde3e9a3cb9522011b25900f8e25fe67a211c"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "b45dbe007b19bb99b34720dcc7fa1a29dc0054293437da3411935f334c3fcede"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "efa0963d65e10b45ee4b489a875a6be5e49c5abe4bff84935f7a668ead6fa7fd"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "24a03e65a54a07d2f9e93479df718dcb824105f303430aa886039158ead89617"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "b046b884f9ccab3f3038d23573ed76d609f147d43e359aab32927ba698d25601"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "23179a67e103356f9008609e867075a0ecf7d3e2ffef3862f1bf80ed0dfe6fce"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "272663e65fb0607ad88f58fdf88299841e2a4e33e374d385fe9c7b524d189e70"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "7a05d6e10eae9fcdd1f1341ae6232c4697de37a9e657a982c30bc3a846e8e6d9"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "49655ed2b51c1d5c2d8ec53697c13dd5edd3b2f8207eca36f7a543cf5f50a4bf"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "b35f5b832541541ed150abaee55584abb0adec5c058e49d76e8e1bb3a09f8afb"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "15c82058c30296af0b6afcc3f1ef268e8bf28c24a67ed4a5b352961f37540268"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "9be9807cd39dc39bcf7af97e8ea86da5c63d396b5c962e2c0d5406d0ce7294a8"
+   }
+  ]
+ },
+ "crud-steward-10it-nobr": {
+  "Name": "CRUD Stewardship 10 iterations No Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "250ae97e51730944825b07745fe95bfdc33faca5a638433f7c2eae3931d9dc19"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "217e1db227aa6b37c55b0b333233630ce2e656e06224689d8c0b0ea4fd738e86"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "d33e9896792247f231bb8b577046f162e2ad6da42a7c0c786130ca5ff4f168a1"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "e2931220f3dd1a2e8761314f84feecde0b11f91538904466eaa93aeb956621b7"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "df00d7e6ee3291e5946266e26deea4f3d1199049ad66d2906bf826e973946909"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "8c71b10aa494973b824517af7aa4f871af2f19003c17d81fda433ac898fc035a"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "f311afcc2f820bd05df78348258e3abe23f6c68bfffb8410160e97718b16c25c"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "da0ca6e0690c95cb3f18007877d1991d2928a7ae4777af34393159b2d6bef740"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "42a38bfa30ec0b08d0e5840a824d0f50c60cf61531a9252eb4f7a0d9efbbd1ff"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "fb2b301d12aec99e8b03520e2ae8b976d3b0d2dbda16492da013504af6fd7e72"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "930ace2c6d2aacec93d501ac4dfad29cc85fed3194cbef00a66c525dd7e66862"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "e7ca4c3382f7c83644fb88b3333e06c933c86722f43fdca2e744c1120cc5f127"
+   }
+  ]
+ },
+ "crud-steward-15min-br": {
+  "Name": "CRUD Stewardship 15 min With Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "8df4b8c31e9f370eca979b41d0db434e9a96d5d54fec5858da2ff1e91fb78d22"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "1542ee63807980c210337d80438cc915ad00f02c753a7d65047744dc51176d7e"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "8af42274c242076c226bee0c3c4ead178ccbe059372b48267dbf2b7a56de302f"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "640c8c75cf4d86c107894bd281b95f41c043c03945fb2592f2eb2abbbe0f4a12"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "aeaededd9d6f35b6624436766e382842562ed3cf33ff65081bcefcf873ada1cb"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "0ffd66c7631d1b4c23af4cf8905beba54b2d50c784bf031114553369029ac0b7"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "9fe7ea1966e78c0515fe2f35bb7d569218c62b43552c30053e167588870a0b39"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "f2366f6b5ce445b484274be002005b3f65b4ab7157386be5141f614ed58ca588"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "d82f1ef4f68d292e6672bcebfa41e437ebc514fa794b818a5c923fe36262f0b1"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "65bc3d58fd718770b965dd04218d4f70a43231740e72dc83f08dab097449c5d9"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "f10e98ae7da46df3c7974d9458da40d87b593da0e96dc31e5d6f766d0a0c8687"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "80e64860980cadfc3ca5fec9b386a576fca721d8378341fed3504ef87c23baaa"
+   }
+  ]
+ },
+ "crud-steward-15min-nobr": {
+  "Name": "CRUD Stewardship 15 min No Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "51089e1aa0b4927c378129f1f0e44ca1eab95b26c3518742fee7e7b6ef0e358b"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "af68860e0a761be5adb8ca3f92c22ed3ab831483ca735b559e2d1ce03a11fcb1"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "eb8ecdee54ca55a52da563ba59232469462ddb07b3a683c19be553856064edda"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "727b208339d236c8e9d077b8ab41d5749ceb7b1354d87756d1d20d93d8ed0241"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "0ad7f1251d12d386e368bfe0f4752883940a52dd9f7b46a1ae041c4f918c4f43"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "ce1194b32409966c166a896aed248c9b350a0a09edca2aab902acc4443aa6979"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "95ec85651688baa06986cb1235c5fbb5b2773cda62ba9b18826582d257076fb9"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "77b5933bea698621cb8a4d8a55bbc207fd8c2aeca0d46ddbb3b6f496887da44a"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "2d074a3124016143ae2adbed634d14c4916ccf03f48c85762acc8a3634309874"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "6c86ba1e9445f51f2efe98169593d6d5923b4fab49870661f52ea6c69e5f1197"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "22ff540620484a6c490eb230d328bd865504b3d6e467507fd37f005ac4941cdf"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "465e87cb87596a5221150f2638a8b5b5e07cbf7c2792753af0b9a3e11fe98709"
+   }
+  ]
+ },
+ "crud-steward-1min-br": {
+  "Name": "CRUD Stewardship 1 min With Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "c6c7ef31963c892b832016e7a1f287daf9fc2cfeddf7c754487c77768fa0c8b0"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "dc1c17e906b2b32da30ef8cee57c710212caa96e1933d0ee2a28c0e62833d120"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "534e93bfcba8c7a2bf89002f0632b93ffb1b6898ee01591ef97362bb32d463f2"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "dbac7d3f05fa5b84a9ec3026ccbd343d974c3a59bcdc424fddbc408a338471b4"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "704575ecc3ba8db6a9a4a81fa925abb88e311a83c9b035737e1252a3503f7003"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "0072d8d2c9645da02913f69d7fe948455d9b0a9631f45a5b48fa4e543335c7bc"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "eb9311780ba1e6ba5b132c22541a97693516fe61ce0924d4f924775c0ff9037e"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "1be21229eb006a7b84355dbbef93461fd0a6afb30dc5f0c19bf1a55d2e3521db"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "d3439ecd46c1cb6aa296eefdc8781c706d17f49a86c7af2653bd7957c9a7502d"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "42451e6bcf6af33eef8e31b49a1220c3334fba7df912165eb5eb37adbdb3e97b"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "8b339a521e88abf872962912e5a0cd2868facf15371d0e03cbc435c61d10dcc2"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "3d77f802a57c3b0c2cf07ee99b257c44d600b0be3612dc174449ce1ff4383a59"
+   }
+  ]
+ },
+ "crud-steward-1min-nobr": {
+  "Name": "CRUD Stewardship 1 min No Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "3f628e8bc74ecf7b31e2384ee7dad9040753ce7dbf3e7b413f12f29cf47da07c"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "f1a436a191f49a86205374b8951e7e1cabe7d066251de51dfffa84875e467971"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "ff757a2a7a63f81d65094c981cd07888456970c66a44ffbc8633476383b87ef6"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "92bbf60041f80aa33ea55b756d18ccd07b3650c2bbe9176c8918a48dbb9392b0"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "abb4a090ac62835320c2c464db3f21d84a0b3b531d94a7cc6c5c4ad2b36ba53c"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "d39d2626418339e68c0304f5c7bd7c585482174a5d853e6d2fa2a0802836f4fa"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "176cf1a1ebd2bd01f3bbe1c1fdfb2789cca205d4e3b6ad30564cf2516dd1f71a"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "818f6ec72ca4e999346519a3ac60b46665735eb64a273f70bbc888c22601f8eb"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "2aa97515b550360a013a462a1b8f535d9e39db831e22821645fed4d29d76863e"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "f8cecb6bdaf16b5dce255fc11fa4ed8c454fc70ef4d939bc8620b80e10a86961"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "5dab94573708a3220b5ff2d0aa9638bb41f1adb82464cdf668b104a672d816f1"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "b9d34e052599426d0bdfd56a7911af08469fd2abf686f63e27eae737aeb4ce84"
+   }
+  ]
+ },
+ "crud-steward-30min-br": {
+  "Name": "CRUD Stewardship 30 min With Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "16b5ff2dd699079c661934126b1cb1d6f8d382af249f8b596ea3c63b44c85d55"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "57ecf72e80c2625f2bef494325d102ed3245782382f02d2bde05ba67701ffda8"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "d3529a29315513d1f1d67fd39330d7d2dadc72e08b6c355e39a535165940f9f8"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "2031b7ee23980720fb7c606d105fbdefd3e4c5408cd66012130bce2ff92f3105"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "26a451ac8b3e05fdd8f481b87e8a9fac589f14c10b470cee004957b7cf2954a2"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "65936f91660ba8e21789f687d974c72609b2844228376c9dc6936d9f15c29b37"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "62fae603b41797cdb97f9c4e3868d521f7b9c384b566b6ad5c6fc47c34566605"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "87ca7fa2e2a0c0024598ebde24fd418307739edf5566f6153b35afc06404e97c"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "b3e5c5fa8eed1243b163109c15e68871242505fbcce7b2207f241610da9b3374"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "f78e1a3fb6f1ac024379e1495b9b18439bcff9733218d373c587c8cca011929b"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "11209e74c456c2a4d333132dba046beb9b301cfc8ef6f9c9840d82080809cbbb"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "9caecf4c3085fd40e7af47f00463434719807d2da124db7d7b49c21d9d8dee90"
+   }
+  ]
+ },
+ "crud-steward-30min-nobr": {
+  "Name": "CRUD Stewardship 30 min No Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "b12c8fe49e0c8556b45bacb8b950d0539d5528ce195332fb4629fcae5936d288"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "63561387a06698d7d0cd0fe24bc7e49c87f2c349cd372d4015c8ee8afcbfc945"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "8f78a0b96e66b25e781ce15edc8147db72d1bf50e9ed73a6a2f54eb21a42f76c"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "b66841058a9feb46ef7c772d15306ca9ccf673c88f084335b4e7b101e5d62bc7"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "47658ec33348aab4567533a14a5c47aad18e11e402babbe56b9dcc1a09afe239"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "21841a94ea15f34955b3e828f389401efdc3e08829935f241795d6995db22bc1"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "fb4314db246a0444ee4ed0329ded82466689ef9ce1755c5dbaf28ad49e18b7f5"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "6c6ef3e7490291702fd99cc7540cac5fa0c3419a16adb579cea68f11eac82231"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "87b491c379e1625fb5494d52153285eae0c454f016c831b5ef545d5713176b6e"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "52832fd79ea3ddac5e1c883c6fb1d253503fecb664b09db58ef95fe7ff8231eb"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "99e1b7c0540015b6f6e71471b1138bda82eec97f8c23df96204118e39cc38a6b"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "f00b13d614da252e76d929bb4340acbe7e87eba5881107734c9f2dca1a42b87e"
+   }
+  ]
+ },
+ "crud-steward-5min-br": {
+  "Name": "CRUD Stewardship 5 min With Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "1cc76d5af7334d22583da9f094a4f3f42b15ae651cafc38ec6d6599e2c15ac0b"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "a916ca3e186cd3291fe76a06c408f6e09306110283120bed7dbafab42159469e"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "94a063411d77073afc1cd437792cbcbda18ee356209b4cc166802f12b6c1838d"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "bc4ce7003542f81e66199a944c8a5e3cf4a6ec26ac411ae86490c2f51565db42"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "4f43cb720ad54ac799c8aa7e931c864e333757a79b3481601893b22ad07d3580"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "5642a310252acf0e994085819329b4c385054f74bd531edaf25a78a83e05e94f"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "0099fc75856b55ced0ff05aa5c561314448aa51622e7c08a4b8cf66011727424"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "5cd77be54b7ad882651668601356ffd4831a7eadb72afdab78e84191bd8e5d62"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "0af5f43fb8a23162e00ae1c5c5d64df3a0cb8bfde732e72e1fc1e86aee35b9a6"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "ca891cacd1ba16c9b851e7bfaaf3f20ef39d080b8fceff4ff6fea41eeeadc0d5"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "ecc2f43ad729c7d3c1afb5c06a248f79c54cf33540d7d261f45b9ca039d410e0"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "b83b027198a14768e966dcf6c020874b94f8b9d3df524e1230932346bd478ffb"
+   }
+  ]
+ },
+ "crud-steward-5min-nobr": {
+  "Name": "CRUD Stewardship 5 min No Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "c47478e4555f5d9635ed8d1178aac74c2f60489d9d018f7638f75596038367f0"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "edb0d74b47dd19c47c781c6d0d82fd90d1b18788c532dcb0c02c7dad3860d63f"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "ad3769b40523c78c74fc20ba59d2a582e7f4985230d369e868d6635b8542d39d"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "1b8b84ed60c432c5ebcfc713b33d0a4c71f5c1777b4da16180afb1b4c7782b8a"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "193df57761f0ca5a9bbbc6dee8076879862996984e7faadf988ecc7ea5941815"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "67a8046613af61ba9c3069e5b8f89c6c94e22c3a5f2974ea18a6bd23a9e33be3"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "2becafbc1f2e447b84356cc34bb61ad51d8151bfc19ddc436644a82ceaa4c587"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "0db742ed99636edad943d596a253aa2676b5e6140f4a577372735b7b42db3273"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "0e6ac4ed23b3c08559dd6fc25eb576e083352bbf361638839813458510aaf7a1"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "8f7a05e445aaa9de27e3e6c9e73912cc5f5c7a83d5f31bcf39de4755be793da7"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "49f908e2233f857d4ac0f8e36ebc6f7bae23ad1563b7c8dac9636b1d2dd6130b"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "ac146d54cf16429bcf02daa8e7d641ad8f329dd03e46c4f3bf785bedd6ef3c66"
+   }
+  ]
+ },
+ "crud-steward-60min-br": {
+  "Name": "CRUD Stewardship 60 min With Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "55f1081fec9171dfe089672e6da00f235bbe8e09ab63bd5092f096662bccf184"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "69c3a9865aec98b49b1b63105bdcee9fd489cab94fbd7e2d0bbc5b86209f72bc"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "27cb91a6f9af1a06bff205488f3ef0b2309c9d2d577c4651a381f51bd1398989"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "83da484be1a897a429b7b2ea7eaa183a75215af138da094e7f32333b0191dc83"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "76002a5ea218c407ac601420e26c9dddb791e70a7254dd7a139bb8fa32a02e48"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "4968c75b926dceeec844fea7bc081ccd6c6f0a48d868d6229778fbd1eeb3dc4b"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "99d9594ce43a981e1945578f934dd960b7b2e460d094e1b6e5f8601b79b1cdea"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "31c99c6c8fdc416429872cd5d3d4dfea88eeb4034eedd4e59614f81bbbfa5bc2"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "9dc7f30513fe7ac054cc8c7b22e1d65b4b9dbe54cf403083c2a704cd0c9b30a2"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "a512117f69de1fddabeffe6f5b4109978d519a9f55864a36fd6ec234b8023c46"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "911a628cf9a147463cef0828207358358d38597ffb0bb31104b450faf5615fbe"
+   },
+   {
+    "Name": "StewardshipFilterScenario With Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "53de47d739820cf2572ed0d23794242a438adec88d6c646b6beac1e9be59333c"
+   }
+  ]
+ },
+ "crud-steward-60min-nobr": {
+  "Name": "CRUD Stewardship 60 min No Business Rules",
+  "PlainTags": "CRUD,{{ProfiseeVersionCode}},{{$ref:crud/environment:MainMachineTag}},Stewardship",
+  "Details": [
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 1 User",
+    "Order": 1,
+    "Sha256": "0e45372cf9f705134c03dcf6a2cf12580ac751819f891dc4e330799f29e54703"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 1 User",
+    "Order": 2,
+    "Sha256": "e44a07edf25f4a55c0dc0590513cbabdfc898655ed738ae204f7015a6e432e3c"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 1 User",
+    "Order": 3,
+    "Sha256": "045a1aedd28fb189188524376aeebc8f0799cb0aa647829bcbc4637aefe6b1c4"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 1 User",
+    "Order": 4,
+    "Sha256": "5e1e7ac3706862f05ea5f573f5de0d33ff9d89d6058c16ce9e75e4c691c82468"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 10 Users",
+    "Order": 5,
+    "Sha256": "35adadfa26bde7482bf6b2f077448e925192e7254622da21ba49a228123cef42"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 10 Users",
+    "Order": 6,
+    "Sha256": "41bcb02f9804a31aa9eb5f156203b456c331b5677150cb9323d82ce86e95a577"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 10 Users",
+    "Order": 7,
+    "Sha256": "afaaa61fcd301ab6ed64eb747ba1492ab62413fbb8b640d801de12fc60aa3aa0"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 10 Users",
+    "Order": 8,
+    "Sha256": "a4fbb198b4b0902d56b54d303b63acf4e3c7923a65ba575451259d3c8a08e374"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 15 Attributes 100 Users",
+    "Order": 9,
+    "Sha256": "f3b09d330a52a5a3d2bd931a45a4b6afbdfb0028c56d98ead8d8ac3331769c70"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 30 Attributes 100 Users",
+    "Order": 10,
+    "Sha256": "2a29cdb841955a920f52352f07c8f854c8232425595904d2dc9c3d8027bb078e"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 60 Attributes 100 Users",
+    "Order": 11,
+    "Sha256": "96a1fdf5c2c531069bc69ca5200d9086cde86f75dfde6c025767e08f42e352bb"
+   },
+   {
+    "Name": "StewardshipFilterScenario No Business Rules 120 Attributes 100 Users",
+    "Order": 12,
+    "Sha256": "6fc5cd2d345cf83d0852ecc3a93b4851cb16991fbe8f075900599f07e912d8af"
+   }
+  ]
+ }
+}

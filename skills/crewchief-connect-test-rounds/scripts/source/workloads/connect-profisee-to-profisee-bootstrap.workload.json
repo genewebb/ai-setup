@@ -1,0 +1,117 @@
+{
+  "name": "connect-profisee-to-profisee-bootstrap",
+  "description": "What: Build of the Profisee to Profisee test track, run first by every connect-test-*-profisee-to-profisee-export: Set API Key Profisee To Profisee, Target Model Build, Profisee To Profisee Connect Setup, Target Baseline Backup. On the target it builds only this family (the Dba domains and PDataProfiseeToProfiseeImport); it never deletes another entity. Export only: the service offers no Import flow. Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: workloads it runs: connect-api-key-set-profisee-to-profisee, connect-model-profisee-to-profisee-target-build, connect-profisee-to-profisee-connect-setup, connect-profisee-to-profisee-target-baseline-create. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "tags": [
+    "connect",
+    "providers",
+    "profisee-to-profisee"
+  ],
+  "globalParameters": {},
+  "globalParametersNotes": "Each child owns its globals (a child global beats a parent global), so every child also runs on its own.",
+  "credentialUserId": null,
+  "credentialPassword": null,
+  "credentialNotes": "",
+  "steps": [
+    {
+      "inline": {
+        "workloadName": "connect-api-key-set-profisee-to-profisee",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Set the test API key on the Profisee to Profisee target instance. Why: Runs the child workload 'connect-api-key-set-profisee-to-profisee' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-api-key-set-profisee-to-profisee'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Set API Key Profisee To Profisee"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-model-profisee-to-profisee-target-build",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Build the Connect model on the target from the spec: 50 Dba domains with their rows, PDataProfiseeToProfiseeImport, verify. Why: Runs the child workload 'connect-model-profisee-to-profisee-target-build' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-model-profisee-to-profisee-target-build'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Target Model Build"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-profisee-to-profisee-connect-setup",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Create the target service configuration and strategy on Main. Why: Runs the child workload 'connect-profisee-to-profisee-connect-setup' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-profisee-to-profisee-connect-setup'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Profisee To Profisee Connect Setup"
+    },
+    {
+      "inline": {
+        "workloadName": "connect-profisee-to-profisee-target-baseline-create",
+        "type": "RunWorkloadStep",
+        "parameters": {},
+        "timeoutSeconds": 43200,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Back up the target as its baseline (profisee_ConnectTarget_<CrewChief box>_<version code>.bak). Why: Runs the child workload 'connect-profisee-to-profisee-target-baseline-create' so its tested steps are reused here, not repeated. Success: The child workload ends with every step Succeeded or Skipped. If it fails: Open the run output of 'connect-profisee-to-profisee-target-baseline-create'; its first failed step says what to check.",
+        "notes": ""
+      },
+      "label": "Target Baseline Backup"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "ProfiseeToProfiseeDatabaseName",
+      "description": "Profisee database name on the Profisee-to-Profisee target. Passed by the test that runs this one: connect reference data, or the CRUD lab set of a TestAutoManager round.",
+      "default": "{{$ref:connect/databases:ProfiseeToProfiseeDatabaseName}}"
+    },
+    {
+      "name": "ProfiseeToProfiseeDatabaseServerName",
+      "description": "SQL Server of the Profisee-to-Profisee target. Passed by the test that runs this one: connect reference data, or the CRUD lab set of a TestAutoManager round.",
+      "default": "{{$ref:connect/machines:ProfiseeToProfiseeDatabaseServerName}}"
+    },
+    {
+      "name": "ProfiseeToProfiseeInstanceName",
+      "description": "Profisee instance name on the Profisee-to-Profisee target. Passed by the test that runs this one: connect reference data, or the CRUD lab set of a TestAutoManager round.",
+      "default": "{{$ref:connect/instances:ProfiseeToProfiseeInstanceName}}"
+    },
+    {
+      "name": "ProfiseeToProfiseeServerName",
+      "description": "Profisee-to-Profisee target application server (short name). Passed by the test that runs this one: connect reference data, or the CRUD lab set of a TestAutoManager round.",
+      "default": "{{$ref:connect/machines:ProfiseeToProfiseeServerName}}"
+    },
+    {
+      "name": "ProfiseeToProfiseeServerNameFQDN",
+      "description": "Profisee-to-Profisee target application server, fully qualified. Passed by the test that runs this one: connect reference data, or the CRUD lab set of a TestAutoManager round.",
+      "default": "{{$ref:connect/machines:ProfiseeToProfiseeServerNameFQDN}}"
+    },
+    {
+      "name": "ProfiseeToProfiseeUrl",
+      "description": "Profisee URL of the Profisee-to-Profisee target. Passed by the test that runs this one: connect reference data, or the CRUD lab set of a TestAutoManager round.",
+      "default": "{{$ref:connect/urls:ProfiseeToProfiseeUrl}}"
+    },
+    {
+      "name": "ProfiseeVersionCode",
+      "description": "TestAuto version code (data.tProfiseeVersion) the runs are recorded under; the automation tags, run profile codes and backup names carry it. Passed by the test that runs this one (connect/environment:ProfiseeVersionCode, or the lane's version).",
+      "default": "{{$ref:connect/environment:ProfiseeVersionCode}}"
+    }
+  ]
+}
