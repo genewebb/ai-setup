@@ -1,6 +1,6 @@
 {
   "name": "connect-model-profisee-to-profisee-target-build",
-  "description": "What: Build the Connect model on the Profisee to Profisee target instance from the spec (empty-model bootstrap): delete this family if present (PDataProfiseeToProfiseeImport, the retired name PDataProfiseeToProfiseeExport, then the 50 Dba domains), create the domains with the same ids as Main, load their rows, create PDataProfiseeToProfiseeImport, verify. Never deletes another entity (also not the Main-role entities on a shared server); stops first if another entity uses a Dba domain. Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: reference values: connect/instances:ProfiseeToProfiseeInstanceName, connect/machines:ProfiseeToProfiseeServerNameFQDN. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
+  "description": "What: Build the Connect model on the Profisee to Profisee target instance from the spec (empty-model bootstrap): delete this family if present (PDataProfiseeToProfiseeImport, the retired name PDataProfiseeToProfiseeExport, then the 50 Dba domains), create the domains with the same ids as Main and load their rows (unless kept), create PDataProfiseeToProfiseeImport, verify. Never deletes another entity (also not the Main-role entities on a shared server); keeps the domains when another entity on the target uses them (the CRUD base on the same instance) and all 50 have their spec ids, otherwise stops first. Why: A building block of the Connect pack; a test, setup or schedule workload runs it so its steps exist once. When: Never run directly once the pack is tested; its parents run it. Running it alone is safe only when its own Needs are met. Needs: reference values: connect/instances:ProfiseeToProfiseeInstanceName, connect/machines:ProfiseeToProfiseeServerNameFQDN. Success: Every step Succeeded or Skipped. If it fails: Run connect-preflight first; then open the first failed step, whose If it fails text names what to check.",
   "tags": [
     "connect",
     "providers",
@@ -12,9 +12,10 @@
     "ProfiseeModelId": "b08af24d-4aa3-4d4f-a9cd-439d232b717e",
     "ProfiseeModelName": "Maestro",
     "ProfiseeBaseUrl": "https://{{ProfiseeToProfiseeServerNameFQDN}}/{{ProfiseeToProfiseeInstanceName}}/rest",
-    "ProfiseeApiKey": "{{$config:RestKeys:ProfiseeToProfiseeRestKey}}"
+    "ProfiseeApiKey": "{{$config:RestKeys:ProfiseeToProfiseeRestKey}}",
+    "DomainsToCreate": ""
   },
-  "globalParametersNotes": "Spec: C:\\devops\\repos\\speed-merchants\\CrewChief\\connect-model-spec. The domains carry the same ids as on Main, so the export entity's domain attributes bind on either side.",
+  "globalParametersNotes": "Spec: C:\\devops\\repos\\speed-merchants\\CrewChief\\connect-model-spec. The domains carry the same ids as on Main, so the export entity's domain attributes bind on either side. DomainsToCreate is set during the run by Decide Domain Create (true or false); it starts blank so no domain step runs before that decision.",
   "credentialUserId": null,
   "credentialPassword": null,
   "credentialNotes": "",
@@ -78,7 +79,7 @@
         "captureVerbose": false,
         "captureDebug": false,
         "treatStderrAsError": true,
-        "scriptContent": "$ErrorActionPreference = 'Stop'\r\n$gateway = '{{ProfiseeBaseUrl}}'.TrimEnd('/') + '/'\r\n$headers = @{ 'x-api-key' = '{{ProfiseeApiKey}}'; accept = 'application/json' }\r\nfunction Get-Rows([string]$Path) {\r\n    $response = Invoke-RestMethod -Uri \"$gateway$Path\" -Headers $headers -TimeoutSec 600\r\n    if ($response.PSObject.Properties.Name -contains 'data') { @($response.data) } else { @($response) }\r\n}\r\n# A 401 body echoes the API key: keep only the code. Other bodies are reduced to their error text, key masked.\r\nfunction Get-Reason([string]$Body) {\r\n    if (-not $Body) { return '' }\r\n    $text = $Body\r\n    try { $json = $Body | ConvertFrom-Json -ErrorAction Stop; foreach ($n in 'errors', 'title', 'message') { if ($json.$n) { $text = ConvertTo-Json -Compress -Depth 5 -InputObject $json.$n; break } } } catch { }\r\n    $text = ($text.Replace('{{ProfiseeApiKey}}', '***') -replace '\\s+', ' ').Trim()\r\n    if ($text.Length -gt 400) { $text.Substring(0, 400) + '...' } else { $text }\r\n}$familyEntities = @('{{PDataProfiseeToProfiseeImport}}', '{{PDataProfiseeToProfiseeExport}}')\r\n$familyDomains = @('Dba_001_PDATA', 'Dba_002_PDATA', 'Dba_003_PDATA', 'Dba_004_PDATA', 'Dba_005_PDATA', 'Dba_006_PDATA', 'Dba_007_PDATA', 'Dba_008_PDATA', 'Dba_009_PDATA', 'Dba_010_PDATA', 'Dba_011_PDATA', 'Dba_012_PDATA', 'Dba_013_PDATA', 'Dba_014_PDATA', 'Dba_015_PDATA', 'Dba_016_PDATA', 'Dba_017_PDATA', 'Dba_018_PDATA', 'Dba_019_PDATA', 'Dba_020_PDATA', 'Dba_021_PDATA', 'Dba_022_PDATA', 'Dba_023_PDATA', 'Dba_024_PDATA', 'Dba_025_PDATA', 'Dba_026_PDATA', 'Dba_027_PDATA', 'Dba_028_PDATA', 'Dba_029_PDATA', 'Dba_030_PDATA', 'Dba_031_PDATA', 'Dba_032_PDATA', 'Dba_033_PDATA', 'Dba_034_PDATA', 'Dba_035_PDATA', 'Dba_036_PDATA', 'Dba_037_PDATA', 'Dba_038_PDATA', 'Dba_039_PDATA', 'Dba_040_PDATA', 'Dba_041_PDATA', 'Dba_042_PDATA', 'Dba_043_PDATA', 'Dba_044_PDATA', 'Dba_045_PDATA', 'Dba_046_PDATA', 'Dba_047_PDATA', 'Dba_048_PDATA', 'Dba_049_PDATA', 'Dba_050_PDATA')\r\n$family = $familyEntities + $familyDomains\r\n$entities = @(Get-Rows 'v1/Entities')\r\n$foreign = @($entities | Where-Object { -not $_.isSystem -and $_.identifier.name -notin $family } | ForEach-Object { $_.identifier.name })\r\nif ($foreign) { \"WARNING: $($foreign.Count) entities outside this family are left untouched: $($foreign -join ', ')\" }\r\n# A foreign entity whose attribute uses a family domain blocks the domain delete: stop BEFORE deleting anything.\r\n$uses = @(Get-Rows 'v1/Attributes' | Where-Object { $_.domainEntityId.name -in $familyDomains -and $_.identifier.entityId.name -notin $family } |\r\n    ForEach-Object { \"$($_.identifier.entityId.name).$($_.identifier.name) -> $($_.domainEntityId.name)\" })\r\nif ($uses) { throw \"Foreign entities use this family's domains, so the domains cannot be rebuilt. Empty the model first. $($uses.Count) attribute(s): $(($uses | Select-Object -First 20) -join '; ')\" }\r\n$present = @($entities | ForEach-Object { $_.identifier.name })\r\n$failures = [System.Collections.Generic.List[string]]::new()\r\n# Dependents first: the entities that use the domains, then the domains.\r\nforeach ($name in @($familyEntities | Where-Object { $_ -in $present }) + @($familyDomains | Where-Object { $_ -in $present })) {\r\n    $r = Invoke-WebRequest -Method Delete -Uri \"${gateway}v1/Entities/$([uri]::EscapeDataString($name))\" -Headers $headers -SkipHttpErrorCheck -TimeoutSec 600\r\n    $code = [int]$r.StatusCode\r\n    if ($code -in 200, 204, 404) { \"Deleted $name ($code).\" }\r\n    elseif ($code -eq 401) { $failures.Add(\"$name -> 401\") }\r\n    else { $failures.Add(\"$name -> ${code}: $(Get-Reason ([string]$r.Content))\") }\r\n}\r\nif ($failures.Count) { throw \"Family delete failed: $($failures -join '; ')\" }\r\n$left = @(Get-Rows 'v1/Entities' | Where-Object { $_.identifier.name -in $family } | ForEach-Object { $_.identifier.name })\r\nif ($left) { throw \"Still present after delete: $($left -join ', ')\" }\r\n\"Family deleted: none of the $($familyEntities.Count) entities and $($familyDomains.Count) domains exist now.\"",
+        "scriptContent": "$ErrorActionPreference = 'Stop'\r\n$gateway = '{{ProfiseeBaseUrl}}'.TrimEnd('/') + '/'\r\n$headers = @{ 'x-api-key' = '{{ProfiseeApiKey}}'; accept = 'application/json' }\r\nfunction Get-Rows([string]$Path) {\r\n    $response = Invoke-RestMethod -Uri \"$gateway$Path\" -Headers $headers -TimeoutSec 600\r\n    if ($response.PSObject.Properties.Name -contains 'data') { @($response.data) } else { @($response) }\r\n}\r\n# A 401 body echoes the API key: keep only the code. Other bodies are reduced to their error text, key masked.\r\nfunction Get-Reason([string]$Body) {\r\n    if (-not $Body) { return '' }\r\n    $text = $Body\r\n    try { $json = $Body | ConvertFrom-Json -ErrorAction Stop; foreach ($n in 'errors', 'title', 'message') { if ($json.$n) { $text = ConvertTo-Json -Compress -Depth 5 -InputObject $json.$n; break } } } catch { }\r\n    $text = ($text.Replace('{{ProfiseeApiKey}}', '***') -replace '\\s+', ' ').Trim()\r\n    if ($text.Length -gt 400) { $text.Substring(0, 400) + '...' } else { $text }\r\n}$familyEntities = @('{{PDataProfiseeToProfiseeImport}}', '{{PDataProfiseeToProfiseeExport}}')\r\n$familyDomains = @('Dba_001_PDATA', 'Dba_002_PDATA', 'Dba_003_PDATA', 'Dba_004_PDATA', 'Dba_005_PDATA', 'Dba_006_PDATA', 'Dba_007_PDATA', 'Dba_008_PDATA', 'Dba_009_PDATA', 'Dba_010_PDATA', 'Dba_011_PDATA', 'Dba_012_PDATA', 'Dba_013_PDATA', 'Dba_014_PDATA', 'Dba_015_PDATA', 'Dba_016_PDATA', 'Dba_017_PDATA', 'Dba_018_PDATA', 'Dba_019_PDATA', 'Dba_020_PDATA', 'Dba_021_PDATA', 'Dba_022_PDATA', 'Dba_023_PDATA', 'Dba_024_PDATA', 'Dba_025_PDATA', 'Dba_026_PDATA', 'Dba_027_PDATA', 'Dba_028_PDATA', 'Dba_029_PDATA', 'Dba_030_PDATA', 'Dba_031_PDATA', 'Dba_032_PDATA', 'Dba_033_PDATA', 'Dba_034_PDATA', 'Dba_035_PDATA', 'Dba_036_PDATA', 'Dba_037_PDATA', 'Dba_038_PDATA', 'Dba_039_PDATA', 'Dba_040_PDATA', 'Dba_041_PDATA', 'Dba_042_PDATA', 'Dba_043_PDATA', 'Dba_044_PDATA', 'Dba_045_PDATA', 'Dba_046_PDATA', 'Dba_047_PDATA', 'Dba_048_PDATA', 'Dba_049_PDATA', 'Dba_050_PDATA')\r\n$family = $familyEntities + $familyDomains\r\n$specIds = @{ 'Dba_001_PDATA' = 'c753e36e-8780-4c97-ad98-0e1aabc61180'; 'Dba_002_PDATA' = '72367298-a3c4-41e4-8e31-778a278683cf'; 'Dba_003_PDATA' = '4fa7fa89-56ea-400e-a19b-e104b36fd860'; 'Dba_004_PDATA' = '08a24248-7f92-424f-92ec-b1229586960e'; 'Dba_005_PDATA' = '4625cff8-ac3e-4c0a-b2e7-e030e5f786df'; 'Dba_006_PDATA' = 'daf5f0ab-916c-4a35-b5ac-1898c7bbfd11'; 'Dba_007_PDATA' = 'fc5a9ea9-2a43-432f-aebd-2472bf3364dc'; 'Dba_008_PDATA' = '285bce51-fc36-4389-8eb0-e8927c69f40f'; 'Dba_009_PDATA' = 'f0a24c0a-2e2f-403e-bda2-a7ea1a316456'; 'Dba_010_PDATA' = '61cc435c-22df-4416-a233-5b892a6d406d'; 'Dba_011_PDATA' = 'bdbd8cc7-5292-429c-a5cd-64589b747636'; 'Dba_012_PDATA' = 'cff8bbb6-5b4c-4c62-bbd4-ecafc6a08839'; 'Dba_013_PDATA' = '3fa79172-6cc8-43cf-9344-361f30fbd6cd'; 'Dba_014_PDATA' = '675330b4-dc31-4f59-8266-c8cf50b0442b'; 'Dba_015_PDATA' = 'b1862a5b-5a15-48fe-8c47-502bf7b59eaa'; 'Dba_016_PDATA' = '471ae7d8-097e-425d-a183-8db4458e8b8c'; 'Dba_017_PDATA' = '0bc20871-c750-42f4-8d4d-e6fd92c4ea0c'; 'Dba_018_PDATA' = '843d966d-b06c-4018-9bc0-e22b66dd50ee'; 'Dba_019_PDATA' = '640f1343-2a8e-40d7-8859-fc54277f4bfe'; 'Dba_020_PDATA' = 'e4246cf6-21dc-405f-b082-51f4f58c882a'; 'Dba_021_PDATA' = '4e8def60-048c-45e7-b714-1866126f6f90'; 'Dba_022_PDATA' = '9af2b6d9-90cd-4cad-a2e3-de7fe7fa5111'; 'Dba_023_PDATA' = 'cc82f366-1cf9-41a2-976e-d074f8d3755a'; 'Dba_024_PDATA' = 'a010f05d-0b8e-4f26-9782-194498610201'; 'Dba_025_PDATA' = 'd7df4087-448b-45d0-8e14-d9e9b91619da'; 'Dba_026_PDATA' = '4a176419-0ca4-443c-b852-75d953bca187'; 'Dba_027_PDATA' = '0923d35a-1770-4761-82f3-5edbbc865d80'; 'Dba_028_PDATA' = '34c5da4d-55e0-4a72-872b-00423aa6a3af'; 'Dba_029_PDATA' = '5e225ca9-1b25-4a34-89c8-053c1adbfa63'; 'Dba_030_PDATA' = 'ddb77d27-8746-47b8-b724-f7afd18e82af'; 'Dba_031_PDATA' = '76d72f15-9046-48d4-a4bc-59dacfc4e64b'; 'Dba_032_PDATA' = '69ed0a49-1a96-4682-9c9f-9fad2f877ac6'; 'Dba_033_PDATA' = '5213ff5d-ed89-4abd-af80-3957088e6209'; 'Dba_034_PDATA' = '8827ca70-99a6-482c-8bb6-5c681d9027aa'; 'Dba_035_PDATA' = 'fe239d73-dcb0-4685-9760-43c93511d372'; 'Dba_036_PDATA' = '1be5c740-bc1f-44d4-a0ea-794fae282e62'; 'Dba_037_PDATA' = 'e292b2ab-01a2-4365-8e8c-41b7bbe9f7c2'; 'Dba_038_PDATA' = '0f94dece-7b19-4a9a-ad8b-c24aac0b99d5'; 'Dba_039_PDATA' = 'fb9da93a-be72-4694-b1ce-8f66350ec93a'; 'Dba_040_PDATA' = '6a76cd91-168f-4bf7-bb77-3ce295fa35dc'; 'Dba_041_PDATA' = 'd5f5a397-d043-45ba-9114-1358d885c37f'; 'Dba_042_PDATA' = '8b086baf-2452-43e7-b10e-753d3039bb31'; 'Dba_043_PDATA' = 'eb4a213c-61f9-42a4-bf9a-5fa81d6422e2'; 'Dba_044_PDATA' = 'e947877f-6947-4828-90f3-5272198a4c84'; 'Dba_045_PDATA' = 'dd616d7e-5486-4651-9c8f-178027d38b68'; 'Dba_046_PDATA' = '0f698a32-46b8-4ee9-84dd-8ae2c08d0fb3'; 'Dba_047_PDATA' = 'bf5fe016-23ca-4bf4-a386-139fa7074e1a'; 'Dba_048_PDATA' = 'ce1120c5-d021-489d-8aa6-4cf62fae4c5d'; 'Dba_049_PDATA' = 'b039614e-d03f-4ff9-914e-3a61238fc6b8'; 'Dba_050_PDATA' = 'be7dcf4f-4b4d-40a4-8cac-ef52b55e5fd2' }\r\n$entities = @(Get-Rows 'v1/Entities')\r\n$foreign = @($entities | Where-Object { -not $_.isSystem -and $_.identifier.name -notin $family } | ForEach-Object { $_.identifier.name })\r\nif ($foreign) { \"WARNING: $($foreign.Count) entities outside this family are left untouched: $($foreign -join ', ')\" }\r\n# A foreign entity whose attribute uses a family domain blocks the domain delete: stop BEFORE deleting anything.\r\n$uses = @(Get-Rows 'v1/Attributes' | Where-Object { $_.domainEntityId.name -in $familyDomains -and $_.identifier.entityId.name -notin $family } |\r\n    ForEach-Object { \"$($_.identifier.entityId.name).$($_.identifier.name) -> $($_.domainEntityId.name)\" })\r\n# Another pack's entities on this instance may use the domains (the CRUD base does): keep the domains when every one\r\n# of the 50 is there with its spec id, delete and rebuild only this family's entities. Anything else stops here.\r\n$keepDomains = $false\r\nif ($uses) {\r\n    $byName = @{}; foreach ($e in $entities) { $byName[[string]$e.identifier.name] = [string]$e.identifier.id }\r\n    $wrong = @($specIds.Keys | Sort-Object | Where-Object { -not $byName.ContainsKey($_) -or $byName[$_] -ne $specIds[$_] } |\r\n        ForEach-Object { if ($byName.ContainsKey($_)) { \"$_ (id $($byName[$_]), spec $($specIds[$_]))\" } else { \"$_ (missing)\" } })\r\n    if ($wrong) { throw \"Foreign entities use this family's domains, so the domains are kept, but $($wrong.Count) of the $($specIds.Count) are not the spec's: $(($wrong | Select-Object -First 20) -join '; '). Empty the model first, or restore a base whose domains were built from the spec. $($uses.Count) attribute(s) use them: $(($uses | Select-Object -First 5) -join '; ')\" }\r\n    $users = @($uses | ForEach-Object { $_.Split('.')[0] } | Sort-Object -Unique)\r\n    $keepDomains = $true\r\n    \"Kept the $($specIds.Count) domains: they exist with the spec ids and $($users.Count) other entit$(if ($users.Count -eq 1) { 'y' } else { 'ies' }) use them ($($users -join ', ')). Only this family's entities are deleted and rebuilt.\"\r\n}\r\n$present = @($entities | ForEach-Object { $_.identifier.name })\r\n$failures = [System.Collections.Generic.List[string]]::new()\r\n# Dependents first: the entities that use the domains, then the domains.\r\n$targets = @($familyEntities | Where-Object { $_ -in $present })\r\nif (-not $keepDomains) { $targets += @($familyDomains | Where-Object { $_ -in $present }) }\r\nforeach ($name in $targets) {\r\n    $r = Invoke-WebRequest -Method Delete -Uri \"${gateway}v1/Entities/$([uri]::EscapeDataString($name))\" -Headers $headers -SkipHttpErrorCheck -TimeoutSec 600\r\n    $code = [int]$r.StatusCode\r\n    if ($code -in 200, 204, 404) { \"Deleted $name ($code).\" }\r\n    elseif ($code -eq 401) { $failures.Add(\"$name -> 401\") }\r\n    else { $failures.Add(\"$name -> ${code}: $(Get-Reason ([string]$r.Content))\") }\r\n}\r\nif ($failures.Count) { throw \"Family delete failed: $($failures -join '; ')\" }\r\n$gone = if ($keepDomains) { $familyEntities } else { $family }\r\n$left = @(Get-Rows 'v1/Entities' | Where-Object { $_.identifier.name -in $gone } | ForEach-Object { $_.identifier.name })\r\nif ($left) { throw \"Still present after delete: $($left -join ', ')\" }\r\nif ($keepDomains) { \"Family entities deleted: none of the $($familyEntities.Count) exist now; the $($familyDomains.Count) domains are kept.\" }\r\nelse { \"Family deleted: none of the $($familyEntities.Count) entities and $($familyDomains.Count) domains exist now.\" }",
         "type": "PowerShellStep",
         "parameters": {},
         "timeoutSeconds": 1800,
@@ -87,10 +88,33 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Delete this family if present (absent is fine): 2 entities, then the 50 Dba domains. Warns about other entities and leaves them alone; stops before deleting anything if one of them uses a Dba domain. Why: Does work no single built-in step does (several calls, waits or checks in one place) and stops at the first problem. Success: The script finishes without an error; its output lines say what it did. If it fails: Read the last output line and the error text: the script names the value, server or record it could not handle.",
+        "description": "What: Delete this family if present (absent is fine): 2 entities, then the 50 Dba domains. Warns about other entities and leaves them alone. When one of them uses a Dba domain (the CRUD base on the same instance does) the domains are kept and only this family's entities are deleted, provided all 50 exist with their spec ids; otherwise it stops before deleting anything and names the domains that differ. Why: Does work no single built-in step does (several calls, waits or checks in one place) and stops at the first problem. Success: The script finishes without an error; its output lines say what it did. If it fails: Read the last output line and the error text: the script names the value, server or record it could not handle.",
         "notes": ""
       },
       "label": "Delete Family"
+    },
+    {
+      "inline": {
+        "executionPolicy": "Bypass",
+        "preferWindowsPowerShell": false,
+        "runAsAdministrator": false,
+        "captureVerbose": false,
+        "captureDebug": false,
+        "treatStderrAsError": true,
+        "scriptContent": "$ErrorActionPreference = 'Stop'\r\n$gateway = '{{ProfiseeBaseUrl}}'.TrimEnd('/') + '/'\r\n$headers = @{ 'x-api-key' = '{{ProfiseeApiKey}}'; accept = 'application/json' }\r\nfunction Get-Rows([string]$Path) {\r\n    $response = Invoke-RestMethod -Uri \"$gateway$Path\" -Headers $headers -TimeoutSec 600\r\n    if ($response.PSObject.Properties.Name -contains 'data') { @($response.data) } else { @($response) }\r\n}\r\n# A 401 body echoes the API key: keep only the code. Other bodies are reduced to their error text, key masked.\r\nfunction Get-Reason([string]$Body) {\r\n    if (-not $Body) { return '' }\r\n    $text = $Body\r\n    try { $json = $Body | ConvertFrom-Json -ErrorAction Stop; foreach ($n in 'errors', 'title', 'message') { if ($json.$n) { $text = ConvertTo-Json -Compress -Depth 5 -InputObject $json.$n; break } } } catch { }\r\n    $text = ($text.Replace('{{ProfiseeApiKey}}', '***') -replace '\\s+', ' ').Trim()\r\n    if ($text.Length -gt 400) { $text.Substring(0, 400) + '...' } else { $text }\r\n}\r\n$specIds = @{ 'Dba_001_PDATA' = 'c753e36e-8780-4c97-ad98-0e1aabc61180'; 'Dba_002_PDATA' = '72367298-a3c4-41e4-8e31-778a278683cf'; 'Dba_003_PDATA' = '4fa7fa89-56ea-400e-a19b-e104b36fd860'; 'Dba_004_PDATA' = '08a24248-7f92-424f-92ec-b1229586960e'; 'Dba_005_PDATA' = '4625cff8-ac3e-4c0a-b2e7-e030e5f786df'; 'Dba_006_PDATA' = 'daf5f0ab-916c-4a35-b5ac-1898c7bbfd11'; 'Dba_007_PDATA' = 'fc5a9ea9-2a43-432f-aebd-2472bf3364dc'; 'Dba_008_PDATA' = '285bce51-fc36-4389-8eb0-e8927c69f40f'; 'Dba_009_PDATA' = 'f0a24c0a-2e2f-403e-bda2-a7ea1a316456'; 'Dba_010_PDATA' = '61cc435c-22df-4416-a233-5b892a6d406d'; 'Dba_011_PDATA' = 'bdbd8cc7-5292-429c-a5cd-64589b747636'; 'Dba_012_PDATA' = 'cff8bbb6-5b4c-4c62-bbd4-ecafc6a08839'; 'Dba_013_PDATA' = '3fa79172-6cc8-43cf-9344-361f30fbd6cd'; 'Dba_014_PDATA' = '675330b4-dc31-4f59-8266-c8cf50b0442b'; 'Dba_015_PDATA' = 'b1862a5b-5a15-48fe-8c47-502bf7b59eaa'; 'Dba_016_PDATA' = '471ae7d8-097e-425d-a183-8db4458e8b8c'; 'Dba_017_PDATA' = '0bc20871-c750-42f4-8d4d-e6fd92c4ea0c'; 'Dba_018_PDATA' = '843d966d-b06c-4018-9bc0-e22b66dd50ee'; 'Dba_019_PDATA' = '640f1343-2a8e-40d7-8859-fc54277f4bfe'; 'Dba_020_PDATA' = 'e4246cf6-21dc-405f-b082-51f4f58c882a'; 'Dba_021_PDATA' = '4e8def60-048c-45e7-b714-1866126f6f90'; 'Dba_022_PDATA' = '9af2b6d9-90cd-4cad-a2e3-de7fe7fa5111'; 'Dba_023_PDATA' = 'cc82f366-1cf9-41a2-976e-d074f8d3755a'; 'Dba_024_PDATA' = 'a010f05d-0b8e-4f26-9782-194498610201'; 'Dba_025_PDATA' = 'd7df4087-448b-45d0-8e14-d9e9b91619da'; 'Dba_026_PDATA' = '4a176419-0ca4-443c-b852-75d953bca187'; 'Dba_027_PDATA' = '0923d35a-1770-4761-82f3-5edbbc865d80'; 'Dba_028_PDATA' = '34c5da4d-55e0-4a72-872b-00423aa6a3af'; 'Dba_029_PDATA' = '5e225ca9-1b25-4a34-89c8-053c1adbfa63'; 'Dba_030_PDATA' = 'ddb77d27-8746-47b8-b724-f7afd18e82af'; 'Dba_031_PDATA' = '76d72f15-9046-48d4-a4bc-59dacfc4e64b'; 'Dba_032_PDATA' = '69ed0a49-1a96-4682-9c9f-9fad2f877ac6'; 'Dba_033_PDATA' = '5213ff5d-ed89-4abd-af80-3957088e6209'; 'Dba_034_PDATA' = '8827ca70-99a6-482c-8bb6-5c681d9027aa'; 'Dba_035_PDATA' = 'fe239d73-dcb0-4685-9760-43c93511d372'; 'Dba_036_PDATA' = '1be5c740-bc1f-44d4-a0ea-794fae282e62'; 'Dba_037_PDATA' = 'e292b2ab-01a2-4365-8e8c-41b7bbe9f7c2'; 'Dba_038_PDATA' = '0f94dece-7b19-4a9a-ad8b-c24aac0b99d5'; 'Dba_039_PDATA' = 'fb9da93a-be72-4694-b1ce-8f66350ec93a'; 'Dba_040_PDATA' = '6a76cd91-168f-4bf7-bb77-3ce295fa35dc'; 'Dba_041_PDATA' = 'd5f5a397-d043-45ba-9114-1358d885c37f'; 'Dba_042_PDATA' = '8b086baf-2452-43e7-b10e-753d3039bb31'; 'Dba_043_PDATA' = 'eb4a213c-61f9-42a4-bf9a-5fa81d6422e2'; 'Dba_044_PDATA' = 'e947877f-6947-4828-90f3-5272198a4c84'; 'Dba_045_PDATA' = 'dd616d7e-5486-4651-9c8f-178027d38b68'; 'Dba_046_PDATA' = '0f698a32-46b8-4ee9-84dd-8ae2c08d0fb3'; 'Dba_047_PDATA' = 'bf5fe016-23ca-4bf4-a386-139fa7074e1a'; 'Dba_048_PDATA' = 'ce1120c5-d021-489d-8aa6-4cf62fae4c5d'; 'Dba_049_PDATA' = 'b039614e-d03f-4ff9-914e-3a61238fc6b8'; 'Dba_050_PDATA' = 'be7dcf4f-4b4d-40a4-8cac-ef52b55e5fd2' }\r\n$entities = @(Get-Rows 'v1/Entities')\r\n$byName = @{}; foreach ($e in $entities) { $byName[[string]$e.identifier.name] = [string]$e.identifier.id }\r\n$wrong = @($specIds.Keys | Sort-Object | Where-Object { -not $byName.ContainsKey($_) -or $byName[$_] -ne $specIds[$_] } |\r\n    ForEach-Object { if ($byName.ContainsKey($_)) { \"$_ (id $($byName[$_]), spec $($specIds[$_]))\" } else { \"$_ (missing)\" } })\r\n$present = @($specIds.Keys | Where-Object { $byName.ContainsKey($_) })\r\n# Only true or false reaches the output: it becomes the run value DomainsToCreate.\r\nif ($present.Count -eq 0) { 'true'; return }\r\nif (-not $wrong) { 'false'; return }\r\nthrow \"$($present.Count) of the $($specIds.Count) domains exist, $($wrong.Count) differ from the spec: $(($wrong | Select-Object -First 20) -join '; '). Neither create nor keep is safe: empty the model first.\"\r\n",
+        "type": "PowerShellStep",
+        "parameters": {},
+        "timeoutSeconds": 1800,
+        "continueOnError": false,
+        "retryEnabled": false,
+        "maxRetries": 0,
+        "retryDelaySeconds": 5,
+        "workingDirectory": null,
+        "description": "What: Look at the 50 Dba domains on the target and print true when none exists (the steps below create and load them) or false when all 50 exist with their spec ids (kept: another entity uses them), into the run value DomainsToCreate. Why: the target can be an instance whose own model already holds the domains (the CRUD base); they are never written over. Success: true or false is printed. If it fails: some domains exist and others do not, or an id differs from the spec; the message names them. Empty the model first.",
+        "notes": "",
+        "outputParameterName": "DomainsToCreate"
+      },
+      "label": "Decide Domain Create"
     },
     {
       "inline": {
@@ -118,8 +142,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_001_PDATA with its spec id (c753e36e-8780-4c97-ad98-0e1aabc61180). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_001_PDATA with its spec id (c753e36e-8780-4c97-ad98-0e1aabc61180). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_001_PDATA"
     },
@@ -149,8 +174,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_002_PDATA with its spec id (72367298-a3c4-41e4-8e31-778a278683cf). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_002_PDATA with its spec id (72367298-a3c4-41e4-8e31-778a278683cf). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_002_PDATA"
     },
@@ -180,8 +206,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_003_PDATA with its spec id (4fa7fa89-56ea-400e-a19b-e104b36fd860). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_003_PDATA with its spec id (4fa7fa89-56ea-400e-a19b-e104b36fd860). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_003_PDATA"
     },
@@ -211,8 +238,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_004_PDATA with its spec id (08a24248-7f92-424f-92ec-b1229586960e). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_004_PDATA with its spec id (08a24248-7f92-424f-92ec-b1229586960e). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_004_PDATA"
     },
@@ -242,8 +270,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_005_PDATA with its spec id (4625cff8-ac3e-4c0a-b2e7-e030e5f786df). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_005_PDATA with its spec id (4625cff8-ac3e-4c0a-b2e7-e030e5f786df). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_005_PDATA"
     },
@@ -273,8 +302,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_006_PDATA with its spec id (daf5f0ab-916c-4a35-b5ac-1898c7bbfd11). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_006_PDATA with its spec id (daf5f0ab-916c-4a35-b5ac-1898c7bbfd11). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_006_PDATA"
     },
@@ -304,8 +334,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_007_PDATA with its spec id (fc5a9ea9-2a43-432f-aebd-2472bf3364dc). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_007_PDATA with its spec id (fc5a9ea9-2a43-432f-aebd-2472bf3364dc). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_007_PDATA"
     },
@@ -335,8 +366,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_008_PDATA with its spec id (285bce51-fc36-4389-8eb0-e8927c69f40f). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_008_PDATA with its spec id (285bce51-fc36-4389-8eb0-e8927c69f40f). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_008_PDATA"
     },
@@ -366,8 +398,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_009_PDATA with its spec id (f0a24c0a-2e2f-403e-bda2-a7ea1a316456). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_009_PDATA with its spec id (f0a24c0a-2e2f-403e-bda2-a7ea1a316456). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_009_PDATA"
     },
@@ -397,8 +430,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_010_PDATA with its spec id (61cc435c-22df-4416-a233-5b892a6d406d). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_010_PDATA with its spec id (61cc435c-22df-4416-a233-5b892a6d406d). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_010_PDATA"
     },
@@ -428,8 +462,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_011_PDATA with its spec id (bdbd8cc7-5292-429c-a5cd-64589b747636). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_011_PDATA with its spec id (bdbd8cc7-5292-429c-a5cd-64589b747636). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_011_PDATA"
     },
@@ -459,8 +494,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_012_PDATA with its spec id (cff8bbb6-5b4c-4c62-bbd4-ecafc6a08839). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_012_PDATA with its spec id (cff8bbb6-5b4c-4c62-bbd4-ecafc6a08839). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_012_PDATA"
     },
@@ -490,8 +526,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_013_PDATA with its spec id (3fa79172-6cc8-43cf-9344-361f30fbd6cd). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_013_PDATA with its spec id (3fa79172-6cc8-43cf-9344-361f30fbd6cd). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_013_PDATA"
     },
@@ -521,8 +558,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_014_PDATA with its spec id (675330b4-dc31-4f59-8266-c8cf50b0442b). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_014_PDATA with its spec id (675330b4-dc31-4f59-8266-c8cf50b0442b). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_014_PDATA"
     },
@@ -552,8 +590,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_015_PDATA with its spec id (b1862a5b-5a15-48fe-8c47-502bf7b59eaa). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_015_PDATA with its spec id (b1862a5b-5a15-48fe-8c47-502bf7b59eaa). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_015_PDATA"
     },
@@ -583,8 +622,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_016_PDATA with its spec id (471ae7d8-097e-425d-a183-8db4458e8b8c). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_016_PDATA with its spec id (471ae7d8-097e-425d-a183-8db4458e8b8c). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_016_PDATA"
     },
@@ -614,8 +654,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_017_PDATA with its spec id (0bc20871-c750-42f4-8d4d-e6fd92c4ea0c). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_017_PDATA with its spec id (0bc20871-c750-42f4-8d4d-e6fd92c4ea0c). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_017_PDATA"
     },
@@ -645,8 +686,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_018_PDATA with its spec id (843d966d-b06c-4018-9bc0-e22b66dd50ee). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_018_PDATA with its spec id (843d966d-b06c-4018-9bc0-e22b66dd50ee). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_018_PDATA"
     },
@@ -676,8 +718,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_019_PDATA with its spec id (640f1343-2a8e-40d7-8859-fc54277f4bfe). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_019_PDATA with its spec id (640f1343-2a8e-40d7-8859-fc54277f4bfe). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_019_PDATA"
     },
@@ -707,8 +750,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_020_PDATA with its spec id (e4246cf6-21dc-405f-b082-51f4f58c882a). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_020_PDATA with its spec id (e4246cf6-21dc-405f-b082-51f4f58c882a). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_020_PDATA"
     },
@@ -738,8 +782,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_021_PDATA with its spec id (4e8def60-048c-45e7-b714-1866126f6f90). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_021_PDATA with its spec id (4e8def60-048c-45e7-b714-1866126f6f90). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_021_PDATA"
     },
@@ -769,8 +814,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_022_PDATA with its spec id (9af2b6d9-90cd-4cad-a2e3-de7fe7fa5111). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_022_PDATA with its spec id (9af2b6d9-90cd-4cad-a2e3-de7fe7fa5111). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_022_PDATA"
     },
@@ -800,8 +846,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_023_PDATA with its spec id (cc82f366-1cf9-41a2-976e-d074f8d3755a). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_023_PDATA with its spec id (cc82f366-1cf9-41a2-976e-d074f8d3755a). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_023_PDATA"
     },
@@ -831,8 +878,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_024_PDATA with its spec id (a010f05d-0b8e-4f26-9782-194498610201). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_024_PDATA with its spec id (a010f05d-0b8e-4f26-9782-194498610201). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_024_PDATA"
     },
@@ -862,8 +910,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_025_PDATA with its spec id (d7df4087-448b-45d0-8e14-d9e9b91619da). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_025_PDATA with its spec id (d7df4087-448b-45d0-8e14-d9e9b91619da). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_025_PDATA"
     },
@@ -893,8 +942,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_026_PDATA with its spec id (4a176419-0ca4-443c-b852-75d953bca187). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_026_PDATA with its spec id (4a176419-0ca4-443c-b852-75d953bca187). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_026_PDATA"
     },
@@ -924,8 +974,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_027_PDATA with its spec id (0923d35a-1770-4761-82f3-5edbbc865d80). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_027_PDATA with its spec id (0923d35a-1770-4761-82f3-5edbbc865d80). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_027_PDATA"
     },
@@ -955,8 +1006,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_028_PDATA with its spec id (34c5da4d-55e0-4a72-872b-00423aa6a3af). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_028_PDATA with its spec id (34c5da4d-55e0-4a72-872b-00423aa6a3af). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_028_PDATA"
     },
@@ -986,8 +1038,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_029_PDATA with its spec id (5e225ca9-1b25-4a34-89c8-053c1adbfa63). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_029_PDATA with its spec id (5e225ca9-1b25-4a34-89c8-053c1adbfa63). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_029_PDATA"
     },
@@ -1017,8 +1070,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_030_PDATA with its spec id (ddb77d27-8746-47b8-b724-f7afd18e82af). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_030_PDATA with its spec id (ddb77d27-8746-47b8-b724-f7afd18e82af). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_030_PDATA"
     },
@@ -1048,8 +1102,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_031_PDATA with its spec id (76d72f15-9046-48d4-a4bc-59dacfc4e64b). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_031_PDATA with its spec id (76d72f15-9046-48d4-a4bc-59dacfc4e64b). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_031_PDATA"
     },
@@ -1079,8 +1134,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_032_PDATA with its spec id (69ed0a49-1a96-4682-9c9f-9fad2f877ac6). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_032_PDATA with its spec id (69ed0a49-1a96-4682-9c9f-9fad2f877ac6). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_032_PDATA"
     },
@@ -1110,8 +1166,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_033_PDATA with its spec id (5213ff5d-ed89-4abd-af80-3957088e6209). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_033_PDATA with its spec id (5213ff5d-ed89-4abd-af80-3957088e6209). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_033_PDATA"
     },
@@ -1141,8 +1198,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_034_PDATA with its spec id (8827ca70-99a6-482c-8bb6-5c681d9027aa). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_034_PDATA with its spec id (8827ca70-99a6-482c-8bb6-5c681d9027aa). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_034_PDATA"
     },
@@ -1172,8 +1230,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_035_PDATA with its spec id (fe239d73-dcb0-4685-9760-43c93511d372). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_035_PDATA with its spec id (fe239d73-dcb0-4685-9760-43c93511d372). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_035_PDATA"
     },
@@ -1203,8 +1262,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_036_PDATA with its spec id (1be5c740-bc1f-44d4-a0ea-794fae282e62). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_036_PDATA with its spec id (1be5c740-bc1f-44d4-a0ea-794fae282e62). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_036_PDATA"
     },
@@ -1234,8 +1294,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_037_PDATA with its spec id (e292b2ab-01a2-4365-8e8c-41b7bbe9f7c2). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_037_PDATA with its spec id (e292b2ab-01a2-4365-8e8c-41b7bbe9f7c2). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_037_PDATA"
     },
@@ -1265,8 +1326,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_038_PDATA with its spec id (0f94dece-7b19-4a9a-ad8b-c24aac0b99d5). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_038_PDATA with its spec id (0f94dece-7b19-4a9a-ad8b-c24aac0b99d5). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_038_PDATA"
     },
@@ -1296,8 +1358,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_039_PDATA with its spec id (fb9da93a-be72-4694-b1ce-8f66350ec93a). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_039_PDATA with its spec id (fb9da93a-be72-4694-b1ce-8f66350ec93a). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_039_PDATA"
     },
@@ -1327,8 +1390,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_040_PDATA with its spec id (6a76cd91-168f-4bf7-bb77-3ce295fa35dc). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_040_PDATA with its spec id (6a76cd91-168f-4bf7-bb77-3ce295fa35dc). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_040_PDATA"
     },
@@ -1358,8 +1422,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_041_PDATA with its spec id (d5f5a397-d043-45ba-9114-1358d885c37f). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_041_PDATA with its spec id (d5f5a397-d043-45ba-9114-1358d885c37f). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_041_PDATA"
     },
@@ -1389,8 +1454,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_042_PDATA with its spec id (8b086baf-2452-43e7-b10e-753d3039bb31). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_042_PDATA with its spec id (8b086baf-2452-43e7-b10e-753d3039bb31). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_042_PDATA"
     },
@@ -1420,8 +1486,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_043_PDATA with its spec id (eb4a213c-61f9-42a4-bf9a-5fa81d6422e2). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_043_PDATA with its spec id (eb4a213c-61f9-42a4-bf9a-5fa81d6422e2). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_043_PDATA"
     },
@@ -1451,8 +1518,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_044_PDATA with its spec id (e947877f-6947-4828-90f3-5272198a4c84). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_044_PDATA with its spec id (e947877f-6947-4828-90f3-5272198a4c84). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_044_PDATA"
     },
@@ -1482,8 +1550,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_045_PDATA with its spec id (dd616d7e-5486-4651-9c8f-178027d38b68). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_045_PDATA with its spec id (dd616d7e-5486-4651-9c8f-178027d38b68). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_045_PDATA"
     },
@@ -1513,8 +1582,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_046_PDATA with its spec id (0f698a32-46b8-4ee9-84dd-8ae2c08d0fb3). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_046_PDATA with its spec id (0f698a32-46b8-4ee9-84dd-8ae2c08d0fb3). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_046_PDATA"
     },
@@ -1544,8 +1614,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_047_PDATA with its spec id (bf5fe016-23ca-4bf4-a386-139fa7074e1a). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_047_PDATA with its spec id (bf5fe016-23ca-4bf4-a386-139fa7074e1a). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_047_PDATA"
     },
@@ -1575,8 +1646,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_048_PDATA with its spec id (ce1120c5-d021-489d-8aa6-4cf62fae4c5d). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_048_PDATA with its spec id (ce1120c5-d021-489d-8aa6-4cf62fae4c5d). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_048_PDATA"
     },
@@ -1606,8 +1678,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_049_PDATA with its spec id (b039614e-d03f-4ff9-914e-3a61238fc6b8). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_049_PDATA with its spec id (b039614e-d03f-4ff9-914e-3a61238fc6b8). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_049_PDATA"
     },
@@ -1637,8 +1710,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Create domain entity Dba_050_PDATA with its spec id (be7dcf4f-4b4d-40a4-8cac-ef52b55e5fd2). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Create domain entity Dba_050_PDATA with its spec id (be7dcf4f-4b4d-40a4-8cac-ef52b55e5fd2). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Create Domain Dba_050_PDATA"
     },
@@ -1668,8 +1742,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_001_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_001_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_001_PDATA"
     },
@@ -1699,8 +1774,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_002_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_002_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_002_PDATA"
     },
@@ -1730,8 +1806,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_003_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_003_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_003_PDATA"
     },
@@ -1761,8 +1838,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_004_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_004_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_004_PDATA"
     },
@@ -1792,8 +1870,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_005_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_005_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_005_PDATA"
     },
@@ -1823,8 +1902,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_006_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_006_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_006_PDATA"
     },
@@ -1854,8 +1934,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_007_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_007_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_007_PDATA"
     },
@@ -1885,8 +1966,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_008_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_008_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_008_PDATA"
     },
@@ -1916,8 +1998,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_009_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_009_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_009_PDATA"
     },
@@ -1947,8 +2030,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_010_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_010_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_010_PDATA"
     },
@@ -1978,8 +2062,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_011_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_011_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_011_PDATA"
     },
@@ -2009,8 +2094,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_012_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_012_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_012_PDATA"
     },
@@ -2040,8 +2126,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_013_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_013_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_013_PDATA"
     },
@@ -2071,8 +2158,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_014_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_014_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_014_PDATA"
     },
@@ -2102,8 +2190,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_015_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_015_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_015_PDATA"
     },
@@ -2133,8 +2222,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_016_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_016_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_016_PDATA"
     },
@@ -2164,8 +2254,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_017_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_017_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_017_PDATA"
     },
@@ -2195,8 +2286,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_018_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_018_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_018_PDATA"
     },
@@ -2226,8 +2318,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_019_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_019_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_019_PDATA"
     },
@@ -2257,8 +2350,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_020_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_020_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_020_PDATA"
     },
@@ -2288,8 +2382,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_021_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_021_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_021_PDATA"
     },
@@ -2319,8 +2414,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_022_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_022_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_022_PDATA"
     },
@@ -2350,8 +2446,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_023_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_023_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_023_PDATA"
     },
@@ -2381,8 +2478,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_024_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_024_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_024_PDATA"
     },
@@ -2412,8 +2510,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_025_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_025_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_025_PDATA"
     },
@@ -2443,8 +2542,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_026_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_026_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_026_PDATA"
     },
@@ -2474,8 +2574,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_027_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_027_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_027_PDATA"
     },
@@ -2505,8 +2606,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_028_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_028_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_028_PDATA"
     },
@@ -2536,8 +2638,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_029_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_029_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_029_PDATA"
     },
@@ -2567,8 +2670,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_030_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_030_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_030_PDATA"
     },
@@ -2598,8 +2702,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_031_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_031_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_031_PDATA"
     },
@@ -2629,8 +2734,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_032_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_032_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_032_PDATA"
     },
@@ -2660,8 +2766,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_033_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_033_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_033_PDATA"
     },
@@ -2691,8 +2798,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_034_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_034_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_034_PDATA"
     },
@@ -2722,8 +2830,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_035_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_035_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_035_PDATA"
     },
@@ -2753,8 +2862,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_036_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_036_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_036_PDATA"
     },
@@ -2784,8 +2894,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_037_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_037_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_037_PDATA"
     },
@@ -2815,8 +2926,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_038_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_038_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_038_PDATA"
     },
@@ -2846,8 +2958,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_039_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_039_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_039_PDATA"
     },
@@ -2877,8 +2990,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_040_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_040_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_040_PDATA"
     },
@@ -2908,8 +3022,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_041_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_041_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_041_PDATA"
     },
@@ -2939,8 +3054,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_042_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_042_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_042_PDATA"
     },
@@ -2970,8 +3086,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_043_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_043_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_043_PDATA"
     },
@@ -3001,8 +3118,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_044_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_044_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_044_PDATA"
     },
@@ -3032,8 +3150,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_045_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_045_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_045_PDATA"
     },
@@ -3063,8 +3182,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_046_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_046_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_046_PDATA"
     },
@@ -3094,8 +3214,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_047_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_047_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_047_PDATA"
     },
@@ -3125,8 +3246,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_048_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_048_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_048_PDATA"
     },
@@ -3156,8 +3278,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_049_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_049_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_049_PDATA"
     },
@@ -3187,8 +3310,9 @@
         "maxRetries": 0,
         "retryDelaySeconds": 5,
         "workingDirectory": null,
-        "description": "What: Load the 30 spec rows of Dba_050_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down.",
-        "notes": ""
+        "description": "What: Load the 30 spec rows of Dba_050_PDATA (the domain is new, so this is a full replace). Why: Calls the Profisee or TestAuto REST API for this change or check, the same way a client would. Success: The response status is one of the expected codes (200, 201). If it fails: 401 = the API key is not set on that instance yet (run connect-setup) or the secret is wrong; 404 = the record, entity or address is missing; no response = the server in the URL (connect/urls, connect/machines) is down. Skipped when: the 50 domains already exist with their spec ids because another entity on the target uses them (Decide Domain Create printed false).",
+        "notes": "",
+        "runWhen": "{{DomainsToCreate}}"
       },
       "label": "Load Domain Dba_050_PDATA"
     },

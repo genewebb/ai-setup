@@ -94,6 +94,109 @@ class CommonPack(unittest.TestCase):
             self.assertLess(labels.index('Find The Instance Service'), labels.index(next(l for l in labels if 'Profisee Service' in l)))
             self.assertEqual('', w['globalParameters']['InstanceServiceName'])
 
+    # ---------------------------------------------------------------- common-health-wait heals itself
+    HEALTH_URL = 'http://127.0.0.1:%d/demo/rest'
+
+    def health_step(self, label):
+        return next(s for s in self.workloads['common-health-wait']['steps'] if s['label'] == label)['inline']
+
+    def run_health(self, label, url, minutes=None):
+        script = self.health_step(label)['scriptContent']
+        if minutes is not None:
+            first, rest = script.split('\r\n', 2)[1], None
+            self.assertTrue(first.startswith('$Minutes = '), first)
+            script = script.replace(first, '$Minutes = %s' % minutes, 1)
+        return run_ps(script, {'{{ProfiseeBaseUrl}}': url})
+
+    @staticmethod
+    def serve(body):
+        """A local stand-in for the health address (synthetic answers); returns (server, port)."""
+        import http.server
+        import threading
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                data = body.encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        return server, server.server_address[1]
+
+    def test_health_wait_steps_restart_once_only_when_still_not_healthy(self):
+        w = self.workloads['common-health-wait']
+        self.assertEqual(['Wait For Every Service', 'Name The Server To Restart', 'Name The Instance To Restart',
+                          'Stop The Instance', 'Start The Instance', 'Wait Again After The Restart'], [s['label'] for s in w['steps']])
+        self.assertEqual({'RestartServerName': '', 'RestartInstanceName': ''}, w['globalParameters'])
+        self.assertEqual(['ProfiseeBaseUrl'], [i['name'] for i in w['inputs']], 'no caller has to pass anything new')
+        self.assertIsNone(self.health_step('Wait For Every Service').get('runWhen'))
+        self.assertIsNone(self.health_step('Name The Server To Restart').get('runWhen'))
+        self.assertEqual('RestartServerName', self.health_step('Name The Server To Restart')['outputParameterName'])
+        self.assertEqual('RestartInstanceName', self.health_step('Name The Instance To Restart')['outputParameterName'])
+        for label in ('Name The Instance To Restart', 'Stop The Instance', 'Start The Instance', 'Wait Again After The Restart'):
+            self.assertEqual('{{RestartServerName}}', self.health_step(label)['runWhen'], label)
+        for label, child in (('Stop The Instance', 'common-instance-stop'), ('Start The Instance', 'common-instance-start')):
+            step = self.health_step(label)
+            self.assertEqual(child, step['workloadName'], 'the tested stop and start are reused, not copied')
+            self.assertEqual({'ApplicationServerName': '{{RestartServerName}}', 'ProfiseeInstanceName': '{{RestartInstanceName}}'},
+                             step['parameters'], 'the server and instance come from the address that was asked, never from the caller')
+        total = sum(self.health_step(l)['timeoutSeconds'] for l in ('Wait For Every Service', 'Wait Again After The Restart'))
+        self.assertLessEqual(total, 1000, 'callers give this workload 1200 seconds')
+
+    def test_health_all_healthy_ends_at_once_and_names_no_server(self):
+        server, port = self.serve('{"healthChecks":{"Data":{"status":"Healthy"},"Matching":{"status":"Healthy"}}}')
+        try:
+            url = self.HEALTH_URL % port
+            code, out, err = self.run_health('Wait For Every Service', url)
+            self.assertEqual(0, code, err)
+            self.assertIn('All 2 health checks Healthy', out)
+            code, out, err = self.run_health('Name The Server To Restart', url)
+            self.assertEqual(0, code, err)
+            self.assertEqual('', out.strip(), 'blank = nothing is restarted')
+        finally:
+            server.shutdown()
+
+    def test_health_still_down_first_wait_ends_green_and_the_server_is_named(self):
+        server, port = self.serve('{"healthChecks":{"Data":{"status":"Healthy"},"Matching":{"status":"Unhealthy"}}}')
+        try:
+            url = self.HEALTH_URL % port
+            code, out, err = self.run_health('Wait For Every Service', url, minutes=0)
+            self.assertEqual(0, code, 'the first wait never fails: the restart comes next. ' + err)
+            self.assertIn('Not healthy yet: Matching', out)
+            self.assertIn('restarted once', out)
+            code, out, err = self.run_health('Name The Server To Restart', url)
+            self.assertEqual(0, code, err)
+            self.assertEqual('127.0.0.1', out.strip(), 'only the name: it becomes a run value')
+            code, out, err = self.run_health('Wait Again After The Restart', url, minutes=0)
+            self.assertNotEqual(0, code, 'after the restart a service that stays down is a failure')
+            self.assertIn('still not healthy', err)
+            self.assertIn('Matching', err)
+            self.assertIn('after one restart', err)
+        finally:
+            server.shutdown()
+
+    def test_health_server_and_instance_come_from_the_address(self):
+        # A name that does not resolve: the probe fails, so the server is named; its short name is the first label.
+        url = 'https://app-x.invalid/demo/rest'
+        code, out, err = self.run_health('Name The Server To Restart', url)
+        self.assertEqual(0, code, err)
+        self.assertEqual('app-x', out.strip())
+        code, out, err = self.run_health('Name The Instance To Restart', url)
+        self.assertEqual(0, code, err)
+        self.assertEqual('demo', out.strip())
+
+    def test_health_address_without_an_instance_is_refused_not_guessed(self):
+        code, _out, err = self.run_health('Name The Instance To Restart', 'https://app-x.invalid/rest')
+        self.assertNotEqual(0, code)
+        self.assertIn('cannot tell the instance', err)
+
 
 if __name__ == '__main__':
     unittest.main()

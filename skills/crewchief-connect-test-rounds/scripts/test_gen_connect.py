@@ -466,6 +466,134 @@ class GeneratedPack(unittest.TestCase):
         self.assertEqual({k: v for k, v in before.items() if k.startswith('workloads')},
                          {k: v for k, v in after.items() if k.startswith('workloads')})
 
+    # ---------------------------------------------------------------- P2P target on a box whose model already uses the domains
+    TARGET_BUILD = 'connect-model-profisee-to-profisee-target-build'
+
+    def target_step(self, label):
+        return next(s for s in self.workloads[self.TARGET_BUILD]['steps'] if s['label'] == label)['inline']
+
+    def spec_domains(self):
+        """Domain name -> spec id, from the Create Domain bodies."""
+        out = {}
+        for s in self.workloads[self.TARGET_BUILD]['steps']:
+            if s['label'].startswith('Create Domain '):
+                body = json.loads(s['inline']['body'])[0]
+                out[body['identifier']['name']] = body['identifier']['id']
+        return out
+
+    def test_target_build_creates_and_loads_domains_only_when_they_are_not_there(self):
+        w = self.workloads[self.TARGET_BUILD]
+        labels = [s['label'] for s in w['steps']]
+        self.assertEqual(labels.index('Delete Family') + 1, labels.index('Decide Domain Create'))
+        self.assertEqual('DomainsToCreate', self.target_step('Decide Domain Create')['outputParameterName'])
+        self.assertEqual('', w['globalParameters']['DomainsToCreate'])
+        gated = [s for s in w['steps'] if s['label'].startswith(('Create Domain ', 'Load Domain '))]
+        self.assertEqual(100, len(gated))
+        for s in gated:
+            self.assertEqual('{{DomainsToCreate}}', s['inline'].get('runWhen'), s['label'])
+            self.assertIn('Skipped when', s['inline']['description'], s['label'])
+        for label in ('Create Entity PDataProfiseeToProfiseeImport', 'Create Attributes PDataProfiseeToProfiseeImport', 'Verify Model'):
+            self.assertIsNone(self.target_step(label).get('runWhen'), label)
+        # The Main build is not changed: it owns its model.
+        for s in self.workloads['connect-model-main-build']['steps']:
+            self.assertIsNone(s['inline'].get('runWhen'), s['label'])
+
+    @staticmethod
+    def serve_model(entities, attributes):
+        """A local stand-in for the target's REST address (synthetic model). Returns (server, base url, deleted list)."""
+        import http.server
+        import threading
+        deleted = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def answer(self, code, obj=None):
+                data = b'' if obj is None else json.dumps(obj).encode('utf-8')
+                self.send_response(code)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def do_GET(self):
+                if self.path.startswith('/rest/v1/Entities'):
+                    return self.answer(200, {'data': [{'identifier': {'name': n, 'id': i, 'modelId': {'id': 'm'}}, 'isSystem': False}
+                                                      for n, i in entities.items()]})
+                if self.path.startswith('/rest/v1/Attributes'):
+                    return self.answer(200, {'data': [{'identifier': {'name': a, 'entityId': {'name': e}}, 'domainEntityId': {'name': d}}
+                                                      for e, a, d in attributes if e in entities]})
+                return self.answer(404)
+
+            def do_DELETE(self):
+                name = self.path.rsplit('/', 1)[1]
+                deleted.append(name)
+                entities.pop(name, None)
+                return self.answer(204)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        return server, 'http://127.0.0.1:%d/rest' % server.server_address[1], deleted
+
+    def run_target(self, label, url):
+        return run_ps(self.target_step(label)['scriptContent'], {
+            '{{ProfiseeBaseUrl}}': url, '{{ProfiseeApiKey}}': 'synthetic-key',
+            '{{PDataProfiseeToProfiseeImport}}': 'PDataProfiseeToProfiseeImport',
+            '{{PDataProfiseeToProfiseeExport}}': 'PDataProfiseeToProfiseeExport'})
+
+    def test_target_build_keeps_domains_another_entity_uses_and_deletes_only_its_own_entities(self):
+        domains = self.spec_domains()
+        entities = dict(domains, OTHER_ENTITY='o1', PDataProfiseeToProfiseeImport='p1')
+        attributes = [('OTHER_ENTITY', 'Dba_%03d' % n, 'Dba_%03d_PDATA' % n) for n in range(1, 51)] + \
+                     [('PDataProfiseeToProfiseeImport', 'Dba_001', 'Dba_001_PDATA')]
+        server, url, deleted = self.serve_model(entities, attributes)
+        try:
+            code, out, err = self.run_target('Delete Family', url)
+            self.assertEqual(0, code, err)
+            self.assertEqual(['PDataProfiseeToProfiseeImport'], deleted, 'never a domain, never the other entity')
+            self.assertIn('Kept the 50 domains', out)
+            self.assertIn('OTHER_ENTITY', out)
+            code, out, err = self.run_target('Decide Domain Create', url)
+            self.assertEqual(0, code, err)
+            self.assertEqual('false', out.strip())
+        finally:
+            server.shutdown()
+
+    def test_target_build_still_stops_when_a_used_domain_is_not_the_spec_one(self):
+        domains = self.spec_domains()
+        entities = dict(domains, OTHER_ENTITY='o1')
+        entities['Dba_007_PDATA'] = '00000000-0000-0000-0000-000000000007'
+        del entities['Dba_050_PDATA']
+        attributes = [('OTHER_ENTITY', 'Dba_001', 'Dba_001_PDATA')]
+        server, url, deleted = self.serve_model(entities, attributes)
+        try:
+            code, _out, err = self.run_target('Delete Family', url)
+            self.assertNotEqual(0, code)
+            self.assertEqual([], deleted, 'nothing is deleted before the stop')
+            self.assertIn('Dba_007_PDATA', err)
+            self.assertIn('Dba_050_PDATA', err)
+            code, _out, err = self.run_target('Decide Domain Create', url)
+            self.assertNotEqual(0, code, 'some but not all domains, or a wrong id: never guessed')
+        finally:
+            server.shutdown()
+
+    def test_target_build_on_an_empty_or_own_model_deletes_the_family_and_creates_the_domains(self):
+        domains = self.spec_domains()
+        entities = dict(domains, PDataProfiseeToProfiseeImport='p1')
+        attributes = [('PDataProfiseeToProfiseeImport', 'Dba_001', 'Dba_001_PDATA')]
+        server, url, deleted = self.serve_model(entities, attributes)
+        try:
+            code, out, err = self.run_target('Delete Family', url)
+            self.assertEqual(0, code, err)
+            self.assertEqual(51, len(deleted))
+            self.assertEqual('PDataProfiseeToProfiseeImport', deleted[0], 'dependents first')
+            code, out, err = self.run_target('Decide Domain Create', url)
+            self.assertEqual(0, code, err)
+            self.assertEqual('true', out.strip())
+        finally:
+            server.shutdown()
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -2,7 +2,7 @@
 
   workloads/common/internal/
     common-api-key-set         set the standard API key, restart the instance, prove the key (gateway and Data service)
-    common-health-wait         wait until every health check of the instance is Healthy
+    common-health-wait         wait until every health check of the instance is Healthy; restart the instance once when one stays down
     common-instance-stop       stop the instance's Windows service (when it has one) and IIS
     common-instance-start      start IIS and the instance's Windows service (when it has one)
     common-instance-pools      recycle (or start) the instance's application pools, found on the server
@@ -70,19 +70,62 @@ clear_workloads(wl_root)
 # ---------------------------------------------------------------- common-health-wait
 with open(os.path.join(here, 'health.ps1'), encoding='utf-8', newline='') as f:
     HEALTH = f.read()
+FIRST_WAIT, LAST_WAIT = 3, 8
+STUCK = "{{RestartServerName}}"
+STUCK_WHY = "every health check was Healthy within the first %d minutes (the step Name The Server To Restart printed nothing)" % FIRST_WAIT
+RESTART = {"ApplicationServerName": STUCK, "ProfiseeInstanceName": "{{RestartInstanceName}}"}
+
+
+def health(mode, minutes):
+    """health.ps1 with the two lines that say what it does."""
+    return "$Mode = '%s'\n$Minutes = %d\n" % (mode, minutes) + HEALTH
+
+
 emit("common-health-wait",
      ("What: Ask the health address of the Profisee instance (its REST address plus /health) every 15 seconds until every "
-      "health check is Healthy, for at most 10 minutes. Why: services stay cold after a restore, a recycle or a key change; a "
-      "measured run must not pay for the warm-up, and a check must not hit a service that is still starting. " + NEVER +
-      " Needs: the instance is started. Success: all checks Healthy within 10 minutes. If it fails: the last line names the "
-      "checks that are not Healthy; open the health address and fix the service it names."),
+      "health check is Healthy. When a check is still not Healthy after %d minutes, restart the instance once "
+      "(common-instance-stop, then common-instance-start, on the server and instance named in the address) and wait again, "
+      "for at most %d minutes. Why: services stay cold after a restore, a recycle or a key change; a measured run must not "
+      "pay for the warm-up, a check must not hit a service that is still starting, and a service that stays down after a "
+      "restore usually comes up after one restart, which a person used to do by hand. " % (FIRST_WAIT, LAST_WAIT) + NEVER +
+      " Needs: the instance is started; for the restart, the admin credential (UserCredentials secrets) can manage services "
+      "on the application server over CredSSP. Success: all checks Healthy, at once or after the one restart. If it fails: "
+      "the last line names the checks that are not Healthy after the restart; open the health address and fix the service "
+      "it names."),
      ["health"],
-     [steps.ps("Wait For Every Service", HEALTH,
-               "What: Wait until every health check of the instance is Healthy. Why: services stay cold after a restore and a "
-               "recycle; a measured run must not pay for the warm-up. Success: all checks Healthy within 10 minutes. If it "
-               "fails: open the health address (the instance's REST address plus /health) and fix the service it names.",
-               timeout=900)],
-     box("ProfiseeBaseUrl"))
+     [steps.ps("Wait For Every Service", health('Wait', FIRST_WAIT),
+               "What: Wait until every health check of the instance is Healthy, for at most %d minutes. Why: services stay "
+               "cold after a restore and a recycle; a measured run must not pay for the warm-up. Success: all checks Healthy, "
+               "or the last line says which are not and that the instance is restarted once. If it fails: the step could not "
+               "run at all (PowerShell 7 on this box); a service that is down never fails this step." % FIRST_WAIT,
+               timeout=300),
+      steps.ps("Name The Server To Restart", health('Server', 0),
+               "What: Ask the health address once more; when a check is still not Healthy, print the short name of the "
+               "application server, read from the address, into the run value RestartServerName. Nothing is printed when "
+               "every check is Healthy. Why: the steps below run only when a name was printed, and the restart must hit the "
+               "server that was asked, never another one. Success: one name, or nothing. If it fails: the step could not run "
+               "at all (PowerShell 7 on this box).",
+               timeout=180, output="RestartServerName"),
+      steps.gated(steps.ps("Name The Instance To Restart", health('Instance', 0),
+                           "What: Print the instance name, read from the address (https://<application server>/<instance>/rest), "
+                           "into the run value RestartInstanceName. Why: the restart finds the instance's Windows service by "
+                           "this name. Success: one name. If it fails: the address does not end in /<instance>/rest; correct "
+                           "ProfiseeBaseUrl in the calling pack's reference data.",
+                           timeout=60, output="RestartInstanceName"), STUCK, STUCK_WHY),
+      steps.gated(steps.instance_stop_child("a service that stays down after its warm-up time is restarted once",
+                                            parameters=RESTART), STUCK, STUCK_WHY),
+      steps.gated(steps.instance_start_child("the services start again and read their state fresh", parameters=RESTART),
+                  STUCK, STUCK_WHY),
+      steps.gated(steps.ps("Wait Again After The Restart", health('Final', LAST_WAIT),
+                           "What: Wait until every health check of the instance is Healthy, for at most %d minutes after the "
+                           "restart. Why: the restart is tried once; a service that is still down needs a person. Success: all "
+                           "checks Healthy. If it fails: open the health address (the instance's REST address plus /health) "
+                           "and fix the service the last line names." % LAST_WAIT,
+                           timeout=560), STUCK, STUCK_WHY)],
+     box("ProfiseeBaseUrl"),
+     globals_={"RestartServerName": "", "RestartInstanceName": ""},
+     notes=("RestartServerName and RestartInstanceName are set during the run, and only when a health check stays not Healthy: "
+            "they start blank so the restart steps are skipped on a healthy instance."))
 
 # ---------------------------------------------------------------- common-instance-stop / common-instance-start
 emit("common-instance-stop",
@@ -241,7 +284,7 @@ Building blocks every workload pack runs, kept once. Restore `workloads/common` 
 | Workload | Does |
 |---|---|
 | `common-api-key-set` | Sets the standard API key, restarts the instance, proves the key through the gateway and the Data service |
-| `common-health-wait` | Waits until every health check of the instance is Healthy |
+| `common-health-wait` | Waits until every health check of the instance is Healthy; still not healthy after 3 minutes = restarts the instance once and waits again |
 | `common-instance-stop` | Stops the instance's Windows service (when it has one) and IIS |
 | `common-instance-start` | Starts IIS and the instance's Windows service (when it has one) |
 | `common-instance-pools` | Recycles (or starts) the instance's application pools, found on the server |
