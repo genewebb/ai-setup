@@ -63,4 +63,5 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - **[TestAuto restart mid-run orphans the Poll job: run stays Running forever, metrics lost](reference_testauto_restart_orphans_running_scenario.md)**
 - **[Profisee services stay cold after recycle/restore: warm via /rest/health or Monitor drains nothing](reference_profisee_cold_service_after_recycle.md)**
 - [Connect Databricks 1M export fail 11/12: first big ConnEx MERGE auto-sets dataSkippingStatsColumns (metadata), parallel writes fail; fix = explicit 32-col list in prepare](reference_connect_databricks_fresh_table_delta_conflict.md)
+- [Connect Synapse 1M 12T fail 11/13: DW100c, ConnEx UPDATEs queue + 120 s timeout; pool check workload on SMVMTR3; rerun, drop 12T if it fails again](reference_connect_synapse_12t_dw100c_timeout.md)
 - [Portal hangs, health green: Data ShiftPartitions job holds Sch-M on t$Entity behind matching; kill = Hangfire retry](reference_partition_job_blocks_portal_during_matching.md)
