@@ -542,6 +542,60 @@ class GeneratedPack(unittest.TestCase):
             '{{PDataProfiseeToProfiseeImport}}': 'PDataProfiseeToProfiseeImport',
             '{{PDataProfiseeToProfiseeExport}}': 'PDataProfiseeToProfiseeExport'})
 
+    @staticmethod
+    def serve_statements():
+        """A local stand-in for the Databricks statement API (synthetic). Every statement SUCCEEDS at once; the primary key
+        count answers 0. Returns (server, host url, list of the statements sent, in order)."""
+        import http.server
+        import threading
+        sent = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers['Content-Length'])).decode('utf-8'))
+                sent.append(body['statement'])
+                data = json.dumps({'statement_id': 's%d' % len(sent), 'status': {'state': 'SUCCEEDED'},
+                                   'result': {'data_array': [['0']]}}).encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        return server, 'http://127.0.0.1:%d/' % server.server_address[1], sent
+
+    def test_databricks_export_table_sets_its_stats_columns_before_connect_writes(self):
+        # 11/12: on the first large Connect MERGE into the fresh table Databricks picks the data-skipping stats columns
+        # itself and commits that as a metadata change; the parallel MERGEs then fail (DELTA_CONCURRENT_APPEND.
+        # METADATA_CHANGE) and the 1M export goes red. Setting the columns when the table is made leaves that write nothing
+        # to change (proven on a scratch table: unchanged with the property set, changed without it).
+        w = self.workloads['connect-databricks-export-prepare']
+        stats = w['globalParameters']['ExportStatsColumns']
+        cols = [c.strip() for c in stats.split(',')]
+        self.assertEqual(32, len(cols))
+        self.assertEqual(len(cols), len(set(cols)))
+        self.assertIn(w['globalParameters']['ExportKeyColumn'], cols)
+        step = next(s for s in w['steps'] if s['label'] == 'Recreate Databricks Export Table')['inline']
+        server, url, sent = self.serve_statements()
+        try:
+            tokens = {'{{%s}}' % k: v for k, v in w['globalParameters'].items()}
+            tokens.update({'{{DatabricksHost}}': url, '{{DatabricksToken}}': 'synthetic-token'})
+            code, out, err = run_ps(step['scriptContent'], tokens)
+        finally:
+            server.shutdown()
+        self.assertEqual(0, code, err.strip() or out.strip())
+        table = 'connex_test.pdatadatabricksexport'
+        expected = "ALTER TABLE %s SET TBLPROPERTIES ('delta.dataSkippingStatsColumns' = '%s')" % (table, stats)
+        self.assertEqual([expected], [s for s in sent if 'dataSkipping' in s])
+        last_key = max(i for i, s in enumerate(sent) if 'PRIMARY KEY' in s or 'SET NOT NULL' in s)
+        self.assertGreater(sent.index(expected), last_key)
+        self.assertNotIn('{{', ''.join(sent))
+
     def test_target_build_keeps_domains_another_entity_uses_and_deletes_only_its_own_entities(self):
         domains = self.spec_domains()
         entities = dict(domains, OTHER_ENTITY='o1', PDataProfiseeToProfiseeImport='p1')
