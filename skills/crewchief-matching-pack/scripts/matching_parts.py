@@ -527,5 +527,28 @@ def monitor_quiet():
         "in the portal's Activity Monitor.", timeout=1900)
 
 
+def scenariomgt_check_step(family):
+    return steps.http_get("ScenarioMgt Check", "{{ScenarioMgtBaseUrl}}v1/Records/TestAutoWorkflow?PageSize=1",
+                          "What: List one TestAuto workflow. Why: proves the address and key reach the TestAuto repository before anything "
+                          "is written. Success: HTTP 200. If it fails: 401 = wrong ScenarioMgt key (RestClients:ScenarioMgt:ApiKey); 404 = "
+                          f"wrong address in {family}/urls:ScenarioMgtBaseUrl.", headers={"x-api-key": "{{ScenarioMgtApiKey}}"})
+
+
+def version_exists_step(family, setup_name):
+    return steps.ps("TestAuto Version Exists", "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        "$base = '{{ScenarioMgtBaseUrl}}'.TrimEnd('/') + '/'",
+        "$headers = @{ 'x-api-key' = '{{ScenarioMgtApiKey}}'; accept = 'application/json' }",
+        "$version = '" + VER + "'",
+        "$verFilter = [uri]::EscapeDataString(\"[Code] eq '$version'\")",
+        "$v = Invoke-RestMethod -Uri \"${base}v1/Records/ProfiseeVersion?Filter=$verFilter\" -Headers $headers",
+        "$rows = if ($v -is [array]) { $v } else { @($v.data) }",
+        f"if (-not $rows) {{ throw \"TestAuto version '$version' does not exist in the repository; create it (data.tProfiseeVersion) before running {setup_name}.\" }}",
+        "\"TestAuto version $version exists.\""]),
+        f"What: Check the TestAuto version of this run ({family}/environment:ProfiseeVersionCode, or the lane's) exists in the "
+        "TestAuto repository. Why: every run profile and workflow step is recorded under it. Success: the version exists. If it "
+        f"fails: create the version in the repository (data.tProfiseeVersion), then rerun {setup_name}.")
+
+
 def title(name):
     return name.title().replace('-', ' ')
