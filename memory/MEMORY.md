@@ -34,7 +34,8 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [Seq events also in SQL: logging.tSystemLog (Profisee DB + PROD speedmerchants)](reference_systemlog_table.md)
 
 ## Active work (newest first; full status in each file)
-- **[TestAutoIsolation 11/13: isolation harness built, uncommitted; Proxmox build/pin by SSH key; home box = mechanics only; 7 judged + 5 reported figures](project_testautoisolation_2026-11-13.md)**
+- **[Matching 100M continue 11/14: S1 hand-run on Profisee100M, new pack matching-large from SMVMTR3 for S1 end + S2-3c; plan stage](project_matching_large_100m_continue_2026-11-14.md)**
+- **[TestAutoIsolation 11/13-14: isolation harness, uncommitted; agent 1.2.0; far end/tuning/fixed addr/prepared image/outside workload built 11/14, not host-tried; home box = mechanics only](project_testautoisolation_2026-11-13.md)**
 - **[CORPSQL03 to Proxmox 11/09: no new hardware, pilot Docker-in-VM vs LXC for DB, 3 design notes, gates before wipe](project_corpsql03_proxmox_conversion_2026-11-09.md)**
 - [QA Connect box 26R3QA 11/09: pack zip verified vs repo; doc gaps listed](project_qa_connect_box_26r3qa_2026-11-09.md)
 - **[Multi-version lanes 11/09: per-lane version/build/name/prep decided; 26R4 Configuration support built + laptop-proven 11/11, uncommitted, lab deploy open](project_multi_version_lanes_2026-11-09.md)**
