@@ -1,6 +1,6 @@
 ---
 name: crewchief-matching-pack
-description: The CrewChief Matching workload pack (CrewChief/packs/matching) that measures Profisee Matching Scenarios 1, 2, 3a, 3b and 3c through small tagged TestAuto workflows, with setup, restores and backups in CrewChief. Covers the per-scenario workloads and backup chain, the generator scripts that write the workloads and the TestAuto workflow specs, the continuous-matching setup, the post-run checks, and the traps already hit. Use when running, rerunning, tweaking or extending a Matching scenario workload, changing a TestAuto Matching step config, adding a size, or debugging a Matching run that measured nothing.
+description: The CrewChief Matching workload pack (CrewChief/packs/matching) that measures Profisee Matching Scenarios 1, 2, 3a, 3b and 3c through small tagged TestAuto workflows, with setup, restores and backups in CrewChief. Covers the per-scenario workloads and backup chain, the generator scripts that write the workloads and the TestAuto workflow specs, the continuous-matching setup, the post-run checks, and the traps already hit. Use when running, rerunning, tweaking or extending a Matching scenario workload, changing a TestAuto Matching step config, adding a size, or debugging a Matching run that measured nothing. Also covers the Matching Large pack (CrewChief/packs/matching-large: finish a hand-run large Scenario 1, then 2-3c with striped checkpoints) and the shared matching_parts.py.
 ---
 
 # CrewChief Matching pack
@@ -196,6 +196,35 @@ Then: `pwsh packs\tools\Test-Pack.ps1 -PackRoot packs\matching -Family matching`
 `New-PackBackup.ps1 -PackRoot matching -Family matching -Destination <dir>`; `crewchief restore <zip> --folder
 workloads/matching --folder reference-kv/matching --replace`; `crewchief validate workload <name> --strict`;
 rerun `matching-1k-testauto-create` if a TestAuto spec changed (upsert updates in place by tag).
+
+## Shared parts and the Matching Large pack (11/14)
+
+- `scripts/matching_parts.py`: TestAuto step builders, patches, Scenario 1 / 2-3c details, size prelude, run-profile
+  step, checks, continuous-matching and monitor-quiet steps, moved out of `gen_matching.py` with defaults equal to
+  the Matching pack. `gen_matching.py` imports them. **Rule:** after any change here, regenerate the Matching pack into
+  a scratch copy and diff it against the repo: it must be byte-identical (or the change is intended for Matching too).
+  `test_gen_matching.py` (25 tests) must still pass.
+- `scripts/gen_matching_large.py <packRoot>` writes `CrewChief/packs/matching-large` (family `matching-large`):
+  `start/matching-large-preflight`, `-setup`; `tests/matching-large-continue`; `internal/matching-large-scenario1-finish`,
+  `-scenario2`, `-3a`, `-3b`, `-3c`; 7 reference sets; `rounds/100m-continue-round.txt`. `catalog-meta.json` is hand-kept.
+  Tests: `test_gen_matching_large.py` (11).
+- Purpose: a large Scenario 1 run by hand (100M on CORPVMHA1 / CORPSQL03 `Profisee100M`, 11/03-11/07). Finish writes the
+  End marker at the last Matching activity's CompletedTime + 1 s (once), links end counts and timing to `{{STEP:1}}`,
+  then backs up `after-1`. Scenarios 2-3c work on `matching-large/values:<Size>.Slice` (1M), `Timing(1440, "00:00:00")`.
+- Checkpoints are striped SQL steps (`backup_sql` / `restore_sql`): COPY_ONLY, COMPRESSION, CHECKSUM, VERIFYONLY,
+  one stripe per `databases:BackupFolders` folder; a restore checks every stripe with `xp_fileexist` before OFFLINE.
+- Each later scenario has `Check Scenario <x> Ran Here` (both markers in this DB): catches SMVMTR3's TestAuto still
+  pointing at SMVM3. TestAuto settings are repointed by hand (help page `77_PackMatchingLarge.md`).
+- Source tables: `C:\Deploy\SQLScripts\ModelSource\Build-MatchingScenarioTables.ps1` gained `-SourceDatabase` and
+  `-Slice` (multiple of 100; 0 = N/10 as before).
+
+```powershell
+python <skill>\scripts\gen_matching_large.py C:\devops\repos\speed-merchants\CrewChief\packs\matching-large
+```
+
+```powershell
+pwsh C:\devops\repos\speed-merchants\CrewChief\packs\tools\New-PackCatalog.ps1 -PackRoot C:\devops\repos\speed-merchants\CrewChief\packs\matching-large -Family matching-large
+```
 
 ## Traps already hit (each cost a run)
 

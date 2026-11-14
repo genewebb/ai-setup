@@ -129,6 +129,8 @@ class GeneratedPack(unittest.TestCase):
         for d in spec['Details']:
             c = json.loads(d['ScenarioConfiguration'])['ScenarioRuntime']['CustomParms']
             self.assertEqual('{{STEP:1}}', c['UnifiedMatchingScenarioWorkloadExecution'], d['Name'])
+            self.assertEqual('{{ProfiseeVersionCode}}-RetailClient-Scenario 1-100000000-0',
+                             c['UnifiedMatchingApiExecutionRunProfile'], d['Name'])
         timing = json.loads(spec['Details'][1]['ScenarioConfiguration'])['ScenarioRuntime']['CustomParms']
         self.assertEqual(('Start of Scenario 1 for Retail Client', 'End of Scenario 1 for Retail Client'),
                          (timing['StartMarkerText'], timing['EndMarkerText']))
