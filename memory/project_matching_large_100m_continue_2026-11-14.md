@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 30030f2b-29ba-4de1-a057-b1b5de691d97
-  modified: 2026-11-14T16:42:49.509Z
+  modified: 2026-11-16T13:14:59.471Z
 ---
 
 State read 2026-11-14 (CORPSQL03 Profisee100M, read-only): monitor.tActivity ID 6 Start of Scenario 1 (hand-inserted) 2026-11-03 20:29:24 UTC; Txn 2018 Indexing to 11-06 20:03, Clustering & Survivorship to 11-07 09:12:40 UTC; extra Indexing Txn 12087 (08:37-10:12) and 31519 (10:12-14:18:10 UTC), trigger unknown. No End marker, no TestAuto execution. data.tRetailClient 120,004,763 rows. DB 5 data files D/F/G/H/I (300 GB each, 754 GB used), log K 494 GB; FULL recovery with 15-min log backups; backup compression default on; default backup D:\DBBackup. Free: D 626 GB, F/G/H/I 3.2 TB each.
@@ -18,5 +18,7 @@ Round 3 decisions: first restore guarded by CHECKSUM + RESTORE VERIFYONLY; strip
 BUILT 11/14 (Gene "go"; uncommitted, not run on lab): speed-merchants `CrewChief/packs/matching-large` (8 workloads, lint PASS) + help `77_PackMatchingLarge.md` + rows in 60_PacksOverview / packs/README; ai-setup `matching_parts.py` (shared, matching pack regenerates byte-identical), `gen_matching_large.py`, `test_gen_matching_large.py` (11 OK), SKILL.md section; `C:\Deploy\SQLScripts\ModelSource\Build-MatchingScenarioTables.ps1` gained -SourceDatabase/-Slice (not in git). 3c collection stays inside 3c workflow ({{STEP:4}}), 3b/3c TimeLimit 00:00:00, exact 1M. Next for Gene: build ModelSourceMatching on CORPSQL03, restore pack on SMVMTR3, repoint TestAuto, preflight/setup/continue.
 
 11/14 read: CORPVMHA1 Monitor appsettings DataRetentionDays = 120 (not the 360 of 10/12). TestAuto markers go through ConnectionStrings:MonitorDB (fallback ProfiseeAppSettings:MonitorDbConnection), so "Ran Here" proves MonitorDB only. Gene committed the ai-setup scripts in a20acde (branch bug/ai-setup-updates/gene).
+
+**PAUSED 2026-11-16 (Gene): all 100M matching testing paused for now; CORPSQL03 is being wiped for Proxmox. Do not resume or propose S2 runs until Gene restarts it.**
 
 Facts: DatabaseOperationsStep backs up to ONE file only. Tag box = CrewChief box $env:COMPUTERNAME (SMVMTR3). 26R3 100M run profiles exist in PROD (Scenario 1/2/3a/3b/3c-100000000-0). Related: [[project_test_lab_topology_cadence]], [[reference_profisee_monitor_activity_30day_purge]], [[reference_partition_job_blocks_portal_during_matching]].

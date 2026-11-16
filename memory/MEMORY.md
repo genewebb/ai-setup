@@ -28,12 +28,14 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - **[ai-setup rollout = prof setup reload / prof setup push / prof streams update](feedback_ai_setup_rollout_via_prof.md)** · [ai-setup git flow: work/<change> branch, both clones clean first](project_ai_setup_branch_workflow_2026-10-18.md)
 
 ## Environment
+- **[Office LAN: short names (CORPNAS01/SMVMTR1) spoofed by nodezero host, use FQDNs 11/16](reference_office_lan_short_name_spoofed_nodezero.md)**
 - **[Laptop shell = CORP\agenewe, not genewe](reference_corp_dual_accounts.md)** · [runs Claude elevated by choice](feedback_runs_elevated_by_choice.md) · [Key repos](project_repos.md) · [workspace start](project_workspace_start_convention.md)
 - [vNext = SPEEDY, light speed humor](feedback_call_it_speedy_with_speed_humor.md) · [CDP = Common Data Platform, not Chrome DevTools](reference_cdp_is_common_data_platform.md)
 - [Obsidian: Sync on both vaults, obsidian-git unused; stay on Obsidian vs Trilium](reference_obsidian_setup.md)
 - [Seq events also in SQL: logging.tSystemLog (Profisee DB + PROD speedmerchants)](reference_systemlog_table.md)
 
 ## Active work (newest first; full status in each file)
+- **[TestAuto EmailStep (Teams channel mail) 11/16: built+tested, uncommitted; PROD UtilityType row + secrets + live send pending](project_testauto_email_step_2026-11-16.md)**
 - **[Matching 100M continue 11/14: S1 hand-run on Profisee100M, new pack matching-large from SMVMTR3 for S1 end + S2-3c; BUILT uncommitted, lab run pending](project_matching_large_100m_continue_2026-11-14.md)**
 - **[TestAutoIsolation 11/13-14: isolation harness, uncommitted; agent 1.3.0 (duty-cycle strengths); far end/fixed addr/prepared image home-box tried 11/14; top-5 enhancements (host counters, load strengths, leak table, host fix) built; home box = mechanics only](project_testautoisolation_2026-11-13.md)**
 - **[CORPSQL03 to Proxmox 11/09: no new hardware, pilot Docker-in-VM vs LXC for DB, 3 design notes, gates before wipe](project_corpsql03_proxmox_conversion_2026-11-09.md)**

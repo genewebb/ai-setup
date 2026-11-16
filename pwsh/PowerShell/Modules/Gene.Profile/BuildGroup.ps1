@@ -15,8 +15,9 @@ $script:ProfBuildDetails = @{
         '-Configuration Release). "all" builds TestAuto, CrewChief, DataGen, Mutate and TestAutoManager in turn.'
     )
     run     = @(
-        'Same as typing the dp* command alone (dpspeed, dpcrewchief, dpdatagen, dpmutate, dpmgr, dpv2): for most products',
-        'build + publish + start the app here; for speedy (dpv2) rebuild the local containers.',
+        'Same as typing the dp* command alone (dpspeed, dpcrewchief, dpdatagen, dpmutate, dpmgr, dpiso, dpv2): for most products',
+        'build + publish + start the app here (isolation: publish\web, http://localhost:5080); for speedy (dpv2) rebuild',
+        'the local containers.',
         'Extra dp* switches may follow (prof build run testauto -CleanBuild).'
     )
     publish = @(
@@ -31,7 +32,8 @@ $script:ProfBuildDetails = @{
     )
     more    = @(
         'For the switches that are not build/run/publish: prof build more speedy -Test, prof build more crewchief -Cli,',
-        'prof build more testauto -UpdateClientId -Run. With no switches it shows the dp* command''s own help.'
+        'prof build more testauto -UpdateClientId -Run, prof build more isolation -Agent (agent Docker image).',
+        'With no switches it shows the dp* command''s own help.'
     )
 }
 $script:ProfBuildUsage = @{
@@ -50,6 +52,7 @@ $script:ProfBuildProducts = [ordered]@{
     datagen   = [pscustomobject]@{ Name = 'DataGen'; Command = 'dpdatagen'; Repo = 'SpeedMerchantsRepo'; Build = @('TestData.Generation\TestData.Generation.sln'); VersionFile = 'TestData.Generation\Directory.Build.props'; Run = $true; Publish = $true }
     mutate    = [pscustomobject]@{ Name = 'Mutate (DataGen + Mutation)'; Command = 'dpmutate'; Repo = 'SpeedMerchantsRepo'; Build = @('TestData.Mutation\TestData.Mutation.sln'); VersionFile = 'TestData.Mutation\Directory.Build.props'; Run = $true; Publish = $true }
     manager   = [pscustomobject]@{ Name = 'TestAutoManager'; Command = 'dpmgr'; Repo = 'SpeedMerchantsRepo'; Build = @('TestAutoManager\TestAutoManager.sln'); VersionFile = 'TestAutoManager\Directory.Build.props'; Run = $true; Publish = $true }
+    isolation = [pscustomobject]@{ Name = 'TestAutoIsolation'; Command = 'dpiso'; Repo = 'SpeedMerchantsRepo'; Build = @('TestAutoIsolation\TestAutoIsolation.sln'); VersionFile = 'TestAutoIsolation\Directory.Build.props'; Run = $true; Publish = $false }
     speedy    = [pscustomobject]@{ Name = 'Speedy'; Command = 'dpv2'; Repo = 'SpeedyRepo'; Build = @('Speedmerchants.sln'); VersionFile = 'Directory.Build.props'; Run = $true; Publish = $true }
     all       = [pscustomobject]@{ Name = 'All five (TestAuto, CrewChief, DataGen, Mutate, TestAutoManager)'; Command = 'dpall'; Repo = 'SpeedMerchantsRepo'; Build = @('speed-merchants.sln', 'CrewChief\CrewChief.sln', 'TestData.Generation\TestData.Generation.sln', 'TestData.Mutation\TestData.Mutation.sln', 'TestAutoManager\TestAutoManager.sln'); VersionFile = ''; Run = $false; Publish = $true }
 }
@@ -64,7 +67,7 @@ function Get-GeneBuildProducts {
 }
 
 $script:ProfGroups['build'] = [pscustomobject]@{
-    Description = 'Build, run or publish a product (TestAuto, CrewChief, DataGen, Mutate, Speedy, all)'
+    Description = 'Build, run or publish a product (TestAuto, CrewChief, DataGen, Mutate, TestAutoManager, TestAutoIsolation, Speedy, all)'
     Verbs       = $script:ProfBuildVerbs
     Details     = $script:ProfBuildDetails
     Usage       = $script:ProfBuildUsage

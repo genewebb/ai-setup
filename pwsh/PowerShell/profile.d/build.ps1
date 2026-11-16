@@ -1522,6 +1522,95 @@ function dpmgr {
     dotnet run --project $web -c $Configuration --no-build
 }
 
+function dpiso {
+    <#
+        TestAutoIsolation (the noisy-neighbour isolation harness, speed-merchants\TestAutoIsolation)
+        build/test/run helper. No install package exists for it: the web app runs from publish\web, as its
+        README says. -Agent builds the agent Docker image through the repo's build-agent-image.ps1.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true, PositionalBinding = $false)]
+    param(
+        [ValidateSet('Debug','Release')]
+        [string]$Configuration,
+        [switch]$Run,
+        [switch]$Test,
+        [switch]$TestDocker,
+        [switch]$Agent,
+        [string]$DockerHost,
+        [Alias('h','help')]
+        [switch]$ShowHelp,
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$ExtraArgs = @()
+    )
+
+    if ($ShowHelp) {
+        Write-Host ""
+        Write-Host "dpiso  - TestAutoIsolation build/test/run helper" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "Syntax:" -ForegroundColor Yellow
+        Write-Host "  dpiso [-Configuration Debug|Release] [-Run] [-Test] [-TestDocker] [-Agent [-DockerHost <ssh://user@host>]] [-ShowHelp] [-WhatIf]"
+        Write-Host ""
+        Write-Host "Options:" -ForegroundColor Yellow
+        Write-Host "  (none)          Publish TestAutoIsolation.Web to publish\web, then run it there in this console"
+        Write-Host "                  (http://localhost:5080; data in %LOCALAPPDATA%\TestAutoIsolation)."
+        Write-Host "  -Run            Run publish\web without building."
+        Write-Host "  -Test           Build and run the tests that need no Docker (TestCategory!=Docker), then exit."
+        Write-Host "  -TestDocker     Run the Docker tests (TestCategory=Docker); needs the local three-instance stack up."
+        Write-Host "  -Agent          Build the agent image (build-agent-image.ps1, tag from that script) on the local Docker."
+        Write-Host "  -DockerHost     With -Agent: build onto another Docker host instead (e.g. ssh://tester@iso1)."
+        Write-Host ""
+        Write-Host "Examples:" -ForegroundColor Yellow
+        Write-Host "  dpiso"
+        Write-Host "  dpiso -Test"
+        Write-Host "  dpiso -Agent"
+        Write-Host ""
+        return
+    }
+
+    if ($ExtraArgs.Count -gt 0) {
+        throw ("dpiso: unrecognized argument(s): $($ExtraArgs -join ' ') - nothing was built. Run 'dpiso -ShowHelp'.")
+    }
+    if (@($Run, $Test, $TestDocker, $Agent).Where({ $_ }).Count -gt 1) { throw 'dpiso: pick one of -Run, -Test, -TestDocker, -Agent.' }
+    if ($DockerHost -and -not $Agent) { throw 'dpiso: -DockerHost only applies with -Agent.' }
+
+    $root = Join-Path $global:GeneMachine.SpeedMerchantsRepo 'TestAutoIsolation'
+    if (-not (Test-Path -LiteralPath $root)) { throw "TestAutoIsolation not found: $root" }
+    if (-not $Configuration) { $Configuration = 'Release' }
+
+    if ($Agent) {
+        $script = Join-Path $root 'build-agent-image.ps1'
+        if (-not (Test-Path -LiteralPath $script)) { throw "Agent image script not found: $script" }
+        $agentArgs = @{}
+        if ($DockerHost) { $agentArgs.DockerHost = $DockerHost }
+        if ($WhatIfPreference) { Write-Host "[WhatIf] Would run: $script$(if ($DockerHost) { " -DockerHost $DockerHost" })" -ForegroundColor Yellow; return }
+        & $script @agentArgs
+        return
+    }
+
+    $tests = Join-Path $root 'TestAutoIsolation.Tests'
+    if ($Test -or $TestDocker) {
+        $filter = if ($TestDocker) { 'TestCategory=Docker' } else { 'TestCategory!=Docker' }
+        if ($WhatIfPreference) { Write-Host "[WhatIf] Would run: dotnet test $tests -c $Configuration --filter `"$filter`"" -ForegroundColor Yellow; return }
+        dotnet test $tests -c $Configuration --filter $filter -nologo
+        if ($LASTEXITCODE -ne 0) { throw "dpiso: tests failed ($LASTEXITCODE)." }
+        return
+    }
+
+    $web = Join-Path $root 'TestAutoIsolation.Web'
+    $out = Join-Path $root 'publish\web'
+    if (-not $Run) {
+        if ($WhatIfPreference) { Write-Host "[WhatIf] Would run: dotnet publish $web -c $Configuration -o $out, then run TestAutoIsolation.Web.dll there" -ForegroundColor Yellow; return }
+        dotnet publish $web -c $Configuration -o $out -nologo
+        if ($LASTEXITCODE -ne 0) { throw "dpiso: publish failed ($LASTEXITCODE)." }
+    }
+    $dll = Join-Path $out 'TestAutoIsolation.Web.dll'
+    if ($WhatIfPreference) { Write-Host "[WhatIf] Would run: dotnet $dll (in $out)" -ForegroundColor Yellow; return }
+    if (-not (Test-Path -LiteralPath $dll)) { throw "dpiso: $dll not found. Run dpiso without -Run once to publish it." }
+    Push-Location -LiteralPath $out
+    try { dotnet $dll }
+    finally { Pop-Location }
+}
+
 function dpall {
     <#
     .SYNOPSIS
