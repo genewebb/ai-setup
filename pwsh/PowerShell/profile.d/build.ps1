@@ -164,7 +164,7 @@ function Publish-SpeedMerchantsPackage {
         deletes the version it was meant to replace.
     #>
     param(
-        [Parameter(Mandatory)][ValidateSet('CrewChief', 'TestAuto', 'TestDataGeneration', 'TestDataGenerationAndMutation', 'TestAutoManager')][string[]]$Product,
+        [Parameter(Mandatory)][ValidateSet('CrewChief', 'TestAuto', 'TestDataGeneration', 'TestDataGenerationAndMutation', 'TestAutoManager', 'TestAutoIsolation')][string[]]$Product,
         [Parameter(Mandatory)][datetime]$BuiltAfter
     )
 
@@ -1525,8 +1525,10 @@ function dpmgr {
 function dpiso {
     <#
         TestAutoIsolation (the noisy-neighbour isolation harness, speed-merchants\TestAutoIsolation)
-        build/test/run helper. No install package exists for it: the web app runs from publish\web, as its
-        README says. -Agent builds the agent Docker image through the repo's build-agent-image.ps1.
+        build/test/run/package helper, same shape as dpmgr. -Package runs the repo script
+        (TestAutoIsolation\installer\New-TestAutoIsolationInstaller.ps1: Windows service install, agent image inside
+        as a file) plus the shared share-copy tail step. -Agent builds the agent Docker image through the repo's
+        build-agent-image.ps1.
     #>
     [CmdletBinding(SupportsShouldProcess = $true, PositionalBinding = $false)]
     param(
@@ -1537,6 +1539,10 @@ function dpiso {
         [switch]$TestDocker,
         [switch]$Agent,
         [string]$DockerHost,
+        [switch]$Package,
+        [switch]$Bump,
+        [switch]$BumpMinor,
+        [switch]$BumpMajor,
         [Alias('h','help')]
         [switch]$ShowHelp,
         [Parameter(ValueFromRemainingArguments = $true)]
@@ -1545,10 +1551,10 @@ function dpiso {
 
     if ($ShowHelp) {
         Write-Host ""
-        Write-Host "dpiso  - TestAutoIsolation build/test/run helper" -ForegroundColor Cyan
+        Write-Host "dpiso  - TestAutoIsolation build/test/run/package helper" -ForegroundColor Cyan
         Write-Host ""
         Write-Host "Syntax:" -ForegroundColor Yellow
-        Write-Host "  dpiso [-Configuration Debug|Release] [-Run] [-Test] [-TestDocker] [-Agent [-DockerHost <ssh://user@host>]] [-ShowHelp] [-WhatIf]"
+        Write-Host "  dpiso [-Configuration Debug|Release] [-Run] [-Test] [-TestDocker] [-Agent [-DockerHost <ssh://user@host>]] [-Package [-Bump|-BumpMinor|-BumpMajor]] [-ShowHelp] [-WhatIf]"
         Write-Host ""
         Write-Host "Options:" -ForegroundColor Yellow
         Write-Host "  (none)          Publish TestAutoIsolation.Web to publish\web, then run it there in this console"
@@ -1558,11 +1564,18 @@ function dpiso {
         Write-Host "  -TestDocker     Run the Docker tests (TestCategory=Docker); needs the local three-instance stack up."
         Write-Host "  -Agent          Build the agent image (build-agent-image.ps1, tag from that script) on the local Docker."
         Write-Host "  -DockerHost     With -Agent: build onto another Docker host instead (e.g. ssh://tester@iso1)."
+        Write-Host "  -Package        Build the install package (Windows service, ports 5080/5081, agent image inside)"
+        Write-Host "                  -> $global:GeneBitsDir\TestAutoIsolation-Setup-<version>.exe, copy it to the team share"
+        Write-Host "                  and the shared bits, prune older ones there. Needs Docker and Inno Setup here."
+        Write-Host "  -Bump           With -Package: patch version in TestAutoIsolation\Directory.Build.props."
+        Write-Host "  -BumpMinor      With -Package: minor version."
+        Write-Host "  -BumpMajor      With -Package: major version."
         Write-Host ""
         Write-Host "Examples:" -ForegroundColor Yellow
         Write-Host "  dpiso"
         Write-Host "  dpiso -Test"
         Write-Host "  dpiso -Agent"
+        Write-Host "  dpiso -Package -Bump"
         Write-Host ""
         return
     }
@@ -1570,8 +1583,11 @@ function dpiso {
     if ($ExtraArgs.Count -gt 0) {
         throw ("dpiso: unrecognized argument(s): $($ExtraArgs -join ' ') - nothing was built. Run 'dpiso -ShowHelp'.")
     }
-    if (@($Run, $Test, $TestDocker, $Agent).Where({ $_ }).Count -gt 1) { throw 'dpiso: pick one of -Run, -Test, -TestDocker, -Agent.' }
+    if (@($Run, $Test, $TestDocker, $Agent, $Package).Where({ $_ }).Count -gt 1) { throw 'dpiso: pick one of -Run, -Test, -TestDocker, -Agent, -Package.' }
     if ($DockerHost -and -not $Agent) { throw 'dpiso: -DockerHost only applies with -Agent.' }
+    $bumpCount = @($Bump, $BumpMinor, $BumpMajor).Where({ $_ }).Count
+    if ($bumpCount -gt 0 -and -not $Package) { throw 'dpiso: -Bump/-BumpMinor/-BumpMajor only apply with -Package - nothing was built or bumped.' }
+    if ($bumpCount -gt 1) { throw 'dpiso: use at most one of -Bump (patch), -BumpMinor (minor), -BumpMajor (major).' }
 
     $root = Join-Path $global:GeneMachine.SpeedMerchantsRepo 'TestAutoIsolation'
     if (-not (Test-Path -LiteralPath $root)) { throw "TestAutoIsolation not found: $root" }
@@ -1584,6 +1600,25 @@ function dpiso {
         if ($DockerHost) { $agentArgs.DockerHost = $DockerHost }
         if ($WhatIfPreference) { Write-Host "[WhatIf] Would run: $script$(if ($DockerHost) { " -DockerHost $DockerHost" })" -ForegroundColor Yellow; return }
         & $script @agentArgs
+        return
+    }
+
+    if ($Package) {
+        $script = Join-Path $root 'installer\New-TestAutoIsolationInstaller.ps1'
+        if (-not (Test-Path -LiteralPath $script)) { throw "Packaging script not found: $script" }
+        $bumpText = if ($Bump) { ' -Bump' } elseif ($BumpMinor) { ' -BumpMinor' } elseif ($BumpMajor) { ' -BumpMajor' } else { '' }
+        if ($WhatIfPreference) {
+            Write-Host "[WhatIf] Would run: $script -Configuration $Configuration -OutputDir $global:GeneBitsDir$bumpText" -ForegroundColor Yellow
+            Write-Host "[WhatIf] Would copy TestAutoIsolation-Setup-<version>.exe to $($global:GeneMachine.PackageShare) and remove older versions there." -ForegroundColor Yellow
+            return
+        }
+        $started = Get-Date
+        $packArgs = @{ OutputDir = $global:GeneBitsDir; Configuration = $Configuration }
+        if ($Bump) { $packArgs.Bump = $true }
+        if ($BumpMinor) { $packArgs.BumpMinor = $true }
+        if ($BumpMajor) { $packArgs.BumpMajor = $true }
+        & $script @packArgs
+        Publish-SpeedMerchantsPackage -Product 'TestAutoIsolation' -BuiltAfter $started
         return
     }
 
