@@ -69,6 +69,20 @@ Verify with `Show-RoyalDocument.ps1`; `cred=MISSING <id>` means a broken credent
 with the document open, tell the owner to reload it (File > Open) before saving anything there, or the next save
 in Royal TS discards the change.
 
+## Duplicate object IDs across documents
+
+**Never make a document by copying another .rtsz.** The copy keeps every object ID, and Royal TS then shows
+"Duplicate Objects ... already exists in one of the documents" on load. Build new documents with
+`New-RoyalObject` (fresh IDs) or the scripts above.
+
+Check and repair (report only without `-Fix`; prints IDs, types and names, never credential fields):
+```powershell
+& "{ClaudeHome}\skills\royalts\scripts\Repair-RoyalDuplicateIds.ps1" -Directory '<docs dir>'
+& "{ClaudeHome}\skills\royalts\scripts\Repair-RoyalDuplicateIds.ps1" -Directory '<docs dir>' -Fix -KeepDocument '<original doc name>'
+```
+`-Fix` refuses while RoyalTS.exe runs. It replaces each clashing ID as text across the whole copy, so its internal
+links follow and encrypted fields stay byte-identical; backup `.bak-dupids-<stamp>` beside each changed file.
+
 ## RDP to a Linux desktop through SSH
 
 The host firewall allows only SSH, so RDP must ride an SSH tunnel. In Royal TS that is a Secure Gateway:
