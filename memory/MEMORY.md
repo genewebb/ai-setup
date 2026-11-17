@@ -29,6 +29,7 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 
 ## Environment
 - **[Office LAN: short names (CORPNAS01/SMVMTR1) spoofed by nodezero host, use FQDNs 11/16](reference_office_lan_short_name_spoofed_nodezero.md)**
+- [Home Proxmox 192.168.8.210 unreachable from office laptop; don't try](reference_home_proxmox_unreachable_from_office.md)
 - **[Laptop shell = CORP\agenewe, not genewe](reference_corp_dual_accounts.md)** · [runs Claude elevated by choice](feedback_runs_elevated_by_choice.md) · [Key repos](project_repos.md) · [workspace start](project_workspace_start_convention.md)
 - [vNext = SPEEDY, light speed humor](feedback_call_it_speedy_with_speed_humor.md) · [CDP = Common Data Platform, not Chrome DevTools](reference_cdp_is_common_data_platform.md)
 - [Obsidian: Sync on both vaults, obsidian-git unused; stay on Obsidian vs Trilium](reference_obsidian_setup.md)
