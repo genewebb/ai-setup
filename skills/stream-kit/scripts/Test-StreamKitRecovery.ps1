@@ -162,6 +162,21 @@ try {
     Case 'suspect logs an owner question' ((Get-Content -Raw (Join-Path $r2 '.streams\owner\questions.md')) -match 'G1\.B \| grader red on main only \(C2\)')
     Case 'suspect names the red clause in history' ($tb.history[-1].note -match '^grader-suspect: C2 red on main')
 
+    # ---- 3b. a check-only row red on main only goes to a builder (ticketed), not an author: an author may not edit a check
+    $r2b = New-Repo 'r2b' ([ordered]@{ 'G1.B' = $wtOnly }); $repos += $r2b
+    $d2b = J $r2b; $row2b = $d2b.tasks | Where-Object { $_.id -eq 'G1.B' }
+    New-Item -ItemType Directory (Join-Path $r2b '.streams\checks') -Force | Out-Null
+    Move-Item (Join-Path $r2b '.streams\graders\G1.B.ps1') (Join-Path $r2b '.streams\checks\G1.B.ps1')
+    $row2b.artifacts.check = '.streams\checks\G1.B.ps1'; $row2b.artifacts.grader = $null
+    $d2b | ConvertTo-Json -Depth 50 | Set-Content (Join-Path $r2b '.streams\tasks.json')
+    [void](Build $r2b 'G1.B' 'B done' 'build-1')
+    $o2b = & "$S\Integrate-Patch.ps1" -Repo $r2b -Session integ-1 -Task G1.B
+    $tb2b = T $r2b 'G1.B'
+    Case 'check-only red on main is CHECK-SUSPECT' ("$o2b" -eq 'CHECK-SUSPECT G1.B') "$o2b"
+    Case 'check-suspect goes to ticketed for a builder' ($tb2b.state -eq 'ticketed') $tb2b.state
+    Case 'check-suspect keeps the patch' ($tb2b.artifacts.patch -eq '.streams\patches\G1.B.patch')
+    Case 'check-suspect names the check in history' ($tb2b.history[-1].note -match '^check-suspect: C2 red on main.*\.streams\\checks\\G1\.B\.ps1') $tb2b.history[-1].note
+
     # ---- 4. code defect: red in the worktree too -> REVERSED to ticketed, patch kept
     $wtC = Build $r2 'G1.C' 'wrong' 'build-2'
     $o = & "$S\Integrate-Patch.ps1" -Repo $r2 -Session integ-1 -Task G1.C
@@ -2227,6 +2242,19 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     [void](& "$S\Claim-Task.ps1" -Repo $r55 -Role build -Session build-55 -Task G1.B)
     $o55e = @(& "$S\Revise-Task.ps1" -Repo $r55 -Session plan-55 -Task G1.B -Release block -Note 'park it'); $x55e = $LASTEXITCODE
     Case 'park: a row a live session holds is refused' (($x55e -eq 2) -and (($o55e -join ' ') -match 'BLOCK-CLAIMED G1\.B') -and ((T $r55 'G1.B').state -eq 'building')) "exit $x55e : $($o55e -join ' | ')"
+    # withdraw: a built row whose patch never landed is parked in one locked write (kit item IN-20261116135653-12bc).
+    # Through built>ticketed and then ticketed>blocked a builder reclaimed G26.T564 between the two calls.
+    $d55w = J $r55; foreach ($t in $d55w.tasks) { if ($t.id -eq 'G1.B') { $t.state = 'built'; $t.claim = $null } }
+    Set-Content -LiteralPath (Join-Path $r55 '.streams\tasks.json') -Encoding utf8 -Value ($d55w | ConvertTo-Json -Depth 50)
+    $o55f = @(& "$S\Revise-Task.ps1" -Repo $r55 -Session plan-55 -Task G1.B -Release block -Note 'withdrawn: superseded'); $x55f = $LASTEXITCODE
+    $t55f = T $r55 'G1.B'
+    Case 'withdraw: block moves an unclaimed built row straight to blocked' (($x55f -eq 0) -and ($t55f.state -eq 'blocked') -and (($o55f -join ' ') -match 'REVISED G1\.B -> blocked \(withdrawn while built') -and ((($t55f.history | Select-Object -Last 1)['note']) -match 'withdrawn while built')) "exit $x55f : $($o55f -join ' | ') state $($t55f.state)"
+    $o55g = @(& "$S\Claim-Task.ps1" -Repo $r55 -Role build -Session build-55g -Task G1.B 2>&1); $x55g = $LASTEXITCODE
+    Case 'withdraw: a builder cannot claim the withdrawn row' (($x55g -ne 0) -and ((T $r55 'G1.B').state -eq 'blocked')) "exit $x55g : $($o55g -join ' | ')"
+    $d55h = J $r55; foreach ($t in $d55h.tasks) { if ($t.id -eq 'G1.B') { $t.state = 'built'; $t.claim = $null } }
+    Set-Content -LiteralPath (Join-Path $r55 '.streams\tasks.json') -Encoding utf8 -Value ($d55h | ConvertTo-Json -Depth 50)
+    $o55h = @(& "$S\Update-Task.ps1" -Repo $r55 -Task G1.B -Role plan -Session plan-55 -To blocked -Note 'skip the guards' 2>&1); $x55h = $LASTEXITCODE
+    Case 'withdraw: Update-Task -Role plan cannot make the built>blocked move' (($x55h -ne 0) -and ((T $r55 'G1.B').state -eq 'built')) "exit $x55h : $($o55h -join ' | ')"
 
     # ---- 55r. the planner retires a superseded blocked row (kit item IN-20261009150944-5bbd). No role could move a row
     # out of blocked except back into work, so G5.T101, G5.T134, G5.T143 and G2.T114 sat blocked for good and inflated
@@ -3760,7 +3788,32 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $fy2 = @(& "$S\Activate-Group.ps1" -Repo $ar -Session status-a -Group A1 -FreshnessOnly)
     $ay = T $ar 'A1.Y'
     Case '95 freshness tick: an edited line in an allocator file still stales the row' ($ay.state -eq 'planned' -and (($ay.history | Select-Object -Last 1).note -match 'STALE: ids\.yaml')) (($fy2 -join ' | ') + ' :: ' + (($ay.history | Select-Object -Last 1) | ConvertTo-Json -Compress))
-
+    # CLAIM RACE (kit item IN-20261116223306-d8b1): a row claimed between the scan and the write is dropped (RACE-SKIP)
+    # and the other stale rows still go to planned, instead of the whole batch failing REVISE-FAILED.
+    Set-Content (Join-Path $ar 'r1.txt') 'r1'; Set-Content (Join-Path $ar 'r2.txt') 'r2'
+    $env:GIT_COMMITTER_DATE = '2026-12-05T00:00:00Z'; $env:GIT_AUTHOR_DATE = '2026-12-05T00:00:00Z'
+    git -C $ar add -A; git -C $ar commit -q -m 'r base'
+    $rdoc = J $ar
+    foreach ($rp in @(@('A1.R1', 'r1.txt'), @('A1.R2', 'r2.txt'))) { $rr = & $A $rp[0] 'A1' 'ticketed' $rp[1] @(); $rr.history = @(@{ at = '2026-12-06T00:00:00Z'; by = 'author-1'; to = 'ticketed'; note = 'ticket' }); $rdoc.tasks += $rr }
+    $rdoc | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $ar '.streams\tasks.json') -Encoding utf8
+    Set-Content (Join-Path $ar 'r1.txt') 'r1 moved'; Set-Content (Join-Path $ar 'r2.txt') 'r2 moved'
+    $env:GIT_COMMITTER_DATE = '2026-12-07T00:00:00Z'; $env:GIT_AUTHOR_DATE = '2026-12-07T00:00:00Z'
+    git -C $ar add -A; git -C $ar commit -q -m 'r moves'
+    [Environment]::SetEnvironmentVariable('GIT_COMMITTER_DATE', $null); [Environment]::SetEnvironmentVariable('GIT_AUTHOR_DATE', $null)
+    $raceHook = Join-Path $Scratch 'race-hook95.ps1'
+    Set-Content -LiteralPath $raceHook -Value @"
+`$tp = '$(Join-Path $ar '.streams\tasks.json')'
+`$d = Get-Content -Raw -LiteralPath `$tp | ConvertFrom-Json
+`$now = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
+foreach (`$t in `$d.tasks) { if (`$t.id -eq 'A1.R2') { `$t.state = 'building'; `$t.claim = [pscustomobject]@{ session = 'build-race'; role = 'build'; at = `$now; beat = `$now } } }
+`$d | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath `$tp -Encoding utf8
+"@
+    $env:STREAM_ACTIVATE_PRE_REVISE = $raceHook
+    $frRace = @(& "$S\Activate-Group.ps1" -Repo $ar -Session status-a -Group A1 -FreshnessOnly); $frRaceCode = $LASTEXITCODE
+    [Environment]::SetEnvironmentVariable('STREAM_ACTIVATE_PRE_REVISE', $null)
+    Case '95 freshness tick: a row claimed after the scan is RACE-SKIPped and the other stale row still goes to planned' ($frRaceCode -eq 0 -and (T $ar 'A1.R1').state -eq 'planned' -and (T $ar 'A1.R2').state -eq 'building' -and ($frRace -join ' ') -match 'RACE-SKIP A1\.R2' -and ($frRace -join ' ') -notmatch 'REVISE-FAILED' -and ($frRace -join ' ') -match 'FRESHNESS A1 stale 1') ("exit $frRaceCode :: " + ($frRace -join ' | '))
+    $rr2 = J $ar; foreach ($t in $rr2.tasks) { if ($t.id -eq 'A1.R2') { $t.claim = $null; $t.state = 'ticketed' } }
+    $rr2 | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $ar '.streams\tasks.json') -Encoding utf8
     # ---- 96. tiered testing (3.3): a Tier 2 run, the flaky screen, attribution, Tier 3 retest, the close rule, nightly.
     # The dotnet leg is a fake runner that writes a trx from a control file, so the cases exercise the kit's scripts,
     # not dotnet. Tests: NS.FooTests.Flaky (fails, passes on the re-run), NS.FooTests.Real (fails twice: owned by T1.A,
@@ -3930,6 +3983,14 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $atc96 = @(& "$S\Add-SuiteRunGroup.ps1" -Repo $at96 -Session integ-t -Run run-A1-1 -Group A3) -join ' | '; $atcx96 = $LASTEXITCODE
     $atr96 = @(& "$S\Add-SuiteRunGroup.ps1" -Repo $at96 -Session integ-t -Run run-A1-2 -Group A2) -join ' | '; $atrx96 = $LASTEXITCODE
     $atk96 = & { . "$S\lib\Streams.ps1"; . "$S\lib\Suites.ps1"; (@(Get-SuiteRunRecords (Get-StreamPaths $at96) 'A2' '2') | ForEach-Object { $_['id'] }) -join ',' }
+    # A group with no build rows at all (a gate-only group such as G27) is covered by any finished run; refusing it
+    # left its close grader without a run naming it forever (kit item IN-20261115034912-ac66).
+    $ate96 = & { $k = Get-Content -Raw (Join-Path $at96 '.streams\tasks.json') | ConvertFrom-Json -AsHashtable
+        $k.groups += @{ id = 'A4'; name = 'a4'; state = 'integrating'; origin = 'plan' }
+        $k | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $at96 '.streams\tasks.json') -Encoding utf8
+        @(& "$S\Add-SuiteRunGroup.ps1" -Repo $at96 -Session integ-t -Run run-A1-1 -Group A4) -join ' | '
+        @((Get-Content -Raw (Join-Path $atd96 'run-A1-1.json') | ConvertFrom-Json).groups) -join ',' }
+    Case '96 Add-SuiteRunGroup counts a finished run for a group with no build rows' ($ate96[0] -eq 'ATTACHED run-A1-1 A4' -and $ate96[1] -eq 'A1,A2,A4') ($ate96 -join ' ; ')
     Case '96 Add-SuiteRunGroup counts a finished run for a landed group once, refuses an unlanded group and a running run' ($ata96 -eq 'ATTACHED run-A1-1 A2' -and $atb96 -match '^ALREADY' -and $atc96 -match '^NOT-COVERED A3\.Z\(ticketed\)' -and $atcx96 -eq 2 -and $atr96 -match '^RUN-RUNNING' -and $atrx96 -eq 4 -and $atk96 -eq 'run-A1-1') "$ata96 // $atb96 // $atc96 ($atcx96) // $atr96 ($atrx96) // $atk96"
     # The owner of a failing file is the LATEST LANDED row that holds it: code on main was broken by a landed row, and
     # an open later-group row on the same file must not turn this group's regression into a 'later' known failure.
@@ -4164,9 +4225,17 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
        legs = @(@{ step = 'leg'; name = 'Full'; kind = 'dotnet'; project = 'no-such-project'; exit = 0 }) } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $rdir 'run-TX-3.json')
     $ex4 = ''; $xo4 = @(); try { $xo4 = @(& "$S\Export-SuiteResults.ps1" -Repo $tr -Run run-TX-3) } catch { $ex4 = ("$_" -split "`n")[0] }
     $res4 = Get-Content -Raw (Join-Path $rdir 'run-TX-3.results.json') | ConvertFrom-Json -AsHashtable
-    $dr4 = @($res4['tests'] | Where-Object { $_['test'] -eq 'discover:Full' -and $_['outcome'] -eq 'failed' }).Count
-    Case '96 a Tier 2 leg that cannot be discovered is a failed discover: row and a DISCOVERY-FAILED line' (-not $ex4 -and $dr4 -eq 1 -and ($xo4 -join ' ') -match 'RESULTS run-TX-3 passed 1 failed 1' -and ($xo4 -join ' ') -match 'DISCOVERY-FAILED run-TX-3 Full \(') "err=$ex4 out=$($xo4 -join ' | ')"
+    $dr4 = @($res4['tests'] | Where-Object { $_['test'] -eq 'discover:Full' -and $_['outcome'] -eq 'not-run' }).Count
+    Case '96 a Tier 2 leg that reported results and cannot be discovered is a not-run discover: row and a DISCOVERY-FAILED line' (-not $ex4 -and $dr4 -eq 1 -and ($xo4 -join ' ') -match 'RESULTS run-TX-3 passed 1 failed 0' -and ($xo4 -join ' ') -match 'DISCOVERY-FAILED run-TX-3 Full \(') "err=$ex4 out=$($xo4 -join ' | ')"
     Case '96 a discovery failure is kept in the results file as discoveryErrors' ($res4['discoveryErrors'] -and ([string]$res4['discoveryErrors']['Full']) -match 'no-such-project') ($res4['discoveryErrors'] | ConvertTo-Json -Compress)
+    # A leg that reported no result and cannot be discovered stays a failed discover: row (kit item IN-20261112210622-3ee8).
+    $rx6 = Join-Path $rdir 'run-TX-6'; New-Item -ItemType Directory -Path $rx6 -Force | Out-Null
+    @{ id = 'run-TX-6'; tier = '2'; group = 'TX'; startedAt = '2026-10-01T00:00:00Z'; status = 'done'; snapshot = $tr; runDir = $rx6; head = 'h'
+       legs = @(@{ step = 'leg'; name = 'Gone'; kind = 'dotnet'; project = 'no-such-project'; exit = 1; command = '' }) } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $rdir 'run-TX-6.json')
+    $ex6 = ''; $xo6 = @(); try { $xo6 = @(& "$S\Export-SuiteResults.ps1" -Repo $tr -Run run-TX-6) } catch { $ex6 = ("$_" -split "`n")[0] }
+    $res6 = Get-Content -Raw (Join-Path $rdir 'run-TX-6.results.json') | ConvertFrom-Json -AsHashtable
+    $dr6 = @($res6['tests'] | Where-Object { $_['test'] -eq 'discover:Gone' -and $_['outcome'] -eq 'failed' }).Count
+    Case '96 a leg with no result whose discovery fails is a failed discover: row' (-not $ex6 -and $dr6 -eq 1) "err=$ex6 out=$($xo6 -join ' | ') rows=$($res6['tests'] | ConvertTo-Json -Compress)"
     # A leg the run never started (not-measured perf leg) ran no test: its listing failure is 'not-run', never a failed
     # row a fix must own (run-G17-17 filed discover:Playwright.Perf as an unowned failure; kit item IN-20261106122133-be19).
     $rx5 = Join-Path $rdir 'run-TX-4'; New-Item -ItemType Directory -Path $rx5 -Force | Out-Null
@@ -4261,6 +4330,13 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
         $peJ = @(if (Test-Path $peF) { Get-Content -Raw $peF | ConvertFrom-Json })
         $pc1 = @(& "$S\Test-GroupClose.ps1" -Repo $pr -Group P1 -DryRun)
         Case '96p -Exempt leg:<name> records an owner exemption for a NOT-MEASURED leg, and rule 7 then skips it' ($pe0x -eq 2 -and ($pe0 -join ' ') -match 'NO-MATCH' -and $pe1x -eq 0 -and ($pe1 -join ' ') -match 'EXEMPTED P1 leg:Tests\.Perf' -and @($peJ | Where-Object { $_.test -eq 'leg:Tests.Perf' -and $_.run -eq $paId -and $_.reason -match 'OWNER' }).Count -eq 1 -and ($pc1 -join ' ') -notmatch 'NOT-MEASURED') "e0=$pe0x/$($pe0 -join ' ') e1=$pe1x/$($pe1 -join ' ') close=$($pc1 -join ' | ')"
+        # A perf leg exempt for every group the run serves is skipped outright: no quiet wait and no perf hold, which
+        # would pause every author and build runner (kit item IN-20261116141052-8b15). The host is still loaded here.
+        $pk = @(& "$S\Start-SuiteRun.ps1" -Repo $pr -Session integ-p -Group P1 -Reason manual -Wait); $pkt = $pk -join ' | '
+        $pkId = if ($pkt -match 'RUN-ENDED (run-P1-\d+)') { $Matches[1] } else { 'none' }
+        $pkRes = Get-Content -Raw (Join-Path $pr ".streams\suites\runs\$pkId.results.json") -ErrorAction SilentlyContinue | ConvertFrom-Json
+        $pkDec = Get-Content -Raw (Join-Path $pr '.streams\decisions.md') -ErrorAction SilentlyContinue
+        Case '96p a perf leg exempt for every group of the run is skipped: no quiet wait, no perf hold, a not-measured row' ($pkt -match 'EXEMPT-SKIP Tests\.Perf' -and $pkt -notmatch 'host not quiet|QUIET-HOST' -and $pkDec -match "TIER2 $pkId leg Tests\.Perf EXEMPT-SKIP" -and @($pkRes.tests | Where-Object { $_.test -eq 'leg:Tests.Perf' -and $_.outcome -eq 'not-measured' }).Count -eq 1 -and -not (Test-Path (Join-Path $pr '.streams\runners\perf-hold.json'))) "$pkt res=$($pkRes | ConvertTo-Json -Compress -Depth 4)"
         Remove-Item -LiteralPath $peF -Force -ErrorAction SilentlyContinue
 
         # A quiet host: the leg runs, its real failure becomes a fix task.
@@ -4553,6 +4629,7 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     }
     $tasks100 = Join-Path $r100 '.streams\tasks.json'
     $cl100 = Join-Path $Scratch 'claude-stub100.ps1'; New-Stub100 $cl100 $tasks100 'built'
+    Set-Content -LiteralPath (Join-Path $r100 '.streams\tickets\G1.R.md') -Value @('# G1.R', '', '**BUILDER, READ FIRST (bounced twice): change', 'the check, not the product.**', '', 'Body text.')
     $env:STREAM_RUNNER_AI = $ai100; $env:STREAM_RUNNER_CLAUDE = $cl100
     $o100 = @(); $e100 = ''
     try { $o100 = @(& "$S\Start-StreamRunner.ps1" -Repo $r100 -Role build -IntervalSeconds 1 -MaxRuns 1) } catch { $e100 = ("$_" -split "`n")[0] }
@@ -4567,6 +4644,7 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     Case '100a build pre-stage: the unit is launched with a packet whose unit.md names the row, the worktree and a proved RED' ((-not $e100) -and $pk100 -and $md100 -match '## Task G1\.R \(claim HELD by build-' -and $md100 -match 'Step 3, worktree: `' -and $md100 -match 'RED PROVED' -and $md100 -match 'FAIL C1') "err='$e100' cmd='$cmd100' md=$(& $short $md100 300) out=$($o100 -join ' | ')"
     Case '100a build pre-stage: at launch the row was building, claimed by the unit session, with artifacts.red recorded' ($rowAt100 -and $rowAt100.state -eq 'building' -and $rowAt100.claim.session -eq $sess100 -and $rowAt100.artifacts.red -eq '.streams\logs\G1.R.grader.red.txt' -and (Test-Path (Join-Path $r100 '.streams\logs\G1.R.grader.red.txt'))) "state=$(if ($rowAt100) { $rowAt100.state }) claim=$(if ($rowAt100) { $rowAt100.claim | ConvertTo-Json -Compress }) sess=$sess100"
     Case '100a build pre-stage: task.json sits beside unit.md, and the runner printed the claim' ($pk100 -and (Test-Path (Join-Path (Split-Path $pk100) 'task.json')) -and (($o100 -join "`n") -match 'PRESTAGE build-\S+ claimed G1\.R')) "out=$($o100 -join ' | ')"
+    Case '100a pre-stage: the packet copies the ticket''s READ-FIRST paragraph whole' ($md100 -match '## Ticket READ-FIRST' -and $md100 -match 'BUILDER, READ FIRST \(bounced twice\): change\s+the check, not the product' -and $md100 -notmatch 'Body text') (& $short $md100 400)
     $after100 = T $r100 'G1.R'
     Case '100a build pre-stage: after the unit exits the claim is released; an unchanged tree is not harvested' ($after100.state -eq 'ticketed' -and -not $after100.claim -and (($o100 -join "`n") -match 'HARVEST-(EMPTY|SKIPPED) G1\.R') -and (($o100 -join "`n") -match 'RELEASED G1\.R')) "state=$($after100.state) out=$($o100 -join ' | ')"
     # (b)
@@ -4874,7 +4952,7 @@ if ($Mode -eq 'retest') { exit 0 } else { exit 1 }
     Case '105b every title of every batch is read back, so all 40 re-run passes count' ($flaky105 -eq 40) "flaky=$flaky105 of $($res105.Count)"
     # 105e (kit item IN-20261106101234-3b7d): discovery runs the real npx.cmd in this snapshot, which has no node_modules;
     # npx waited on its install prompt for ever. With '--no' and a closed stdin it ends and the leg is a failed discover: row.
-    Case '105e Playwright discovery in a tree without node_modules ends as a failed discover: row' (@($res105 | Where-Object { $_.test -eq 'discover:PW' -and $_.outcome -eq 'failed' }).Count -eq 1) "discover=$(@($res105 | Where-Object { $_.test -like 'discover:*' } | ConvertTo-Json -Compress)) run=$($s105 -join ' | ')"
+    Case '105e Playwright discovery in a tree without node_modules ends as a not-run discover: row (the leg reported results)' (@($res105 | Where-Object { $_.test -eq 'discover:PW' -and $_.outcome -eq 'not-run' }).Count -eq 1) "discover=$(@($res105 | Where-Object { $_.test -like 'discover:*' } | ConvertTo-Json -Compress)) run=$($s105 -join ' | ')"
     # 105f: a --list that never ends is ended at STREAM_PW_LIST_TIMEOUT_SECONDS. A fake npx.cmd first on PATH sleeps 60 s.
     $bin105f = Join-Path $Scratch 'npx105f'; New-Item -ItemType Directory -Path $bin105f -Force | Out-Null
     Set-Content -Path (Join-Path $bin105f 'npx.cmd') -Encoding ascii -Value "@echo off`r`nping -n 60 127.0.0.1 >NUL`r`n"

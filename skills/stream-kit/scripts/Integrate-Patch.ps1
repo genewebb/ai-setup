@@ -688,7 +688,16 @@ if ($gcode -eq 0) {
         Add-Decision $P $Session "grader for $($t.id) hit an environment failure on main; retry later: $hit"
         "RETRY $($t.id) (environment)"; exit 0
     }
-    if (-not $why.Count) {
+    # A row graded by its builder CHECK alone has no author grader to re-author, and an author may not edit a check, so
+    # a planned row only bounced between the two (G26.T248, kit item IN-20261112234727-d55f). Such a red goes back to a
+    # builder, who owns the check and keeps the verified patch.
+    $checkRel = "$(Get-Field $t 'artifacts', 'check')"
+    if (-not $why.Count -and $checkRel -and -not (Get-Field $t 'artifacts', 'grader')) {
+        $note = "check-suspect: $($redIds -join ',') red on main but PASS in $wt on identical content under the same check; the failing entries are in the builder CHECK $checkRel, which only a builder edits: fix the check so it passes on main (follow the ticket's READ-FIRST line, if any), never the product; patch kept at $($t.artifacts.patch). Main: $fails"
+        & $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To ticketed -Note $note | Out-Null
+        Add-Decision $P $Session "check for $($t.id) red on main only ($($redIds -join ',')); row back to ticketed for a builder to fix its check"
+        "CHECK-SUSPECT $($t.id)"
+    } elseif (-not $why.Count) {
         $note = "grader-suspect: $($redIds -join ',') red on main but PASS in $wt on identical content under the same grader; patch kept at $($t.artifacts.patch), no rebuild needed; the grader needs re-authoring. Main: $fails"
         & $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To planned -Note $note | Out-Null
         Add-LineTo $P.Questions ("- {0} | grader red on main only ({1}); same clauses PASS in the worktree on identical content | default: task back to planned for a new grader, verified patch kept for reuse | a clause that cannot pass after git apply (file times, tree-local state) is a grader defect" -f $t.id, ($redIds -join ','))

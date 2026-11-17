@@ -37,7 +37,8 @@ $late = foreach ($t in $rows) {
     $at = $null; foreach ($h in @($t.history)) { if ($h -and [string]$h.to -eq 'integrated' -and $h.at) { $at = [string]$h.at } }
     if ($at -and (ConvertTo-UtcTime $at) -gt $start) { "$($t.id)(integrated $at)" }
 }
-if (-not $rows.Count) { "NOT-COVERED $Group has no build rows"; exit 2 }
+# A group with no build rows has nothing a run could miss, so any finished Tier 2 run covers it; refusing it left a
+# gate-only group unable to close, because its close grader needs a run naming it (kit item IN-20261115034912-ac66, G27).
 if (@($late).Count) { "NOT-COVERED $(@($late) -join ', ') not landed when $Run started ($($rec['startedAt']))"; exit 2 }
 if ($DryRun) { "DRY-RUN would attach $Run to $Group ($($rows.Count) rows landed)"; exit 0 }
 $rec['groups'] = @(@(Get-SuiteRunGroups $rec) + $Group)

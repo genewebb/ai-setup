@@ -99,17 +99,41 @@ foreach ($t in @($doc.tasks | Where-Object { -not $KnownFailuresOnly -and $_.sta
 # Initialize-GroupRunDefinition; kit item IN-20261025141723-5621), in both modes, so the nightly never meets NO-RUN-DEFINITION.
 function Write-RunDefinition { $src = Initialize-GroupRunDefinition $P $Group; if ($src -like '!*') { "RUN-DEFINITION-FAILED $Group $($src.Substring(1))" } elseif ($src) { Add-Decision $P $Session "RUN-DEFINITION $Group copied from $src"; "RUN-DEFINITION $Group from $src" } }
 
+# The scan above reads tasks.json without its lock, so a builder or author can claim a stale row before the batch is
+# written; Revise-Task.ps1 then refuses the whole batch (REAUTHOR-CLAIMED / REAUTHOR-STATE) and every other stale row
+# stayed ticketed for one more tick (kit item IN-20261116223306-d8b1). Such a row now belongs to its claim: drop it
+# (RACE-SKIP) and write the rest once more. Any other refusal still fails the run. STREAM_ACTIVATE_PRE_REVISE is a
+# self-test seam: a script run just before the first write, to make the race happen.
+# Prints its lines; the outcome is $script:ReviseOk, so a caller never mistakes printed lines for a result.
+function Invoke-StaleRevise([string] $BatchFile, [string] $BatchNote) {
+    $script:ReviseOk = $false
+    if ($env:STREAM_ACTIVATE_PRE_REVISE) { & $env:STREAM_ACTIVATE_PRE_REVISE | Out-Null }
+    for ($try = 1; $try -le 2; $try++) {
+        Write-AtomicText $BatchFile ([ordered]@{ note = $BatchNote; edits = @($edits) } | ConvertTo-Json -Depth 6)
+        $out = @(& "$PSScriptRoot\Revise-Task.ps1" -Repo $Repo -Session $Session -File $BatchFile)
+        $code = $LASTEXITCODE
+        $out | ForEach-Object { "  $_" }
+        if (-not $code) { $script:ReviseOk = $true; return }
+        $refused = @($out | Where-Object { "$_" -like 'REFUSED *' })
+        $raced = @($refused | ForEach-Object { if ("$_" -match '^REFUSED REAUTHOR-(?:CLAIMED|STATE) (\S+):') { $Matches[1] } } | Where-Object { $_ } | Select-Object -Unique)
+        if ($try -eq 2 -or $code -ne 2 -or -not $raced.Count -or $raced.Count -ne $refused.Count) { "REVISE-FAILED exit $code (nothing released; see the lines above)"; $script:ReviseOk = $false; return }
+        foreach ($rid in $raced) {
+            "RACE-SKIP $rid (claimed or moved after the scan; its holder owns it now)"
+            $skipped.Add([ordered]@{ id = $rid; why = 'claimed or moved after the scan' })
+            foreach ($e in @($edits | Where-Object { $_.task -eq $rid })) { [void]$edits.Remove($e) }
+            foreach ($s0 in @($stale | Where-Object { $_.id -eq $rid })) { [void]$stale.Remove($s0) }
+        }
+        if (-not $edits.Count) { $script:ReviseOk = $true; return }
+    }
+}
 if ($FreshnessOnly) {
     if ($DryRun) { "DRY-RUN FRESHNESS $Group stale $($stale.Count) skipped $($skipped.Count)"; exit 0 }
     Write-RunDefinition
     if ($edits.Count) {
         $bf = Join-Path $P.Plans "$Group.freshness-revise.json"
         if (-not (Test-Path $P.Plans)) { New-Item -ItemType Directory -Path $P.Plans -Force | Out-Null }
-        Write-AtomicText $bf ([ordered]@{ note = "freshness tick of $Group (own write-set files changed on main since ticketed)"; edits = @($edits) } | ConvertTo-Json -Depth 6)
-        $out = @(& "$PSScriptRoot\Revise-Task.ps1" -Repo $Repo -Session $Session -File $bf)
-        $out | ForEach-Object { "  $_" }
-        if ($LASTEXITCODE) { "REVISE-FAILED exit $LASTEXITCODE (nothing released; see the lines above)"; exit 3 }
-        Add-Decision $P $Session "FRESHNESS $Group at $($head.Substring(0, 10)): $($stale.Count) ticketed row(s) to planned (own files changed on main since ticketed): $(@($stale | ForEach-Object { $_.id }) -join ', ')"
+        Invoke-StaleRevise $bf "freshness tick of $Group (own write-set files changed on main since ticketed)"; if (-not $script:ReviseOk) { exit 3 }
+        if ($stale.Count) { Add-Decision $P $Session "FRESHNESS $Group at $($head.Substring(0, 10)): $($stale.Count) ticketed row(s) to planned (own files changed on main since ticketed): $(@($stale | ForEach-Object { $_.id }) -join ', ')" }
     }
     "FRESHNESS $Group stale $($stale.Count) skipped $($skipped.Count)"
     exit 0
@@ -168,10 +192,8 @@ Write-RunDefinition
 if ($edits.Count) {
     $bf = Join-Path $P.Plans "$Group.activation-revise.json"
     if (-not (Test-Path $P.Plans)) { New-Item -ItemType Directory -Path $P.Plans -Force | Out-Null }
-    Write-AtomicText $bf ([ordered]@{ note = "activation of $Group (freshness check)"; edits = @($edits) } | ConvertTo-Json -Depth 6)
-    $out = @(& "$PSScriptRoot\Revise-Task.ps1" -Repo $Repo -Session $Session -File $bf)
-    $out | ForEach-Object { "  $_" }
-    if ($LASTEXITCODE) { "REVISE-FAILED exit $LASTEXITCODE (nothing released; see the lines above)"; exit 3 }
+    Invoke-StaleRevise $bf "activation of $Group (freshness check)"; if (-not $script:ReviseOk) { exit 3 }
+
 }
 if ($fixTasks.Count) {
     $ff = Join-Path $P.Plans "$Group.activation-fixes.json"

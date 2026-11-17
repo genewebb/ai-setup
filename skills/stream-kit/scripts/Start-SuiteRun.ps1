@@ -87,7 +87,8 @@ $head = if ($headLine -match ' HEAD (\S+)') { $Matches[1] } else { '' }
 $covered = @($Group)
 foreach ($g in @((Get-FocusGroups $doc $P).groups | Where-Object { $_ -ne $Group })) {
     $gw = @(Get-GroupBuildRows $doc $g)
-    if ($gw.Count -and -not @($gw | Where-Object { $_.state -notin @('integrated', 'done') }).Count) { $covered += $g }
+    # A group with no build rows is covered by any run: nothing of it can be untested (kit item IN-20261115034912-ac66).
+    if (-not @($gw | Where-Object { $_.state -notin @('integrated', 'done') }).Count) { $covered += $g }
 }
 $rec = [ordered]@{ id = $id; tier = '2'; group = $Group; groups = $covered; reason = $Reason; window = $(if ($Reason -eq 'nightly') { $window } else { '' })
     session = $Session; startedAt = Get-Now; endedAt = $null; head = $head; snapshot = $snap; runDir = $runDir; status = 'running'; legs = @() }

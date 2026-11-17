@@ -292,11 +292,15 @@ function Get-HostLoadSample($P) {
 }
 # Waits for a quiet host. Beats the integrator lock (every 30 s) while it waits when $Session holds it.
 # Returns @{ quiet = $bool; waitedSeconds = <n>; why = <the last reason it was not quiet, or ''> }.
-function Wait-QuietHost($P, [string] $Session = '') {
+# -Hold: the caller holds new runner units (lib\Streams.ps1 Set-PerfHold), so units already running drain and the
+# wait may last up to STREAM_PERF_HOLD_WAIT_SECONDS (default 5400, a build unit's limit) when that exceeds the plain max.
+# An explicit STREAM_QUIET_MAX_WAIT_SECONDS always wins, so a caller that bounds the wait is never held longer.
+function Wait-QuietHost($P, [string] $Session = '', [switch] $Hold) {
     $pct = Get-QuietSetting 'STREAM_QUIET_CPU_PCT' 20
     $window = Get-QuietSetting 'STREAM_QUIET_WINDOW_SECONDS' 60
     $sample = [Math]::Max(0.2, (Get-QuietSetting 'STREAM_QUIET_SAMPLE_SECONDS' 5))
     $max = Get-QuietSetting 'STREAM_QUIET_MAX_WAIT_SECONDS' 1800
+    if ($Hold -and -not $env:STREAM_QUIET_MAX_WAIT_SECONDS) { $max = [Math]::Max($max, (Get-QuietSetting 'STREAM_PERF_HOLD_WAIT_SECONDS' 5400)) }
     $start = Get-Date; $quietSince = $null; $why = ''; $beatAt = $start
     while ($true) {
         $s = Get-HostLoadSample $P

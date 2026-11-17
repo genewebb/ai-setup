@@ -132,8 +132,16 @@ function Remove-RedirectFile([string] $Path) {
 foreach ($old in @(Get-ChildItem -LiteralPath $P.Logs -Filter "$Task.grader.$Label.txt.*" -File -ErrorAction SilentlyContinue)) {
     if ($old.Name -match '\.(part|err|in)$' -and $old.LastWriteTimeUtc -lt [DateTime]::UtcNow.AddMinutes(-2)) { Remove-RedirectFile $old.FullName }
 }
+# A builder may record a Python check (.streams\checks\<task>.py, taking the root as its one positional argument):
+# pwsh -File refuses any file that is not .ps1, so G26.T447 went red on main with no clause run (kit item
+# IN-20261113183233-fd7f). Python runs isolated (-I), so no PYTHONPATH or user site from the host leaks in.
+function Get-ScriptLaunch([string] $Path) {
+    if ([IO.Path]::GetExtension($Path) -ieq '.py') { return @{ exe = 'python'; argv = @('-I', $Path, $Root) } }
+    @{ exe = 'pwsh'; argv = @('-NoProfile', '-NonInteractive', '-File', $Path, '-Root', $Root) }
+}
 try {
     foreach ($g in $scripts) {
+        $launch = Get-ScriptLaunch $g
         $tmp = "$log.$PID-$([guid]::NewGuid().ToString('N').Substring(0, 6))"
         $part = "$tmp.part"
         $err = ''
@@ -145,7 +153,7 @@ try {
             $err = "$tmp.err"
             $in = "$tmp.in"
             [IO.File]::WriteAllText($in, '')
-            $proc = Start-Process -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $g, '-Root', $Root) -PassThru -NoNewWindow -RedirectStandardOutput $part -RedirectStandardError $err -RedirectStandardInput $in
+            $proc = Start-Process -FilePath $launch.exe -ArgumentList $launch.argv -PassThru -NoNewWindow -RedirectStandardOutput $part -RedirectStandardError $err -RedirectStandardInput $in
             $every = if ($env:STREAM_BEAT_SECONDS) { [int]$env:STREAM_BEAT_SECONDS } else { 30 }
             $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
             while (-not $proc.HasExited) {
@@ -170,7 +178,8 @@ try {
             $tail = Read-RedirectText $err
             if ($timedOut) { $tail = "$tail$(if ($tail) { [Environment]::NewLine })$timedOut"; $one = 8 }
         } else {
-            & pwsh -NoProfile -File $g -Root $Root *> $part
+            $launchArgs = $launch.argv
+            & $launch.exe @launchArgs *> $part
             $one = $LASTEXITCODE
         }
         # The seconds let Integrate-Patch report each script's share of a main grade (census vs check vs grader).

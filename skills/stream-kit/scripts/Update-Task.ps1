@@ -100,7 +100,9 @@ trap { if ("$_" -like 'TRANSITION-REFUSED*') { Write-Output "$_"; exit 6 } else 
             Add-History $t $Session $t.state "write set widened (auto-accepted): $($new -join ', ')$(if ($Note) { " -- $Note" })"
         }
     }
-    if ($Beat -and $t.claim) { $t.claim.beat = Get-Now }
+    # Any call by the claim holder is proof of life, not only -Beat: a builder that wrote a progress -Note without
+    # -Beat had its live claim broken as stale 13 minutes later (kit item IN-20261113063833-e81c).
+    if ($t.claim -and ($Beat -or $t.claim.session -eq $Session)) { $t.claim.beat = Get-Now }
     foreach ($k in $Artifacts.Keys) { $t.artifacts[$k] = $Artifacts[$k] }
     if ($Base.Count) { $t['base'] = [ordered]@{}; foreach ($k in $Base.Keys) { $t.base[$k] = $Base[$k] } }
     # blocked>integrated records a verified patch that is ALREADY on main (two drains of one integrator landed G3.T019 and

@@ -183,13 +183,17 @@ $legEnv = {
     if ($parts.Count) { ($parts -join ' ') + ' ' } else { '' }
 }
 foreach ($suite in @($want | Where-Object { -not ([string]$_['test']).StartsWith('grader:') } | Group-Object { [string]$_['suite'] })) {
+    # A perf hold covers only the perf suite it was set for: the next suite (and the end of the loop) lifts it.
+    Clear-PerfHold $P
     $name = $suite.Name; $ld = $legDef[$name]; $kind = if ($ld) { [string]$ld['kind'] } else { '' }
     # A perf leg runs only on a quiet host (lib\Suites.ps1 Wait-QuietHost). Measured on a loaded host it is no evidence
     # (owner rule 9827), so its tests are NOT-MEASURED: out of this retest's tests, so they are neither a pass nor a
     # strike, and the next retest runs them again (kit item IN-20261010212643-92b1).
     if (Test-PerfLeg $ld) {
-        $q = Wait-QuietHost $P $Session
+        Set-PerfHold $P $Session $name
+        $q = Wait-QuietHost $P $Session -Hold
         if (-not $q.quiet) {
+            Clear-PerfHold $P
             foreach ($nm in @($suite.Group | ForEach-Object { [string]$_['test'] })) { $notMeasured.Add($nm) }
             $legs.Add([ordered]@{ step = 'leg'; name = $name; kind = $kind; project = [string]$ld['project']; exit = 0; log = ''; command = ''; notMeasured = $true; reason = "host not quiet after $($q.waitedSeconds) s: $($q.why)" })
             $rec['legs'] = @($legs); Write-JsonFile $recPath $rec
@@ -291,6 +295,7 @@ if ($Mode -eq 'fix' -and $def -and $def.Contains('retestSweeps')) {
         $rec['legs'] = @($legs); Write-JsonFile $recPath $rec
     }
 }
+Clear-PerfHold $P
 foreach ($t in @($want | Where-Object { ([string]$_['test']).StartsWith('grader:') })) {
     $task = ([string]$t['test']).Substring(7)
     [void](& "$PSScriptRoot\Invoke-Grader.ps1" -Repo $Repo -Task $task -Root $snap -Label $id -BeatSession $Session)

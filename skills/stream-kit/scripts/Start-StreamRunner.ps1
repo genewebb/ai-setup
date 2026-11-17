@@ -704,6 +704,18 @@ function Write-UnitPacket([string] $Session, $doc, $Row, $Item, [string[]] $Stag
             if ($note -match 'STALE:') { $md.Add('- **REFRESH MODE** (stream-author step 2): the STALE note above names the files and the sha; update only the clauses and checks those changes touch.') }
         }
         $md.Add('')
+        # A ticket's READ-FIRST paragraph is the author's standing order after a bounce; builders who read only this
+        # packet missed it and re-made the bounced fix (G26.T248, kit item IN-20261112234727-d55f), so it is copied here.
+        $ticketRel = Get-RowArtifact $Row 'ticket'
+        $ticketPath = if ($ticketRel) { if ([IO.Path]::IsPathRooted($ticketRel)) { $ticketRel } else { Join-Path $Repo $ticketRel } } else { '' }
+        if ($ticketPath -and (Test-Path -LiteralPath $ticketPath)) {
+            $para = [Collections.Generic.List[string]]::new()
+            foreach ($tl in @(Get-Content -LiteralPath $ticketPath -TotalCount 80)) {
+                if ($para.Count) { if (-not $tl.Trim()) { break }; $para.Add($tl) }
+                elseif ($tl -match 'READ[ -]FIRST') { $para.Add($tl) }
+            }
+            if ($para.Count) { $md.Add('## Ticket READ-FIRST (copied from the ticket; it overrides your default fix)'); $md.Add(''); foreach ($l in $para) { $md.Add($l) }; $md.Add('') }
+        }
         if ($Row -and $Role -eq 'author') {
             $ex = @(Get-RequirementExcerpts $doc $Row)
             if ($ex.Count) { $md.Add('## Requirement excerpts (grep hits for each why id; read the file for the whole clause)'); $md.Add(''); foreach ($l in $ex) { $md.Add($l) }; $md.Add('') }
@@ -1232,6 +1244,8 @@ function Exit-OwnerWait([string] $Session, [string] $Token, [string] $How) {
             $hit = $false
             for ($i = 0; $i -lt $lines.Count; $i++) {
                 if ($lines[$i] -like "- ESCALATE *``[$Token``]") { $lines[$i] = "RESOLVED $($lines[$i]) ($How $(Format-LocalStamp))"; $hit = $true }
+                # A line someone resolved by hand still gets its time, so the queue never shows an unstamped RESOLVED.
+                elseif ($lines[$i] -like "RESOLVED - ESCALATE *``[$Token``]") { $lines[$i] = "$($lines[$i]) ($How $(Format-LocalStamp))"; $hit = $true }
             }
             if ($hit) { Write-AtomicText $P.Prompts (($lines -join "`n") + "`n") }
         }
@@ -1270,6 +1284,8 @@ function Invoke-LiveUnit([string] $Claude, [string[]] $CliArgs, [string] $Out, [
     $usedMs = [long]0
     $limitMs = [long]$UnitTimeoutSeconds * 1000
     $lastWaitBeat = $null
+    $clearedSince = $null
+    $lastClearCheck = [datetime]::MinValue
     $waitBeatEvery = if ($env:STREAM_BEAT_SECONDS) { [int]$env:STREAM_BEAT_SECONDS } else { 60 }
     $script:unitQuota = $null
     $tail = @{ path = $null; offset = [long]0; rest = ''; lastCheck = [datetime]::MinValue; started = Get-Date; warned = $false }
@@ -1283,8 +1299,20 @@ function Invoke-LiveUnit([string] $Claude, [string[]] $CliArgs, [string] $Out, [
             if (-not $waiting) { $usedMs += $tick }
             $r = Read-UnitWaiting $waitFile
             if ($r.ok) {
-                if ($r.w -and -not $waiting) { $waiting = $true; Enter-OwnerWait $r.w $Session $token }
+                if ($r.w -and -not $waiting -and "$($r.w.since)" -ne $clearedSince) { $waiting = $true; Enter-OwnerWait $r.w $Session $token }
                 elseif (-not $r.w -and $waiting) { $waiting = $false; Exit-OwnerWait $Session $token 'answered' }
+                elseif (-not $r.w) { $clearedSince = $null }
+            }
+            # The mod clears its record only when the prompted call ENDS: an approved Monitor call ran on for hours, so
+            # Builder 5's line stood 08:48 to 11:37 EST on 2026-11-15 with nothing on screen and the unit timeout
+            # paused (kit item IN-20261115183608-88c8). A main transcript entry written after the record's since means
+            # the session moved on, so the prompt is gone: resolve the line, and ignore that record until it changes.
+            if ($waiting -and $r.w -and ((Get-Date) - $lastClearCheck).TotalSeconds -ge $quotaCheckSeconds) {
+                $lastClearCheck = Get-Date
+                if (Test-PromptCleared $tail $ClaudeSession $r.w) {
+                    $waiting = $false; $clearedSince = "$($r.w.since)"
+                    Exit-OwnerWait $Session $token 'cleared, session moved on'
+                }
             }
             # The unit timeout is paused while the owner owes an answer, so the unit's claims are kept fresh too: on
             # 2026-10-10 G4.T131's unit sat on a prompt from 09:14Z, its own beat loop had stopped, and the watchdog broke
@@ -1319,6 +1347,29 @@ function Invoke-LiveUnit([string] $Claude, [string[]] $CliArgs, [string] $Out, [
         # unit that exits between two polls ends here still waiting (kit item IN-20261107131239-5b1e).
         if ($Tab) { Set-RunnerTabTitle $Tab }
     }
+}
+
+# True when the unit's main transcript holds an assistant entry stamped more than 2 s after the waiting record's
+# since (ms since the epoch): an open prompt blocks the main turn, so no such entry can be written while it stands. Reads
+# the last 256 KB only. False when the record has no since or the quota watch has not found the transcript yet.
+function Test-PromptCleared([hashtable] $Tail, [string] $ClaudeSession, $W) {
+    if (-not $W -or -not $W.PSObject.Properties['since'] -or -not $ClaudeSession) { return $false }
+    if (-not $Tail.path -or -not (Test-Path -LiteralPath $Tail.path)) { return $false }
+    $after = [DateTimeOffset]::FromUnixTimeMilliseconds([long]$W.since + 2000).UtcDateTime
+    try {
+        $fs = [IO.FileStream]::new($Tail.path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+        try {
+            $from = [Math]::Max([long]0, $fs.Length - 262144)
+            [void]$fs.Seek($from, [IO.SeekOrigin]::Begin)
+            $text = [IO.StreamReader]::new($fs).ReadToEnd()
+        } finally { $fs.Dispose() }
+    } catch { return $false }
+    foreach ($line in ($text -split "`n")) {
+        if ($line -notmatch '"type"\s*:\s*"assistant"' -or $line -notmatch '"timestamp"\s*:\s*"([^"]+)"') { continue }
+        $ts = [datetime]::MinValue
+        if ([datetime]::TryParse($Matches[1], [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$ts) -and $ts -gt $after) { return $true }
+    }
+    $false
 }
 
 # Beats every claim the unit session holds while it waits on the owner. A beat that cannot get the tasks.json lock is
@@ -1401,6 +1452,8 @@ if ($DryRun) {
         $why = Get-WorkGate
         if (-not $why) { & $dryIdle "IDLE nothing to take for $Role"; exit 0 }
         "GATE $why"
+        $dph = Get-PerfHold $P
+        if ($dph) { "PERF-HOLD $($dph.leg) by $($dph.by): no new unit while the perf leg needs a quiet host"; "SESSION $session"; exit 0 }
         "PRESTAGE $(if ($preStage) { "on: the runner takes the item or claims the row (Claim-Task.ps1), writes .streams\units\<session>\unit.md$(if ($Role -eq 'build') { ', lays the worktree and proves the author grader RED (a not-red row bounces to planned with no launch)' }), then launches with 'packet: <unit.md>'" } else { 'off (-NoPreStage): the unit does its own inbox, lessons and claim steps' })"
     }
     $cfg = Get-RoleConfig
@@ -1539,6 +1592,16 @@ while ($true) {
         # runner reads as held through its whole pre-stage (kit item IN-20261024091316-c6c2).
         if (-not (Get-QuotaHold $P)) { $state.status = "quota hold lifted $(Format-LocalStamp); back to the gate"; Write-RunnerState $state }
         continue
+    }
+    # A perf leg needs a quiet host: while a suite holds one (lib\Streams.ps1 Get-PerfHold) a work runner launches and
+    # claims nothing; units already running finish (kit item IN-20261115023632-9007).
+    if ($gated) {
+        $ph = Get-PerfHold $P
+        if ($ph) {
+            $state.status = "perf hold: $($ph.leg) by $($ph.by), until $($ph.until.ToString('yyyy-MM-ddTHH:mm:ssZ'))"; Write-RunnerState $state
+            "$(Get-TabNow) PERF-HOLD $($ph.leg) by $($ph.by): no new unit while the perf leg needs a quiet host; next check in 30 s"
+            Start-Sleep -Seconds 30; continue
+        }
     }
     $check = Sync-LaunchEnvironment
     Restore-RunnerTabTitle

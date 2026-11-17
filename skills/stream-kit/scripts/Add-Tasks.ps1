@@ -6,7 +6,7 @@
 #                     same files. A fix on the files of an already integrated task becomes its own task that depends on
 #                     it (a gate fail always lands here). A fix added to a group whose integration task is done reopens
 #                     that task (done -> ticketed) and a closed group (-> integrating), so the suites run again.
-# Refuses the whole file (writes nothing, exit 2) if any task lacks why ids or a write set, or if two open tasks would
+# Refuses the whole file (writes nothing, exit 2) if any task lacks why ids, a write set or (work rows) estMinutes, or if two open tasks would
 # share a file without one depending (transitively) on the other.
 param(
     [Parameter(Mandatory)] [string] $Repo,
@@ -39,6 +39,9 @@ $report = [Collections.Generic.List[string]]::new()
         if (-not $t) { continue }
         if (-not @($t.why).Count) { $problems.Add("$($t.id): no REQ/AC ids in why") }
         if ($t.kind -notin @('gate', 'integration') -and -not @($t.writeSet).Count) { $problems.Add("$($t.id): no write set") }
+        # Every work row is priced: the forecast, the critical path and the overrun flag read estMinutes, and a row that
+        # carried the price under another key ("estimate") was added unpriced and silently zeroed the forecast.
+        if ($t.kind -notin @('gate', 'integration') -and (Get-EstMinutes $t) -lt 1) { $problems.Add("$($t.id): no estMinutes (a positive whole number of minutes)$(if ($t.ContainsKey('estimate')) { '; found key estimate, which nothing reads' })") }
         if ($t.id -in $ids) { $problems.Add("$($t.id): id already exists") }
         $cand = if ($t.kind -in @('gate', 'integration')) { $null } else { Get-WriteSetCandidates $wsIndex $t.writeSet }
         foreach ($o in @($open) + @($new)) {

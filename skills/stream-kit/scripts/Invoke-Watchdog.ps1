@@ -244,8 +244,12 @@ if (Test-Path -LiteralPath (Join-Path $P.Suites 'runs')) {
     # Resolve-RunningSuiteRuns), not only when the next run starts: run-G17-10 read 'running' on the test page for 6 h
     # after its process died, and its record hid the last finished run (kit item IN-20261030191146-aba1).
     foreach ($x in @(Resolve-RunningSuiteRuns $P $Session)) { if ($x -is [string]) { $acts.Add($x) } }
-    foreach ($r in @(Get-SuiteRunRecords $P | Where-Object { $_['status'] -eq 'running' -and $_['snapshot'] })) {
-        if (Test-SuiteRunAlive $r) { $runSnaps[([string]$r['snapshot']).Replace('/', '\').TrimEnd('\').ToLowerInvariant()] = [string]$r['id'] }
+    # A run whose legs ended still reads its snapshot while its process lives: Invoke-SuiteLegs.ps1 writes 'done' at the
+    # end of the legs, then exports, screens, attributes and runs the after steps there. run-G17-27 lost its snapshot to
+    # this rule between the legs and the attribution (kit item IN-20261116152111-6c9e).
+    foreach ($r in @(Get-SuiteRunRecords $P | Where-Object { $_['snapshot'] })) {
+        $inUse = if ([string]$r['status'] -eq 'running') { Test-SuiteRunAlive $r } else { Test-SuiteRunProcess $r }
+        if ($inUse) { $runSnaps[([string]$r['snapshot']).Replace('/', '\').TrimEnd('\').ToLowerInvariant()] = [string]$r['id'] }
     }
 }
 function Invoke-SnapshotRule([string] $Dir) {

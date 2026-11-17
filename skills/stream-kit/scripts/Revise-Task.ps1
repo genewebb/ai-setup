@@ -228,7 +228,19 @@ trap { if ("$_" -like 'TRANSITION-REFUSED*') { "REFUSED $_"; exit 2 } else { bre
             $why0 = if ($e['note']) { [string] $e['note'] } elseif ($in['note']) { [string] $in['note'] } else { '' }
             if (-not $why0) { $problems.Add("BLOCK-NO-NOTE $($t.id): -Release block needs a -Note naming the release condition"); continue }
             if ($t.claim -and (Test-ClaimLive $t)) { $problems.Add("BLOCK-CLAIMED $($t.id): $($t.claim.role) $($t.claim.session) holds it; the holder blocks it, not the planner"); continue }
-            if ($t.state -notin @('planned', 'ticketed')) { $problems.Add("BLOCK-STATE $($t.id): only a planned or ticketed row can be parked, and this one is $($t.state)"); continue }
+            # A built row is withdrawn here in one locked write: the integrator's built>ticketed left a gap a builder
+            # claimed into before the planner could park it (G26.T564, kit item IN-20261116135653-12bc). A row whose patch
+            # the drain is grading on main right now is refused, because that drain owns its next state.
+            if ($t.state -eq 'built') {
+                $gp = Get-GradePendingPatch $P
+                if ($gp -and $gp.task -eq [string] $t.id) { $problems.Add("BLOCK-DRAINING $($t.id): the integrator is grading its patch on main ($($gp.holder)); wait for that drain to end, then block it"); continue }
+                $t.claim = $null
+                Set-TaskState $t 'blocked' 'plan-withdraw' $Session "plan revise: withdrawn while built (patch kept, not landed)$(if ($parts.Count) { "; $($parts -join '; ')" }) -- $why0"
+                [void](Add-DependentBounceNotes $doc $t $Session 'built' 'blocked' $why0)
+                $report.Add("REVISED $($t.id) -> blocked (withdrawn while built; $($parts -join '; '))")
+                continue
+            }
+            if ($t.state -notin @('planned', 'ticketed')) { $problems.Add("BLOCK-STATE $($t.id): only a planned, ticketed or built row can be parked, and this one is $($t.state)"); continue }
             $t.claim = $null
             $to = 'blocked'
         }

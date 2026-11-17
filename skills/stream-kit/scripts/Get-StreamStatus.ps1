@@ -150,7 +150,7 @@ function Get-UpChainPath([string] $id) {
     while ($id -and $seen.Add($id)) {
         $t = $byId[$id]
         if (-not $t) { break }
-        if ($t.state -notin @('done', 'integrated')) { $out.Add([int]$t.estMinutes) }
+        if ($t.state -notin @('done', 'integrated')) { $out.Add((Get-EstMinutes $t)) }
         $next = $null; $best = -1
         foreach ($d in @($t.dependsOn)) {
             if ($d -and $upChain.ContainsKey($d) -and $upChain[$d] -gt $best) { $best = $upChain[$d]; $next = $d }
@@ -202,7 +202,7 @@ $groups = foreach ($g in $doc.groups) {
         $runIntegration = @($ts | Where-Object { $_.state -eq 'building' -and $_.kind -eq 'integration' }).Count
         $heldLabel = if ($runIntegration) { 'build done; Tier 2 run in flight' + $(if ($openGates) { "; $openGates gate(s) open" } else { '' }) } else { "build done; $heldOpen integration/gate left" }
     }
-    $remain = [int](($togo | ForEach-Object { [int]$_.estMinutes } | Measure-Object -Sum).Sum)
+    $remain = [int](($togo | ForEach-Object { (Get-EstMinutes $_) } | Measure-Object -Sum).Sum)
     # The floor: no rate can beat the longest chain of unlanded work this group sits on top of.
     $floor = [int](($togo | ForEach-Object { $upChain[$_.id] } | Measure-Object -Maximum).Maximum)
     # ...and the rows it was summed from, which is the only population a split scale can make the date lie about.
@@ -214,7 +214,7 @@ $groups = foreach ($g in $doc.groups) {
     $pathSpread = HalfSplit $floorPath
     $landed = @(foreach ($t in $ts) {
             $a = First-Landed $t
-            if ($a) { [pscustomobject]@{ hours = ($now - [datetime]::Parse($a, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)).TotalHours; est = [int]$t.estMinutes } }
+            if ($a) { [pscustomobject]@{ hours = ($now - [datetime]::Parse($a, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)).TotalHours; est = (Get-EstMinutes $t) } }
         })
     $win = $null; $delivered = 0; $n = 0
     foreach ($w in $DeliveryWindowHours) {
@@ -248,8 +248,8 @@ $groups = foreach ($g in $doc.groups) {
     # to-go ones is worth seeing. They no longer DECIDE anything: nothing a landed row is priced at reaches any
     # forecast number, so this gap cannot make a date wrong. $chainScaleSplit, measured above on the to-go
     # population the floor is actually summed from, is what guards the date.
-    $landedMedian = Median @($ts | Where-Object { $_.state -in @('integrated', 'done') -and -not (Test-Retired $_) } | ForEach-Object { [int]$_.estMinutes })
-    $togoMedian = Median @($togo | ForEach-Object { [int]$_.estMinutes })
+    $landedMedian = Median @($ts | Where-Object { $_.state -in @('integrated', 'done') -and -not (Test-Retired $_) } | ForEach-Object { (Get-EstMinutes $_) })
+    $togoMedian = Median @($togo | ForEach-Object { (Get-EstMinutes $_) })
     $skew = if ($landedMedian -gt 0 -and $togoMedian -gt 0) { [math]::Round($landedMedian / $togoMedian, 2) } else { 0 }
     $scaleSplit = $pathSpread -gt $ScaleSplitRatio
     $predicted = $null; $basis = $null; $softDate = $false
@@ -454,7 +454,7 @@ $tasks = foreach ($t in $doc.tasks) {
     # A ticketing row is timed from when the author CLAIMED it, not from a state move: it has not moved state at all,
     # which is exactly why it was invisible. claim.at is written by Claim-Task.ps1 and never refreshed, unlike beat.
     if ($ticketing -and $t.claim['at']) { $elapsed = Age $t.claim.at }
-    [ordered]@{ id = $t.id; group = $t.group; title = $t.title; kind = $t.kind; state = $t.state; est = $t.estMinutes
+    [ordered]@{ id = $t.id; group = $t.group; title = $t.title; kind = $t.kind; state = $t.state; est = (Get-EstMinutes $t)
         # The bucket the page and the counts use: `ticketing` for a planned row a live author holds, else the state.
         bucket = Bucket $t; ticketing = $ticketing
         # claim is the one-line human form. The page needs the parts, so they are carried separately rather than
@@ -463,7 +463,7 @@ $tasks = foreach ($t in $doc.tasks) {
         claimSession = if ($t.claim) { $t.claim.session } else { $null }
         claimRole = if ($t.claim) { $t.claim.role } else { $null }
         claimBeatMinutes = if ($t.claim) { Age $t.claim.beat } else { $null }
-        elapsed = $elapsed; overrun = ($null -ne $elapsed -and $elapsed -gt 2 * [int]$t.estMinutes)
+        elapsed = $elapsed; overrun = ($null -ne $elapsed -and $elapsed -gt 2 * (Get-EstMinutes $t))
         # A `building` task with no claim is orphaned: the session that set it building ended without a rollback, and
         # the watchdog only ever breaks a CLAIM, so nothing frees it. It is invisible until someone re-states it.
         orphaned = ($t.state -eq 'building' -and -not $t.claim -and -not $intKept)
@@ -1010,8 +1010,14 @@ function Get-LeftToPlan($doc, [string] $repo) {
         $am = [regex]::Match($txt, '(?ms)^acceptance:[ \t]*\r?\n(.*?)(?=^[A-Za-z_][\w-]*:|\z)')
         if (-not $am.Success) { continue }
         $ids = @([regex]::Matches($am.Groups[1].Value, '(?m)^[ \t]*- id:[ \t]*(AC-[A-Za-z0-9-]+)[ \t]*\r?$') | ForEach-Object { $_.Groups[1].Value })
-        if ([regex]::Match($txt, '(?m)^status:[ \t]*(\S+)').Groups[1].Value -ne 'READY') { $out.notReadyClauses += $ids.Count; continue }
         $rel = $f.FullName.Substring($root.TrimEnd('\').Length + 1)
+        $fst = [regex]::Match($txt, '(?m)^status:[ \t]*(\S+)').Groups[1].Value
+        if ($fst -ne 'READY') {
+            # Retired files, the fictional sample package and the blank templates are never work, so the not-READY
+            # count leaves them out (owner 2026-11-15, kit item IN-20261116025403-54ef); the files stay in the repo.
+            if ($fst -ne 'RETIRED' -and $rel -notmatch '^(RequirementDocumentExample|templates)\\') { $out.notReadyClauses += $ids.Count }
+            continue
+        }
         if (-not $ids.Count) { $bad += $rel; continue }
         $did = [regex]::Match($txt, '(?m)^id:[ \t]*(\S+)').Groups[1].Value
         if (-not $did) { $did = $f.BaseName }

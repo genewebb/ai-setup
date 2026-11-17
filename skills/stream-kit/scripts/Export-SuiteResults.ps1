@@ -202,7 +202,9 @@ function Get-DiscoveredTests($leg, [string[]] $Reported = @()) {
                     if (-not $pr.WaitForExit($limit * 1000)) { $timedOut = $true; try { $pr.Kill($true) } catch { } ; $null = $pr.WaitForExit(10000) }
                     else { $pr.WaitForExit(); $code = $pr.ExitCode }
                     $o = @(if ($outTask.Wait(10000)) { $outTask.Result -split "`r?`n" })
-                    if ($errTask.Wait(10000)) { $errText = (@($errTask.Result -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -Last 1) }
+                    # The whole stderr is kept (last 4000 characters): a Node crash ends with a bare 'Node.js v22...' line,
+                    # and its error and stack sit above it.
+                    if ($errTask.Wait(10000)) { $errText = (@($errTask.Result -split "`r?`n" | Where-Object { $_.Trim() }) -join ' | '); if ($errText.Length -gt 4000) { $errText = '...' + $errText.Substring($errText.Length - 4000) } }
                     if ($timedOut) { return @{ keys = @(); error = "playwright --list timed out after $limit s" } }
                     $text = $o -join "`n"; $at = $text.IndexOf('{')
                     $tail = if ($errText) { ": $errText" } else { '' }
@@ -252,7 +254,10 @@ function Add-NotRunRows($leg, [string] $name, [int] $from) {
         # A leg the run never started (not-measured, lock-lost) ran no test that could fail: its listing failure is
         # 'not-run', so it files no fix row and never holds a close on its own.
         $never = [bool]$leg['notMeasured'] -or [bool]$leg['lockLost'] -or ([string]$rec['status'] -eq 'lock-lost' -and [int]$leg['exit'] -eq 5)
-        $rows.Add([ordered]@{ test = "discover:$name"; suite = $name; outcome = $(if ($never) { 'not-run' } else { 'failed' }); durationMs = 0; file = ''; project = [string]$leg['project']; head = $rec['head']; error = [string]$d.error })
+        # A leg that reported results has its failures on its own rows; only its total is unknown, which the
+        # DISCOVERY-FAILED line and discoveryErrors name, so its listing failure files no unowned failure either.
+        $ranTests = $sorted.Count -gt 0
+        $rows.Add([ordered]@{ test = "discover:$name"; suite = $name; outcome = $(if ($never -or $ranTests) { 'not-run' } else { 'failed' }); durationMs = 0; file = ''; project = [string]$leg['project']; head = $rec['head']; error = [string]$d.error })
         return
     }
     $discovered[$name] = $d.keys.Count

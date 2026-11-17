@@ -86,6 +86,17 @@ try {
     $nf = Join-Path $Scratch 'nowhy.json'; $nowhy | ConvertTo-Json -Depth 10 | Set-Content $nf
     & "$S\Add-Tasks.ps1" -Repo $repo -Role plan -Session plan-1 -File $nf | Out-Null
     Case 'plan refuses task without why' ($LASTEXITCODE -eq 2)
+    $noest = @{ tasks = @(@{ id = 'G1.T6'; group = 'G1'; title = 'x'; why = @('AC-9'); kind = 'code'; writeSet = @('y.txt'); estimate = 90 }) }
+    $ef = Join-Path $Scratch 'noest.json'; $noest | ConvertTo-Json -Depth 10 | Set-Content $ef
+    $out = & "$S\Add-Tasks.ps1" -Repo $repo -Role plan -Session plan-1 -File $ef
+    Case 'plan refuses work row without estMinutes' ($LASTEXITCODE -eq 2 -and ($out -join ' ') -match 'G1.T6: no estMinutes.*key estimate' -and -not (@((J $repo).tasks | Where-Object { $_.id -eq 'G1.T6' }).Count))
+    $doc0 = Get-Content -Raw (Join-Path $repo '.streams\tasks.json')
+    $d0 = $doc0 | ConvertFrom-Json -AsHashtable -Depth 50; $src = @($d0.tasks | Where-Object { $_.id -eq 'G1.T3' })[0]; $row = $src | ConvertTo-Json -Depth 50 | ConvertFrom-Json -AsHashtable -Depth 50; $row['id'] = 'G1.T7'; $row['writeSet'] = @('y.txt'); [void]$row.Remove('estMinutes'); $d0.tasks += $row
+    $d0 | ConvertTo-Json -Depth 50 | Set-Content (Join-Path $repo '.streams\tasks.json')
+    try { $sj = & "$S\Get-StreamStatus.ps1" -Repo $repo -Json 2>&1 } catch { $sj = "THREW $_"; $global:LASTEXITCODE = 1 }
+    $sjOk = $LASTEXITCODE -eq 0 -and (($sj -join "`n") -notmatch 'cannot be found')
+    Set-Content -NoNewline -LiteralPath (Join-Path $repo '.streams\tasks.json') -Value $doc0
+    Case 'status reads a row with no estMinutes as 0' $sjOk
 
     # author: critical path first (T1 heads the 30+30+25 chain), parallel claims never collide
     $jobs = 1..3 | ForEach-Object { $n = $_; Start-Job -ScriptBlock { param($s, $r, $n) & "$s\Claim-Task.ps1" -Repo $r -Role author -Session "author-x-$n" } -ArgumentList $S, $repo, $n }
@@ -231,6 +242,17 @@ try {
     Case 'watchdog breaks stale build claim' (($w -join ' ') -match 'BROKE G1.T3' -and (T $repo 'G1.T3').state -eq 'ticketed' -and -not (T $repo 'G1.T3').claim) ($w -join ' ')
     $w2 = & "$S\Invoke-Watchdog.ps1" -Repo $repo -Session status-1
     Case 'watchdog quiet when nothing stale' (@($w2) -contains 'QUIET') "$w2"
+
+    # A holder's progress -Note without -Beat is proof of life: its claim must survive the watchdog (kit item
+    # IN-20261113063833-e81c, G26.T331 lost a near-finished build this way).
+    $b7 = & "$S\Claim-Task.ps1" -Repo $repo -Role build -Session build-7 -Task G1.T3 | ConvertFrom-Json
+    $doc = J $repo; $t = $doc.tasks | Where-Object { $_.id -eq 'G1.T3' }; $t.claim.beat = (Get-Date).ToUniversalTime().AddMinutes(-50).ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $doc | ConvertTo-Json -Depth 50 | Set-Content (Join-Path $repo '.streams\tasks.json')
+    & "$S\Update-Task.ps1" -Repo $repo -Task G1.T3 -Role build -Session build-7 -Note 'done so far: A1' | Out-Null
+    $w7 = & "$S\Invoke-Watchdog.ps1" -Repo $repo -Session status-1
+    Case 'holder note without -Beat keeps the build claim' ($b7.id -eq 'G1.T3' -and ($w7 -join ' ') -notmatch 'BROKE G1.T3' -and (T $repo 'G1.T3').claim.session -eq 'build-7') ($w7 -join ' ')
+    & "$S\Update-Task.ps1" -Repo $repo -Task G1.T3 -Role build -Session build-7 -To ticketed -Release -Note 'test cleanup' | Out-Null
+    Case 'holder note case cleans up' ((T $repo 'G1.T3').state -eq 'ticketed' -and -not (T $repo 'G1.T3').claim)
 
     # A 'running' run record whose process is gone is marked abandoned on the watchdog pass, not only when the next run
     # starts: run-G17-10 read 'running' on the test page for 6 h after its pid died (kit item IN-20261030191146-aba1).
@@ -811,6 +833,19 @@ try {
     Case 'the build gate reads IDLE while only frozen-group rows are ticketed' (($gate -join "`n") -match '(?m)^IDLE nothing to take for build') ($gate -join '|')
     $gateA = @(& "$S\Start-StreamRunner.ps1" -Repo $cr -Role author -DryRun)
     Case 'the author gate reads GATE planned for the focus group' (($gateA -join "`n") -match '(?m)^GATE planned 3 \(C1\.\S+\) focus C1') ($gateA -join '|')
+    # A perf leg's hold (kit item IN-20261115023632-9007): a live hold stops a work runner before its pre-stage claims;
+    # a hold whose pid is gone, or whose until has passed, is void and the gate reads as before.
+    $phf = Join-Path $cr '.streams\runners\perf-hold.json'; New-Item -ItemType Directory -Path (Split-Path $phf) -Force | Out-Null
+    $phNow = (Get-Date).ToUniversalTime()
+    @{ pid = $PID; until = $phNow.AddSeconds(600).ToString('yyyy-MM-ddTHH:mm:ssZ'); by = 'suite-test'; leg = 'Playwright.Perf' } | ConvertTo-Json | Set-Content $phf -Encoding utf8
+    $phOut = @(& "$S\Start-StreamRunner.ps1" -Repo $cr -Role author -DryRun)
+    Case 'a live perf hold stops the author runner before its pre-stage' ((($phOut -join "`n") -match '(?m)^PERF-HOLD Playwright\.Perf by suite-test') -and -not (($phOut -join "`n") -match '(?m)^(PRESTAGE|RUN) ')) ($phOut -join '|')
+    @{ pid = 999999; until = $phNow.AddSeconds(600).ToString('yyyy-MM-ddTHH:mm:ssZ'); by = 'suite-test'; leg = 'Playwright.Perf' } | ConvertTo-Json | Set-Content $phf -Encoding utf8
+    $phDead = @(& "$S\Start-StreamRunner.ps1" -Repo $cr -Role author -DryRun)
+    @{ pid = $PID; until = $phNow.AddSeconds(-5).ToString('yyyy-MM-ddTHH:mm:ssZ'); by = 'suite-test'; leg = 'Playwright.Perf' } | ConvertTo-Json | Set-Content $phf -Encoding utf8
+    $phOld = @(& "$S\Start-StreamRunner.ps1" -Repo $cr -Role author -DryRun)
+    Remove-Item -LiteralPath $phf -Force
+    Case 'a perf hold with a dead pid or a past until is void' ((($phDead -join "`n") -notmatch '(?m)^PERF-HOLD') -and (($phDead -join "`n") -match '(?m)^PRESTAGE ') -and (($phOld -join "`n") -notmatch '(?m)^PERF-HOLD') -and (($phOld -join "`n") -match '(?m)^PRESTAGE ')) "dead=$($phDead -join '|') old=$($phOld -join '|')"
     # The GATE line names the row the claim takes (kit item IN-20261024221545-7b45): claim order, not board order. Both
     # board orders are probed, the last planned row marked an integration fix (claimed first, listed last).
     $gateMiss = @()
@@ -1032,7 +1067,12 @@ try {
        pidStart = (Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o') } | ConvertTo-Json | Set-Content $srRec
     $wdr = @(& "$S\Invoke-Watchdog.ps1" -Repo $sr -Session status-s)
     Case 'the watchdog keeps a snapshot that a running suite run names, even when superseded' ((Test-Path $snap1) -and (Test-Path $snap2)) ($wdr -join ' | ')
-    $sx = Get-Content -Raw $srRec | ConvertFrom-Json -AsHashtable; $sx.status = 'done'; $sx | ConvertTo-Json | Set-Content $srRec
+    # Legs ended 'done' but the run's process still exports, screens and attributes in the snapshot (kit item
+    # IN-20261116152111-6c9e: run-G17-27's snapshot was reaped under its attribution).
+    $sx = Get-Content -Raw $srRec | ConvertFrom-Json -AsHashtable; $sx.status = 'done'; $sx.screen = 'pending'; $sx | ConvertTo-Json | Set-Content $srRec
+    $wdp = @(& "$S\Invoke-Watchdog.ps1" -Repo $sr -Session status-s)
+    Case 'the watchdog keeps a done run''s snapshot while its process still lives (attribution reads it)' ((Test-Path $snap1) -and (Test-Path $snap2)) ($wdp -join ' | ')
+    $sx = Get-Content -Raw $srRec | ConvertFrom-Json -AsHashtable; $sx.pid = 999999; $sx.screen = 'done'; $sx | ConvertTo-Json | Set-Content $srRec
     $wds = @(& "$S\Invoke-Watchdog.ps1" -Repo $sr -Session status-s)
     Case 'a superseded snapshot is reaped and the newest kept' (-not (Test-Path $snap1) -and (Test-Path $snap2)) ($wds -join ' | ')
     Remove-Item (Join-Path $sr '.streams\integrator.lock') -Force
@@ -1213,6 +1253,25 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     $hr7 = @(& "$S\Invoke-Grader.ps1" -Repo $gr -Task H1.O -Root $hwt -Label wt); $hx7 = $LASTEXITCODE
     $hl7 = Get-Content -Raw (Join-Path $gr '.streams\logs\H1.O.grader.wt.txt')
     Case 'a row with only an author grader grades as before, one hash, no section header' ($hx7 -eq 0 -and $hl7 -match '(?m)^GRADER sha [0-9A-Fa-f]+ ' -and $hl7 -notmatch '\+' -and $hl7 -notmatch '(?m)^== ') "exit $hx7 : $hl7"
+    # A Python check (.py, root as its one positional argument) runs under python, never pwsh -File, which refuses a
+    # non-.ps1 file (kit item IN-20261113183233-fd7f: G26.T447 went red on main with no clause run).
+    Set-Content (Join-Path $gr '.streams\checks\H1.P.py') @'
+import sys, os
+root = sys.argv[1]
+ok = os.path.exists(os.path.join(root, "impl.txt"))
+print(("PASS" if ok else "FAIL") + " P1" + ("" if ok else ": impl.txt missing"))
+sys.exit(0 if ok else 1)
+'@
+    $pd = J $gr
+    $hP = CTask 'H1.P' 'H1' 'building' 5 @() ''; $hP.artifacts.check = '.streams\checks\H1.P.py'; $hP.artifacts.grader = $null
+    $pd.tasks = @($pd.tasks) + @($hP)
+    $pd | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $gr '.streams\tasks.json') -Encoding utf8
+    $hr8 = @(& "$S\Invoke-Grader.ps1" -Repo $gr -Task H1.P -Root $hwt -Label wt); $hx8 = $LASTEXITCODE
+    Case 'a .py check runs under python and its clause lines grade' ($hx8 -eq 0 -and ($hr8 -join ' ') -match 'PASS P1') "exit $hx8 : $($hr8 -join ' | ')"
+    $pwt = Join-Path $Scratch 'chk-wt-py'; New-Item -ItemType Directory -Path $pwt -Force | Out-Null
+    $hr9 = @(& "$S\Invoke-Grader.ps1" -Repo $gr -Task H1.P -Root $pwt -Label red-check -Only check -ExpectRed -BeatSession 'chk-beat'); $hx9 = $LASTEXITCODE
+    $hl9 = Get-Content -Raw (Join-Path $gr '.streams\logs\H1.P.grader.red-check.txt')
+    Case 'a .py check under a beating run is a real RED with its clause named' ($hx9 -eq 0 -and $hl9 -match 'FAIL P1' -and $hl9 -notmatch "\.ps1' extension") "exit $hx9 : $hl9"
 
     # Left to plan (kit items IN-20261009131901-10e4, IN-20261009132301-e0a4): the acceptance clauses of READY requirement
     # files that no row names, over ALL requirements, with a per-group count and a 'not in any group' count. The folder is
@@ -1227,6 +1286,12 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     Set-Content (Join-Path $pr 'docs\requirements\features\FEAT-A-001.yaml') "id: FEAT-A-001`nstatus: READY`nacceptance:`n- id: AC-A-001`n  given:`n  - a`n- id: AC-A-002`n- id: AC-A-003`ntraceability:`n  - AC-A-009`n"
     Set-Content (Join-Path $pr 'docs\requirements\features\FEAT-B-001.yaml') "id: FEAT-B-001`nstatus: READY`nacceptance:`n- id: AC-B-001`n- id: AC-B-002`n"
     Set-Content (Join-Path $pr 'docs\requirements\templates\target.yaml') "id: FEAT-TEMPLATE-000`nstatus: DRAFT`nacceptance:`n- id: AC-T-001`n"
+    # The not-READY count leaves out RETIRED files, the fictional sample package and the blank templates: only
+    # FEAT-D-001 counts (kit item IN-20261116025403-54ef).
+    New-Item -ItemType Directory -Path (Join-Path $pr 'docs\requirements\RequirementDocumentExample') -Force | Out-Null
+    Set-Content (Join-Path $pr 'docs\requirements\features\FEAT-D-001.yaml') "id: FEAT-D-001`nstatus: DRAFT`nacceptance:`n- id: AC-D-001`n"
+    Set-Content (Join-Path $pr 'docs\requirements\features\FEAT-R-001.yaml') "id: FEAT-R-001`nstatus: RETIRED`nacceptance:`n- id: AC-R-001`n- id: AC-R-002`n"
+    Set-Content (Join-Path $pr 'docs\requirements\RequirementDocumentExample\FEAT-EXAMPLE-001.yaml') "id: FEAT-EXAMPLE-001`nstatus: REVIEW`nacceptance:`n- id: AC-E-001`n- id: AC-E-002`n- id: AC-E-003`n"
     $pT1 = CTask 'P1.T1' 'P1' 'ticketed' 5 @() ''; $pT1.why = @('builds the A loader', 'AC-A-001')
     $pT2 = CTask 'P1.T2' 'P1' 'planned' 5 @() ''; $pT2.why = @('x'); $pT2.tests = @('AC-A-002-B covers the refusal')
     $pT3 = CTask 'P1.T3' 'P1' 'planned' 5 @() ''; $pT3.why = @('x')

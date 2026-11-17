@@ -149,6 +149,10 @@ $script:Transitions = @{
     # inflated the board's blocked count (kit item IN-20261009150944-5bbd). The role is 'plan-retire', not 'plan', so
     # only Revise-Task's guarded path can make the move; Update-Task -Role plan -To done stays refused.
     'blocked>done#retire'  = @('plan-retire')
+    # Withdraw: Revise-Task.ps1 -Release block parks a BUILT row whose patch never landed, in one locked write. Through
+    # built>ticketed then ticketed>blocked a builder reclaimed the row between the two calls (kit item
+    # IN-20261116135653-12bc). The role is 'plan-withdraw' so only Revise-Task's guarded path can make the move.
+    'built>blocked#withdraw' = @('plan-withdraw')
 }
 
 # A retired row is state done with a `retired` record ({ at, by, note }). Every close and claim rule already treats done
@@ -700,6 +704,13 @@ function Get-ClaimProgressAt($Task, $Paths) {
     @{ at = $best; what = $what }
 }
 
+# A row's estMinutes as a whole number, 0 when the row has none: gate rows carry none, and a planner batch that
+# misspelled the field must not take the status page down. Reads hashtable and object rows alike.
+function Get-EstMinutes($t) {
+    $v = if ($t -is [Collections.IDictionary]) { $t['estMinutes'] } elseif ($t -and $t.PSObject.Properties['estMinutes']) { $t.estMinutes } else { $null }
+    $n = 0; if ($null -ne $v -and [int]::TryParse("$v", [ref] $n)) { $n } else { 0 }
+}
+
 # Longest remaining estimate chain from each task; the critical path is the tasks on the longest chain.
 function Get-ChainMinutes($doc) {
     $memo = @{}
@@ -712,7 +723,7 @@ function Get-ChainMinutes($doc) {
         if ($memo.ContainsKey($id)) { return $memo[$id] }
         if ($seen -contains $id) { throw "DEPENDENCY CYCLE at $id" }
         $t = $byId[$id]
-        $own = if ($t.state -in @('done', 'integrated')) { 0 } else { [int]$t.estMinutes }
+        $own = if ($t.state -in @('done', 'integrated')) { 0 } else { (Get-EstMinutes $t) }
         $best = 0
         foreach ($n in @($dependents[$id])) { if ($n) { $v = & $calc $n (@($seen) + $id); if ($v -gt $best) { $best = $v } } }
         $memo[$id] = $own + $best
@@ -779,7 +790,7 @@ function Get-UpChainMinutes($doc) {
         if ($seen -contains $id) { throw "DEPENDENCY CYCLE at $id" }
         $t = $byId[$id]
         if (-not $t) { return 0 }
-        $own = if ($t.state -in @('done', 'integrated')) { 0 } else { [int]$t.estMinutes }
+        $own = if ($t.state -in @('done', 'integrated')) { 0 } else { (Get-EstMinutes $t) }
         $best = 0
         foreach ($d in @($t.dependsOn)) { if ($d) { $v = & $calc $d (@($seen) + $id); if ($v -gt $best) { $best = $v } } }
         $memo[$id] = $own + $best
@@ -1320,6 +1331,34 @@ function Set-QuotaHold($P, [datetime] $Until, [string] $By, [string] $Type) {
     if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     $doc = [ordered]@{ until = $Until.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); by = $By; type = $Type; at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
     Write-AtomicText (Join-Path $dir 'quota-hold.json') ($doc | ConvertTo-Json)
+}
+# THE PERF HOLD (kit item IN-20261115023632-9007): a perf leg needs a quiet host, and runners build around the clock,
+# so the suite writes .streams\runners\perf-hold.json { pid, until, by, leg } for the quiet wait and the leg run, and
+# author and build runners launch no new unit while it stands. Units already running finish. Get-PerfHold returns the
+# hold while its until is in the future AND its pid is alive, else $null, so a crashed suite never stalls the runners.
+function Get-PerfHold($P) {
+    $f = Join-Path $P.Root 'runners\perf-hold.json'
+    if (-not (Test-Path -LiteralPath $f)) { return $null }
+    try { $h = Get-Content -LiteralPath $f -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop } catch { return $null }
+    $u = [datetime]::MinValue
+    if (-not [datetime]::TryParse([string]$h['until'], [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal, [ref]$u)) { return $null }
+    if ($u -le (Get-Date).ToUniversalTime()) { return $null }
+    $hp = 0; if (-not [int]::TryParse([string]$h['pid'], [ref]$hp) -or -not (Get-Process -Id $hp -ErrorAction SilentlyContinue)) { return $null }
+    @{ until = $u; by = [string]$h['by']; leg = [string]$h['leg']; pid = $hp }
+}
+# Seconds: STREAM_PERF_HOLD_SECONDS (default 7200) caps the hold; the caller removes it when the leg ends.
+function Set-PerfHold($P, [string] $By, [string] $Leg) {
+    $sec = 7200; $v = 0; if ([int]::TryParse([string]$env:STREAM_PERF_HOLD_SECONDS, [ref]$v) -and $v -gt 0) { $sec = $v }
+    $dir = Join-Path $P.Root 'runners'
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $now = (Get-Date).ToUniversalTime()
+    $doc = [ordered]@{ pid = $PID; until = $now.AddSeconds($sec).ToString('yyyy-MM-ddTHH:mm:ssZ'); by = $By; leg = $Leg; at = $now.ToString('yyyy-MM-ddTHH:mm:ssZ') }
+    Write-AtomicText (Join-Path $dir 'perf-hold.json') ($doc | ConvertTo-Json)
+}
+function Clear-PerfHold($P) {
+    $f = Join-Path $P.Root 'runners\perf-hold.json'
+    $h = $null; try { $h = Get-Content -LiteralPath $f -Raw -ErrorAction Stop | ConvertFrom-Json -AsHashtable } catch { return }
+    if ([string]$h['pid'] -eq [string]$PID) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
 }
 
 # THE EARLY-LIFT PROBE (kit item IN-20261024093536-3be3): a weekly hold is capped at 6 h, but the account can lift

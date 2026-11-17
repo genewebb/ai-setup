@@ -1,6 +1,6 @@
 ---
 name: stream-integrate
-description: v0.23. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes, even while a suite run is going, and each cycle first handles the oldest open item in its inbox (.streams\inbox\stream-integrate.md), then applies each built, verified patch to the dirty main tree as soon as it is ready and re-runs that task's grader there. When a whole group is integrated it starts one Tier 2 run (Start-SuiteRun.ps1, in a snapshot of main, so main stays open), the scripts screen flaky tests and attribute failures to fix tasks, a Tier 3 retest runs only the failed tests once the fixes land, and Test-GroupClose.ps1 says when the group may close; then it activates the next group (Activate-Group.ps1). Use for /stream-integrate (run under /loop), /stream-integrate once, /stream-integrate gate <task> pass|fail "<note>", /stream-integrate status.
+description: v0.24. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes, even while a suite run is going, and each cycle first handles the oldest open item in its inbox (.streams\inbox\stream-integrate.md), then applies each built, verified patch to the dirty main tree as soon as it is ready and re-runs that task's grader there. When a whole group is integrated it starts one Tier 2 run (Start-SuiteRun.ps1, in a snapshot of main, so main stays open), the scripts screen flaky tests and attribute failures to fix tasks, a Tier 3 retest runs only the failed tests once the fixes land, and Test-GroupClose.ps1 says when the group may close; then it activates the next group (Activate-Group.ps1). Use for /stream-integrate (run under /loop), /stream-integrate once, /stream-integrate gate <task> pass|fail "<note>", /stream-integrate status.
 ---
 
 # stream-integrate
@@ -136,6 +136,10 @@ and leaves it built. With more than one focus group, "the focus group" in the st
        the patch's files. A clause like that can't pass after any `git apply` (file times, tree-local state). The task
        goes to `planned` with the patch kept, and a line goes to `owner\questions.md`. An author writes a portable
        grader; the builder then lays the kept patch down and re-verifies, and does not rebuild.
+     - **CHECK-SUSPECT**: the same evidence on a row graded by its builder check alone (`artifacts.check`, no
+       `artifacts.grader`). An author may not edit a check, so the task goes to `ticketed` with the patch kept and a
+       `check-suspect:` note naming the check: a builder fixes the check (the ticket's READ-FIRST line, if any), never
+       the product. No owner question.
      - **REVERSED** (code defect, or not provably the grader): the task goes to `ticketed`, and the note says which
        test failed (a clause that also failed in the worktree, a changed grader, differing content, or a gone
        worktree). The patch stays as the builder's starting point.

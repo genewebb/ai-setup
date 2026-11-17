@@ -43,9 +43,24 @@ $step = {
     $log = Join-Path $rec['runDir'] "$kind.$name.txt"
     # A perf leg runs only on a quiet host (lib\Suites.ps1 Wait-QuietHost, kit item IN-20261010212643-92b1); a host that
     # never quiets leaves it NOT-MEASURED: no result, never a failure.
+    $perfHeld = $false
     if ($kind -eq 'leg' -and (Test-PerfLeg $s)) {
-        $q = Wait-QuietHost $P $Session
+        # A perf leg the owner exempted (leg:<name> in exempt.<G>.json) for every group this run serves can change no
+        # close, so it is skipped outright: no quiet wait and no perf hold, which pauses every author and build runner
+        # (kit item IN-20261116141052-8b15: run-G17-27 held them 2 h for an exempt leg).
+        $runGroups = @(@($rec['groups']) + @($rec['group']) | Where-Object { $_ } | ForEach-Object { [string]$_ } | Select-Object -Unique)
+        $notExempt = @($runGroups | Where-Object { -not (Get-SuiteExemptions $P $_).ContainsKey("leg:$name") })
+        if ($runGroups.Count -and -not $notExempt.Count) {
+            $legs.Add([ordered]@{ step = $kind; name = $name; kind = [string]$s['kind']; project = [string]$s['project']; exit = 0; log = $log; command = ''; notMeasured = $true; exempt = $true; reason = "exempt for every run group ($($runGroups -join ','))" })
+            $rec['legs'] = @($legs); Write-JsonFile $recPath $rec
+            Add-Decision $P $Session "TIER2 $Run leg $name EXEMPT-SKIP (exempt for $($runGroups -join ','); no quiet wait, no perf hold)"
+            $said.Add("EXEMPT-SKIP $name exempt for $($runGroups -join ',')")
+            return 'ok'
+        }
+        Set-PerfHold $P $Session $name; $perfHeld = $true
+        $q = Wait-QuietHost $P $Session -Hold
         if (-not $q.quiet) {
+            Clear-PerfHold $P
             $legs.Add([ordered]@{ step = $kind; name = $name; kind = [string]$s['kind']; project = [string]$s['project']; exit = 0; log = $log; command = ''; notMeasured = $true; reason = "host not quiet after $($q.waitedSeconds) s: $($q.why)" })
             $rec['legs'] = @($legs); Write-JsonFile $recPath $rec
             Add-Decision $P $Session "TIER2 $Run leg $name NOT-MEASURED (host not quiet after $($q.waitedSeconds) s: $($q.why))"
@@ -56,8 +71,8 @@ $step = {
     }
     if ($s['kind'] -in @('dotnet', 'playwright')) { New-Item -ItemType Directory -Path (Join-Path $rec['runDir'] $name) -Force | Out-Null }
     $cmd = Expand-SuiteCommand ([string]$s['command']) $vars
-    $out = @(& "$PSScriptRoot\Invoke-IntegratorRun.ps1" -Repo $Repo -Session $Session -Log $log -Command $cmd -WorkDir $wd)
-    $code = $LASTEXITCODE
+    try { $out = @(& "$PSScriptRoot\Invoke-IntegratorRun.ps1" -Repo $Repo -Session $Session -Log $log -Command $cmd -WorkDir $wd); $code = $LASTEXITCODE }
+    finally { if ($perfHeld) { Clear-PerfHold $P } }
     # A leg refused for LOCK-LOST never ran: 'lockLost' tells Export-SuiteResults.ps1 to write it 'not-run', never a
     # failure to attribute (kit item IN-20261020115130-5b6f).
     $lost = ($out -join ' ') -match 'LOCK-LOST'
