@@ -36,6 +36,7 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [Seq events also in SQL: logging.tSystemLog (Profisee DB + PROD speedmerchants)](reference_systemlog_table.md)
 
 ## Active work (newest first; full status in each file)
+- **[Isolation test plan page + RESTART: "restart" = vault note 11 Restart Log + page Restart tab; update both every result 11/17](project_isolation_test_plan_page_2026-11-17.md)**
 - [TestAuto EmailStep (Teams channel mail) 11/16: DONE, merged main, PROD row, Teams post verified 9:04; CrewChief moved to shared SmtpMail, uncommitted](project_testauto_email_step_2026-11-16.md)
 - **[Matching 100M continue 11/14: S1 hand-run on Profisee100M, new pack matching-large from SMVMTR3 for S1 end + S2-3c; BUILT uncommitted, lab run pending](project_matching_large_100m_continue_2026-11-14.md)**
 - **[TestAutoIsolation 11/13-14: isolation harness, uncommitted; agent 1.3.0 (duty-cycle strengths); far end/fixed addr/prepared image home-box tried 11/14; top-5 enhancements (host counters, load strengths, leak table, host fix) built; home box = mechanics only](project_testautoisolation_2026-11-13.md)**
