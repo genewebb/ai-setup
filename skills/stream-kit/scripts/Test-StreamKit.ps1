@@ -90,7 +90,19 @@ try {
     $ef = Join-Path $Scratch 'noest.json'; $noest | ConvertTo-Json -Depth 10 | Set-Content $ef
     $out = & "$S\Add-Tasks.ps1" -Repo $repo -Role plan -Session plan-1 -File $ef
     Case 'plan refuses work row without estMinutes' ($LASTEXITCODE -eq 2 -and ($out -join ' ') -match 'G1.T6: no estMinutes.*key estimate' -and -not (@((J $repo).tasks | Where-Object { $_.id -eq 'G1.T6' }).Count))
+    $badkind = @{ tasks = @(@{ id = 'G1.T6K'; group = 'G1'; title = 'x'; why = @('AC-9'); kind = 'tests'; writeSet = @('yk.txt'); dependsOn = @(); estMinutes = 5 }) }
+    $kf = Join-Path $Scratch 'badkind.json'; $badkind | ConvertTo-Json -Depth 10 | Set-Content $kf
+    $out = & "$S\Add-Tasks.ps1" -Repo $repo -Role plan -Session plan-1 -File $kf
+    Case 'plan refuses a kind no claim takes' ($LASTEXITCODE -eq 2 -and ($out -join ' ') -match "G1.T6K: BAD-KIND 'tests'" -and -not (@((J $repo).tasks | Where-Object { $_.id -eq 'G1.T6K' }).Count))
     $doc0 = Get-Content -Raw (Join-Path $repo '.streams\tasks.json')
+    $dk = $doc0 | ConvertFrom-Json -AsHashtable -Depth 50; $rk = @($dk.tasks | Where-Object { $_.id -eq 'G1.T3' })[0] | ConvertTo-Json -Depth 50 | ConvertFrom-Json -AsHashtable -Depth 50
+    $rk['id'] = 'G1.T7K'; $rk['writeSet'] = @('yk.txt'); $rk['kind'] = 'tests'; $rk['dependsOn'] = @(); $dk.tasks += $rk
+    $dk | ConvertTo-Json -Depth 50 | Set-Content (Join-Path $repo '.streams\tasks.json')
+    $kb = @(& "$S\Revise-Task.ps1" -Repo $repo -Session plan-1 -Task G1.T7K -Kind tests2); $kbx = $LASTEXITCODE
+    $kg = @(& "$S\Revise-Task.ps1" -Repo $repo -Session plan-1 -Task G1.T7K -Kind code); $kgx = $LASTEXITCODE
+    $kr = (T $repo 'G1.T7K')
+    Case 'plan revise corrects a kind no claim takes' ($kbx -eq 2 -and ($kb -join ' ') -match 'BAD-KIND G1.T7K' -and $kgx -eq 0 -and $kr.kind -eq 'code' -and $kr.state -eq 'planned') (($kb + $kg) -join ' | ')
+    Set-Content -NoNewline -LiteralPath (Join-Path $repo '.streams\tasks.json') -Value $doc0
     $d0 = $doc0 | ConvertFrom-Json -AsHashtable -Depth 50; $src = @($d0.tasks | Where-Object { $_.id -eq 'G1.T3' })[0]; $row = $src | ConvertTo-Json -Depth 50 | ConvertFrom-Json -AsHashtable -Depth 50; $row['id'] = 'G1.T7'; $row['writeSet'] = @('y.txt'); [void]$row.Remove('estMinutes'); $d0.tasks += $row
     $d0 | ConvertTo-Json -Depth 50 | Set-Content (Join-Path $repo '.streams\tasks.json')
     try { $sj = & "$S\Get-StreamStatus.ps1" -Repo $repo -Json 2>&1 } catch { $sj = "THREW $_"; $global:LASTEXITCODE = 1 }
@@ -103,6 +115,9 @@ try {
     $claims = $jobs | Wait-Job | Receive-Job; $jobs | Remove-Job
     $got = @($claims | Where-Object { $_ -ne 'NONE' } | ForEach-Object { ($_ | ConvertFrom-Json).id })
     Case 'parallel author claims are distinct' ($got.Count -eq 3 -and @($got | Sort-Object -Unique).Count -eq 3) ($got -join ',')
+    $kc0 = [string] (T $repo $got[0]).kind
+    $kc = @(& "$S\Revise-Task.ps1" -Repo $repo -Session plan-1 -Task $got[0] -Kind $(if ($kc0 -eq 'docs') { 'code' } else { 'docs' })); $kcx = $LASTEXITCODE
+    Case 'plan revise refuses a kind change on a claimed row' ($kcx -eq 2 -and ($kc -join ' ') -match "KIND-CLAIMED $([regex]::Escape($got[0]))" -and [string] (T $repo $got[0]).kind -eq $kc0) ($kc -join ' | ')
     $holder = { param($id) (T $repo $id).claim.session }
     foreach ($id in 'G1.T1', 'G1.T2', 'G1.T3') {
         $sess = & $holder $id
@@ -1128,6 +1143,31 @@ try {
     $ej = & "$S\Get-StreamStatus.ps1" -Repo $er -Json | ConvertFrom-Json
     $eR = @($ej.authorRank | Where-Object { $_.id -eq 'E3.R' })
     Case 'the page model names the inherited group and the row it comes through' ($eR.Count -eq 1 -and $eR[0].effectiveGroup -eq 'E1' -and $eR[0].via -eq 'E1.A' -and -not @($ej.authorRank | Where-Object { $_.id -in @('E3.Z', 'E2.X', 'E1.A') }).Count) (($ej.authorRank | ConvertTo-Json -Compress))
+    # FROZEN GROUPS (kit item IN-20261122032828-7a58): an owner hold in config focus.frozen stops every claim of that
+    # group: no author spill into it, no focus pull of its rows, no build claim, and Claim-Task -Task refuses it.
+    $efr = Join-Path $Scratch 'rankrepo'   # $eR above shares $er's name (names are case-insensitive)
+    $edoc | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $efr '.streams\tasks.json') -Encoding utf8
+    $ecfg = Join-Path $efr '.streams\config.json'; $ecfgOld = if (Test-Path $ecfg) { Get-Content $ecfg -Raw } else { $null }
+    '{ "focus": { "groups": [], "frozen": ["E2", "e3"] } }' | Set-Content $ecfg -Encoding utf8
+    $efz = @(1..4 | ForEach-Object { $o = & "$S\Claim-Task.ps1" -Repo $efr -Role author -Session "author-fz$_"; if ("$o" -eq 'NONE') { 'NONE' } else { (($o -join "`n") | ConvertFrom-Json).id } })
+    Case 'a frozen group is never claimed by an author, by focus pull or by spill' ((@($efz | Where-Object { $_ -match '^E[23]\.' }).Count -eq 0) -and $efz[3] -eq 'NONE') ($efz -join ',')
+    $efb = & "$S\Claim-Task.ps1" -Repo $efr -Role build -Session build-fz1
+    Case 'a frozen group''s ticketed row is never claimed by a builder' ("$efb" -eq 'NONE') "$efb"
+    $eft = & "$S\Claim-Task.ps1" -Repo $efr -Role author -Session author-fz9 -Task E2.X 2>&1; $eftCode = $LASTEXITCODE
+    Case 'Claim-Task -Task refuses a row of a frozen group' ($eftCode -eq 2 -and "$eft" -match 'REFUSED-TASK E2\.X : frozen') "$eftCode $eft"
+    # A fix on a frozen row's file never JOINS it (kit item IN-20261122115223-b907): nobody claims that row, so the fix
+    # would never land. The fix is its own row and the frozen row is ordered after it; a focus row still takes the join.
+    $efx = Join-Path $Scratch 'fix-frozen.json'
+    @{ tasks = @(@{ id = 'E1.F9'; group = 'E1'; title = 'fix on frozen file'; why = @('AC-9'); kind = 'code'; writeSet = @('E2.X.txt'); estMinutes = 10 }
+                 @{ id = 'E1.F8'; group = 'E1'; title = 'fix on focus file'; why = @('AC-8'); kind = 'code'; writeSet = @('E1.B.txt'); estMinutes = 10 }) } | ConvertTo-Json -Depth 10 | Set-Content $efx
+    $efxo = & "$S\Add-Tasks.ps1" -Repo $efr -Role integrate -Session integ-fz -File $efx 2>&1; $efxCode = $LASTEXITCODE
+    $efxX = T $efr 'E2.X'
+    Case 'a fix on a frozen row''s file is its own row and the frozen row waits on it' (
+        $efxCode -eq 0 -and "$efxo" -match 'PARKED-AFTER E2\.X after E1\.F9' -and "$efxo" -notmatch 'JOINED E1\.F9' -and (T $efr 'E1.F9').state -eq 'planned' -and
+        @($efxX.dependsOn) -contains 'E1.F9' -and "$($efxX.dependsWhy.'E1.F9')" -match 'not worked now') "$efxCode $efxo"
+    Case 'a fix on a focus row''s file still joins it' ("$efxo" -match 'JOINED E1\.F8 into E1\.B' -and -not ((J $efr).tasks | Where-Object { $_.id -eq 'E1.F8' })) "$efxo"
+    if ($null -ne $ecfgOld) { Set-Content $ecfg $ecfgOld -NoNewline -Encoding utf8 } else { Remove-Item $ecfg -Force }
+    $edoc | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $efr '.streams\tasks.json') -Encoding utf8
 
     # Claimable buffer (owner ruling 2026-10-02, kit item IN-20261002160453-9384, amended by IN-20261002161525-69c9).
     # Target = 2 claimable rows per live builder; below it the board raises PIPELINE DRY with the dominant reason, and
@@ -1902,6 +1942,22 @@ sys.exit(0 if ok else 1)
     $amHead = git -C $amR rev-parse HEAD
     $amI2 = @(& "$S\Integrate-Patch.ps1" -Repo $amR -Session integ-am -Task A1.Q)
     Case 'ALREADY-ON-MAIN: a patch already committed on HEAD is integrated with nothing applied or committed' ($amI2[0] -eq 'INTEGRATED A1.Q (already in HEAD)' -and (T $amR 'A1.Q').state -eq 'integrated' -and (git -C $amR rev-parse HEAD) -eq $amHead -and -not (git -C $amR status --porcelain -- q.txt)) ($amI2 -join ' | ')
+    # UNCOMMITTED (kit item IN-20261119220147-a032): a commit that failed after integration is kept in
+    # .streams\uncommitted.json, flagged by status and retried by the next drain until it lands.
+    $ucFile = Join-Path $amR '.streams\uncommitted.json'
+    Set-Content (Join-Path $amR 'p.txt') 'p DONE-P uncommitted'
+    ConvertTo-Json -InputObject @([pscustomobject]@{ id = 'A1.P'; patch = (Join-Path $amR '.streams\patches\A1.P.patch'); at = '2026-11-19T00:00:00Z'; why = 'index.lock' }) | Set-Content $ucFile
+    Set-Content $amLock 'x'
+    $ucI1 = @(& "$S\Integrate-Patch.ps1" -Repo $amR -Session integ-am -Task A1.Q)
+    $ucKept = Test-Path $ucFile; Remove-Item $amLock -Force
+    $ucFlag = try { (@(& "$S\Get-StreamStatus.ps1" -Repo $amR -Json) -join "`n") -match 'UNCOMMITTED A1\.P' } catch { "status threw: $_" }
+    $ucI2 = @(& "$S\Integrate-Patch.ps1" -Repo $amR -Session integ-am -Task A1.Q)
+    $ucSubj = (git -C $amR log -1 --format=%s)
+    Case 'UNCOMMITTED: a failed commit retry keeps the marker and status flags the row' (@($ucI1 | Where-Object { $_ -like 'UNCOMMITTED A1.P (commit retry failed*' }).Count -eq 1 -and $ucKept -and $ucFlag -eq $true) (($ucI1 -join ' | ') + " :: kept=$ucKept flag=$ucFlag")
+    Case 'UNCOMMITTED: the next drain commits the row and clears the marker' (@($ucI2 | Where-Object { $_ -like 'COMMIT-RETRIED A1.P *' }).Count -eq 1 -and $ucSubj -like 'A1.P:*' -and -not (Test-Path $ucFile) -and -not (git -C $amR status --porcelain -- p.txt)) (($ucI2 -join ' | ') + " :: $ucSubj")
+    ConvertTo-Json -InputObject @([pscustomobject]@{ id = 'A1.P'; patch = (Join-Path $amR '.streams\patches\A1.P.patch'); at = '2026-11-19T00:00:00Z'; why = 'x' }) | Set-Content $ucFile
+    $ucI3 = @(& "$S\Integrate-Patch.ps1" -Repo $amR -Session integ-am -Task A1.Q)
+    Case 'UNCOMMITTED: a marker whose paths hold no change is cleared with no commit' (@($ucI3 | Where-Object { $_ -like 'UNCOMMITTED-CLEARED A1.P*' }).Count -eq 1 -and -not (Test-Path $ucFile) -and (git -C $amR log -1 --format=%s) -eq $ucSubj) ($ucI3 -join ' | ')
     # NO-CODE-CHANGE (kit item IN-20261026203916-9d38): a row built with no code change hands off a patch with no file
     # sections (G17.T116's was its test record). It is graded on main in place: green integrates with no commit, red
     # goes back to ticketed. Before the fix both REBASEd (git apply --check refuses a patch with no diff), forever.

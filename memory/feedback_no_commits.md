@@ -5,10 +5,12 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: cd652c85-823a-4297-846f-e5ffed1e17b1
-  modified: 2026-10-01T01:47:02.453Z
+  modified: 2026-11-18T09:07:39.346Z
 ---
 
 **PLANNED 2026-09-30:** this table moves into each machine's `ProfileMachineConfig.md`, as the `## Git commit policy` table with `Commit` and `Push` columns. A missing repo gets neither. A `commit-guard` hook enforces it. Gene set speedmerchants to commit yes, push yes. See [[feedback-machine-portable-ai-config]]. Until that ships, the table below holds.
+
+**UPDATE 2026-11-18 (SMVMTR1, Gene):** speed-merchants now has a git policy row on SMVMTR1: commit=yes, push=no, worktrees=no (`ProfileMachineConfig.md`, applied revision DA57AB52CB5F). Scope Gene gave: TestAutoIsolation work on branch `bug/isolation_testing_linux/genewebb`, never main; Gene pushes and opens the PR. See [[feedback_git_ok_testautoisolation_2026-11-18]]. Other machines and other speed-merchants work: the old rule below still applies.
 
 **The rule is now SPLIT BY REPO, and the two repo names differ by one hyphen. Read the path before acting.**
 

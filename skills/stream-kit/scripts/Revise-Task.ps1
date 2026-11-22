@@ -25,7 +25,12 @@
 # role could correct it - G2.T97 carried 65 minutes for work measured at 110-150, G2.T36 70 for a seven-file row and
 # G2.T99 45 for a row two files wider, so every watchdog line and every group ETA read from them was wrong. A change
 # must be a positive whole number and must state its new estBasis in the SAME edit, because the old basis is exactly
-# what the new number makes false. estBasis may also be corrected on its own. kind is still not changeable here.
+# what the new number makes false. estBasis may also be corrected on its own.
+# kind: a row filed with a kind no claim selector takes (lib\Streams.ps1 $script:TaskKinds) sits planned for ever, as
+# ten G26 rows filed 'test'/'tests' did on 2026-11-21 (kit item IN-20261121151308-593b). A kind edit is accepted only
+# for a planned or blocked row no live session holds, only to a code, docs or mockup kind (BAD-KIND, KIND-STATE,
+# KIND-CLAIMED); a gate or integration row keeps its kind, and no row becomes one (KIND-FIXED), because both carry
+# their group's wiring.
 # dependsWhy: a map of dependency id -> one-line reason the edge exists (owner request, plan item IN-20261018143920-ebda,
 # kit item IN-20261018144201-44e6). An unstated edge cannot be told apart from an artificial file-order wait, so the
 # status page and the blocker reviews treat a stated one as logical. A key must name an edge the row holds after this
@@ -62,6 +67,7 @@ param(
     [string] $Group = '',
     [int] $EstMinutes = 0,
     [string] $EstBasis = '',
+    [string] $Kind = '',
     [switch] $ClearTests,
     [ValidateSet('auto', 'planned', 'ticketed', 'keep', 'block', 'retire')] [string] $Release = 'auto',
     [string] $Note = ''
@@ -72,7 +78,7 @@ $P = Get-StreamPaths (Resolve-Path $Repo).Path
 
 if ($File) { $in = Get-Content -Raw $File | ConvertFrom-Json -AsHashtable -Depth 20 }
 elseif ($Task) {
-    $in = @{ note = $Note; edits = @(@{ task = $Task; addWriteSet = $AddWriteSet; removeWriteSet = $RemoveWriteSet; addDependsOn = $AddDependsOn; removeDependsOn = $RemoveDependsOn; dependsWhy = $DependsWhy; addWhy = $AddWhy; removeWhy = $RemoveWhy; title = $Title; group = $Group; estMinutes = $EstMinutes; estBasis = $EstBasis; clearTests = [bool] $ClearTests; release = $(if ($PSBoundParameters.ContainsKey('Release')) { $Release } else { '' }); note = $Note }) }
+    $in = @{ note = $Note; edits = @(@{ task = $Task; addWriteSet = $AddWriteSet; removeWriteSet = $RemoveWriteSet; addDependsOn = $AddDependsOn; removeDependsOn = $RemoveDependsOn; dependsWhy = $DependsWhy; addWhy = $AddWhy; removeWhy = $RemoveWhy; title = $Title; group = $Group; estMinutes = $EstMinutes; estBasis = $EstBasis; kind = $Kind; clearTests = [bool] $ClearTests; release = $(if ($PSBoundParameters.ContainsKey('Release')) { $Release } else { '' }); note = $Note }) }
 } else { 'REFUSED give -File or -Task'; exit 2 }
 function Arr($h, $k) { if ($h.Contains($k) -and $null -ne $h[$k]) { @($h[$k] | Where-Object { $_ }) } else { @() } }
 
@@ -185,6 +191,15 @@ trap { if ("$_" -like 'TRANSITION-REFUSED*') { "REFUSED $_"; exit 2 } else { bre
             }
         }
         if ($eb -and $eb -ne [string] $t['estBasis']) { $t['estBasis'] = $eb; $parts += 'estBasis' }
+        $k = if ($e.Contains('kind') -and $e['kind']) { [string] $e['kind'] } else { '' }
+        if ($k -and $k -ne [string] $t['kind']) {
+            $fixed = @('gate', 'integration')
+            if ($k -notin $script:TaskKinds) { $problems.Add("BAD-KIND $($t.id): '$k' is not a kind any role takes ($($script:TaskKinds -join ', '))"); continue }
+            if ($k -in $fixed -or [string] $t['kind'] -in $fixed) { $problems.Add("KIND-FIXED $($t.id): a gate or integration kind carries its group's wiring, so it is neither given nor taken by an edit"); continue }
+            if ($t.claim -and (Test-ClaimLive $t)) { $problems.Add("KIND-CLAIMED $($t.id): $($t.claim.role) $($t.claim.session) holds it; the holder releases it first"); continue }
+            if ($t.state -notin @('planned', 'blocked')) { $problems.Add("KIND-STATE $($t.id): only a planned or blocked row changes kind, and this one is $($t.state)"); continue }
+            $parts += "kind $($t['kind']) -> $k"; $t['kind'] = $k
+        }
         $why = "plan revise: $($parts -join '; ')$(if ($e['note']) { " -- $($e['note'])" } elseif ($in['note']) { " -- $($in['note'])" })"
         # A NOTE-ONLY edit never moves a row. release defaulted to auto, so an edit that changed nothing but its note
         # RELEASED a blocked row: G3.T202 went blocked -> planned at 2026-10-01T19:09:46Z on 'plan revise:  -- tests

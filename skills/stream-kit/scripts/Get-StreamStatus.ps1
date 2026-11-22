@@ -775,6 +775,15 @@ foreach ($t in @($doc.tasks | Where-Object { $_.state -eq 'building' -and $_.cla
 # ---- main tree lock and author release rate (kit item IN-20261002161450-c89b) ----
 # One holder of .streams\main-grader.lock for more than 20 minutes starves every author RED re-run and every apply. On
 # 2026-10-02 that went unseen for 15 hours, while releases fell from 16-20/h to 0-7/h; both are now on the board.
+# A commit that failed after integration (Integrate-Patch.ps1 writes .streams\uncommitted.json) leaves a landed row's
+# files uncommitted on main until a drain retries it (kit item IN-20261119220147-a032).
+$uncommittedFile = Join-Path $P.Root 'uncommitted.json'
+if (Test-Path -LiteralPath $uncommittedFile) {
+    try {
+        $ucRows = @(Get-Content -LiteralPath $uncommittedFile -Raw | ConvertFrom-Json | Where-Object { $_ -and $_.id })
+        foreach ($uc in $ucRows) { $flags.Add("UNCOMMITTED $($uc.id) integrated but its commit failed at $($uc.at); the next Integrate-Patch drain retries it") }
+    } catch { $flags.Add("UNCOMMITTED marker file $uncommittedFile cannot be read: $(("$_" -split "`n")[0])") }
+}
 $mainLock = Get-MainTreeLockState $P
 if ($mainLock -and $mainLock.minutes -gt $script:MainLockFlagMinutes) {
     $flags.Add("main tree held $($mainLock.minutes) min by '$($mainLock.holder)': author RED re-runs and applies wait behind main-grader.lock")

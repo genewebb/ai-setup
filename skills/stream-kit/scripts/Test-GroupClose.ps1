@@ -131,9 +131,12 @@ else {
     if (-not $attr) { $refused.Add("NOT-ATTRIBUTED $($run['id']) (Register-SuiteFailures.ps1 has not run)") }
     $retests = @(Get-SuiteRunRecords $P $Group '3' | Where-Object { $_['baseRun'] -eq $run['id'] -and $_['status'] -eq 'done' })
     $resAll = Read-JsonFile (Join-Path $rd "$($run['id']).results.json")
-    $crashed = @(@($resAll['tests']) | Where-Object { $_ -and ([string]$_['test']).StartsWith('leg:') -and $_['outcome'] -eq 'failed' } | ForEach-Object { [string]$_['test'] })
+    # A run marked done before Export-SuiteResults.ps1 wrote its results (kit item IN-20261120233841-c9a2) has no
+    # evidence for rules 6 and 7 yet: refuse, never throw.
+    if (-not $resAll) { $refused.Add("NOT-COLLECTED $($run['id']) has no results file yet (Export-SuiteResults.ps1 has not run)") }
+    $crashed = @(@(if ($resAll) { $resAll['tests'] }) | Where-Object { $_ -and ([string]$_['test']).StartsWith('leg:') -and $_['outcome'] -eq 'failed' } | ForEach-Object { [string]$_['test'] })
     if ($crashed.Count) { $refused.Add("LEG-CRASHED $($run['id']) left no results for $($crashed -join ', '): start a new Tier 2 run once the leg runs") }
-    $unmeasured = @(@($resAll['tests']) | Where-Object { $_ -and $_['outcome'] -eq 'not-measured' -and -not $exempted.ContainsKey([string]$_['test']) } | ForEach-Object { [string]$_['test'] })
+    $unmeasured = @(@(if ($resAll) { $resAll['tests'] }) | Where-Object { $_ -and $_['outcome'] -eq 'not-measured' -and -not $exempted.ContainsKey([string]$_['test']) } | ForEach-Object { [string]$_['test'] })
     if ($unmeasured.Count) { $refused.Add("NOT-MEASURED $($run['id']) never ran $($unmeasured -join ', '): the host was not quiet; start a new Tier 2 run when it can be") }
 }
 

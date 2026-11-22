@@ -35,9 +35,23 @@ $report = [Collections.Generic.List[string]]::new()
     # comparison was still ~15 s of an 81-row release's lock hold on the 1016-row board (kit item IN-20261010181957-2e7f).
     $wsIndex = New-WriteSetIndex
     foreach ($o in $open) { Add-WriteSetIndex $wsIndex $o }
+    # Groups a fix may join a row of: released or integrating, not frozen, and a focus group.
+    $frozen = Get-FrozenGroups $P
+    $workedGroups = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    # Only an owner-set focus excludes a group: with the automatic focus every released group is still worked.
+    $focus = Get-FocusGroups $doc $P
+    $focusIds = if ($focus.source -eq 'config') { @($focus.groups) } else { $null }
+    # Rows read from tasks.json are objects and new rows are dictionaries; StrictMode throws on a missing origin.
+    function Get-RowOrigin($r) { if ($r -is [Collections.IDictionary]) { [string]$r['origin'] } elseif ($r.PSObject.Properties['origin']) { [string]$r.origin } else { '' } }
+    foreach ($g in @($doc.groups)) {
+        $wg = [string]$g.id
+        if ([string]$g.state -in @('released', 'integrating') -and -not $frozen.Contains($wg) -and ($null -eq $focusIds -or $wg -in $focusIds)) { [void]$workedGroups.Add($wg) }
+    }
     foreach ($t in @($in['tasks'])) {
         if (-not $t) { continue }
         if (-not @($t.why).Count) { $problems.Add("$($t.id): no REQ/AC ids in why") }
+        # A kind no claim selector takes leaves the row on the board with no taker (G26 rows filed as 'test' sat unclaimed).
+        if ($t.kind -and $t.kind -notin $script:TaskKinds) { $problems.Add("$($t.id): BAD-KIND '$($t.kind)' (one of $($script:TaskKinds -join ', '))") }
         if ($t.kind -notin @('gate', 'integration') -and -not @($t.writeSet).Count) { $problems.Add("$($t.id): no write set") }
         # Every work row is priced: the forecast, the critical path and the overrun flag read estMinutes, and a row that
         # carried the price under another key ("estimate") was added unpriced and silently zeroed the forecast.
@@ -54,6 +68,18 @@ $report = [Collections.Generic.List[string]]::new()
                     # landed already: a history note there would never be acted on; build on top of it instead
                     $t['dependsOn'] = @(@($t['dependsOn']) + $o.id | Where-Object { $_ } | Select-Object -Unique)
                     $report.Add("CHAINED $($t.id) after $($o.id)")
+                    continue
+                }
+                if ($Role -eq 'integrate' -and $o.state -ne 'done' -and $o.state -ne 'building' -and (Get-RowOrigin $o) -ne 'integration' -and -not $workedGroups.Contains([string]$o.group)) {
+                    # A row of a group no role works now (not released, frozen by the owner, or outside the focus groups)
+                    # is never claimed, so a fix joined into it never lands and the failing group can never close (run-G17-32
+                    # joined G28.R32F1 into parked G29.T004; kit item IN-20261122115223-b907). The fix stays its own row
+                    # and the idle row is ordered after it, with the reason stated.
+                    $o['dependsOn'] = @(@($o['dependsOn']) + $t.id | Where-Object { $_ } | Select-Object -Unique)
+                    if (-not ($o['dependsWhy'] -is [Collections.IDictionary])) { $o['dependsWhy'] = [ordered]@{} }
+                    $o['dependsWhy'][[string]$t.id] = "integration fix $($t.id) lands first; group $($o.group) is not worked now"
+                    Add-History $o $Session $o.state "ordered after integration fix $($t.id) [$(@($t.writeSet) -join ', ')]: group $($o.group) is not worked now"
+                    $report.Add("PARKED-AFTER $($o.id) after $($t.id)")
                     continue
                 }
                 if ($Role -eq 'integrate' -and $o.state -ne 'done') {

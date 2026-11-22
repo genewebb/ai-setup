@@ -4078,6 +4078,11 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $cl = @(& "$S\Test-GroupClose.ps1" -Repo $tr -Group T1 -DryRun); $clx = $LASTEXITCODE
     [IO.File]::WriteAllText($resPath1, $resKeep1)
     Case '96 a leg that crashed in the latest Tier 2 run refuses the close' ($clx -eq 1 -and ($cl -join ' ') -match 'LEG-CRASHED run-T1-1 .*leg:Playwright') ($cl -join ' | ')
+    # A done run whose results file is not written yet (kit item IN-20261120233841-c9a2) refuses, never throws.
+    Move-Item -LiteralPath $resPath1 -Destination "$resPath1.held" -Force
+    try { $clc = @(& "$S\Test-GroupClose.ps1" -Repo $tr -Group T1 -DryRun 2>&1 | ForEach-Object { "$_" }); $clcx = $LASTEXITCODE } catch { $clc = @("THROW $_"); $clcx = -1 }
+    Move-Item -LiteralPath "$resPath1.held" -Destination $resPath1 -Force
+    Case '96 a done Tier 2 run with no results file yet refuses NOT-COLLECTED' ($clcx -eq 1 -and ($clc -join ' ') -match 'NOT-COLLECTED run-T1-1' -and ($clc -join ' ') -notmatch 'null array') ($clc -join ' | ')
     # A gates-only group (review gates plus its integration row, G15; kit item IN-20261020234526-74b6) has no build row a
     # suite could cover, so it closes on its gates with no Tier 2 run; a group that has a build row still needs one.
     $tasksKeep9 = [IO.File]::ReadAllText((Join-Path $tr '.streams\tasks.json'))

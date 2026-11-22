@@ -813,6 +813,7 @@ function Test-DepsAt($doc, $Task, [string[]] $States) {
 # and are checked by the caller. Claim-Task.ps1 and Get-StreamStatus.ps1 both read this one rule, so the board's
 # claimable count is exactly the rows a build claim would offer.
 $script:BuildKinds = @('code', 'docs', 'mockup')
+$script:TaskKinds = @('code', 'docs', 'mockup', 'gate', 'integration')
 $script:BuildReadyStates = @('built', 'integrated', 'done')
 # A BUILT dependency counts only while its own base is whole: every dependency of it is integrated or done, or is
 # itself built on a whole base. A built row's patch was cut on top of its own built dependencies' patches, and
@@ -1152,13 +1153,15 @@ function Get-Claimable($P, $doc, [string] $Role, $Held = $null) {
     if ($null -eq $Held) { $Held = Get-InboxHeldRows $P }
     $released = @($doc.groups | Where-Object { $_.state -in @('released', 'integrating') } | ForEach-Object { $_.id })
     $focus = Get-FocusSet $doc $P
+    $frozen = Get-FrozenGroups $P
     $fg = Get-FocusGroups $doc $P
     $r = [ordered]@{ focusGroup = $(if ($fg.groups.Count) { $fg.groups -join '+' } else { $null }); focusSource = $fg.source; ids = [Collections.Generic.List[string]]::new(); rows = [Collections.Generic.List[object]]::new()
         waiting = [Collections.Generic.List[object]]::new(); heldIds = [Collections.Generic.List[string]]::new()
-        held = 0; claimed = 0; notReleased = 0; notFocus = 0
+        held = 0; claimed = 0; notReleased = 0; notFocus = 0; frozen = 0
         ticketed = @($doc.tasks | Where-Object { $_.state -eq 'ticketed' -and $_.kind -in $script:BuildKinds }) }
     foreach ($t in $doc.tasks) {
         if ($t.state -ne $want -or $t.kind -notin $kinds) { continue }
+        if ($frozen.Contains([string]$t.group)) { $r.frozen++; continue }
         if (-not $focus.Contains([string]$t.id)) { $r.notFocus++; continue }
         # The integrator lands a closed group's leftover built row (Get-FocusSet: final review I1); claims stay released-only.
         if ($Role -ne 'integrate' -and $t.group -notin $released) { $r.notReleased++; continue }
@@ -1178,7 +1181,7 @@ function Get-Claimable($P, $doc, [string] $Role, $Held = $null) {
     $r['spill'] = $false
     if ($Role -eq 'author' -and $r.ids.Count -eq 0) {
         foreach ($t in $doc.tasks) {
-            if ($t.state -ne 'planned' -or $t.kind -notin $kinds -or $focus.Contains([string]$t.id)) { continue }
+            if ($t.state -ne 'planned' -or $t.kind -notin $kinds -or $focus.Contains([string]$t.id) -or $frozen.Contains([string]$t.group)) { continue }
             if ($t.group -notin $released -or (Test-ClaimLive $t) -or $Held.Contains([string]$t.id)) { continue }
             $r.ids.Add([string]$t.id); $r.rows.Add($t)
         }
@@ -1426,6 +1429,18 @@ function Get-StreamConfig($P = $null) {
     try { $doc = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json -AsHashtable -Depth 10; if ($doc -isnot [Collections.IDictionary]) { $doc = @{} } } catch { $doc = @{} }
     $script:StreamConfigCache = @{ file = $file; stamp = $stamp; doc = $doc }
     $doc
+}
+# FROZEN GROUPS (owner hold, kit item IN-20261122032828-7a58): .streams\config.json "focus": { "frozen": ["G26"] }.
+# No role takes a row of a frozen group: Get-Claimable skips it for author, build and integrate, author spill skips it,
+# and Claim-Task.ps1 -Task refuses it (frozen). Removing a group from focus.groups alone did not stop author spill.
+# Returns a case-insensitive HashSet of group ids; empty when the key is missing.
+function Get-FrozenGroups($P = $null) {
+    $set = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $cfg = Get-StreamConfig $P
+    if ($cfg.Contains('focus') -and $cfg.focus -is [Collections.IDictionary] -and $cfg.focus.Contains('frozen') -and $null -ne $cfg.focus.frozen) {
+        foreach ($g in @($cfg.focus.frozen)) { if ("$g") { [void]$set.Add([string]$g) } }
+    }
+    , $set
 }
 
 # FOCUS (2026-10-05 priority-focus-design 3.1; owner-set since 2026-10-06). The focus groups are the groups every work

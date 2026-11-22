@@ -84,6 +84,61 @@ if ($lockState -eq 'retaken') { Add-Decision $P $Session 'integrator lock was go
 $doc = Read-Tasks $P
 $update = "$PSScriptRoot\Update-Task.ps1"
 
+# A commit that fails after its row went integrated (an index.lock race) leaves the files uncommitted on main while the
+# board reads landed: G26.T520 sat so for 3 days (kit item IN-20261119220147-a032). Each such row is kept in
+# .streams\uncommitted.json ({ id, patch, at, why }), retried at the start of every drain, and flagged by Get-StreamStatus.
+$script:UncommittedPath = Join-Path $P.Root 'uncommitted.json'
+function Read-UncommittedRows {
+    if (-not (Test-Path -LiteralPath $script:UncommittedPath)) { return @() }
+    try { @(Get-Content -LiteralPath $script:UncommittedPath -Raw | ConvertFrom-Json) | Where-Object { $_ -and $_.id } } catch { @() }
+}
+function Write-UncommittedRows($Rows) {
+    $list = @($Rows | Where-Object { $_ })
+    if (-not $list.Count) { Remove-Item -LiteralPath $script:UncommittedPath -Force -ErrorAction SilentlyContinue; return }
+    Write-AtomicText $script:UncommittedPath (ConvertTo-Json -InputObject @($list) -Depth 4)
+}
+function Add-UncommittedRow([string] $Id, [string] $PatchPath, [string] $Why) {
+    $rows = @(Read-UncommittedRows | Where-Object { [string]$_.id -ne $Id })
+    $rows += [pscustomobject]@{ id = $Id; patch = $PatchPath; at = (Get-Now); why = $Why }
+    Write-UncommittedRows $rows
+}
+function Get-PatchPaths([string] $PatchPath) {
+    @(Get-Content -LiteralPath $PatchPath | ForEach-Object { if ($_ -match '^diff --git a/(.+) b/(.+)$') { $Matches[1]; $Matches[2] } } | Sort-Object -Unique)
+}
+if (-not $NoCommit) {
+    $pendingCommits = @(Read-UncommittedRows)
+    if ($pendingCommits.Count) {
+        $retryPolicy = Get-IntegrateGitPolicy $Repo
+        $keepRows = @()
+        foreach ($uc in $pendingCommits) {
+            $ucId = [string]$uc.id; $ucPatch = [string]$uc.patch
+            if (-not $retryPolicy.Commit) { $keepRows += $uc; "UNCOMMITTED $ucId (retry skipped: $($retryPolicy.Why))"; continue }
+            if (-not $ucPatch -or -not (Test-Path -LiteralPath $ucPatch)) { $keepRows += $uc; "UNCOMMITTED $ucId (retry skipped: patch $ucPatch not found)"; continue }
+            $ucPaths = Get-PatchPaths $ucPatch
+            $ucDirty = @(& git -C $Repo status --porcelain --untracked-files=all -- @ucPaths 2>$null | Where-Object { $_ })
+            if (-not $ucDirty.Count) {
+                Add-Decision $P $Session "uncommitted marker for $ucId cleared: its patch paths hold no change against HEAD"
+                "UNCOMMITTED-CLEARED $ucId (nothing left to commit)"; continue
+            }
+            $ucRow = @($doc.tasks | Where-Object { [string]$_.id -eq $ucId }) | Select-Object -First 1
+            $ucTitle = if ($ucRow) { [string]$ucRow.title } else { 'commit retry' }
+            try {
+                $staleLock = Clear-StaleGitIndexLock $P $Session $Repo; if ($staleLock) { "STALE-INDEX-LOCK removed $staleLock" }
+                [void](Invoke-Git $Repo (@('add', '-A', '-f', '--') + $ucPaths))
+                [void](Invoke-Git $Repo (@('commit', '-q', '-m', "${ucId}: $ucTitle", '-m', "Commit retried by stream-integrate ($Session): the commit after integration failed at $($uc.at).", '-m', 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>', '--') + $ucPaths))
+                $ucSha = (Invoke-Git $Repo @('rev-parse', '--short', 'HEAD')) | Select-Object -First 1
+                Add-Decision $P $Session "commit retry of $ucId committed as $ucSha (it failed at $($uc.at): $($uc.why))"
+                "COMMIT-RETRIED $ucId $ucSha"
+            } catch {
+                $uc.why = $_.Exception.Message; $keepRows += $uc
+                Add-Decision $P $Session "commit retry of $ucId failed, still uncommitted: $($_.Exception.Message)"
+                "UNCOMMITTED $ucId (commit retry failed; kept for the next drain)"
+            }
+        }
+        Write-UncommittedRows $keepRows
+    }
+}
+
 # FOCUS (2026-10-05 priority-focus-design 3.1): only rows in the focus set (lib\Streams.ps1 Get-FocusSet) are applied.
 # A built row outside it is reported NOT-FOCUS and stays built until its group's turn.
 $focusSet = Get-FocusSet $doc
@@ -327,7 +382,8 @@ if ($batchMax -gt 1) {
                     "COMMITTED $($r.id) $sha"; $done += [string]$r.id
                 } catch {
                     Add-Decision $P $Session "commit of $($r.id) failed, left uncommitted: $($_.Exception.Message)"
-                    "COMMIT FAILED $($r.id) (left uncommitted)"
+                    Add-UncommittedRow ([string]$r.id) $bPatch[[string]$r.id] $_.Exception.Message
+                    "COMMIT FAILED $($r.id) (left uncommitted; retried at the next drain)"
                 }
             }
             Write-StepTime $bId 'commit'
@@ -613,7 +669,8 @@ if ($gcode -eq 0) {
         }
     } catch {
         Add-Decision $P $Session "commit of $($t.id) failed, left uncommitted: $($_.Exception.Message)"
-        "COMMIT FAILED $($t.id) (left uncommitted)"
+        Add-UncommittedRow ([string]$t.id) $patch $_.Exception.Message
+        "COMMIT FAILED $($t.id) (left uncommitted; retried at the next drain)"
     }
 } else {
     # red on main: decide grader defect vs code defect while main still holds the patch

@@ -109,7 +109,8 @@ $held = [Collections.Generic.List[string]]::new()
         $t = $one[0]
         $want = if ($Role -eq 'author') { 'planned' } else { 'ticketed' }
         $kinds = if ($Role -eq 'author') { @('code', 'mockup', 'docs', 'integration') } else { @('code', 'docs', 'mockup') }
-        if ($t.group -notin $released) { $refusals.Add("REFUSED-TASK $Task : its group $($t.group) is not released or integrating") }
+        if ((Get-FrozenGroups $P).Contains([string]$t.group)) { $refusals.Add("REFUSED-TASK $Task : frozen, the owner holds group $($t.group) (config focus.frozen)") }
+        elseif ($t.group -notin $released) { $refusals.Add("REFUSED-TASK $Task : its group $($t.group) is not released or integrating") }
         elseif (-not $focusSet.Contains([string]$t.id) -and -not ($Role -eq 'author' -and $t.state -eq 'planned' -and (Get-Claimable $P $doc 'author' $busy).spill)) { $refusals.Add("REFUSED-TASK $Task : not-focus, the focus group is $focusGroup and this row is not in its effective set (spec 3.1)") }
         elseif ($t.state -ne $want) { $refusals.Add("REFUSED-TASK $Task : $Role claims a $want row and this one is $($t.state)") }
         elseif ($t.kind -notin $kinds) { $refusals.Add("REFUSED-TASK $Task : $Role does not claim a $($t.kind) task$(if ($t.kind -eq 'gate') { ' - a gate row is advanced to ticketed with no claim by any author claim' })") }
