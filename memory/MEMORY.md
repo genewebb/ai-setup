@@ -8,6 +8,9 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 ## How Gene wants me to work
 - [Voice = caveman + Truth format](feedback_voice_caveman_plus_truth_format.md) · **[EVERY decision = AskUserQuestion + recommendation](feedback_questions_via_askuserquestion.md)** · [prompts: FULL paths + Suggestion block](feedback_prompts_full_paths_with_suggestions.md)
 - Workstyle: [do it right, never patch](feedback_do_it_right_not_a_patch.md) · [plain English + before/after](feedback_explain_plain_english_with_example.md) · [verify, no guessing](feedback_verify_no_guessing.md) · [scope discipline](feedback_scope_discipline.md) · [implement autonomously](feedback_implement_autonomously.md) · [review whole subsystem](feedback_review_whole_subsystem_not_serially.md) · [full script every iteration](feedback_full_script_every_iteration.md) · [user rebuilds app](feedback_user_rebuilds_app.md)
+- [Kit proposals: stage doc in D:\Laptop, planner reads it and files kit inbox in order; keep the prompt short](feedback_kit_proposals_via_planner.md)
+- **[SMVMTR1 can't read Q:; stage files in \\SMVMTR1\d$\Laptop and use D:\Laptop paths in prompts](reference_smvmtr1_staging_d_laptop.md)**
+- [git pull --ff-only before tasks; read SMVMTR1 .streams by UNC (safe.directory=*)](feedback_git_pull_before_tasks_smvmtr1_read_ok.md)
 - [Gene doing steps by hand: ONE step per reply](feedback_one_step_at_a_time_when_troubleshooting.md) · [Asked "what is the command" = command only, run nothing](feedback_command_question_answer_only.md)
 - [Lucid MCP works: flowchart recipe + first doc 11/02](reference_lucid_mcp_flowcharts.md)
 - [Long runs self-drive with /loop](feedback_always_make_long_runs_unattended.md) · [run independent tasks in parallel](feedback_run_parallel_when_possible.md) · [Copy before probing; NEVER git checkout to undo](feedback_copy_before_probe_never_git_checkout.md)
@@ -16,6 +19,7 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [Mutation = TestData.Mutation engine, strategy fields only, never append text](feedback_use_testdata_mutation_engine.md)
 - [No machine names in comments/descriptions; machine values only in reference data](feedback_no_machine_names_in_comments.md)
 - [CA1416 warnings expected (Linux transition), never report](feedback_ca1416_expected_linux_transition.md)
+- **[No pipelines for non-product code (Speedy, speed-merchants): missing pipeline = accepted gap, never an action item](feedback_no_pipelines_for_non_product_code.md)**
 - [Testing: integration over unit](feedback_testing_philosophy_integration_over_unit.md) · [Libraries: FREE OSS only (MIT/Apache)](feedback_free_oss_only_no_revenue_gated_libs.md)
 - Code: [centralize constants](feedback_centralize_constants.md) · [207 not success](feedback_207_not_success.md) · [record codes from response](feedback_recordcode_from_response.md) · [reuse PathAndQueryBuilder](feedback_rest_reuse_path_query_utility.md) · [reuse config sections](feedback_reuse_existing_config_sections.md) · [atomic tests](feedback_tests_must_be_atomic.md) · [no outside fixtures](feedback_unit_tests_no_outside_artifacts.md) · [tech stack](project_tech_stack.md) · [DI factory lambda hides missing dep](reference_factory_lambda_hides_missing_di_dependency.md) · [read path that WRITES fails under load](reference_read_path_that_writes_fails_under_load.md)
 
@@ -31,6 +35,7 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - [Seq events also in SQL: logging.tSystemLog (Profisee DB + PROD speedmerchants)](reference_systemlog_table.md)
 
 ## Active work (newest first; full status in each file)
+- [Travel kit 11/23: C:\Travel baseline 3-way NAS sync, both-shell drive letters, prof travel / prof nas (branch work/travel-nas-prof)](project_travel_kit_nas_sync_2026-11-23.md)
 - **[Isolation testing moved to SMVMTR1 11/18: master = D:\devops\repos\speed-merchants\docs\isolation (START-HERE, note 11 stop point); test plan page + publish.sh](project_isolation_test_plan_page_2026-11-17.md)** · [TestAutoIsolation harness history](project_testautoisolation_2026-11-13.md) · [git OK on TAI 11/18](feedback_git_ok_testautoisolation_2026-11-18.md) · **[post progress to In Progress tab via progress.py](feedback_isolation_in_progress_tab_2026-11-18.md)** · [11/18 decisions: A first, reboot OK, API open, I bump 14.0.0](project_isolation_smvmtr1_decisions_2026-11-18.md) · **[Isolation goal = no cross-impact; speed gains are by-product](feedback_isolation_goal_not_performance_2026-11-18.md)** · **[Status/ETA = container isolation; SQL flip is a separate problem](feedback_isolation_status_frame_container_isolation_2026-11-19.md)**
 - [Isolation 11/22: real Windows containers can be adjusted when used; don't hold verdict for tuning](project_isolation_windows_containers_adjustable_2026-11-22.md)
 - **[Profisee SQL on Linux DBs start with isolation final-setup settings (TAI 14.4.0), sized per box](project_profisee_db_start_settings_2026-11-20.md)** · [Profisee registry: containers_updated.txt token lists all; 2026r1-r4 Windows images (win22/win25), no Linux image](reference_profisee_container_registry_2026-11-20.md)
@@ -63,3 +68,4 @@ Index of memories: one short line per entry, with detail in the files. Topic ent
 - **[TestAuto restart mid-run orphans the Poll job: run stays Running forever, metrics lost](reference_testauto_restart_orphans_running_scenario.md)**
 - **[Profisee services stay cold after recycle/restore: warm via /rest/health or Monitor drains nothing](reference_profisee_cold_service_after_recycle.md)**
 - [Portal hangs, health green: Data ShiftPartitions job holds Sch-M on t$Entity behind matching; kill = Hangfire retry](reference_partition_job_blocks_portal_during_matching.md)
+- **[Agent verification 11/22: framework v1 done (4 kinds, gates, B1-B8, rubric), 5 assessments; next Speedy v1 assessment + profile; route census maybe superseded](project_speedy_agent_verification_requirements_2026-11-22.md)**
