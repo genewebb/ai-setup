@@ -265,6 +265,17 @@ function Add-NotRunRows($leg, [string] $name, [int] $from) {
     # name of exactly one method that reported nothing; otherwise by its display name.
     $byMethod = @{}
     foreach ($q in @($d['fqns'])) { if ($q -and -not $reportedFqn.Contains($q)) { $m = ($q -split '\.')[-1]; $byMethod[$m] = @($byMethod[$m]) + $q | Where-Object { $_ } } }
+    $allByMethod = @{}
+    foreach ($q in @($d['fqns'])) { if ($q) { $m = ($q -split '\.')[-1]; $allByMethod[$m] = @($allByMethod[$m]) + $q | Where-Object { $_ } } }
+    # Methods whose reported rows are named by a DisplayName (the display, cut at '(', is not the method's name).
+    $dOwn = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    for ($i = $from; $i -lt $rows.Count; $i++) {
+        $r = $rows[$i]; $q = [string]$r['fqn']; if (-not $q) { continue }
+        $dc = [string]$r['display']; $ci = $dc.IndexOf('('); if ($ci -ge 0) { $dc = $dc.Substring(0, $ci) }; $dc = $dc.Trim()
+        if ($dc -and $dc -ne ($q -split '\.')[-1] -and -not $q.EndsWith(".$dc")) { [void]$dOwn.Add($q) }
+    }
+    $displayOwners = @($dOwn)
+    $displayClasses = @($displayOwners | ForEach-Object { $_.Substring(0, $_.LastIndexOf('.')) } | Select-Object -Unique)
     # A data-driven method whose rows cannot be serialized at discovery (a [DataRow(typeof(...))]) is listed once under its
     # bare name and expands into its rows only when it runs: that entry is covered by any reported row of the method.
     $expanded = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -292,8 +303,16 @@ function Add-NotRunRows($leg, [string] $name, [int] $from) {
         } else {
             $cut = $k; $ci = $cut.IndexOf('('); if ($ci -ge 0) { $cut = $cut.Substring(0, $ci) }; $cut = $cut.Trim()
             $owner = @($byMethod[$cut] | Select-Object -Unique)
-            $test = if ($owner.Count -eq 1) { $owner[0] } else { $k }
-            $rows.Add([ordered]@{ test = $test; suite = $name; outcome = 'not-run'; durationMs = 0; file = ''; project = [string]$leg['project']; head = $rec['head']; display = $k })
+            # A sibling row of a method that also reported a row (a plain [DataRow] 'Method (args)') is owned by the one
+            # discovered method of that name; a row named by a DisplayName is owned by the one method whose reported rows
+            # carry display names, or at least named under the one class all such methods share, so a grader matching
+            # '.<Class>.<method>' can count it.
+            if ($owner.Count -ne 1) { $owner = @($allByMethod[$cut] | Select-Object -Unique) }
+            if ($owner.Count -ne 1 -and $displayOwners.Count -eq 1) { $owner = @($displayOwners) }
+            $nr = [ordered]@{ test = $k; suite = $name; outcome = 'not-run'; durationMs = 0; file = ''; project = [string]$leg['project']; head = $rec['head']; display = $k }
+            if ($owner.Count -eq 1) { $nr['test'] = $owner[0]; $nr['fqn'] = $owner[0] }
+            elseif ($displayClasses.Count -eq 1) { $nr['test'] = "$($displayClasses[0]).$k" }
+            $rows.Add($nr)
         }
     }
 }

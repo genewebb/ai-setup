@@ -110,6 +110,11 @@ if (-not $want.Count -and -not $checks.Count) {
     $why = if ($Mode -eq 'fix' -and $notLanded.Count) { "no fix landed since the last retest: $((@($notLanded | Select-Object -First 5)) -join '; ')" } else { 'no failed test left to retest' }
     "RETEST-NOTHING $Mode for $Run ($why)"; exit 0
 }
+# Impact checks alone cannot clear a failure that still waits on its fix, so the group's close stays UNRETESTED; such a
+# retest only spends a full setup (retest-G28-3: about 2 h, 0 tests). Wait until those fixes land, or re-point them.
+if ($Mode -eq 'fix' -and -not $want.Count -and $notLanded.Count) {
+    "RETEST-NOTHING $Mode for $Run (only impact checks would run, and $($notLanded.Count) failure(s) still wait on a fix that has not landed: $((@($notLanded | Select-Object -First 5)) -join '; '))"; exit 0
+}
 
 # ---- where ----
 $k = 1; while (Test-Path (Join-Path $rd "retest-$Group-$k.json")) { $k++ }
@@ -146,8 +151,35 @@ $runAfter = {
         $rec['legs'] = @($legs); Write-JsonFile $recPath $rec
     }
 }
+"RETEST-TESTS $id $($want.Count) test(s), $($checks.Count) check(s): $((@($want | Select-Object -First 10 | ForEach-Object { [string]$_['test'] })) -join '; ')$(if ($want.Count -gt 10) { "; +$($want.Count - 10)" })"
+# A sweep runs only when it names a known leg and its whenPaths (if any) match a fix row's write set landed since the
+# base run started. Known before setup, so setup can be cut to the legs this retest touches.
+$sweepSkip = {
+    param($sw)
+    $ln = [string]$sw['leg']
+    if (-not $legDef[$ln]) { return "no such leg in $([string]$base['group']).run.json" }
+    $when = @($sw['whenPaths'] | Where-Object { $_ } | ForEach-Object { ([string]$_).Replace('\', '/') -replace '\*\*', '*' })
+    if ($when.Count -and -not @($fixPaths | Where-Object { $fp = $_; @($when | Where-Object { $fp -like $_ }).Count }).Count) { return "no fix row landed since $Run writes $($when -join ', ')" }
+    ''
+}
 if ($Mode -eq 'fix') {
     $setup = if ($def -and $def.Contains('retestSetup')) { @($def['retestSetup']) } elseif ($def) { @($def['setup']) } else { @() }
+    # SETUP BY LEG (kit item IN-20261122203208-6e86): retest-G28-2..4 each spent about 2 h on the full setup (images,
+    # stack, live proofs) to re-run 7 minutes of Tests.Architecture. When every leg this retest re-runs or sweeps names
+    # its own "retestSetup" (setup step names; [] = none), only those steps run, in definition order. One leg without it
+    # keeps the whole setup. Impact checks and graders add no step: they build what they run.
+    $touched = @(@(@($want | Where-Object { -not ([string]$_['test']).StartsWith('grader:') } | ForEach-Object { [string]$_['suite'] }) +
+        @(if ($def -and $def.Contains('retestSweeps')) { @($def['retestSweeps'] | Where-Object { $_ -and -not (& $sweepSkip $_) } | ForEach-Object { [string]$_['leg'] }) })) | Select-Object -Unique)
+    $noOwn = @($touched | Where-Object { -not $legDef[$_] -or -not $legDef[$_].Contains('retestSetup') })
+    if ($touched.Count -and -not $noOwn.Count) {
+        $need = @{}; foreach ($ln in $touched) { foreach ($n in @($legDef[$ln]['retestSetup'])) { if ($n) { $need[[string]$n] = $true } } }
+        $all = @($setup | Where-Object { $_ })
+        $setup = @($all | Where-Object { $need.ContainsKey([string]$_['name']) })
+        $unknown = @($need.Keys | Where-Object { $nk = $_; -not @($all | Where-Object { [string]$_['name'] -eq $nk }).Count } | Sort-Object)
+        $rec['setupByLeg'] = [ordered]@{ legs = @($touched); steps = @($setup | ForEach-Object { [string]$_['name'] }); skipped = $all.Count - $setup.Count }
+        Write-JsonFile $recPath $rec
+        "SETUP-BY-LEG $($touched -join ',') runs $($setup.Count) of $($all.Count) setup step(s): $((@($setup | ForEach-Object { [string]$_['name'] })) -join ', ')$(if ($unknown.Count) { " (no such step: $($unknown -join ', '))" })"
+    } elseif ($touched.Count) { "SETUP-FULL $($noOwn -join ',') name(s) no retestSetup" }
     foreach ($s in @($setup | Where-Object { $_ })) {
         $sn = [string]$s['name']; $log = Join-Path $runDir "setup.$sn.txt"
         $cmd = Expand-SuiteCommand ([string]$s['command']) @{ repo = $Repo; snapshot = $snap; runDir = $runDir; leg = $sn; run = $id; group = $Group }
@@ -274,11 +306,8 @@ foreach ($suite in @($want | Where-Object { -not ([string]$_['test']).StartsWith
 if ($Mode -eq 'fix' -and $def -and $def.Contains('retestSweeps')) {
     foreach ($sw in @($def['retestSweeps'] | Where-Object { $_ })) {
         $ln = [string]$sw['leg']; $ld = $legDef[$ln]
-        if (-not $ld) { "SWEEP-SKIP $ln (no such leg in $([string]$base['group']).run.json)"; continue }
-        $when = @($sw['whenPaths'] | Where-Object { $_ } | ForEach-Object { ([string]$_).Replace('\', '/') -replace '\*\*', '*' })
-        if ($when.Count -and -not @($fixPaths | Where-Object { $fp = $_; @($when | Where-Object { $fp -like $_ }).Count }).Count) {
-            "SWEEP-SKIP $ln (no fix row landed since $Run writes $($when -join ', '))"; continue
-        }
+        $skip = & $sweepSkip $sw
+        if ($skip) { "SWEEP-SKIP $ln ($skip)"; continue }
         $sRoot = Join-Path $runDir 'sweep'; $out = Join-Path $sRoot $ln; New-Item -ItemType Directory -Path $out -Force | Out-Null
         $proj = [string]$ld['project']
         # The leg's own command with {runDir} at <runDir>\sweep, so its results never mix with the re-run of that leg's

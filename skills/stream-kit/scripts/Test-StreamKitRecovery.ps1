@@ -4127,6 +4127,18 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $q2 = @(& "$S\Invoke-Retest.ps1" -Repo $tr -Session integ-t -Group T1 -Mode fix)
     $c4a = @(& "$S\Test-GroupClose.ps1" -Repo $tr -Group T1 -DryRun); $c4ax = $LASTEXITCODE
     Case '96 no retest runs again until the next attempt lands, and one failure blocks nothing' (($q2 -join ' ') -match 'RETEST-NOTHING' -and $c4ax -eq 1) (($q2 -join ' | ') + ' / ' + ($c4a -join ' | '))
+    # A landed fix row with an impact check, while the only failure still waits on its unlanded attempt: checks alone
+    # cannot clear that failure, so no snapshot and no setup are spent (retest-G28-3 ran 2 h for 0 tests).
+    $tasksKeepCk = [IO.File]::ReadAllText((Join-Path $tr '.streams\tasks.json'))
+    $d = J $tr | ConvertTo-Json -Depth 20 | ConvertFrom-Json -AsHashtable
+    $d.tasks += @{ id = 'T1.RCK'; group = 'T1'; kind = 'code'; origin = 'integration'; state = 'integrated'; title = 'impact-only fix'; writeSet = @('tests/CkTests.cs'); dependsOn = @()
+        artifacts = @{ check = 'ck.check.ps1' }; history = @(@{ at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); by = 'integ-t'; to = 'integrated'; note = 'landed' }) }
+    $d | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $tr '.streams\tasks.json') -Encoding utf8
+    $nRunsCk = @(Get-ChildItem $rdir -Filter 'retest-T1-*.json').Count
+    $qck = @(); try { $qck = @(& "$S\Invoke-Retest.ps1" -Repo $tr -Session integ-t -Group T1 -Mode fix) } catch { $qck = @("threw: $(("$_" -split "`n")[0])") }
+    $nRunsCk2 = @(Get-ChildItem $rdir -Filter 'retest-T1-*.json').Count
+    [IO.File]::WriteAllText((Join-Path $tr '.streams\tasks.json'), $tasksKeepCk)
+    Case '96 a checks-only retest while a failure still waits on its fix starts no run' (($qck -join ' ') -match 'RETEST-NOTHING fix .*only impact checks would run.*NS\.FooTests\.Flaky \(waits on ' -and $nRunsCk2 -eq $nRunsCk) "runs $nRunsCk -> $nRunsCk2 out=$($qck -join ' | ')"
     & $land $refix1
     $q3 = @(& "$S\Invoke-Retest.ps1" -Repo $tr -Session integ-t -Group T1 -Mode fix)
     $refix2 = if (($q3 -join ' ') -match 'REFIX NS\.FooTests\.Flaky (\S+)') { $Matches[1] } else { 'none' }
@@ -4250,6 +4262,30 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $res5 = Get-Content -Raw (Join-Path $rdir 'run-TX-4.results.json') | ConvertFrom-Json -AsHashtable
     $dr5 = @($res5['tests'] | Where-Object { $_['test'] -eq 'discover:Perf' })
     Case '96 a never-started leg whose discovery fails is a not-run discover: row, not a failure' (-not $ex5 -and $dr5.Count -eq 1 -and $dr5[0]['outcome'] -eq 'not-run' -and -not @($res5['tests'] | Where-Object { $_['outcome'] -eq 'failed' }).Count -and ($xo5 -join ' ') -match 'DISCOVERY-FAILED run-TX-4 Perf \(') "err=$ex5 out=$($xo5 -join ' | ') rows=$($res5['tests'] | ConvertTo-Json -Compress)"
+    # A not-run .NET data row is named under its method's class, so a grader matching '.<Class>.<method>' counts it
+    # (kit item IN-20261122221934-4b66: run-G17-32 left NavMenuTests rows named by their DisplayName alone). A fake
+    # dotnet.cmd first on PATH answers both listings: a DisplayName row and a plain DataRow sibling each did not run.
+    $rx7 = Join-Path $rdir 'run-TX-7'; New-Item -ItemType Directory -Path (Join-Path $rx7 'Disc') -Force | Out-Null
+    $dp7 = Join-Path $tr 'disc'; New-Item -ItemType Directory -Path (Join-Path $dp7 'bin') -Force | Out-Null
+    Set-Content (Join-Path $dp7 'Disc.csproj') '<Project Sdk="Microsoft.NET.Sdk"></Project>'; Set-Content (Join-Path $dp7 'bin\Disc.dll') 'stub'
+    Set-Content (Join-Path $rx7 'Disc\d.trx') "<TestRun xmlns=`"$ns`"><TestDefinitions><UnitTest id=`"1`"><TestMethod className=`"NS.DispTests`" name=`"Shown`" /></UnitTest><UnitTest id=`"2`"><TestMethod className=`"NS.RowTests`" name=`"Plain`" /></UnitTest></TestDefinitions><Results><UnitTestResult testId=`"1`" testName=`"first case`" outcome=`"Passed`" duration=`"00:00:00.1`" /><UnitTestResult testId=`"2`" testName=`"Plain (1)`" outcome=`"Passed`" duration=`"00:00:00.1`" /></Results></TestRun>"
+    $bin7 = Join-Path $Scratch 'fake-dotnet-tx7'; New-Item -ItemType Directory -Path $bin7 -Force | Out-Null
+    Set-Content -Path (Join-Path $bin7 'fake-dotnet.ps1') -Encoding utf8 -Value @(
+        "if (`$args[0] -eq 'test') { 'The following Tests are available:'; '    first case'; '    second case'; '    Plain (1)'; '    Plain (2)'; exit 0 }",
+        "if (`$args[0] -eq 'vstest') { `$t = @(`$args | Where-Object { `"`$_`" -like '/ListTestsTargetPath:*' })[0].Substring(21); Set-Content -LiteralPath `$t -Value @('NS.DispTests.Shown', 'NS.RowTests.Plain'); exit 0 }",
+        'exit 1')
+    Set-Content -Path (Join-Path $bin7 'dotnet.cmd') -Encoding ascii -Value "@echo off`r`npwsh -NoProfile -File `"$bin7\fake-dotnet.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n"
+    @{ id = 'run-TX-7'; tier = '2'; group = 'TX'; startedAt = '2026-10-01T00:00:00Z'; status = 'done'; snapshot = $tr; runDir = $rx7; head = 'h'
+       legs = @(@{ step = 'leg'; name = 'Disc'; kind = 'dotnet'; project = 'disc'; exit = 0; command = 'dotnet test disc' }) } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $rdir 'run-TX-7.json')
+    $path7 = $env:PATH; $env:PATH = "$bin7;$path7"
+    $ex7 = ''; $xo7 = @(); try { $xo7 = @(& "$S\Export-SuiteResults.ps1" -Repo $tr -Run run-TX-7) } catch { $ex7 = ("$_" -split "`n")[0] } finally { $env:PATH = $path7 }
+    $res7 = if (Test-Path (Join-Path $rdir 'run-TX-7.results.json')) { @((Get-Content -Raw (Join-Path $rdir 'run-TX-7.results.json') | ConvertFrom-Json -AsHashtable)['tests']) } else { @() }
+    $nr7 = @($res7 | Where-Object { $_['outcome'] -eq 'not-run' })
+    $nrDisp7 = @($nr7 | Where-Object { $_['display'] -eq 'second case' })
+    $nrRow7 = @($nr7 | Where-Object { $_['display'] -eq 'Plain (2)' })
+    Case '96 a not-run DataRow sibling of a method that reported a row is named by that method' (-not $ex7 -and $nrRow7.Count -eq 1 -and $nrRow7[0]['test'] -eq 'NS.RowTests.Plain' -and $nrRow7[0]['fqn'] -eq 'NS.RowTests.Plain') "err=$ex7 out=$($xo7 -join ' | ') notrun=$($nr7 | ConvertTo-Json -Compress)"
+    Case '96 a not-run DisplayName row is named by the one method whose rows carry display names' (-not $ex7 -and $nrDisp7.Count -eq 1 -and $nrDisp7[0]['test'] -eq 'NS.DispTests.Shown' -and $nrDisp7[0]['fqn'] -eq 'NS.DispTests.Shown') "err=$ex7 notrun=$($nr7 | ConvertTo-Json -Compress)"
+    Remove-Item -LiteralPath $dp7 -Recurse -Force -ErrorAction SilentlyContinue
     # A nightly-started run hands the integrator lock back when it ends.
     Remove-Item (Join-Path $tr '.streams\integrator.lock') -ErrorAction SilentlyContinue
     Get-ChildItem $rdir -Filter 'run-T1-9*.json' | Remove-Item
@@ -5750,6 +5786,43 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     # The base run's attribution keeps only its own failures (a REFIX may rewrite its fixTask fields, so no hash check).
     $bs124 = [bool]($bh124 -and -not @(@((Get-Content -Raw $ba124 | ConvertFrom-Json).failures) | Where-Object { $_.test -match 'CritTests\.Keep|BarTests\.Ok' }).Count)
     Case '124c a sweep regression files one fix row in the retest''s own attribution, the base run''s untouched' ($all124.Count -eq 2 -and $nw124.Count -eq 1 -and (@($nw124[0].writeSet) -join ',') -eq 'tests/CritTests.cs' -and $rs124 -eq 'NS.BarTests.Ok=unowned,NS.CritTests.Keep=fix' -and $bs124 -and $r124t -match 'ATTRIBUTED retest-A2-\d+ fix 1') "fix=$($all124.Count) new=$(@($nw124 | ForEach-Object { "$($_.id):$(@($_.writeSet) -join ',')" }) -join ';') attr=$rs124 baseSame=$bs124 out=$r124t"
+
+    # ---- 125. RETEST SETUP BY LEG (kit item IN-20261122203208-6e86): retest-G28-2..4 each ran the full setup (images,
+    # stack, live proofs, about 2 h) to re-run 7 minutes of stack-free tests. When every leg a fix retest re-runs or
+    # sweeps names its own retestSetup, only those setup steps run; one leg without it keeps the whole setup.
+    $r125 = Join-Path $Scratch 'setuplegrepo'; New-Item -ItemType Directory -Path (Join-Path $r125 'tests') -Force | Out-Null; $repos += $r125
+    git -C $r125 init -q -b main; git -C $r125 config user.email t@t; git -C $r125 config user.name t; Grant-GitPolicy $r125
+    Set-Content (Join-Path $r125 'tests\FooTests.cs') 'namespace NS { public class FooTests { } }'
+    git -C $r125 add -A; git -C $r125 commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $r125 | Out-Null
+    $cu125 = Join-Path $Scratch 'fake-unit125.json'; $cc125 = Join-Path $Scratch 'fake-crit125.json'
+    @{ tier2 = @{ 'NS.FooTests.Real' = 'Failed' }; retest = @{ 'NS.FooTests.Real' = 'Failed' } } | ConvertTo-Json | Set-Content $cu125 -Encoding utf8
+    @{ tier2 = @{ 'NS.CritTests.Keep' = 'Passed' } } | ConvertTo-Json | Set-Content $cc125 -Encoding utf8
+    $lu125 = [ordered]@{ name = 'Tests.Unit'; kind = 'dotnet'; project = 'tests'; retestSetup = @('build')
+        command = "& '$fk124' -Out '{runDir}\Tests.Unit' -Mode tier2 -Control '$cu125'"
+        retestCommand = "& '$fk124' -Out '{runDir}\Tests.Unit' -Mode retest -Filter '{filter}' -Control '$cu125'" }
+    $lc125 = [ordered]@{ name = 'Tests.Criteria'; kind = 'dotnet'; project = 'tests'; command = "& '$fk124' -Out '{runDir}\Tests.Criteria' -Mode tier2 -Control '$cc125'" }
+    $su125 = @(@{ name = 'stack'; command = "Set-Content '{runDir}\stack.marker' x" }, @{ name = 'build'; command = "Set-Content '{runDir}\build.marker' x" })
+    $wd125 = { param($sweeps) @{ group = 'A3'; copyIgnored = @(); setup = $su125; legs = @($lu125, $lc125); graders = $false; retestSweeps = $sweeps } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $r125 '.streams\suites\A3.run.json') -Encoding utf8 }
+    New-Item -ItemType Directory -Path (Join-Path $r125 '.streams\suites') -Force | Out-Null
+    & $wd125 @(@{ leg = 'Tests.Criteria'; whenPaths = @('docs/**') })
+    @{ groups = @(@{ id = 'A3'; name = 'three'; state = 'integrating'; origin = 'plan'; scope = @{ include = @('F-1') } })
+       tasks = @((& $Tt 'A3.A' 'A3' 'integrated' 'tests/FooTests.cs'), (& $Tt 'A3.I' 'A3' 'ticketed' @() 'integration')) } |
+        ConvertTo-Json -Depth 20 | Set-Content (Join-Path $r125 '.streams\tasks.json') -Encoding utf8
+    [void]@(& "$S\Start-SuiteRun.ps1" -Repo $r125 -Session integ-s -Group A3 -Reason complete -Wait)
+    $rd125 = Join-Path $r125 '.streams\suites\runs'
+    $land125 = { param([string] $at) $d = J $r125; foreach ($t in @($d.tasks | Where-Object { $_.id -like 'A3.R1F*' -and $_.state -ne 'integrated' })) { $t.state = 'integrated'; $t.history += @{ at = $at; by = 'integ-s'; to = 'integrated'; note = 'fix landed' } }; $d | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $r125 '.streams\tasks.json') -Encoding utf8 }
+    $run125 = Get-Content -Raw (Join-Path $rd125 'run-A3-1.json') | ConvertFrom-Json -DateKind String
+    & $land125 ([datetime]::Parse([string]$run125.startedAt, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal).AddSeconds(1).ToString('yyyy-MM-ddTHH:mm:ssZ'))
+    $o125a = @(& "$S\Invoke-Retest.ps1" -Repo $r125 -Session integ-s -Group A3 -Mode fix); $t125a = $o125a -join ' | '
+    $id125a = if ($t125a -match 'RETEST-TESTS (retest-A3-\d+)') { $Matches[1] } else { 'none' }; $rt125a = Join-Path $rd125 $id125a
+    Case '125a every touched leg names retestSetup: only those steps run (the gated sweep is skipped, so it adds none)' ((Test-Path (Join-Path $rt125a 'build.marker')) -and -not (Test-Path (Join-Path $rt125a 'stack.marker')) -and $t125a -match 'SETUP-BY-LEG Tests\.Unit runs 1 of 2 setup step\(s\): build' -and $t125a -match 'RETEST-TESTS retest-A3-\d+ 1 test\(s\)') "out=$t125a"
+    # 125b: a sweep that will run on a leg with no retestSetup keeps the whole setup.
+    & $wd125 @(@{ leg = 'Tests.Criteria' })
+    Start-Sleep -Seconds 1; & $land125 ((Get-Date).ToUniversalTime().AddSeconds(1).ToString('yyyy-MM-ddTHH:mm:ssZ')); Start-Sleep -Seconds 2
+    $o125b = @(& "$S\Invoke-Retest.ps1" -Repo $r125 -Session integ-s -Group A3 -Mode fix); $t125b = $o125b -join ' | '
+    $id125b = if ($t125b -match 'RETEST-TESTS (retest-A3-\d+)') { $Matches[1] } else { 'none' }; $rt125b = Join-Path $rd125 $id125b
+    Case '125b a touched leg without retestSetup keeps the whole setup' ((Test-Path (Join-Path $rt125b 'build.marker')) -and (Test-Path (Join-Path $rt125b 'stack.marker')) -and $t125b -match 'SETUP-FULL Tests\.Criteria') "out=$t125b"
 } catch {
     "FAIL harness: $_ at $($_.InvocationInfo.PositionMessage)"; $fails++
 } finally {
