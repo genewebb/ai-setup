@@ -538,7 +538,9 @@ function Invoke-StatusTick([string] $Session) {
     $archiveNote = 'done today'
     if ($lastDay -ne $today) {
         $ar = Invoke-TickStep 'Archive-TaskHistory.ps1' @{ Repo = $Repo; Session = $Session }; $steps.Add($ar)
-        if ($ar.Ok) { Write-AtomicText $dayFile $today }
+        # Closed inbox items older than 14 days move to inbox\archive (kit item IN-20261123164855-93f4).
+        $ci = Invoke-TickStep 'Compress-StreamInboxes.ps1' @{ Repo = $Repo; Session = $Session }; $steps.Add($ci)
+        if ($ar.Ok -and $ci.Ok) { Write-AtomicText $dayFile $today }
         $archiveNote = Get-TickNote $ar
     }
     # A nightly Tier 2 that yielded and was never started again goes to the owner queue by 07:00 (kit item

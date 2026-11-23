@@ -3,7 +3,7 @@
 Handles: {{handles}}.
 Anyone may write here: the owner, any stream session, or this conversation. Only {{skill}} acts on it.
 
-## Contract (append-only; never edit or delete a line)
+## Contract (append-only; never edit or delete a line. Only Compress-StreamInboxes.ps1, under this file's lock, moves a closed item older than 14 days whole to inbox\archive\)
 
 One line per event. A new item:
 `- <id> | <utc> | <from> | open | request|bug | <task id or -> | <ask, one sentence> | <evidence path or ->`

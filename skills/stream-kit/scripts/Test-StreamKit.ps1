@@ -2028,6 +2028,50 @@ Add-NightlyYieldNotice `$P ([datetime]'2026-10-22T08:00:00')
     $nyOut2 = @(pwsh -NoProfile -File $nyScript)
     $nyQText2 = [IO.File]::ReadAllText($nyQ)
     Case 'a yield followed by a run record, or a nightly that ran, is not queued' ($nyOut2.Count -eq 2 -and $nyOut2[0] -match 'followed by run-E1-2' -and $nyOut2[1] -eq 'last nightly did not yield' -and $nyQText2 -notmatch 'NIGHTLY-YIELDED 2026-10-21') (($nyOut2 -join ' | ') + ' / ' + $nyQText2)
+    # Compress-StreamInboxes.ps1 moves closed items whole to inbox\archive and never an open, taken or recent one; it
+    # rewrites under the inbox's own lock, so a send racing it is kept (kit item IN-20261123164855-93f4).
+    $ciRepo = Join-Path $Scratch 'compressrepo'
+    New-Item -ItemType Directory -Path $ciRepo -Force | Out-Null
+    git -C $ciRepo init -q -b main; git -C $ciRepo config user.email t@t; git -C $ciRepo config user.name t
+    Set-Content (Join-Path $ciRepo 'x.txt') 'x'; git -C $ciRepo add -A; git -C $ciRepo commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $ciRepo | Out-Null
+    $ciInbox = Join-Path $ciRepo '.streams\inbox\stream-kit.md'
+    $ciOld = (Get-Date).ToUniversalTime().AddDays(-30); $ciOldS = $ciOld.ToString('yyyy-MM-ddTHH:mm:ssZ'); $ciNow = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $ciLines = @(
+        "- IN-20200101000001-aaaa | $ciOldS | t | open | request | - | old done ask | -",
+        "- IN-20200101000002-bbbb | $ciOldS | t | open | bug | - | old declined ask | -",
+        "- IN-20200101000003-cccc | $ciOldS | t | open | request | - | recent done ask | -",
+        "- IN-20200101000004-dddd | $ciOldS | t | open | request | - | old open ask | -",
+        "- IN-20200101000005-eeee | $ciOldS | t | open | request | - | old taken ask | -",
+        "- IN-20200101000001-aaaa | $ciOldS | s1 | taken | -",
+        "- IN-20200101000002-bbbb | $ciOldS | s1 | declined | out of scope",
+        "- IN-20200101000001-aaaa | $ciOldS | s1 | done | fixed",
+        "- IN-20200101000003-cccc | $ciNow | s1 | done | fixed",
+        "- IN-20200101000005-eeee | $ciOldS | s1 | taken | -")
+    [IO.File]::AppendAllText($ciInbox, (($ciLines -join "`n") + "`n"))
+    $ciBefore = [IO.File]::ReadAllText($ciInbox)
+    $ciDry = @(& "$S\Compress-StreamInboxes.ps1" -Repo $ciRepo -DryRun)
+    Case 'compress dry run counts the old closed items and writes nothing' ((($ciDry -join ' | ') -match 'WOULD-COMPRESS stream-kit items 2 lines 5 ') -and [IO.File]::ReadAllText($ciInbox) -eq $ciBefore -and -not (Test-Path (Join-Path $ciRepo '.streams\inbox\archive'))) ($ciDry -join ' | ')
+    $ciRun = @(& "$S\Compress-StreamInboxes.ps1" -Repo $ciRepo)
+    $ciAfter = [IO.File]::ReadAllText($ciInbox)
+    $ciArch = Join-Path $ciRepo ".streams\inbox\archive\stream-kit-$($ciOld.ToString('yyyy-MM')).md"
+    $ciArchText = if (Test-Path $ciArch) { [IO.File]::ReadAllText($ciArch) } else { '' }
+    $ciArchIds = @([regex]::Matches($ciArchText, '(?m)^- (IN-\S+) \| ') | ForEach-Object { $_.Groups[1].Value })
+    Case 'compress moves only old done/declined items, every line, and keeps open, taken and recent ones' (($ciRun -join ' | ') -match 'COMPRESSED stream-kit items 2 lines 5 ' -and ($ciArchIds -join ',') -eq 'IN-20200101000001-aaaa,IN-20200101000002-bbbb,IN-20200101000001-aaaa,IN-20200101000002-bbbb,IN-20200101000001-aaaa' -and $ciAfter -notmatch 'aaaa|bbbb' -and ([regex]::Matches($ciAfter, 'cccc')).Count -eq 2 -and $ciAfter -match 'dddd' -and ([regex]::Matches($ciAfter, 'eeee')).Count -eq 2 -and $ciAfter -match '## Contract') (($ciRun -join ' | ') + ' / arch ' + ($ciArchIds -join ','))
+    $ciOpen = @(& "$S\Get-InboxItems.ps1" -Repo $ciRepo -Skill stream-kit -Open)
+    $ciAll = @(& "$S\Get-InboxItems.ps1" -Repo $ciRepo -Skill stream-kit -IncludeArchive -Json | ConvertFrom-Json)
+    $ciA = @($ciAll | Where-Object { $_.id -eq 'IN-20200101000001-aaaa' })
+    Case 'an archived item is found with -IncludeArchive, closed, and -Open is unchanged' ($ciA.Count -eq 1 -and $ciA[0].status -eq 'done' -and $ciA[0].archived -like 'stream-kit-*.md' -and (($ciOpen -join ' ') -match 'dddd') -and (($ciOpen -join ' ') -match 'eeee') -and (($ciOpen -join ' ') -notmatch 'aaaa')) (($ciOpen -join ' | ') + ' / ' + ($ciAll.id -join ','))
+    $ciBulk = foreach ($k in 1..400) { $id = 'IN-20200102{0:D6}-ffff' -f $k; "- $id | $ciOldS | t | open | request | - | bulk $k | -"; "- $id | $ciOldS | s1 | done | ok" }
+    [IO.File]::AppendAllText($ciInbox, (($ciBulk -join "`n") + "`n"))
+    $ciSender = Join-Path $Scratch 'compress-sender.ps1'
+    [IO.File]::WriteAllText($ciSender, "foreach (`$k in 1..12) { & '$S\Send-InboxItem.ps1' -Repo '$ciRepo' -To stream-kit -From racer -Kind request -Ask `"race `$k`" | Out-Null }")
+    $ciProc = Start-Process pwsh -ArgumentList '-NoProfile', '-File', $ciSender -PassThru -WindowStyle Hidden
+    foreach ($k in 1..3) { & "$S\Compress-StreamInboxes.ps1" -Repo $ciRepo | Out-Null }
+    $ciProc.WaitForExit(120000) | Out-Null
+    $ciRace = [IO.File]::ReadAllText($ciInbox)
+    $ciRaced = @(1..12 | Where-Object { $ciRace -match "\| race $_ \|" })
+    Case 'a send racing the compress is kept' ($ciRaced.Count -eq 12 -and $ciRace -notmatch 'bulk 1 ') "kept $($ciRaced.Count) of 12"
 } catch {
     "FAIL harness: $_ at $($_.InvocationInfo.PositionMessage)`n$($_.ScriptStackTrace)"; $fails++
 } finally {

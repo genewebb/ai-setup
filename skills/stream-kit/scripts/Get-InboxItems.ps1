@@ -1,13 +1,15 @@
 # Lists the items of one role's inbox, oldest first, each with its latest status. Read-only (no lock).
 #   -Open : only items this role should act on: open, or taken but silent past the role's limit
 #   -All  : every inbox (-Skill ignored); -Json : machine-readable
+#   -IncludeArchive : also the closed items Compress-StreamInboxes.ps1 moved to inbox\archive\<skill>-<yyyy-MM>.md (field archived)
 # Line form: <id> | <status> <age>m by <who> | <kind> | <task> | <ask> | <evidence>
 param(
     [Parameter(Mandatory)] [string] $Repo,
     [string] $Skill = '',
     [switch] $Open,
     [switch] $All,
-    [switch] $Json
+    [switch] $Json,
+    [switch] $IncludeArchive
 )
 . "$PSScriptRoot\lib\Streams.ps1"
 . "$PSScriptRoot\lib\Inbox.ps1"
@@ -18,6 +20,13 @@ $out = foreach ($s in $skills) {
         if ($Open -and -not (Test-InboxOpen $it $s)) { continue }
         $it['inbox'] = $s; $it['ageMinutes'] = Get-InboxAgeMinutes $it; $it['limitMinutes'] = $script:InboxLimitMinutes[$s]
         $it
+    }
+    if (-not $IncludeArchive -or $Open) { continue }
+    foreach ($af in @(Get-ChildItem -LiteralPath (Join-Path $P.Root 'inbox\archive') -Filter "$s-*.md" -File -ErrorAction SilentlyContinue | Sort-Object Name)) {
+        foreach ($it in Read-InboxItems $af.FullName) {
+            $it['inbox'] = $s; $it['ageMinutes'] = Get-InboxAgeMinutes $it; $it['limitMinutes'] = $script:InboxLimitMinutes[$s]; $it['archived'] = $af.Name
+            $it
+        }
     }
 }
 if ($Json) { ConvertTo-Json -Depth 5 -InputObject @($out); exit 0 }
