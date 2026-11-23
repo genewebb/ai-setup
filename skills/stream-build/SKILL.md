@@ -234,6 +234,11 @@ do the held item's work (an item). Never run them again.
      source-text tests" below): a new `///` on a private or internal member, history wording, a task or inbox id, a new
      `//` block of 6 or more lines, commented-out code, or a perishable stamp ("currently", "for now", "~20 min"). The
      verdict quotes the added line. Existing comments the patch does not touch are not findings.
+   - on speedmerchants, a patch that changes what a web screen shows or does (`src/Web` pages, components, layout,
+     navigation, routes) whose report has no `Screen check:` block for each affected screen. Before step 7 the builder
+     loads the `speedy-screen-verify` skill, opens each affected screen with `speedy-screen-drive` (or the battery
+     fallback that skill names while the command is not built), looks at the screenshots and writes the block into
+     its report. A screen listed under `saw` that the evidence files do not show is a FAIL.
    Its verdict goes to `.streams\verdicts\<task>.md`, auto-accepted decisions listed in it.
    - **Run the verifier in the FOREGROUND: an Agent call without `run_in_background`, and no Monitor, sleep loop or
      polling to wait for it.** The call returns with the verdict, and that one result is the only turn it costs. A
