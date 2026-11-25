@@ -1,6 +1,6 @@
 ---
 name: stream-author
-description: v0.14. Stream kit skill 2 of 5. It runs unattended and never prompts. Each cycle it first takes the oldest open item in its inbox (.streams\inbox\stream-author.md, to rewrite a ticket or grader, including for a ticketed task no builder has claimed), then claims released tasks from .streams\tasks.json, writes a short ticket whose acceptance clauses state WHAT must be true (with REQ/AC ids and the write set), optionally a static grader, has one skeptic subagent try to break them, and then marks the task ticketed for builders. It runs no RED check and builds nothing; the builder proves RED in its own worktree and chooses the tests. When nothing is ready it sleeps and re-checks. Use for /stream-author (run under /loop), /stream-author once, /stream-author status.
+description: v0.15. Stream kit skill 2 of 5. It runs unattended and never prompts. Each cycle it first takes the oldest open item in its inbox (.streams\inbox\stream-author.md, to rewrite a ticket or grader, including for a ticketed task no builder has claimed), then claims released tasks from .streams\tasks.json, writes a short ticket whose acceptance clauses state WHAT must be true (with REQ/AC ids and the write set), optionally a static grader, has one skeptic subagent try to break them, and then marks the task ticketed for builders. It runs no RED check and builds nothing; the builder proves RED in its own worktree and chooses the tests. When nothing is ready it sleeps and re-checks. Use for /stream-author (run under /loop), /stream-author once, /stream-author status.
 ---
 
 # stream-author
@@ -257,8 +257,10 @@ PRE-STAGED UNIT: when your command carries `packet:`, steps 0, 1 and 2 are DONE 
 ## Unknowns
 
 - Take the recommended reading and carry on.
-- Append one line to `.streams\owner\questions.md`: `<task> | question | default applied | why`. Four fields, no
-  leading `- `. Only a question with NO safe default is an escalation for the owner, written
+- Log the default you applied as one line in `.streams\decisions.md`: `- <yyyy-MM-ddTHH:mm:ssZ> [<session>] applied default: <task> | question | default applied | why`, and as a
+  `Update-Task.ps1 -Note "decision (default applied): <what> -- <why>"` on the row. A question with a safe default
+  never goes to the owner queue (owner 2026-11-24 09:48 EST, kit item IN-20261124144922-836f). Only a question with NO
+  safe default is an escalation for the owner, appended to `.streams\owner\questions.md` as
   `ESCALATE <task> | question | why no default`; the status board counts escalations by that shape (kit item
   IN-20261004203020-5f5e).
 - If the owner overrides it later, that becomes a fix task (added by `stream-integrate` or by `/stream-plan revise`).
@@ -294,7 +296,8 @@ never asks for a comment they forbid, and a grader never asserts a source-text c
 
 ## Rules
 
-- Writes ONLY `.streams\tickets\`, `.streams\graders\`, `.streams\owner\questions.md`, appended lines in
+- Writes ONLY `.streams\tickets\`, `.streams\graders\`, `ESCALATE` lines in `.streams\owner\questions.md`,
+  `applied default:` lines in `.streams\decisions.md`, appended lines in
   `.streams\inbox\*.md`, and task fields
   `state / claim / artifacts / history` through the lock.
 - Never edits product code or tests. Graders read the tree; they never change it.

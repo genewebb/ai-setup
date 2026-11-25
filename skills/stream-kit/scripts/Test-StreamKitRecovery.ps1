@@ -159,7 +159,9 @@ try {
     Case 'suspect task goes to planned' ($tb.state -eq 'planned') $tb.state
     Case 'suspect keeps the patch' ($tb.artifacts.patch -eq '.streams\patches\G1.B.patch' -and (Test-Path (Join-Path $r2 '.streams\patches\G1.B.patch')))
     Case 'suspect reverses main' ((Get-Content -Raw (Join-Path $r2 'G1.B.txt')) -eq $before)
-    Case 'suspect logs an owner question' ((Get-Content -Raw (Join-Path $r2 '.streams\owner\questions.md')) -match 'G1\.B \| grader red on main only \(C2\)')
+    # An applied default is logged, not queued: the owner queue holds only lines with no safe default.
+    Case 'suspect logs its applied default in decisions.md' ((Get-Content -Raw (Join-Path $r2 '.streams\decisions.md')) -match 'applied default: G1\.B \| grader red on main only \(C2\)')
+    Case 'suspect writes nothing to the owner questions' (-not ((Get-Content -Raw (Join-Path $r2 '.streams\owner\questions.md') -ErrorAction SilentlyContinue) -match 'G1\.B'))
     Case 'suspect names the red clause in history' ($tb.history[-1].note -match '^grader-suspect: C2 red on main')
 
     # ---- 3b. a check-only row red on main only goes to a builder (ticketed), not an author: an author may not edit a check
@@ -1869,6 +1871,10 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $old40 = (Get-Date).ToUniversalTime().AddMinutes(-90).ToString('yyyy-MM-ddTHH:mm:ssZ')
     $lines40 = @([IO.File]::ReadAllLines($ib40) | ForEach-Object { if ($_ -match "^- $id40 \| \S+ \| author-40 \| taken") { ($_ -split ' \| ')[0] + " | $old40 | author-40 | taken" } else { $_ } })
     [IO.File]::WriteAllLines($ib40, $lines40)
+    # The holder must be silent on the board too: a session still writing tasks.json keeps its hold (Test-InboxOpen).
+    $tf40 = Join-Path $r40 '.streams\tasks.json'; $td40 = Get-Content -Raw $tf40 | ConvertFrom-Json -AsHashtable -DateKind String -Depth 50
+    foreach ($t40 in @($td40['tasks'])) { foreach ($h40 in @($t40['history'])) { if ($h40['by'] -eq 'author-40') { $h40['at'] = $old40 } } }
+    [IO.File]::WriteAllText($tf40, ($td40 | ConvertTo-Json -Depth 50))
     $dd40 = & "$S\Claim-Task.ps1" -Repo $r40 -Role build -Session 'build-40c' | ConvertFrom-Json
     Case 'claim churn: a hold past its inbox limit stops parking the row' ($dd40.id -eq 'G1.A') "claimed $($dd40.id)"
     [void](& "$S\Update-Task.ps1" -Repo $r40 -Task 'G1.A' -Role build -Session 'build-40c' -To ticketed -Release -Note 'test: back once more')
@@ -2547,6 +2553,24 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case '66m two built deps appending to ids.yaml stack: the tree is made with both appends and a MERGED note' ((-not $e66m) -and ($ids66m -match 'ADD-A') -and ($ids66m -match 'ADD-B') -and (Test-Path (Join-Path $Scratch 'wt66mC\G1.C\G1.B.txt')) -and (($o66m -join ' ') -match 'MERGED dependency patch G1\.B\.patch')) "err='$e66m' ids='$ids66m' out=$($o66m -join ' | ')"
     Case '66m base.deps records both dependency patches by their own name' ((($deps66m -join ' ') -match '^G1\.A\.patch:\S+ G1\.B\.patch:\S+$')) "deps=$($deps66m -join ' ')"
 
+    # ---- 66z. A built dependency whose kept patch is EMPTY (a docs row that changed no file) is skipped with a note,
+    # not handed to `git apply`, which answers "No valid patches in input" (kit item IN-20261125023512-a478: G26.T924's
+    # 0-byte patch failed every G26.T925 pre-stage). base.deps still records it, so a later non-empty patch reads as drift.
+    $r66z = New-Repo 'r66z' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok'); 'G1.B' = (ContentGrader 'G1.B' 'ok') }); $repos += $r66z
+    $d66z = J $r66z
+    ($d66z.tasks | Where-Object { $_.id -eq 'G1.B' }).dependsOn = @('G1.A')
+    Set-Content -Path (Join-Path $r66z '.streams\tasks.json') -Encoding utf8 -Value ($d66z | ConvertTo-Json -Depth 50)
+    [void](& "$S\Claim-Task.ps1" -Repo $r66z -Role build -Session 'build-66zA' -Task G1.A)
+    New-Item -ItemType Directory -Force (Join-Path $r66z '.streams\patches') | Out-Null
+    [IO.File]::WriteAllBytes((Join-Path $r66z '.streams\patches\G1.A.patch'), [byte[]]@())
+    & "$S\Update-Task.ps1" -Repo $r66z -Task G1.A -Role build -Session 'build-66zA' -To built -Release -Artifacts @{ patch = '.streams\patches\G1.A.patch'; verdict = 'PASS' } | Out-Null
+    [void](& "$S\Claim-Task.ps1" -Repo $r66z -Role build -Session 'build-66zB' -Task G1.B)
+    $e66z = ''; $o66z = @()
+    try { $o66z = @(& "$S\New-TaskWorktree.ps1" -Repo $r66z -Task G1.B -Session 'build-66zB' -WorktreeRoot (Join-Path $Scratch 'wt66z') 2>&1) } catch { $e66z = ("$_" -split "`n")[0].Trim() }
+    $deps66z = @((J $r66z).tasks | Where-Object { $_.id -eq 'G1.B' } | ForEach-Object { $_.base.deps })
+    Case '66z an empty dependency patch is skipped with a note: the tree is made' ((-not $e66z) -and (Test-Path (Join-Path $Scratch 'wt66z\G1.B')) -and (($o66z -join ' ') -match 'EMPTY dependency patch G1\.A\.patch')) "err='$e66z' out=$($o66z -join ' | ')"
+    Case '66z base.deps still records the empty dependency patch' ((($deps66z -join ' ') -match '^G1\.A\.patch:\S+$')) "deps=$($deps66z -join ' ')"
+
     # ---- 66g. A BASE IS NEVER LAID WHILE ANOTHER HOLDER HAS THE MAIN TREE. On 2026-10-17 Builder 4's pre-stage listed
     # main's untracked files while the integrator had G9.T010's patch applied for its grader (kit item
     # IN-20261017025015-83de). New-TaskWorktree now reads main under main-grader.lock; a busy lock throws with the text a
@@ -2728,6 +2752,9 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     $c67 = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role coordinator -DryRun)
     Remove-Item Env:\STREAM_RUNNER_FREE_RAM_GB -ErrorAction SilentlyContinue
     Case 'runner: a coordinator runner takes its first review when it starts' ((($c67 -join "`n") -match '(?m)^GATE first review since the runner started') -and (($c67 -join "`n") -match '(?m)^RUN /stream-coordinator once repo: ')) "$($c67 -join ' | ')"
+    $oa67 = "$(& "$S\Send-OwnerAnswer.ps1" -Repo $r67 -Target 'questions:Q-67' -Answer 'keep the default')"
+    $c67o = @(& "$S\Start-StreamRunner.ps1" -Repo $r67 -Role coordinator -DryRun)
+    Case 'runner: an open owner-answers item gates a coordinator launch' (($oa67 -match '^SENT IN-') -and (($c67o -join "`n") -match '(?m)^GATE owner answers: 1 open owner-answers item\(s\) \(IN-') -and (($c67o -join "`n") -match '(?m)^RUN /stream-coordinator once repo: ')) "$oa67 | $($c67o -join ' | ')"
     # ---- Start-StreamRunner: one planner per repo (kit item IN-20261004133725-ad1f) ----
     # A plan runner must not launch beside a live plan* session. A fresh taken stream-plan hold by another planner
     # makes it IDLE. With no other planner it runs.
@@ -2821,6 +2848,19 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case 'status tick: a watchdog that loses the tasks.json lock race is BUSY on the heartbeat and TICK-BUSY, and files no kit bug' ((-not $eSTB) -and $tickSTB.Count -eq 1 -and $tickSTB[0] -match '\| Watchdog BUSY \(lock contention; the next tick retries\)\. \|' -and (($oSTB -join "`n") -match '(?m)^\S+ TICK-BUSY Invoke-Watchdog\.ps1 \(1 in a row\): .*lock busy') -and (($oSTB -join "`n") -notmatch 'TICK-FAILED Invoke-Watchdog') -and $kitTextSTB -notmatch 'status runner''s script tick') "err='$eSTB' tick=$($tickSTB -join ' || ') busy=$(@($oSTB | Where-Object { $_ -match 'TICK-(BUSY|FAILED)' }) -join ' || ') kit=$($kitTextSTB.Length)"
     $logSTB = Join-Path $rSTB '.streams\logs\status-tick.log'; $logTextSTB = if (Test-Path -LiteralPath $logSTB) { Get-Content -Raw -LiteralPath $logSTB } else { '' }
     Case 'status tick: a TICK-BUSY line is also appended to .streams\logs\status-tick.log' ($logTextSTB -match '(?m)^\S+ TICK-BUSY Invoke-Watchdog\.ps1 \(1 in a row\)') "text=$($logTextSTB.Trim())"
+    # A tick step waits 60 s (STREAM_TICK_LOCK_WAIT_SECONDS) for tasks.json, not 15 s: a holder that lets go after about
+    # 20 s leaves the watchdog QUIET, not BUSY (kit item IN-20261125103616-01e4).
+    $rSTW = New-Repo 'runnerSTW' ([ordered]@{ 'G1.S' = (ContentGrader 'G1.S' 'done') }); $repos += $rSTW
+    $lockSTW = Join-Path $rSTW '.streams\tasks.json.lock'
+    Set-Content -LiteralPath $lockSTW -Value '{"session":"build-slow-holder","at":"now"}'
+    $savedSTW = $env:STREAM_RUNNER_CLAUDE; $env:STREAM_RUNNER_CLAUDE = $clST
+    Remove-Item Env:\STREAM_TASKS_LOCK_WAIT_SECONDS -ErrorAction SilentlyContinue; Remove-Item Env:\STREAM_TICK_LOCK_WAIT_SECONDS -ErrorAction SilentlyContinue
+    $jobSTW = Start-Job -ArgumentList $lockSTW -ScriptBlock { param($l) Start-Sleep -Seconds 20; Remove-Item -LiteralPath $l -Force }
+    $oSTW = @(); $eSTW = ''
+    try { $oSTW = @(& "$S\Start-StreamRunner.ps1" -Repo $rSTW -Role status -IntervalSeconds 1 -MaxRuns 1 2>&1 | ForEach-Object { "$_" }) } catch { $eSTW = ("$_" -split "`n")[0] }
+    finally { if ($null -ne $savedSTW) { $env:STREAM_RUNNER_CLAUDE = $savedSTW } else { Remove-Item Env:\STREAM_RUNNER_CLAUDE -ErrorAction SilentlyContinue }; Wait-Job $jobSTW -Timeout 60 | Out-Null; Remove-Job $jobSTW -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath $lockSTW -Force -ErrorAction SilentlyContinue }
+    $tickSTW = @($oSTW | Where-Object { $_ -match '^\S+ STATUS-TICK ' })
+    Case 'status tick: a tick step waits 60 s for tasks.json, so a holder that lets go after 20 s leaves the watchdog QUIET, not BUSY (kit item IN-20261125103616-01e4)' ((-not $eSTW) -and $tickSTW.Count -eq 1 -and $tickSTW[0] -match '\| Watchdog QUIET: no stale claim\. \|' -and (($oSTW -join "`n") -notmatch 'TICK-BUSY Invoke-Watchdog')) "err='$eSTW' tick=$($tickSTW -join ' || ') busy=$(@($oSTW | Where-Object { $_ -match 'TICK-(BUSY|FAILED)' }) -join ' || ')"
 
     # ---- 71. every runner session runs on the applied machine config (kit item IN-20261004143031-d21b), and the check
     # that applies it runs once per -LaunchCheckMinutes, not once per unit (ai's Install-AIMachine.ps1 -Launch took 111 s
@@ -4536,9 +4576,9 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $prevMonth = (Get-Date).ToUniversalTime().AddMonths(-1).ToString('yyyy-MM')
     Add-Content (Join-Path $hr '.streams\decisions.md') "- $prevMonth-15T10:00:00Z [x] old line"
     Add-Content (Join-Path $hr '.streams\decisions.md') "- $((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')) [x] new line"
-    $dry = @(& "$S\Archive-TaskHistory.ps1" -Repo $hr -Session status-h -DryRun)
+    $dry = @(& "$S\Archive-TaskHistory.ps1" -Repo $hr -Session status-h -DecisionDays 7 -DryRun)
     Case '97 a dry run archives nothing' (($dry -join ' ') -match 'DRY-RUN ARCHIVED rows 1 entries 4 decisions 1' -and @((T $hr 'H1.OLD').history).Count -eq 4 -and -not (Test-Path (Join-Path $hr '.streams\archive\H1.history.json'))) ($dry -join ' | ')
-    $arc = @(& "$S\Archive-TaskHistory.ps1" -Repo $hr -Session status-h)
+    $arc = @(& "$S\Archive-TaskHistory.ps1" -Repo $hr -Session status-h -DecisionDays 7)
     $ho = T $hr 'H1.OLD'
     $hj = Get-Content -Raw (Join-Path $hr '.streams\archive\H1.history.json') | ConvertFrom-Json -AsHashtable
     Case '97 an old done row''s history moves to the group archive' (($arc -join ' ') -match 'ARCHIVED rows 1 entries 4' -and @($hj['H1.OLD']).Count -eq 4) ($arc -join ' | ')
@@ -4550,6 +4590,18 @@ if ($res -match 'Failed') { exit 1 } else { exit 0 }
     $dm = Get-Content -Raw (Join-Path $hr '.streams\decisions.md')
     $dold = Get-Content -Raw (Join-Path $hr ".streams\archive\decisions-$prevMonth.md") -ErrorAction SilentlyContinue
     Case '97 decisions of an earlier month rotate to the archive' ($dm -notmatch 'old line' -and $dm -match 'new line' -and $dold -match 'old line') "$dm // $dold"
+    # Decisions older than -DecisionDays rotate even inside the current month, and one pointer line stays at the top
+    # (kit item IN-20261123171556-e960: decisions.md held more than 12,000 lines of the current month).
+    $dmf = Join-Path $hr '.streams\decisions.md'
+    $d2 = (Get-Date).ToUniversalTime().AddDays(-2)
+    Add-Content $dmf "- $($d2.ToString('yyyy-MM-ddTHH:mm:ssZ')) [x] two days old"
+    Add-Content $dmf "## heading kept"
+    $arc2 = @(& "$S\Archive-TaskHistory.ps1" -Repo $hr -Session status-h -DecisionDays 1)
+    [void](& "$S\Archive-TaskHistory.ps1" -Repo $hr -Session status-h -DecisionDays 1)
+    $dm2 = Get-Content -Raw $dmf
+    $dold2 = Get-Content -Raw (Join-Path $hr ".streams\archive\decisions-$($d2.ToString('yyyy-MM')).md") -ErrorAction SilentlyContinue
+    Case '97 a decision older than -DecisionDays rotates by its own month, newer lines and headings stay' (($arc2 -join ' ') -match 'decisions 1 lines' -and $dm2 -notmatch 'two days old' -and $dm2 -match 'new line' -and $dm2 -match '## heading kept' -and $dold2 -match 'two days old') "$($arc2 -join ' | ') // $dm2"
+    Case '97 decisions.md keeps exactly one pointer line at the top' (@($dm2 -split "`n" | Where-Object { $_.StartsWith('Older decisions:') }).Count -eq 1 -and ($dm2 -split "`n")[0].StartsWith('Older decisions:')) $dm2
     # ---- 98. a work unit that ends while it holds an inbox item (kit item IN-20261005193358-71ec). On 2026-10-05
     # author-202610051459-b841 took IN-20261005185715-dde9 (re-pin 67 G3 graders), changed 54 of them and was ended at its
     # 1800 s limit; the item stayed taken by a session that never comes back, with nothing saying how far it got. The
@@ -5089,6 +5141,46 @@ if ($Mode -eq 'retest') { exit 0 } else { exit 1 }
     $moved106 = $beats106.Count -eq 2 -and [string]$beats106[1] -gt [string]$beats106[0]
     Case '106 the runner beats the unit''s claim while it waits on a permission prompt' $moved106 "beats=$($beats106 -join ' -> ') out=$(($o106 | Select-Object -Last 3) -join ' | ')"
 
+    # 106b (kit item IN-20261124021651-7821): a build unit claimed G26.T906, beat once, then worked 45 min in a blocking
+    # Agent call with no beat, and the watchdog broke the live claim. The runner beats the unit's claims while its
+    # transcripts grow, a subagent's included, and stops when they stop. Fixture: the stub claims, writes its main
+    # transcript, reads the beat, writes only a subagent transcript for 5 s, reads it, idles 4 s, reads it again.
+    $r106b = New-Repo 'runner106b' ([ordered]@{ 'G1.T' = (ContentGrader 'G1.T' 'done') }); $repos += $r106b; Open-Gate $r106b stream-kit
+    $proj106b = Join-Path $Scratch 'projects106b'; $pd106b = Join-Path $proj106b 'D--some-repo'; New-Item -ItemType Directory -Path $pd106b -Force | Out-Null
+    $ai106b = Join-Path $Scratch 'ai-stub106b.ps1'; Set-Content -LiteralPath $ai106b -Value @('exit 0')
+    $cl106b = Join-Path $Scratch 'claude-stub106b.ps1'; $b106b = Join-Path $Scratch 'claude-stub106b.beats.txt'
+    $readBeat106b = "((Get-Content -Raw (Join-Path '$r106b' '.streams\tasks.json') | ConvertFrom-Json -DateKind String).tasks | Where-Object { `$_.id -eq 'G1.T' }).claim.beat"
+    Set-Content -LiteralPath $cl106b -Value @(
+        "`$i = [array]::IndexOf(`$args, '--session-id'); `$sid = if (`$i -ge 0) { `$args[`$i + 1] } else { 'none' }"
+        "`$t = Join-Path '$pd106b' (`$sid + '.jsonl'); `$sd = Join-Path '$pd106b' (`$sid + '\subagents'); New-Item -ItemType Directory -Path `$sd -Force | Out-Null"
+        "& '$S\Claim-Task.ps1' -Repo '$r106b' -Role build -Session `$env:STREAM_UNIT_SESSION | Out-Null"
+        "Set-Content -LiteralPath `$t -Value '{""type"":""user"",""message"":{""content"":""go""}}'"
+        'Start-Sleep -Seconds 3'
+        "Add-Content -LiteralPath '$b106b' -Value ($readBeat106b)"
+        "1..10 | ForEach-Object { Add-Content -LiteralPath (Join-Path `$sd 'agent-1.jsonl') -Value '{""type"":""assistant""}'; Start-Sleep -Milliseconds 500 }"
+        'Start-Sleep -Seconds 3'
+        "Add-Content -LiteralPath '$b106b' -Value ($readBeat106b)"
+        'Start-Sleep -Seconds 4'
+        "Add-Content -LiteralPath '$b106b' -Value ($readBeat106b)"
+        "Set-Content -LiteralPath `$env:STREAM_UNIT_OUT -Value '{""result"":""stub106b"",""is_error"":false,""num_turns"":1,""total_cost_usd"":0,""outcome"":""idle""}'"
+        'exit 0')
+    $prevWt106b = $env:WT_SESSION; $prevBlock106b = $env:WAVETERM_BLOCKID; $prevPane106b = $env:WEZTERM_PANE
+    Remove-Item Env:\WT_SESSION, Env:\WAVETERM_BLOCKID, Env:\WEZTERM_PANE -ErrorAction SilentlyContinue
+    $env:STREAM_RUNNER_AI = $ai106b; $env:STREAM_RUNNER_CLAUDE = $cl106b; $env:STREAM_BEAT_SECONDS = '1'; $env:STREAM_CLAUDE_PROJECTS = $proj106b; $env:STREAM_RUNNER_QUOTA_CHECK_SECONDS = '1'
+    try {
+        $job106b = Start-ThreadJob -ScriptBlock { param($s, $r) & "$s\Start-StreamRunner.ps1" -Repo $r -Role kit -Live -IntervalSeconds 1 -UnitTimeoutSeconds 60 -MaxRuns 1 } -ArgumentList $S, $r106b
+        $null = Wait-Job $job106b -Timeout 90
+        $o106b = @(Receive-Job $job106b -Keep 3>$null); Stop-Job $job106b -ErrorAction SilentlyContinue; Remove-Job $job106b -Force -ErrorAction SilentlyContinue
+    } finally {
+        Remove-Item Env:\STREAM_RUNNER_AI, Env:\STREAM_RUNNER_CLAUDE, Env:\STREAM_BEAT_SECONDS, Env:\STREAM_CLAUDE_PROJECTS, Env:\STREAM_RUNNER_QUOTA_CHECK_SECONDS -ErrorAction SilentlyContinue
+        if ($null -ne $prevWt106b) { $env:WT_SESSION = $prevWt106b }
+        if ($null -ne $prevBlock106b) { $env:WAVETERM_BLOCKID = $prevBlock106b }
+        if ($null -ne $prevPane106b) { $env:WEZTERM_PANE = $prevPane106b }
+    }
+    $beats106b = @(if (Test-Path $b106b) { Get-Content $b106b | Where-Object { $_ } })
+    $ok106b = $beats106b.Count -eq 3 -and [string]$beats106b[1] -gt [string]$beats106b[0] -and [string]$beats106b[2] -eq [string]$beats106b[1]
+    Case '106b the runner beats a working unit''s claim while a subagent transcript grows, and stops when it goes quiet' $ok106b "beats=$($beats106b -join ' -> ') out=$(($o106b | Select-Object -Last 3) -join ' | ')"
+
     # 107 (kit item IN-20261010145324-4e04): retest-G4-3 built its own Playwright command and dropped the env the leg
     # sets (NODE_USE_SYSTEM_CA), so its preflight died on 'self-signed certificate' and 6 failed tests counted as
     # confirmed failures. The leg here sets STREAM_T107 in its own command and has no retestCommand; the fake npx passes
@@ -5307,6 +5399,7 @@ if ($st -eq 'expected') { exit 0 } else { "STREAM_T107='$env:STREAM_T107'"; exit
     Remove-Item Env:\STREAM_RUNNER_BUSY_RETRY_SECONDS -ErrorAction SilentlyContinue
     $t112 = $o112 -join "`n"
     Case '112 a pre-stage that loses the lock race retries (BUSY-RETRY), never backs off, and launches once the lock is free' ([bool]$done112 -and (Test-Path $ready112) -and $t112 -match 'PRESTAGE-BUSY .*lock busy for 2s' -and $t112 -match 'BUSY-RETRY \d+ s' -and $t112 -notmatch 'BACKOFF' -and $t112 -notmatch 'PRESTAGE-FAILED' -and $t112 -match 'PRESTAGE \S+ claimed G1\.L' -and $t112 -match ' EXIT 0 outcome built .* ok -> ') "finished=$([bool]$done112) out=$($o112 -join ' | ')"
+    Case '112a a claim release that throws after a failed pre-stage is shown (RELEASE-FAILED) and tried once more' ($t112 -match 'RELEASE-FAILED \S+ \(try 1 of 2\) : .*lock busy' -and $t112 -match 'RELEASE-FAILED \S+ \(try 2 of 2\)') "out=$($o112 -join ' | ')"
     Case '112b runner tab: a build GATE line is followed by a plain line naming the row it claims' (($t112 -match '(?m)^\d\d:\d\d:\d\d GATE claimable 1 \(G1\.L\)') -and ($t112 -match '(?m)^  doing      : 1 ticketed row\(s\) are ready to build; this runner claims the first \(G1\.L\) and starts a build session$')) "out=$($o112 -join ' | ')"
 
     # ---- 112c. A runner leaving a usage-limit hold says so in its state file before the pre-stage (kit item

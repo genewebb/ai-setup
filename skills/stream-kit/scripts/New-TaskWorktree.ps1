@@ -116,6 +116,14 @@ Add-Deps $Task
 $applied = [Collections.Generic.List[string]]::new()
 foreach ($pp in $depPatches) {
     $full = if ([IO.Path]::IsPathRooted($pp)) { $pp } else { Join-Path $Repo $pp }
+    # An EMPTY kept patch (a docs row that changed no file) carries no change: `git apply` refuses it with "No valid
+    # patches in input" (kit item IN-20261125023512-a478). It is still recorded in base.deps, so a later non-empty
+    # patch reads as drift at landing.
+    if ((Test-Path -LiteralPath $full -PathType Leaf) -and -not ([IO.File]::ReadAllText($full).Trim())) {
+        $notes.Add("EMPTY dependency patch $(Split-Path -Leaf $full) carries no change; nothing to apply")
+        $applied.Add($pp)
+        continue
+    }
     & git -C $wt apply --check --binary --whitespace=nowarn $full 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         & git -C $wt apply --check --reverse --binary --whitespace=nowarn $full 2>&1 | Out-Null

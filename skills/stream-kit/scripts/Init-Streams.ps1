@@ -1,5 +1,5 @@
 # Creates <repo>\.streams\ with an empty tasks.json and keeps it out of git through .git\info\exclude (never
-# .gitignore, which is a tracked file), and creates the six role inboxes. Safe to re-run: existing state is never overwritten.
+# .gitignore, which is a tracked file), and creates the six role inboxes plus the owner-answers inbox. Safe to re-run: existing state is never overwritten.
 param(
     [Parameter(Mandatory)] [string] $Repo,
     [string[]] $Requirements = @()

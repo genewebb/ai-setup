@@ -1,6 +1,6 @@
 ---
 name: stream-build
-description: v0.17. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
+description: v0.18. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
 ---
 
 # stream-build
@@ -317,7 +317,10 @@ now means this loop):
 1. **Round 1 is a full review**: a fresh subagent given the repo's review prompt and the file and nothing else (the
    clean-session rule of `docs\requirements\RequirementDesign.md`, "Approval sequence"). Save its findings, numbered,
    in the review log.
-2. **Fix** the findings in the file. Owner-only points are owner-queued with the recommended reading taken.
+2. **Fix** the findings in the file. An owner-only point with a safe default takes the recommended reading and is
+   logged as one line in `.streams\decisions.md` (`- <yyyy-MM-ddTHH:mm:ssZ> [<session>] applied default: <task> | question | default applied | why`), never in the owner queue; one with no safe default is
+   an `ESCALATE <task> | question | why no default` line in `.streams\owner\questions.md` (kit item
+   IN-20261124144922-836f).
 3. **Round N (N > 1) is anchored**: a fresh subagent given the file, the round N-1 findings list, and the diff of the
    file since the revision round N-1 reviewed (`reqtools` revision ids in the log). It answers two questions only:
    is each N-1 finding closed (CLOSED / OPEN, with the quote), and does the changed text introduce a defect

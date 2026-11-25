@@ -47,8 +47,14 @@ $report = [Collections.Generic.List[string]]::new()
         $wg = [string]$g.id
         if ([string]$g.state -in @('released', 'integrating') -and -not $frozen.Contains($wg) -and ($null -eq $focusIds -or $wg -in $focusIds)) { [void]$workedGroups.Add($wg) }
     }
+    # A plan row added to a closed group is never claimed and cannot be moved out (Revise-Task.ps1 GROUP-CLOSED), so it
+    # can only be blocked and retired; the batch's own group entries count, so a batch that reopens the group may add to it.
+    $groupState = @{}
+    foreach ($g in @($doc.groups)) { $groupState[[string]$g.id] = [string]$g.state }
+    foreach ($g in @($in['groups'])) { if ($g -and $g.Contains('state')) { $groupState[[string]$g['id']] = [string]$g['state'] } }
     foreach ($t in @($in['tasks'])) {
         if (-not $t) { continue }
+        if ($Role -eq 'plan' -and $groupState[[string]$t['group']] -eq 'closed') { $problems.Add("$($t.id): GROUP-CLOSED $($t['group']) is closed; add the row to an open group, or reopen the group in the same batch") }
         if (-not @($t.why).Count) { $problems.Add("$($t.id): no REQ/AC ids in why") }
         # A kind no claim selector takes leaves the row on the board with no taker (G26 rows filed as 'test' sat unclaimed).
         if ($t.kind -and $t.kind -notin $script:TaskKinds) { $problems.Add("$($t.id): BAD-KIND '$($t.kind)' (one of $($script:TaskKinds -join ', '))") }
@@ -58,6 +64,10 @@ $report = [Collections.Generic.List[string]]::new()
         if ($t.kind -notin @('gate', 'integration') -and (Get-EstMinutes $t) -lt 1) { $problems.Add("$($t.id): no estMinutes (a positive whole number of minutes)$(if ($t.ContainsKey('estimate')) { '; found key estimate, which nothing reads' })") }
         if ($t.id -in $ids) { $problems.Add("$($t.id): id already exists") }
         $cand = if ($t.kind -in @('gate', 'integration')) { $null } else { Get-WriteSetCandidates $wsIndex $t.writeSet }
+        # Every overlap is classified before any row changes: a fix that edited a parked row and then joined another
+        # left the parked row depending on a fix that never became a row (kit item IN-20261125002755-7710).
+        $parked = [Collections.Generic.List[object]]::new()
+        $joinable = [Collections.Generic.List[object]]::new()
         foreach ($o in @($open) + @($new)) {
             if ($t.kind -in @('gate', 'integration')) { break }
             if ($null -ne $cand -and -not $cand.Contains($o)) { continue }
@@ -73,24 +83,42 @@ $report = [Collections.Generic.List[string]]::new()
                 if ($Role -eq 'integrate' -and $o.state -ne 'done' -and $o.state -ne 'building' -and (Get-RowOrigin $o) -ne 'integration' -and -not $workedGroups.Contains([string]$o.group)) {
                     # A row of a group no role works now (not released, frozen by the owner, or outside the focus groups)
                     # is never claimed, so a fix joined into it never lands and the failing group can never close (run-G17-32
-                    # joined G28.R32F1 into parked G29.T004; kit item IN-20261122115223-b907). The fix stays its own row
-                    # and the idle row is ordered after it, with the reason stated.
-                    $o['dependsOn'] = @(@($o['dependsOn']) + $t.id | Where-Object { $_ } | Select-Object -Unique)
-                    if (-not ($o['dependsWhy'] -is [Collections.IDictionary])) { $o['dependsWhy'] = [ordered]@{} }
-                    $o['dependsWhy'][[string]$t.id] = "integration fix $($t.id) lands first; group $($o.group) is not worked now"
-                    Add-History $o $Session $o.state "ordered after integration fix $($t.id) [$(@($t.writeSet) -join ', ')]: group $($o.group) is not worked now"
-                    $report.Add("PARKED-AFTER $($o.id) after $($t.id)")
-                    continue
+                    # joined G28.R32F1 into parked G29.T004; kit item IN-20261122115223-b907).
+                    $parked.Add($o); continue
                 }
-                if ($Role -eq 'integrate' -and $o.state -ne 'done') {
-                    Add-History $o $Session $o.state "integration fix joined: $($t.title) [$(@($t.writeSet) -join ', ')]$(if ($t['note']) { " -- $($t['note'])" })"
-                    $report.Add("JOINED $($t.id) into $($o.id)")
-                    $t = $null; break
-                }
+                if ($Role -eq 'integrate' -and $o.state -ne 'done') { $joinable.Add($o); continue }
                 $problems.Add("$($t.id): write set overlaps $($o.id)")
             }
         }
-        if (-not $t) { continue }
+        # A fix joins a row only when no parked row shares its files and that row is another fix row, is being built or
+        # is claimable now: a joined fix in a row that waits on unbuilt rows holds the failing group's close behind them.
+        $into = $null
+        if (-not $parked.Count) {
+            foreach ($o in $joinable) {
+                if ((Get-RowOrigin $o) -eq 'integration' -or $o.state -eq 'building' -or (Test-BuildReady $P $doc $o)) { $into = $o; break }
+            }
+        }
+        if ($into) {
+            Add-History $into $Session $into.state "integration fix joined: $($t.title) [$(@($t.writeSet) -join ', ')]$(if ($t['note']) { " -- $($t['note'])" })"
+            $report.Add("JOINED $($t.id) into $($into.id)")
+            continue
+        }
+        # Own row: the fix lands first and every idle overlapping row is ordered after it, with the reason stated; a
+        # row already being built cannot wait, so the fix is chained after it.
+        foreach ($o in @($parked) + @($joinable)) {
+            if ($o.state -eq 'building') {
+                $t['dependsOn'] = @(@($t['dependsOn']) + $o.id | Where-Object { $_ } | Select-Object -Unique)
+                $report.Add("CHAINED $($t.id) after $($o.id) (building)")
+                continue
+            }
+            $isParked = $parked.Contains($o)
+            $why = if ($isParked) { "group $($o.group) is not worked now" } else { 'that row is not claimable now' }
+            $o['dependsOn'] = @(@($o['dependsOn']) + $t.id | Where-Object { $_ } | Select-Object -Unique)
+            if (-not ($o['dependsWhy'] -is [Collections.IDictionary])) { $o['dependsWhy'] = [ordered]@{} }
+            $o['dependsWhy'][[string]$t.id] = "integration fix $($t.id) lands first; $why"
+            Add-History $o $Session $o.state "ordered after integration fix $($t.id) [$(@($t.writeSet) -join ', ')]: $why"
+            $report.Add("$(if ($isParked) { 'PARKED-AFTER' } else { 'ORDERED-AFTER' }) $($o.id) after $($t.id)")
+        }
         foreach ($k in @('dependsOn', 'writeSet', 'why')) { if (-not $t.ContainsKey($k) -or $null -eq $t[$k]) { $t[$k] = @() } }
         # Same rule as -AddWriteSet: one JSON element holding several comma-separated paths becomes several entries,
         # because a joined entry overlaps nothing and exports nothing (see Expand-PathList).

@@ -114,7 +114,7 @@ $mode = if ($Live) { 'live' } elseif ($Stream) { 'stream' } else { 'print' }
 $defaults = @{ author = 300; build = 300; integrate = 600; plan = 600; kit = 600; status = 900; coordinator = 1200 }
 if ($IntervalSeconds -le 0) { $IntervalSeconds = $defaults[$Role] }
 # A build unit is limited to 90 minutes, not the 45-minute build CLAIM limit: the claim limit is about beats, and a
-# live unit beats. A build with two verifier rounds outruns 45 minutes, and on 2026-10-04 units were killed mid-build at
+# live unit's claims are beaten by the runner while its transcripts grow (Get-UnitActivityTime). A build with two verifier rounds outruns 45 minutes, and on 2026-10-04 units were killed mid-build at
 # 2700 s (G3.T162, kit item IN-20261004205649-446f).
 $unitLimits = @{ author = 1800; build = 5400; integrate = 1200; plan = 1200; kit = 1200; status = 1200; coordinator = 1200 }
 if ($UnitTimeoutSeconds -le 0) { $UnitTimeoutSeconds = $unitLimits[$Role] }
@@ -186,7 +186,7 @@ function Get-RunnerRules([string] $Session, $Packet = $null, $Cfg = $null) {
 # outside the focus set (filed with -Force, or before the focus rule) is not work this role may do now: it launches no
 # paid unit (final review M9, the Send-InboxItem.ps1 NOT-FOCUS rule).
 function Get-ActionableInboxItems($doc) {
-    $open = @(Read-InboxItems (Get-InboxPath $P $inboxSkill) | Where-Object { Test-InboxOpen $_ $inboxSkill })
+    $open = @(Read-InboxItems (Get-InboxPath $P $inboxSkill) | Where-Object { Test-InboxOpen $_ $inboxSkill $P })
     if ($Role -in @('author', 'build')) {
         $fs = Get-FocusSet $doc
         $known = [Collections.Generic.HashSet[string]]::new(); foreach ($t in $doc.tasks) { [void]$known.Add([string]$t.id) }
@@ -305,7 +305,7 @@ function Get-IdleReport {
         if ($cl.notFocus) { $why.Add("$($cl.notFocus) $want row(s) in other groups$(if ($Role -eq 'author') { ': the author spill found none free (claimed, held or in an unreleased group)' } else { ': builders take focus rows only' })") }
     }
     if ($inFlight.Count) { $why.Add("$($inFlight.Count) row(s) being built now by live builders ($(($inFlight | Select-Object -First 6) -join ', ')$(if ($inFlight.Count -gt 6) { ', ...' }))") }
-    $open = @(Read-InboxItems (Get-InboxPath $P $inboxSkill) | Where-Object { Test-InboxOpen $_ $inboxSkill }).Count
+    $open = @(Read-InboxItems (Get-InboxPath $P $inboxSkill) | Where-Object { Test-InboxOpen $_ $inboxSkill $P }).Count
     if ($open) { $why.Add("$open open item(s) in the $inboxSkill inbox, none actionable now (about rows outside the focus or already held)") }
     New-IdleReport $fg $released @($why)
 }
@@ -446,9 +446,13 @@ function Get-TimedGate($doc) {
         $why.Add("no built row in the focus set$(if ($cl.notFocus) { " ($($cl.notFocus) built row(s) in other groups wait for their group)" })")
         $why.Add('no group integrating')
     } elseif ($Role -eq 'coordinator') {
+        # The coordinator is the only role that applies owner answers, so an open one launches it whatever else is live.
+        $oa = @(Read-InboxItems (Get-InboxPath $P 'owner-answers') | Where-Object { Test-InboxOpen $_ 'owner-answers' $P })
+        if ($oa.Count) { $script:timedWhy = @(); return "owner answers: $($oa.Count) open owner-answers item(s) ($($oa[0].id))" }
+        $why.Add('owner-answers : 0 open item(s)')
         foreach ($other in 'plan', 'kit') {
             $os = "stream-$other"
-            $n = @(Read-InboxItems (Get-InboxPath $P $os) | Where-Object { Test-InboxOpen $_ $os }).Count
+            $n = @(Read-InboxItems (Get-InboxPath $P $os) | Where-Object { Test-InboxOpen $_ $os $P }).Count
             $live = if ($other -eq 'plan') { [bool](Get-LivePlanner $stableSession) -or (Test-LiveRunner 'plan') } else { Test-LiveRunner 'kit' }
             if ($n -and -not $live) { $script:timedWhy = @(); return "stands in for $other : $n open $os item(s) and no live $other session" }
             $why.Add("$os : $n open item(s)$(if ($n) { ', its own session is live' })")
@@ -483,8 +487,15 @@ $tickBusyReport = if ("$env:STREAM_TICK_BUSY_REPORT" -match '^\d+$') { [Math]::M
 function Invoke-TickStep([string] $Script, [hashtable] $ScriptArgs) {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $r = $null
+    # A tick step waits STREAM_TICK_LOCK_WAIT_SECONDS (60) for tasks.json, not the 15 s an interactive caller waits: the
+    # tick has no one waiting on it, and a build pre-stage on a 3,000-row board held the lock past 15 s on three ticks in
+    # a row, each a different session, which filed a kit bug for a lock that was let go every time (kit item
+    # IN-20261125103616-01e4). An explicit STREAM_TASKS_LOCK_WAIT_SECONDS still wins.
+    $prevTickWait = $env:STREAM_TASKS_LOCK_WAIT_SECONDS
+    if ("$prevTickWait" -notmatch '^\d+$') { $env:STREAM_TASKS_LOCK_WAIT_SECONDS = if ("$env:STREAM_TICK_LOCK_WAIT_SECONDS" -match '^\d+$') { $env:STREAM_TICK_LOCK_WAIT_SECONDS } else { '60' } }
     try { $r = Invoke-KitScript $Script $ScriptArgs } catch { $r = [pscustomobject]@{ Text = @(("$_" -split "`n")[0]); Warnings = @(); Code = 'THREW' } }
-    $ok = ($null -eq $r.Code -or "$($r.Code)" -eq '0')
+    finally { if ($null -eq $prevTickWait) { Remove-Item Env:\STREAM_TASKS_LOCK_WAIT_SECONDS -ErrorAction SilentlyContinue } else { $env:STREAM_TASKS_LOCK_WAIT_SECONDS = $prevTickWait } }
+    $ok =($null -eq $r.Code -or "$($r.Code)" -eq '0')
     # A step that lost a lock race (tasks.json or an inbox held past its wait, or a file another process holds) is BUSY,
     # not broken: the next tick runs it again. A builder held tasks.json past the watchdog's 15 s on 2026-10-18 and the
     # tick filed it as a kit bug (kit item IN-20261018192923-9972).
@@ -517,7 +528,12 @@ function Invoke-StatusTick([string] $Session) {
     $acts = @($wd.Text | Where-Object { "$_".Trim() -and $_ -notmatch '^(QUIET|JUNK|WARN)\b' })
     $wdLine = if ($wd.Busy) { "Watchdog $(Get-TickNote $wd)." } elseif (-not $wd.Ok) { "Watchdog FAILED (exit $($wd.Code)): $(Get-TickNote $wd)" } elseif ($acts.Count) { "Watchdog: $($acts -join '; ')" } else { 'Watchdog QUIET: no stale claim.' }
     if ($wdLine.Length -gt 400) { $wdLine = $wdLine.Substring(0, 400) + '...' }
-    $openItems = @(Read-InboxItems (Get-InboxPath $P $inboxSkill) | Where-Object { Test-InboxOpen $_ $inboxSkill })
+    # A held inbox item whose condition is met gets its `woken` line here, so the board and its role see it at once (kit
+    # item IN-20261123164856-bce0).
+    $wk = Invoke-TickStep 'Get-InboxItems.ps1' @{ Repo = $Repo; All = $true; Wake = $true; By = $Session }; $steps.Add($wk)
+    $wokenLine = [string](@($wk.Text | Where-Object { $_ -like 'WAKE-DONE *' }) | Select-Object -Last 1)
+    foreach ($l in @($wk.Text | Where-Object { $_ -like 'WOKEN *' })) { "  inbox     $l" }
+    $openItems = @(Read-InboxItems (Get-InboxPath $P $inboxSkill) | Where-Object { Test-InboxOpen $_ $inboxSkill $P })
     $inboxLine = if ($openItems.Count) { "Own inbox: $($openItems.Count) open item(s) ($((@($openItems | Select-Object -First 3 | ForEach-Object { $_.id })) -join ', ')); a status unit is launched for them." } else { 'Own inbox: no open items.' }
     $st = Invoke-TickStep 'Get-StreamStatus.ps1' @{ Repo = $Repo }; $steps.Add($st)
     foreach ($l in $st.Text) { "  $l" }
@@ -587,7 +603,7 @@ function Invoke-StatusTick([string] $Session) {
     }
     $script:ticks++
     $script:tickWaitSeconds = Get-TickWait $sw.Elapsed.TotalSeconds
-    Write-TickLog "$(Get-TabNow) STATUS-TICK $Session $([int]$sw.Elapsed.TotalSeconds)s | $wdLine | $inboxLine | page: $(Get-TickNote $pg) | cost: $(Get-TickNote $cp) | priority: $(Get-TickNote $pr) | archive: $archiveNote | activation: $(if ($actNotes.Count) { $actNotes -join '; ' } else { 'none needed' }) | freshness: $(if ($freshNotes.Count) { $freshNotes -join '; ' } else { 'clean' }) | nightly: $nightlyNote | next tick at $(Get-TabAt $script:tickWaitSeconds) ($($script:tickWaitSeconds) s: the $IntervalSeconds s interval counts from the tick's start)"
+    Write-TickLog "$(Get-TabNow) STATUS-TICK $Session $([int]$sw.Elapsed.TotalSeconds)s | $wdLine | $inboxLine | page: $(Get-TickNote $pg) | cost: $(Get-TickNote $cp) | priority: $(Get-TickNote $pr) | archive: $archiveNote | activation: $(if ($actNotes.Count) { $actNotes -join '; ' } else { 'none needed' }) | freshness: $(if ($freshNotes.Count) { $freshNotes -join '; ' } else { 'clean' }) | nightly: $nightlyNote | inbox wake: $(if ($wokenLine) { $wokenLine -replace '^WAKE-DONE ', 'woken ' } else { Get-TickNote $wk }) | next tick at $(Get-TabAt $script:tickWaitSeconds) ($($script:tickWaitSeconds) s: the $IntervalSeconds s interval counts from the tick's start)"
     $state.lastTick = Get-Now; $state.ticks = $script:ticks
     $state.status = "ticked $(Format-LocalStamp); next tick in $($script:tickWaitSeconds) s$(if ($openItems.Count) { "; $($openItems.Count) open inbox item(s): launching a unit" })"
     Write-RunnerState $state
@@ -842,7 +858,15 @@ function Invoke-PreStageGuarded([string] $Session) {
         $g.Busy = $first -match 'lock busy for \d+s|being used by another process'
         $g.Failed = "$(if ($g.Busy) { 'PRESTAGE-BUSY' } else { 'PRESTAGE-FAILED' }) $Session : $first"
         $lines.Add($g.Failed)
-        try { foreach ($f in @(Clear-SessionClaims $P $Session $runnerId "released by the runner: pre-stage of $Session failed")) { $lines.Add("RELEASED $f") } } catch { }
+        # A release that throws leaves the row building under a dead claim until the watchdog's limit, so the error is
+        # shown and the release tried once more (kit item IN-20261125024250-04c6).
+        foreach ($try in 1..2) {
+            try { foreach ($f in @(Clear-SessionClaims $P $Session $runnerId "released by the runner: pre-stage of $Session failed")) { $lines.Add("RELEASED $f") }; break }
+            catch {
+                $lines.Add("RELEASE-FAILED $Session (try $try of 2) : $(("$_" -split "`n")[0])")
+                if ($try -lt 2) { Start-Sleep -Milliseconds (Get-Random -Minimum 500 -Maximum 3000) }
+            }
+        }
         try { foreach ($l in @(Open-UnitInboxHolds $P $Session (Get-Date).ToUniversalTime().AddMinutes(-5) 'pre-stage failed')) { $lines.Add($l) } } catch { }
         return $g
     }
@@ -1286,6 +1310,8 @@ function Invoke-LiveUnit([string] $Claude, [string[]] $CliArgs, [string] $Out, [
     $usedMs = [long]0
     $limitMs = [long]$UnitTimeoutSeconds * 1000
     $lastWaitBeat = $null
+    $lastActCheck = [datetime]::MinValue
+    $lastActSeen = $null
     $clearedSince = $null
     $lastClearCheck = [datetime]::MinValue
     $waitBeatEvery = if ($env:STREAM_BEAT_SECONDS) { [int]$env:STREAM_BEAT_SECONDS } else { 60 }
@@ -1322,6 +1348,17 @@ function Invoke-LiveUnit([string] $Claude, [string[]] $CliArgs, [string] $Out, [
             if ($waiting -and ((-not $lastWaitBeat) -or ((Get-Date) - $lastWaitBeat).TotalSeconds -ge $waitBeatEvery)) {
                 $lastWaitBeat = Get-Date
                 Update-WaitingClaims $Session
+            }
+            # A working unit keeps its claims fresh too: the build claim limit is 45 minutes but a build unit may run 90,
+            # and a long blocking Agent call (a blind verifier) writes no beat. The beat follows transcript activity, the
+            # main transcript or a subagent's, so a hung unit still loses its claim at the claim limit.
+            if (-not $waiting -and ((Get-Date) - $lastActCheck).TotalSeconds -ge $waitBeatEvery) {
+                $lastActCheck = Get-Date
+                $act = Get-UnitActivityTime $tail
+                if ($act -and ((-not $lastActSeen) -or $act -gt $lastActSeen)) {
+                    $lastActSeen = $act
+                    Update-WaitingClaims $Session
+                }
             }
             $end = $null
             if ($ClaudeSession -and ((Get-Date) - $tail.lastCheck).TotalSeconds -ge $quotaCheckSeconds) {
@@ -1374,7 +1411,21 @@ function Test-PromptCleared([hashtable] $Tail, [string] $ClaudeSession, $W) {
     $false
 }
 
-# Beats every claim the unit session holds while it waits on the owner. A beat that cannot get the tasks.json lock is
+# Newest write time (UTC) of the unit's main transcript and of every subagent transcript under <session>\subagents, or
+# $null while the quota watch has not found the main transcript.
+function Get-UnitActivityTime([hashtable] $Tail) {
+    if (-not $Tail.path -or -not (Test-Path -LiteralPath $Tail.path)) { return $null }
+    $newest = (Get-Item -LiteralPath $Tail.path).LastWriteTimeUtc
+    $sub = Join-Path ([IO.Path]::GetDirectoryName($Tail.path)) ([IO.Path]::GetFileNameWithoutExtension($Tail.path))
+    if (Test-Path -LiteralPath $sub) {
+        foreach ($f in @(Get-ChildItem -LiteralPath $sub -Recurse -File -Filter '*.jsonl' -ErrorAction SilentlyContinue)) {
+            if ($f.LastWriteTimeUtc -gt $newest) { $newest = $f.LastWriteTimeUtc }
+        }
+    }
+    $newest
+}
+
+# Beats every claim the unit session holds while it waits on the owner or while its transcripts show activity. A beat that cannot get the tasks.json lock is
 # skipped; the next tick tries again.
 function Update-WaitingClaims([string] $Session) {
     try {
@@ -1772,7 +1823,7 @@ while ($true) {
     if (-not $gated) {
         # E4 backoff (lib\Streams.ps1 Get-RunnerWait): an idle unit with an empty inbox doubles the next wait up to
         # 20 min for plan/status/kit/coordinator; an inbox write wakes the runner early.
-        $openNow = @(Read-InboxItems (Get-InboxPath $P $inboxSkill) | Where-Object { Test-InboxOpen $_ $inboxSkill }).Count
+        $openNow = @(Read-InboxItems (Get-InboxPath $P $inboxSkill) | Where-Object { Test-InboxOpen $_ $inboxSkill $P }).Count
         # A gated timed role launched because its gate found work; a unit that still says idle found nothing it could do
         # (an item it cannot act on, a built row another drain holds), and the gate would fire again at once. Its idle
         # counts whatever the inbox holds, so the backoff spaces those relaunches out; an inbox write still wakes it.

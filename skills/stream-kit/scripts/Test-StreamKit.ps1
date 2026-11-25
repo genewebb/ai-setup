@@ -103,6 +103,21 @@ try {
     $kr = (T $repo 'G1.T7K')
     Case 'plan revise corrects a kind no claim takes' ($kbx -eq 2 -and ($kb -join ' ') -match 'BAD-KIND G1.T7K' -and $kgx -eq 0 -and $kr.kind -eq 'code' -and $kr.state -eq 'planned') (($kb + $kg) -join ' | ')
     Set-Content -NoNewline -LiteralPath (Join-Path $repo '.streams\tasks.json') -Value $doc0
+    $cg = @{ groups = @(@{ id = 'G1X'; name = 'Closed'; state = 'closed'; origin = 'plan' }); tasks = @(@{ id = 'G1X.T1'; group = 'G1X'; title = 'x'; why = @('AC-9'); kind = 'code'; writeSet = @('cg.txt'); dependsOn = @(); estMinutes = 5 }) }
+    $cgf = Join-Path $Scratch 'closedgrp.json'; $cg | ConvertTo-Json -Depth 10 | Set-Content $cgf
+    $cgo = @(& "$S\Add-Tasks.ps1" -Repo $repo -Role plan -Session plan-1 -File $cgf); $cgx = $LASTEXITCODE
+    $doc1 = Get-Content -Raw (Join-Path $repo '.streams\tasks.json')
+    $dc = $doc1 | ConvertFrom-Json -AsHashtable -Depth 50; $dc.groups += [ordered]@{ id = 'G1Y'; name = 'Done'; state = 'closed'; origin = 'plan' }
+    $dc | ConvertTo-Json -Depth 50 | Set-Content (Join-Path $repo '.streams\tasks.json')
+    @{ tasks = @(@{ id = 'G1Y.T1'; group = 'G1Y'; title = 'y'; why = @('AC-9'); kind = 'code'; writeSet = @('cy.txt'); dependsOn = @(); estMinutes = 5 }) } | ConvertTo-Json -Depth 10 | Set-Content $cgf
+    $cyo = @(& "$S\Add-Tasks.ps1" -Repo $repo -Role plan -Session plan-1 -File $cgf); $cyx = $LASTEXITCODE
+    @{ groups = @(@{ id = 'G1Y'; state = 'released' }); tasks = @(@{ id = 'G1Y.T2'; group = 'G1Y'; title = 'y2'; why = @('AC-9'); kind = 'code'; writeSet = @('cy2.txt'); dependsOn = @(); estMinutes = 5 }) } | ConvertTo-Json -Depth 10 | Set-Content $cgf
+    $cro = @(& "$S\Add-Tasks.ps1" -Repo $repo -Role plan -Session plan-1 -File $cgf); $crx = $LASTEXITCODE
+    $cids = @((J $repo).tasks | ForEach-Object { $_.id })
+    Case 'plan refuses a new row in a closed group (board or batch), allows it when the batch reopens the group' (
+        $cgx -eq 2 -and ($cgo -join ' ') -match 'G1X.T1: GROUP-CLOSED G1X' -and $cyx -eq 2 -and ($cyo -join ' ') -match 'G1Y.T1: GROUP-CLOSED G1Y' -and
+        $crx -eq 0 -and 'G1Y.T2' -in $cids -and 'G1X.T1' -notin $cids -and 'G1Y.T1' -notin $cids) (($cgo + $cyo + $cro) -join ' | ')
+    Set-Content -NoNewline -LiteralPath (Join-Path $repo '.streams\tasks.json') -Value $doc1
     $d0 = $doc0 | ConvertFrom-Json -AsHashtable -Depth 50; $src = @($d0.tasks | Where-Object { $_.id -eq 'G1.T3' })[0]; $row = $src | ConvertTo-Json -Depth 50 | ConvertFrom-Json -AsHashtable -Depth 50; $row['id'] = 'G1.T7'; $row['writeSet'] = @('y.txt'); [void]$row.Remove('estMinutes'); $d0.tasks += $row
     $d0 | ConvertTo-Json -Depth 50 | Set-Content (Join-Path $repo '.streams\tasks.json')
     try { $sj = & "$S\Get-StreamStatus.ps1" -Repo $repo -Json 2>&1 } catch { $sj = "THREW $_"; $global:LASTEXITCODE = 1 }
@@ -332,7 +347,8 @@ try {
     $w5 = & "$S\Invoke-Watchdog.ps1" -Repo $repo -Session status-1
     Case 'watchdog keeps an old inbox hold whose holder still works the board' (($w5 -join ' ') -notmatch "RELEASED $inId" -and (LastField $ib $inId 3) -eq 'taken') ($w5 -join ' ')
     # ghost-1 has never touched tasks.json, so there is no evidence it is alive and its hold is past the limit.
-    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $inId -Status taken -By ghost-1 | Out-Null
+    # Its take line is written straight in: Set-InboxItem refuses to hand an item from a holder still on the board.
+    Add-Content $ib "- $inId | $(Get-Date -AsUTC -Format 'yyyy-MM-ddTHH:mm:ssZ') | ghost-1 | taken | -"
     AgeHold $ib $inId 'ghost-1' 40
     $w6 = & "$S\Invoke-Watchdog.ps1" -Repo $repo -Session status-1
     Case 'watchdog releases an inbox hold whose holder went silent' (($w6 -join ' ') -match "RELEASED $inId in stream-kit" -and (LastField $ib $inId 3) -eq 'open') ($w6 -join ' ')
@@ -362,6 +378,133 @@ try {
     # A released item is open, so the next session may simply take it; no human takeover step is needed.
     & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $inId -Status taken -By kit-2 | Out-Null
     Case 'a released inbox item can be taken again' ((LastField $ib $inId 3) -eq 'taken' -and (LastField $ib $inId 2) -eq 'kit-2') (LastLine $ib $inId)
+    # A holder deep in one item beats its ROW claim, never the item: past the inbox limit the item stays taken while
+    # that session still writes to tasks.json, so a pre-stage cannot take it from a live holder (kit item IN-20261124223506-acbf).
+    $lbId = ((& "$S\Send-InboxItem.ps1" -Repo $repo -To stream-kit -From owner -Kind request -Ask 'live claim holder probe' -Task G1.T3) -split ' ')[1]
+    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $lbId -Status taken -By live-b | Out-Null
+    AgeHold $ib $lbId 'live-b' 40
+    $lbTf = Join-Path $repo '.streams\tasks.json'; $lbBytes = [IO.File]::ReadAllBytes($lbTf)
+    $lbDoc = Get-Content -Raw $lbTf | ConvertFrom-Json -AsHashtable -Depth 50
+    $lbRow = @($lbDoc['tasks'] | Where-Object { $_['id'] -eq 'G1.T3' })[0]
+    $lbRow['history'] = @($lbRow['history']) + @(@{ at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); by = 'live-b'; to = 'building'; note = 'claim beat probe' })
+    [IO.File]::WriteAllText($lbTf, ($lbDoc | ConvertTo-Json -Depth 50))
+    $lbTake = & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $lbId -Status taken -By pre-stage-x
+    $lbOpen = (& "$S\Get-InboxItems.ps1" -Repo $repo -Skill stream-kit -Open) -join ' '
+    Case 'a taken item past its limit stays held while its holder writes to the board' (($lbTake -join ' ') -like 'ALREADY*' -and $lbOpen -notlike "*$lbId*" -and (LastField $ib $lbId 2) -eq 'live-b') "$($lbTake -join ' ') / $(LastLine $ib $lbId)"
+    [IO.File]::WriteAllBytes($lbTf, $lbBytes)
+    $lbTake2 = & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $lbId -Status taken -By pre-stage-x
+    Case 'the same aged item opens once its holder is silent on the board too' ((LastField $ib $lbId 2) -eq 'pre-stage-x') "$($lbTake2 -join ' ') / $(LastLine $ib $lbId)"
+    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $lbId -Status done -By pre-stage-x -Note 'probe' | Out-Null
+    # A held item leaves -Open until its condition is met: a time, or named tasks reaching a state, whichever first.
+    $hId = ((& "$S\Send-InboxItem.ps1" -Repo $repo -To stream-kit -From owner -Kind request -Ask 'held probe' -Task G1.T3) -split ' ')[1]
+    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status taken -By kit-h | Out-Null
+    $hNo = & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status held -By kit-h
+    Case 'held with no condition is refused' (($hNo -join ' ') -like 'REFUSED*' -and $LASTEXITCODE -eq 2) ($hNo -join ' ')
+    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status held -By kit-h -Until ((Get-Date).ToUniversalTime().AddHours(2).ToString('o')) -Note 'wait' | Out-Null
+    Case 'a held item stays out of -Open while its time is ahead' (
+        (LastField $ib $hId 3) -eq 'held' -and (LastField $ib $hId 4) -like 'until: *; wait' -and
+        ((& "$S\Get-InboxItems.ps1" -Repo $repo -Skill stream-kit -Open) -join ' ') -notlike "*$hId*") (LastLine $ib $hId)
+    $hTake = & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status taken -By kit-x
+    Case 'an unmet held item cannot be taken' (($hTake -join ' ') -like 'ALREADY*') ($hTake -join ' ')
+    $past = (Get-Date).ToUniversalTime().AddMinutes(-5).ToString('yyyy-MM-ddTHH:mm:ssZ')
+    Add-Content $ib "- $hId | $(Get-Date -AsUTC -Format 'yyyy-MM-ddTHH:mm:ssZ') | kit-h | held | until: $past"
+    Case 'a held item opens once its time has passed' (((& "$S\Get-InboxItems.ps1" -Repo $repo -Skill stream-kit -Open) -join ' ') -like "*$hId | held*") (LastLine $ib $hId)
+    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status taken -By kit-h | Out-Null
+    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status held -By kit-h -After G1.T3 -State integrated | Out-Null
+    $tf = Join-Path $repo '.streams\tasks.json'; $tBytes = [IO.File]::ReadAllBytes($tf)
+    $tDoc = Get-Content -Raw $tf | ConvertFrom-Json -AsHashtable -Depth 50
+    $t3 = @($tDoc['tasks'] | Where-Object { $_['id'] -eq 'G1.T3' })[0]
+    $t3['state'] = 'built'; [IO.File]::WriteAllText($tf, ($tDoc | ConvertTo-Json -Depth 50))
+    Case 'a held item stays closed while a named task is short of the state' (
+        (LastField $ib $hId 4) -eq 'after: G1.T3 integrated' -and ((& "$S\Get-InboxItems.ps1" -Repo $repo -Skill stream-kit -Open) -join ' ') -notlike "*$hId*") (LastLine $ib $hId)
+    $t3['state'] = 'integrated'; [IO.File]::WriteAllText($tf, ($tDoc | ConvertTo-Json -Depth 50))
+    Case 'a held item opens when every named task reaches the state' (((& "$S\Get-InboxItems.ps1" -Repo $repo -Skill stream-kit -Open) -join ' ') -like "*$hId | held*")
+    $hT2 = & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status taken -By kit-y
+    Case 'a met held item can be taken' (($hT2 -join ' ') -like "ok $hId taken") ($hT2 -join ' ')
+    [IO.File]::WriteAllBytes($tf, $tBytes)
+    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status done -By kit-y | Out-Null
+    # The status tick's wake step (Get-InboxItems.ps1 -Wake) writes one woken line per met held item, never for an unmet one.
+    $wId = ((& "$S\Send-InboxItem.ps1" -Repo $repo -To stream-kit -From owner -Kind request -Ask 'wake probe') -split ' ')[1]
+    $wId2 = ((& "$S\Send-InboxItem.ps1" -Repo $repo -To stream-kit -From owner -Kind request -Ask 'wake probe unmet') -split ' ')[1]
+    foreach ($x in @($wId, $wId2)) { & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $x -Status taken -By kit-w | Out-Null }
+    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $wId2 -Status held -By kit-w -Until ((Get-Date).ToUniversalTime().AddHours(2).ToString('o')) | Out-Null
+    Add-Content $ib "- $wId | $(Get-Date -AsUTC -Format 'yyyy-MM-ddTHH:mm:ssZ') | kit-w | held | until: $((Get-Date).ToUniversalTime().AddMinutes(-5).ToString('yyyy-MM-ddTHH:mm:ssZ'))"
+    $wk1 = @(& "$S\Get-InboxItems.ps1" -Repo $repo -All -Wake -By st-1)
+    Case 'the wake step writes a woken line for a met held item only' (
+        ($wk1 -contains "WOKEN stream-kit $wId") -and ($wk1 -notcontains "WOKEN stream-kit $wId2") -and
+        (LastField $ib $wId 3) -eq 'woken' -and (LastField $ib $wId 2) -eq 'st-1' -and (LastField $ib $wId 4) -like 'met: until: *' -and
+        (LastField $ib $wId2 3) -eq 'held') ($wk1 -join ' / ')
+    $wk2 = @(& "$S\Get-InboxItems.ps1" -Repo $repo -All -Wake -By st-1)
+    Case 'a woken item is open and a second wake writes nothing' (
+        ($wk2 -join ' ') -eq 'WAKE-DONE 0' -and ((& "$S\Get-InboxItems.ps1" -Repo $repo -Skill stream-kit -Open) -join ' ') -like "*$wId | woken*") ($wk2 -join ' / ')
+    $wPg = Join-Path $repo 'held-page.html'; [void](& "$S\Build-StatusPage.ps1" -Repo $repo -Session kit-w -Out $wPg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
+    $wHtml = Get-Content -LiteralPath $wPg -Raw
+    Case 'the status page lists a held item with what it waits on' ($wHtml -match "<h3>Held</h3>[\s\S]*$([regex]::Escape($wId2))[\s\S]*until: [\s\S]*wake probe unmet" -and $wHtml -notmatch "<h3>Held</h3>[\s\S]*$([regex]::Escape($wId))<") ([regex]::Match($wHtml, '<h3>Held</h3>[\s\S]{0,400}').Value)
+    $wD2 = & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $wId2 -Status done -By kit-w
+    $wD3 = & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $wId -Status done -By kit-x
+    Case 'the holder may close its held item; nobody may close a woken item untaken' (($wD2 -join ' ') -eq "ok $wId2 done" -and ($wD3 -join ' ') -like 'NOT-HELD*') "$wD2 / $wD3"
+    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $wId -Status taken -By kit-w | Out-Null
+    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $wId -Status done -By kit-w | Out-Null
+    # -Key refuses a second filing of one request while the first item is live, and accepts it again once it is done.
+    $kS1 = @(& "$S\Send-InboxItem.ps1" -Repo $repo -To stream-kit -From owner -Kind request -Ask 'key probe' -Key 'G1.T3:dup probe')
+    $kId = ($kS1[-1] -split ' ')[1]
+    $kLen = (Get-Content $ib).Count
+    $kS2 = @(& "$S\Send-InboxItem.ps1" -Repo $repo -To stream-kit -From owner -Kind request -Ask 'key probe again' -Key 'G1.T3:dup  probe'); $kX2 = $LASTEXITCODE
+    Case 'a send whose key matches an open item writes nothing and names it' (
+        ($kS1[-1] -like 'SENT *') -and (LastField $ib $kId 6) -like '*key probe key=G1.T3:dup-probe' -and
+        ($kS2 -join ' ') -like "DUPLICATE $kId stream-kit*" -and $kX2 -eq 10 -and (Get-Content $ib).Count -eq $kLen) "$($kS1 -join ' ') / $($kS2 -join ' ') exit $kX2"
+    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $kId -Status taken -By kit-k | Out-Null
+    $kS3 = @(& "$S\Send-InboxItem.ps1" -Repo $repo -To stream-kit -From owner -Kind request -Ask 'key probe taken' -Key 'G1.T3:dup-probe'); $kX3 = $LASTEXITCODE
+    $kS4 = @(& "$S\Send-InboxItem.ps1" -Repo $repo -To stream-plan -From owner -Kind request -Ask 'key probe other inbox' -Key 'G1.T3:dup-probe'); $kX4 = $LASTEXITCODE
+    $kS5 = @(& "$S\Send-InboxItem.ps1" -Repo $repo -To stream-kit -From owner -Kind request -Ask 'no key one'); $kS6 = @(& "$S\Send-InboxItem.ps1" -Repo $repo -To stream-kit -From owner -Kind request -Ask 'no key one')
+    Case 'a key matches a taken item; another inbox and keyless sends are not checked' (
+        ($kS3 -join ' ') -like "DUPLICATE $kId*" -and $kX3 -eq 10 -and ($kS4 -join ' ') -like 'SENT *' -and $kX4 -eq 0 -and
+        ($kS5 -join ' ') -like 'SENT *' -and ($kS6 -join ' ') -like 'SENT *') "$($kS3 -join ' ') / $($kS4 -join ' ') / $($kS5 -join ' ') / $($kS6 -join ' ')"
+    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $kId -Status done -By kit-k | Out-Null
+    $kS7 = @(& "$S\Send-InboxItem.ps1" -Repo $repo -To stream-kit -From owner -Kind request -Ask 'key probe after done' -Key 'G1.T3:dup-probe'); $kX7 = $LASTEXITCODE
+    Case 'the same key is accepted again once the first item is done' (($kS7 -join ' ') -like 'SENT *' -and $kX7 -eq 0) "$($kS7 -join ' ') exit $kX7"
+    foreach ($x in @($kS5, $kS6, $kS7)) { $xi = ($x[-1] -split ' ')[1]; & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $xi -Status taken -By kit-k | Out-Null; & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $xi -Status done -By kit-k | Out-Null }
+    $kP = ($kS4[-1] -split ' ')[1]; & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-plan -Id $kP -Status taken -By plan-k | Out-Null; & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-plan -Id $kP -Status done -By plan-k | Out-Null
+    # Send-OwnerAnswer.ps1 files one answer per target in the owner-answers inbox; a bad target or a gate answer that
+    # is not pass or fail writes nothing.
+    $oaF = Join-Path $repo '.streams\inbox\owner-answers.md'
+    $oa1 = @(& "$S\Send-OwnerAnswer.ps1" -Repo $repo -Target 'gate:G1.T3' -Answer 'pass looks right'); $oaX1 = $LASTEXITCODE
+    $oaId = ($oa1[-1] -split ' ')[1]
+    $oaLen = (Get-Content $oaF).Count
+    $oa2 = @(& "$S\Send-OwnerAnswer.ps1" -Repo $repo -Target 'gate:G1.T3' -Answer 'fail after all'); $oaX2 = $LASTEXITCODE
+    $oa3 = @(& "$S\Send-OwnerAnswer.ps1" -Repo $repo -Target 'gate:G1.T4' -Answer 'maybe'); $oaX3 = $LASTEXITCODE
+    $oa4 = @(& "$S\Send-OwnerAnswer.ps1" -Repo $repo -Target 'bogus:x' -Answer 'pass'); $oaX4 = $LASTEXITCODE
+    $oa5 = @(& "$S\Send-OwnerAnswer.ps1" -Repo $repo -Target 'questions:Q7' -Answer 'use the default'); $oaX5 = $LASTEXITCODE
+    $oaOpen = @(& "$S\Get-InboxItems.ps1" -Repo $repo -Skill owner-answers -Open)
+    Case 'Send-OwnerAnswer files one answer per target in owner-answers; bad targets and non pass/fail gates are refused' (
+        ($oa1[-1] -like 'SENT *') -and $oaX1 -eq 0 -and (LastField $oaF $oaId 5) -eq 'G1.T3' -and
+        (LastField $oaF $oaId 6) -like 'gate:G1.T3 => pass looks right key=gate:G1.T3' -and
+        ($oa2 -join ' ') -like "DUPLICATE $oaId*" -and $oaX2 -eq 10 -and
+        ($oa3 -join ' ') -like 'REFUSED*' -and $oaX3 -eq 2 -and ($oa4 -join ' ') -like 'REFUSED*' -and $oaX4 -eq 2 -and
+        ($oa5[-1] -like 'SENT *') -and $oaX5 -eq 0 -and $oaOpen.Count -eq 2 -and
+        ((Get-Content $oaF).Count -eq $oaLen + 1)) "$($oa1 -join ' ') / $($oa2 -join ' ') / $($oa3 -join ' ') / $($oa4 -join ' ') / $($oa5 -join ' ') / open $($oaOpen.Count)"
+    foreach ($x in @($oa1, $oa5)) { $xi = ($x[-1] -split ' ')[1]; & "$S\Set-InboxItem.ps1" -Repo $repo -Skill owner-answers -Id $xi -Status taken -By coord-k | Out-Null; & "$S\Set-InboxItem.ps1" -Repo $repo -Skill owner-answers -Id $xi -Status done -By coord-k | Out-Null }
+    # Apply-OwnerAnswer.ps1 applies each answer through the verb that owns it: a gate answer becomes the integrator's
+    # gate command, a question override becomes a plan item, and every applied answer is closed with what was done.
+    $ap1 = @(& "$S\Send-OwnerAnswer.ps1" -Repo $repo -Target 'gate:G1.T9' -Answer 'fail colors are off'); $ap1i = ($ap1[-1] -split ' ')[1]
+    $ap2 = @(& "$S\Send-OwnerAnswer.ps1" -Repo $repo -Target 'gate:G1.T8' -Answer 'pass'); $ap2i = ($ap2[-1] -split ' ')[1]
+    $ap3 = @(& "$S\Send-OwnerAnswer.ps1" -Repo $repo -Target 'questions:Q8' -Answer 'keep the default'); $ap3i = ($ap3[-1] -split ' ')[1]
+    $apOut = @(& "$S\Apply-OwnerAnswer.ps1" -Repo $repo -Session coord-k); $apX = $LASTEXITCODE
+    $apInt = Get-Content (Join-Path $repo '.streams\inbox\stream-integrate.md') -Raw
+    $apPlan = Get-Content (Join-Path $repo '.streams\inbox\stream-plan.md') -Raw
+    $apLeft = @(& "$S\Get-InboxItems.ps1" -Repo $repo -Skill owner-answers -Open | Where-Object { $_ -like 'IN-*' })
+    $apOa = Get-Content $oaF -Raw
+    Case 'Apply-OwnerAnswer forwards gate answers to the integrator and question overrides to the planner, then closes them' (
+        $apX -eq 0 -and ($apOut[-1] -eq 'APPLY-DONE 3') -and
+        $apInt -match '\| G1\.T9 \| gate G1\.T9 fail "colors are off"' -and $apInt -match '\| G1\.T8 \| gate G1\.T8 pass "owner answer ' -and
+        $apPlan -match "Owner answer $ap3i to questions\.md 'Q8': keep the default" -and $apLeft.Count -eq 0 -and
+        $apOa -match "$ap1i \| [^|]+ \| coord-k \| done \| forwarded gate G1\.T9 fail to stream-integrate as IN-" -and
+        $apOa -match "$ap3i \| [^|]+ \| coord-k \| done \| forwarded question 'Q8' to stream-plan as IN-") "$($apOut -join ' / ') exit $apX open $($apLeft.Count)"
+    $ap4 = @(& "$S\Send-OwnerAnswer.ps1" -Repo $repo -Target 'worktree:G1.T77' -Answer 'not yet'); $ap4i = ($ap4[-1] -split ' ')[1]
+    $apSt = $null; try { $apSt = & "$S\Get-StreamStatus.ps1" -Repo $repo -Json | ConvertFrom-Json } catch { $apSt = $null }
+    Case 'the status model lists an owner answer not yet applied under owner.answers' ($null -ne $apSt -and (@($apSt.owner.answers) -join ' ') -like "*$ap4i*worktree:G1.T77 => not yet*" -and (@($apSt.owner.answers) -join ' ') -notlike '*key=*') "$(@($apSt.owner.answers) -join ' / ')"
+    $apOut2 = @(& "$S\Apply-OwnerAnswer.ps1" -Repo $repo -Session coord-k)
+    Case 'Apply-OwnerAnswer keeps a worktree when the answer does not confirm removal' (($apOut2 -join ' ') -like "*DECLINED $ap4i *tree kept*") "$($apOut2 -join ' / ')"
     # These files are hand-editable and the watchdog reads all six every tick, so a truncated line is skipped rather
     # than thrown on: one bad line must not take the claim breaking and the worktree reaper down with it.
     Add-Content $ib "- IN-truncated-0000 | -"
@@ -422,6 +565,17 @@ try {
     Case 'the tile names the applied defaults as the second number' ($html -match '(?s)<a class="tile owner".*?3 applied') 'tile does not name the applied defaults'
     Case 'the tile links to the question list' ($html -match 'href="#owner-questions"' -and $html -match '<div class="panel" id="owner-questions">') 'tile link or panel anchor missing'
     Case 'the question list itself keeps both shapes and drops the resolved lines' (($html -match 'applied default three') -and ($html -match 'escalation two') -and ($html -notmatch 'answered already') -and ($html -notmatch 'escalation answered')) 'resolved line leaked into the page or a shape was dropped'
+    # A resolved line may keep its bullet ahead of the token ('- RESOLVED - ...'); the planner wrote 128 such lines
+    # on 2026-11-24 and the tile counted them as open (kit item IN-20261124184245-7cd6).
+    $qfPrevBr = Get-Content $qf
+    Set-Content $qf @(
+        '- G1.T1 escalation one | the owner has to choose',
+        '- RESOLVED - G1.T3 escalation answered | the owner chose',
+        '- RESOLVED G1.T1 | answered already | rec | why',
+        'G1.T2 | applied default three | rec | why')
+    $sqBr = & "$S\Get-StreamStatus.ps1" -Repo $repo -Json | ConvertFrom-Json
+    Case 'BULLET-RESOLVED: a bulleted RESOLVED line is out of the queue and the escalations' ((@($sqBr.owner.questions).Count -eq 2) -and (@($sqBr.owner.escalations).Count -eq 1)) ('questions ' + @($sqBr.owner.questions).Count + ' escalations ' + @($sqBr.owner.escalations).Count)
+    Set-Content $qf $qfPrevBr
     # OWNER PROMPTS (kit item IN-20261025224357-fa2a): a runner's 'permission prompt in tab' ESCALATE line is its own
     # number and panel, never an owner question; a real ESCALATE question still counts as one. RESOLVED stays out of both.
     $qfOwnerPrompt = @(
@@ -441,6 +595,31 @@ try {
     $htmlOp = Get-Content -Raw $pgOp
     Case 'OWNER-PROMPTS: page renders 1 owner question and 1 owner prompt tile' (($htmlOp -match '<b>1</b><span>owner questions &middot; 0 applied') -and ($htmlOp -match 'href="#owner-prompts"><b>1</b><span>owner prompts</span>')) 'tiles not 1 and 1'
     Case 'OWNER-PROMPTS: prompt panel lists tab, session and blocked command; resolved prompt absent' (($htmlOp -match 'id="owner-prompts"') -and ($htmlOp -match 'Builder 7</td><td class="id">build-prompt-1</td><td class="note">Bash: destructive-path-guard: stubcmd</td>') -and ($htmlOp -notmatch 'build-prompt-2')) 'prompt panel row wrong or resolved leaked'
+    # SINCE-SEEN (kit item IN-20261123164859-56f4): the page lists what moved after the owner's last-seen marker.
+    $ssPg = Join-Path $Scratch 'status-seen.html'
+    $ssFile = Join-Path $repo '.streams\owner\last-seen.json'
+    if (Test-Path $ssFile) { Remove-Item $ssFile }
+    [void](& "$S\Build-StatusPage.ps1" -Repo $repo -Session status-seen -Out $ssPg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
+    Case 'SINCE-SEEN: page without a marker says how to set one' ((Get-Content -Raw $ssPg) -match '(?s)id="since-seen".*?No marker yet.*?Set-OwnerSeen\.ps1') 'no since-seen panel or hint'
+    $ssOut = @(& "$S\Set-OwnerSeen.ps1" -Repo $repo -At '2000-01-01T00:00:00Z')
+    Case 'SINCE-SEEN: Set-OwnerSeen writes the marker' (($ssOut[-1] -like 'SEEN *') -and ((Get-Content -Raw $ssFile) -match '"at":"2000-01-01T00:00:00Z"')) ('out ' + ($ssOut -join ' / '))
+    [void](& "$S\Build-StatusPage.ps1" -Repo $repo -Session status-seen -Out $ssPg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
+    $ssHtml = Get-Content -Raw $ssPg
+    $ssRows = @((Get-Content (Join-Path $repo '.streams\tasks.json') -Raw | ConvertFrom-Json).tasks | Where-Object { @($_.history).Count -gt 0 }).Count
+    Case 'SINCE-SEEN: an old marker lists every row with history, by state' (($ssRows -gt 0) -and ($ssHtml -match ('since [^:]+\d\d:\d\d \S+: ' + $ssRows + ' row\(s\) changed')) -and ($ssHtml -match 'class="flag seen-row">\S+ \d+: ')) ('rows ' + $ssRows)
+    $ssRaw = [IO.File]::ReadAllText((Join-Path $repo '.streams\tasks.json'))
+    $ssStamps = @([regex]::Matches($ssRaw, '"at"\s*:\s*"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+    $ssCut = ([datetime]::Parse($ssStamps[-1], [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)).AddSeconds(-1).ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $ssWant = @((ConvertFrom-Json $ssRaw -DateKind String).tasks | Where-Object { @(@($_.history) | Where-Object { [string]$_.at -gt $ssCut }).Count -gt 0 }).Count
+    [void](& "$S\Set-OwnerSeen.ps1" -Repo $repo -At $ssCut)
+    [void](& "$S\Build-StatusPage.ps1" -Repo $repo -Session status-seen -Out $ssPg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
+    Case 'SINCE-SEEN: a marker one second before the newest entry lists only the rows moved after it (UTC, no offset)' (($ssWant -ge 1) -and ((Get-Content -Raw $ssPg) -match ('[^\d]' + $ssWant + ' row\(s\) changed'))) ('want ' + $ssWant + ' cut ' + $ssCut)
+    [void](& "$S\Set-OwnerSeen.ps1" -Repo $repo -At ((Get-Date).ToUniversalTime().AddHours(1).ToString('yyyy-MM-ddTHH:mm:ssZ')))
+    [void](& "$S\Build-StatusPage.ps1" -Repo $repo -Session status-seen -Out $ssPg -MirrorFile (Join-Path $Scratch 'no-mirror.txt'))
+    Case 'SINCE-SEEN: a fresh marker reads nothing changed' ((Get-Content -Raw $ssPg) -match '0 row\(s\) changed, 0 inbox item\(s\) filed</div>\s*<div class="empty">Nothing changed\.') 'fresh marker still lists changes'
+    $ssBad = @(pwsh -NoProfile -File "$S\Set-OwnerSeen.ps1" -Repo $repo -At 'not-a-date'); $ssBadCode = $LASTEXITCODE
+    Case 'SINCE-SEEN: a bad -At is refused, exit 2' (($ssBadCode -eq 2) -and ($ssBad[-1] -like 'REFUSED*')) ('exit ' + $ssBadCode + ' ' + ($ssBad -join ' / '))
+    Remove-Item $ssFile
     Case 'OWNER-PROMPTS: a legacy prompt line in questions.md is neither a prompt nor a question' (($htmlOp -notmatch 'build-prompt-old') -and (-not (@($sqOp.owner.prompts) -match 'build-prompt-old'))) 'legacy prompt line counted'
     Set-Content $qf $qfPrevOp
     Remove-Item $pfOp -ErrorAction SilentlyContinue
@@ -1157,15 +1336,32 @@ try {
     Case 'Claim-Task -Task refuses a row of a frozen group' ($eftCode -eq 2 -and "$eft" -match 'REFUSED-TASK E2\.X : frozen') "$eftCode $eft"
     # A fix on a frozen row's file never JOINS it (kit item IN-20261122115223-b907): nobody claims that row, so the fix
     # would never land. The fix is its own row and the frozen row is ordered after it; a focus row still takes the join.
+    # A fix joins only a row a builder can take now (kit item IN-20261125002755-7710): E1.B is made a claimable ticketed
+    # row, and E1.A, which waits on an unbuilt row, must not take the join.
+    $efj = J $efr; foreach ($row in @($efj.tasks)) { if ($row.id -eq 'E1.B') { $row.state = 'ticketed'; $row.claim = $null } }
+    $efj | ConvertTo-Json -Depth 50 | Set-Content (Join-Path $efr '.streams\tasks.json') -Encoding utf8
     $efx = Join-Path $Scratch 'fix-frozen.json'
     @{ tasks = @(@{ id = 'E1.F9'; group = 'E1'; title = 'fix on frozen file'; why = @('AC-9'); kind = 'code'; writeSet = @('E2.X.txt'); estMinutes = 10 }
-                 @{ id = 'E1.F8'; group = 'E1'; title = 'fix on focus file'; why = @('AC-8'); kind = 'code'; writeSet = @('E1.B.txt'); estMinutes = 10 }) } | ConvertTo-Json -Depth 10 | Set-Content $efx
+                 @{ id = 'E1.F8'; group = 'E1'; title = 'fix on focus file'; why = @('AC-8'); kind = 'code'; writeSet = @('E1.B.txt'); estMinutes = 10 }
+                 @{ id = 'E1.F6'; group = 'E1'; title = 'fix on waiting file'; why = @('AC-6'); kind = 'code'; writeSet = @('E1.A.txt'); estMinutes = 10 }) } | ConvertTo-Json -Depth 10 | Set-Content $efx
     $efxo = & "$S\Add-Tasks.ps1" -Repo $efr -Role integrate -Session integ-fz -File $efx 2>&1; $efxCode = $LASTEXITCODE
     $efxX = T $efr 'E2.X'
     Case 'a fix on a frozen row''s file is its own row and the frozen row waits on it' (
         $efxCode -eq 0 -and "$efxo" -match 'PARKED-AFTER E2\.X after E1\.F9' -and "$efxo" -notmatch 'JOINED E1\.F9' -and (T $efr 'E1.F9').state -eq 'planned' -and
         @($efxX.dependsOn) -contains 'E1.F9' -and "$($efxX.dependsWhy.'E1.F9')" -match 'not worked now') "$efxCode $efxo"
     Case 'a fix on a focus row''s file still joins it' ("$efxo" -match 'JOINED E1\.F8 into E1\.B' -and -not ((J $efr).tasks | Where-Object { $_.id -eq 'E1.F8' })) "$efxo"
+    Case 'a fix on a row that is not claimable now is its own row and that row waits on it' (
+        "$efxo" -notmatch 'JOINED E1\.F6' -and "$efxo" -match 'ORDERED-AFTER E1\.A after E1\.F6' -and (T $efr 'E1.F6').state -eq 'planned' -and
+        @((T $efr 'E1.A').dependsOn) -contains 'E1.F6' -and "$((T $efr 'E1.A').dependsWhy.'E1.F6')" -match 'not claimable now') "$efxo"
+    # A fix on a frozen row's file AND a focus row's file (kit item IN-20261125002755-7710) never joins: it stays its
+    # own row, both rows wait on it, and no row is left depending on a fix that never became a row.
+    $efy = Join-Path $Scratch 'fix-frozen2.json'
+    @{ tasks = @(@{ id = 'E1.F7'; group = 'E1'; title = 'fix on both'; why = @('AC-7'); kind = 'code'; writeSet = @('E2.X.txt', 'E1.B.txt'); estMinutes = 10 }) } | ConvertTo-Json -Depth 10 | Set-Content $efy
+    $efyo = & "$S\Add-Tasks.ps1" -Repo $efr -Role integrate -Session integ-fz -File $efy 2>&1; $efyCode = $LASTEXITCODE
+    $efyOrder = & "$S\Test-BoardOrder.ps1" -Repo $efr 2>&1
+    Case 'a fix on a frozen and a focus row''s file is its own row and both wait on it' (
+        $efyCode -eq 0 -and "$efyo" -notmatch 'JOINED E1\.F7' -and (T $efr 'E1.F7').state -eq 'planned' -and
+        @((T $efr 'E2.X').dependsOn) -contains 'E1.F7' -and @((T $efr 'E1.B').dependsOn) -contains 'E1.F7' -and "$efyOrder" -notmatch 'UNKNOWN-DEP') "$efyCode $efyo / $efyOrder"
     if ($null -ne $ecfgOld) { Set-Content $ecfg $ecfgOld -NoNewline -Encoding utf8 } else { Remove-Item $ecfg -Force }
     $edoc | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $efr '.streams\tasks.json') -Encoding utf8
 
@@ -1958,6 +2154,43 @@ sys.exit(0 if ok else 1)
     ConvertTo-Json -InputObject @([pscustomobject]@{ id = 'A1.P'; patch = (Join-Path $amR '.streams\patches\A1.P.patch'); at = '2026-11-19T00:00:00Z'; why = 'x' }) | Set-Content $ucFile
     $ucI3 = @(& "$S\Integrate-Patch.ps1" -Repo $amR -Session integ-am -Task A1.Q)
     Case 'UNCOMMITTED: a marker whose paths hold no change is cleared with no commit' (@($ucI3 | Where-Object { $_ -like 'UNCOMMITTED-CLEARED A1.P*' }).Count -eq 1 -and -not (Test-Path $ucFile) -and (git -C $amR log -1 --format=%s) -eq $ucSubj) ($ucI3 -join ' | ')
+    # CO-LAND (kit item IN-20261123201145-57ec): a row with artifacts.coLandWith is applied and graded, its commit held
+    # until the named row integrates; that row's commit then carries both patches' paths in ONE commit naming both.
+    $clR = Join-Path $Scratch 'clrepo'; New-Item -ItemType Directory -Path $clR -Force | Out-Null
+    git -C $clR init -q -b main; git -C $clR config user.email t@t; git -C $clR config user.name t; Grant-GitPolicy $clR
+    foreach ($f in 'x', 'y') { Set-Content (Join-Path $clR "$f.txt") "$f base" }
+    git -C $clR add -A; git -C $clR commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $clR | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $clR '.streams\graders') -Force | Out-Null
+    Grader (Join-Path $clR '.streams\graders\C1.X.ps1') 'x.txt' 'DONE-X'
+    Grader (Join-Path $clR '.streams\graders\C1.Y.ps1') 'y.txt' 'DONE-Y'
+    $clPlan = @{
+        groups = @(@{ id = 'C1'; name = 'cl'; state = 'released'; scope = @{ include = @('F-CL') }; origin = 'plan' })
+        tasks  = @(
+            @{ id = 'C1.X'; group = 'C1'; title = 'X'; why = @('AC-X'); kind = 'code'; writeSet = @('x.txt'); dependsOn = @(); estMinutes = 10; artifacts = @{ ticket = '.streams\tickets\C1.X.md'; grader = '.streams\graders\C1.X.ps1' } }
+            @{ id = 'C1.Y'; group = 'C1'; title = 'Y'; why = @('AC-Y'); kind = 'code'; writeSet = @('y.txt'); dependsOn = @(); estMinutes = 10; artifacts = @{ ticket = '.streams\tickets\C1.Y.md'; grader = '.streams\graders\C1.Y.ps1' } }
+        ) }
+    $clPf = Join-Path $Scratch 'clplan.json'; $clPlan | ConvertTo-Json -Depth 10 | Set-Content $clPf
+    & "$S\Add-Tasks.ps1" -Repo $clR -Role plan -Session plan-cl -File $clPf | Out-Null
+    foreach ($clId in 'C1.X', 'C1.Y') {
+        & "$S\Claim-Task.ps1" -Repo $clR -Role build -Session "build-$clId" -Task $clId | Out-Null
+        $clWt = & "$S\New-TaskWorktree.ps1" -Repo $clR -Task $clId -Session "build-$clId" -WorktreeRoot $wtRoot | Select-Object -Last 1
+        if ($clId -eq 'C1.X') { Set-Content (Join-Path $clWt 'x.txt') 'x DONE-X' } else { Set-Content (Join-Path $clWt 'y.txt') 'y DONE-Y' }
+        & "$S\Export-TaskPatch.ps1" -Repo $clR -Task $clId -Worktree $clWt | Out-Null
+        $clArt = @{ patch = ".streams\patches\$clId.patch" }; if ($clId -eq 'C1.X') { $clArt.coLandWith = 'C1.Y' }
+        & "$S\Update-Task.ps1" -Repo $clR -Task $clId -Role build -Session "build-$clId" -To built -Release -Artifacts $clArt | Out-Null
+    }
+    & "$S\Enter-Integrator.ps1" -Repo $clR -Session integ-cl | Out-Null
+    $clHead0 = git -C $clR rev-parse HEAD
+    $clI1 = @(& "$S\Integrate-Patch.ps1" -Repo $clR -Session integ-cl -Task C1.X)
+    $clUc = Join-Path $clR '.streams\uncommitted.json'
+    $clHeldOk = ((T $clR 'C1.X').state -eq 'integrated' -and (git -C $clR rev-parse HEAD) -eq $clHead0 -and (Test-Path $clUc) -and (Get-Content -Raw $clUc) -match '"holdFor":\s*"C1\.Y"')
+    Case 'CO-LAND: a coLandWith row integrates with its commit held until the partner integrates' (@($clI1 | Where-Object { $_ -like 'HELD-COMMIT C1.X *' }).Count -eq 1 -and $clHeldOk) ($clI1 -join ' | ')
+    $clI2 = @(& "$S\Integrate-Patch.ps1" -Repo $clR -Session integ-cl -Task C1.Y)
+    $clSubj = git -C $clR log -1 --format=%s
+    $clFiles = (@(git -C $clR show --name-only --format= HEAD) | Where-Object { $_ } | Sort-Object) -join ','
+    $clCount = [int](git -C $clR rev-list --count "$clHead0..HEAD")
+    Case 'CO-LAND: the partner commit carries both patches in one commit naming both and clears the hold' (@($clI2 | Where-Object { $_ -like 'HELD-COMMIT C1.X *' }).Count -eq 1 -and @($clI2 | Where-Object { $_ -like 'CO-LANDED C1.X *' }).Count -eq 1 -and $clSubj -like 'C1.Y + C1.X:*' -and $clFiles -eq 'x.txt,y.txt' -and $clCount -eq 1 -and -not (Test-Path $clUc)) (($clI2 -join ' | ') + " :: $clSubj :: $clFiles :: $clCount")
     # NO-CODE-CHANGE (kit item IN-20261026203916-9d38): a row built with no code change hands off a patch with no file
     # sections (G17.T116's was its test record). It is graded on main in place: green integrates with no commit, red
     # goes back to ticketed. Before the fix both REBASEd (git apply --check refuses a patch with no diff), forever.
@@ -2072,6 +2305,61 @@ Add-NightlyYieldNotice `$P ([datetime]'2026-10-22T08:00:00')
     $ciRace = [IO.File]::ReadAllText($ciInbox)
     $ciRaced = @(1..12 | Where-Object { $ciRace -match "\| race $_ \|" })
     Case 'a send racing the compress is kept' ($ciRaced.Count -eq 12 -and $ciRace -notmatch 'bulk 1 ') "kept $($ciRaced.Count) of 12"
+    # Get-Task on a board of thousands of rows: a dependency walk calls it once per edge, so a board scan per call made
+    # Get-StreamStatus take 4-7 min on 2,900 rows. The lookup must stay right after a row is replaced in place, a row is
+    # added, and for a missing or duplicate id.
+    $gtFile = Join-Path $Scratch 'get-task-speed.ps1'
+    [IO.File]::WriteAllText($gtFile, @'
+param([string] $Lib)
+. $Lib
+$doc = [pscustomobject]@{ tasks = [System.Collections.ArrayList]@(1..3000 | ForEach-Object { [pscustomobject]@{ id = "G1.T$_"; state = 'planned' } }) }
+$sw = [Diagnostics.Stopwatch]::StartNew()
+$bad = 0
+foreach ($k in 1..600) { $id = "G1.T$((($k * 7) % 3000) + 1)"; if ((Get-Task $doc $id).id -ne $id) { $bad++ } }
+$sw.Stop()
+"SPEED $([int]$sw.Elapsed.TotalMilliseconds) BAD $bad"
+$doc.tasks[10] = [pscustomobject]@{ id = 'G1.T11'; state = 'built' }
+"REPLACED $((Get-Task $doc 'G1.T11').state)"
+[void]$doc.tasks.Add([pscustomobject]@{ id = 'G1.T3001'; state = 'ticketed' })
+"ADDED $((Get-Task $doc 'G1.T3001').state)"
+try { Get-Task $doc 'G9.T1' | Out-Null; 'MISSING found' } catch { 'MISSING throws' }
+[void]$doc.tasks.Add([pscustomobject]@{ id = 'G1.T5'; state = 'built' })
+try { Get-Task $doc 'G1.T5' | Out-Null; 'DUP found' } catch { 'DUP throws' }
+'@)
+    $gtOut = @(pwsh -NoProfile -File $gtFile -Lib (Join-Path $S 'lib\Streams.ps1'))
+    $gtTxt = $gtOut -join ' | '
+    $gtMs = if ($gtTxt -match 'SPEED (\d+) BAD 0') { [int]$Matches[1] } else { -1 }
+    Case 'Get-Task on a 3000-row board answers 600 lookups in under 5 s and stays right after a replace, an add, a missing and a duplicate id' ($gtMs -ge 0 -and $gtMs -lt 5000 -and $gtTxt -match 'REPLACED built' -and $gtTxt -match 'ADDED ticketed' -and $gtTxt -match 'MISSING throws' -and $gtTxt -match 'DUP throws') $gtTxt
+    # Get-StreamStatus on the live board (2,900 rows) took 4-7 min of CPU because per-row work grew with the board.
+    # The guard reads the status of the same board shape at two sizes in child processes and compares their CPU time:
+    # linear work grows about 4x from 150 to 600 rows, a per-row scan of the board about 16x.
+    $ssr = Join-Path $Scratch 'statscale'
+    New-Item -ItemType Directory -Path $ssr -Force | Out-Null
+    git -C $ssr init -q -b main; git -C $ssr config user.email t@t; git -C $ssr config user.name t; Grant-GitPolicy $ssr
+    Set-Content (Join-Path $ssr 'x.txt') 'x'; git -C $ssr add -A; git -C $ssr commit -q -m base
+    & "$S\Init-Streams.ps1" -Repo $ssr | Out-Null
+    function Measure-StatusCpu([int] $n) {
+        $states = @('planned', 'ticketed', 'built', 'integrated', 'done')
+        $rows = for ($k = 1; $k -le $n; $k++) {
+            $g = 'S' + (1 + ($k % 3)); $st = $states[$k % $states.Count]
+            $deps = if ($k -gt 3) { @("S$(1 + (($k - 3) % 3)).T$($k - 3)") } else { @() }
+            @{ id = "$g.T$k"; group = $g; title = "row $k"; why = @("AC-$k"); kind = 'code'; writeSet = @("f$k.txt"); dependsOn = @($deps)
+               estMinutes = 10; state = $st; claim = $null
+               artifacts = @{ ticket = ".streams\tickets\$g.T$k.md"; grader = $null; patch = $null; verdict = $null }
+               history = @(@{ at = (Get-Date).AddHours(-($k % 48)).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); by = 'plan-1'; to = $st; note = 'fixture' }) }
+        }
+        @{ groups = @(1..3 | ForEach-Object { @{ id = "S$_"; name = "scale $_"; state = 'released'; origin = 'plan'; scope = @{ include = @("FEAT-$_") } } })
+           tasks = @($rows) } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $ssr '.streams\tasks.json') -Encoding utf8
+        $out = Join-Path $Scratch "statscale-$n.json"
+        $p = Start-Process pwsh -ArgumentList '-NoProfile', '-File', "$S\Get-StreamStatus.ps1", '-Repo', $ssr, '-Json' -RedirectStandardOutput $out -RedirectStandardError "$out.err" -NoNewWindow -PassThru
+        $null = $p.Handle; $p.WaitForExit()
+        $okJson = $false; try { $null = Get-Content -Raw $out | ConvertFrom-Json; $okJson = ($p.ExitCode -eq 0) } catch { }
+        [pscustomobject]@{ cpu = $p.TotalProcessorTime.TotalSeconds; ok = $okJson }
+    }
+    $ssSmall = Measure-StatusCpu 150
+    $ssLarge = Measure-StatusCpu 600
+    $ssRatio = if ($ssSmall.cpu -gt 0) { $ssLarge.cpu / $ssSmall.cpu } else { 99 }
+    Case 'Get-StreamStatus CPU grows less than 8x from a 150-row to a 600-row board (no per-row scan of the board)' ($ssSmall.ok -and $ssLarge.ok -and $ssRatio -lt 8) ("150 rows {0:N1} s, 600 rows {1:N1} s, ratio {2:N1}" -f $ssSmall.cpu, $ssLarge.cpu, $ssRatio)
 } catch {
     "FAIL harness: $_ at $($_.InvocationInfo.PositionMessage)`n$($_.ScriptStackTrace)"; $fails++
 } finally {

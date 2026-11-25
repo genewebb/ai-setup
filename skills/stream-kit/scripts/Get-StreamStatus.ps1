@@ -51,21 +51,34 @@ function Add-Activity([string] $at) {
     $d = [datetime]::MinValue
     if ([datetime]::TryParse($at, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal, [ref] $d)) { $activity.Add($d) }
 }
+$inv = [Globalization.CultureInfo]::InvariantCulture; $toUtc = [Globalization.DateTimeStyles]::AdjustToUniversal
 foreach ($t in @($doc.tasks)) {
-    foreach ($h in @($t.history)) { if ($h -and [string]$h.by -notlike 'status*') { Add-Activity ([string]$h.at) } }
+    # Parsed inline, not through Add-Activity: a function call per history entry was seconds of CPU on a large board.
+    foreach ($h in @($t.history)) {
+        if (-not $h -or ([string]$h.by).StartsWith('status', [StringComparison]::OrdinalIgnoreCase)) { continue }
+        $hd = [datetime]::MinValue
+        if ([datetime]::TryParse([string]$h.at, $inv, $toUtc, [ref] $hd)) { $activity.Add($hd) }
+    }
     if ($t.claim) { Add-Activity ([string]$t.claim.at); Add-Activity ([string]$t.claim.beat) }
 }
 if (Test-Path $P.IntLock) { try { $il = Get-Content -Raw $P.IntLock | ConvertFrom-Json -AsHashtable -DateKind String; Add-Activity ([string]$il['beat']) } catch { } }
-$activitySorted = @($activity | Sort-Object)
+$activity.Sort()
+$activitySorted = $activity.ToArray()
+# Only the over-limit gaps can count, and there are few of them: listing them once keeps the per-group call off the
+# whole activity list (37k history entries times 44 groups was most of the groups loop's CPU).
+$outageGaps = [Collections.Generic.List[object]]::new()
+for ($gi = 1; $gi -lt $activitySorted.Count; $gi++) {
+    $ga = $activitySorted[$gi - 1]; $gb = $activitySorted[$gi]
+    if (($gb - $ga).TotalMinutes -gt $OutageGapMinutes) { $outageGaps.Add(@($ga, $gb)) }
+}
 # Hours of outage inside the trailing window of $w hours: the part of each over-limit gap past the limit, clipped to the
 # window. Both ends of a counted gap are real activity, so the trailing silence is never one of them.
 function Get-OutageHours([double] $w) {
     $start = $now.AddHours(-$w)
     $idle = 0.0
-    for ($i = 1; $i -lt $activitySorted.Count; $i++) {
-        $a = $activitySorted[$i - 1]; $b = $activitySorted[$i]
+    foreach ($gap in $outageGaps) {
+        $a = $gap[0]; $b = $gap[1]
         if ($a -lt $start) { continue }                          # straddles the window's start edge, see above
-        if (($b - $a).TotalMinutes -le $OutageGapMinutes) { continue }
         $idle += ($b - $a.AddMinutes($OutageGapMinutes)).TotalHours
     }
     [math]::Round($idle, 2)
@@ -184,16 +197,25 @@ function Get-GroupReleaseStart($g, $ts) {
 }
 
 $groupRaw = @{}
+# Rows indexed by group once, and each row bucketed once: re-filtering every row per group cost seconds per call.
+$tasksByGroup = @{}
+foreach ($tg in @($doc.tasks)) {
+    $gk = [string]$tg.group
+    if (-not $tasksByGroup.ContainsKey($gk)) { $tasksByGroup[$gk] = [Collections.Generic.List[object]]::new() }
+    $tasksByGroup[$gk].Add($tg)
+}
 $groups = foreach ($g in $doc.groups) {
-    $ts = @($doc.tasks | Where-Object { $_.group -eq $g.id })
-    $counts = [ordered]@{}; foreach ($s in $StateBuckets) { $counts[$s] = @($ts | Where-Object { (Bucket $_) -eq $s }).Count }
-    $eta = ($ts | ForEach-Object { $chain[$_.id] } | Measure-Object -Maximum).Maximum
+    $ts = @(if ($tasksByGroup.ContainsKey([string]$g.id)) { $tasksByGroup[[string]$g.id] })
+    $counts = [ordered]@{}; foreach ($s in $StateBuckets) { $counts[$s] = 0 }
+    foreach ($t in $ts) { $b = Bucket $t; if ($counts.Contains($b)) { $counts[$b]++ } }
+    # Plain loops in this block, not ForEach-Object / Where-Object: a scriptblock per row per group was seconds of CPU.
+    $eta = (@(foreach ($t in $ts) { $chain[$t.id] }) | Measure-Object -Maximum).Maximum
 
     # Builder and author work only: an owner gate waits on the owner's time and an integration row on the Tier 2 run,
     # neither is throughput, and each has its own line in the group's phases (below). Counting them here priced them
     # at the builders' rate and moved the date by work no builder can do (kit item IN-20261019192925-bbd8).
-    $togo = @($ts | Where-Object { $_.state -notin @('integrated', 'done') -and $_.kind -notin @('gate', 'integration') })
-    $heldOpen = @($ts | Where-Object { $_.state -notin @('integrated', 'done') -and $_.kind -in @('gate', 'integration') }).Count
+    $togo = @(foreach ($t in $ts) { if ($t.state -notin @('integrated', 'done') -and $t.kind -notin @('gate', 'integration')) { $t } })
+    $heldOpen = @(foreach ($t in $ts) { if ($t.state -notin @('integrated', 'done') -and $t.kind -in @('gate', 'integration')) { $t } }).Count
     # What a group with no builder or author work left still waits on, said in place of a bare 'finished': its
     # Progress still counts those rows as to go (kit item IN-20261020100753-48cc).
     $heldLabel = $null
@@ -202,9 +224,10 @@ $groups = foreach ($g in $doc.groups) {
         $runIntegration = @($ts | Where-Object { $_.state -eq 'building' -and $_.kind -eq 'integration' }).Count
         $heldLabel = if ($runIntegration) { 'build done; Tier 2 run in flight' + $(if ($openGates) { "; $openGates gate(s) open" } else { '' }) } else { "build done; $heldOpen integration/gate left" }
     }
-    $remain = [int](($togo | ForEach-Object { (Get-EstMinutes $_) } | Measure-Object -Sum).Sum)
+    $togoEst = @(foreach ($t in $togo) { (Get-EstMinutes $t) })
+    $remain = [int](($togoEst | Measure-Object -Sum).Sum)
     # The floor: no rate can beat the longest chain of unlanded work this group sits on top of.
-    $floor = [int](($togo | ForEach-Object { $upChain[$_.id] } | Measure-Object -Maximum).Maximum)
+    $floor = [int]((@(foreach ($t in $togo) { $upChain[$t.id] }) | Measure-Object -Maximum).Maximum)
     # ...and the rows it was summed from, which is the only population a split scale can make the date lie about.
     $floorHead = $togo | Sort-Object { [int]$upChain[$_.id] } -Descending | Select-Object -First 1
     # @( ... ) OUTSIDE the if: an else branch that emits @() sends nothing down the pipeline, so the assignment
@@ -248,8 +271,8 @@ $groups = foreach ($g in $doc.groups) {
     # to-go ones is worth seeing. They no longer DECIDE anything: nothing a landed row is priced at reaches any
     # forecast number, so this gap cannot make a date wrong. $chainScaleSplit, measured above on the to-go
     # population the floor is actually summed from, is what guards the date.
-    $landedMedian = Median @($ts | Where-Object { $_.state -in @('integrated', 'done') -and -not (Test-Retired $_) } | ForEach-Object { (Get-EstMinutes $_) })
-    $togoMedian = Median @($togo | ForEach-Object { (Get-EstMinutes $_) })
+    $landedMedian = Median @(foreach ($t in $ts) { if ($t.state -in @('integrated', 'done') -and -not (Test-Retired $t)) { (Get-EstMinutes $t) } })
+    $togoMedian = Median $togoEst
     $skew = if ($landedMedian -gt 0 -and $togoMedian -gt 0) { [math]::Round($landedMedian / $togoMedian, 2) } else { 0 }
     $scaleSplit = $pathSpread -gt $ScaleSplitRatio
     $predicted = $null; $basis = $null; $softDate = $false
@@ -445,6 +468,13 @@ foreach ($g in $groups) {
 # such a row (Test-IntegratorKeepsRow), so it is not orphaned here either: G3.T900 showed 'orphaned, no watchdog will
 # free it' for 49 min while f13d2669 beat a fresh lock through its suite run (kit item IN-20261005020647-63c2).
 $intHold = Get-IntegratorHold $P
+# The longest chain per group, once: taken per row it re-filtered the whole board for every row (84 s of a 190 s call
+# on 2,900 rows, 2026-11-25).
+$groupChainMax = @{}
+foreach ($t in $doc.tasks) {
+    $c = $chain[$t.id]; $k = [string]$t.group
+    if ($null -ne $c -and (-not $groupChainMax.ContainsKey($k) -or $c -gt $groupChainMax[$k])) { $groupChainMax[$k] = $c }
+}
 $tasks = foreach ($t in $doc.tasks) {
     $last = @($t.history)[-1]
     $started = if ($t.state -eq 'building') { Get-StateEntry $t 'building' } else { $null }
@@ -468,7 +498,7 @@ $tasks = foreach ($t in $doc.tasks) {
         # the watchdog only ever breaks a CLAIM, so nothing frees it. It is invisible until someone re-states it.
         orphaned = ($t.state -eq 'building' -and -not $t.claim -and -not $intKept)
         integratorHold = if ($intKept) { "integrator $($started.by) (lock beat $(if ($null -ne $intHold.beatAge) { [int]$intHold.beatAge } else { '?' }) min)" } else { $null }
-        critical = ($chain[$t.id] -eq (($doc.tasks | Where-Object { $_.group -eq $t.group } | ForEach-Object { $chain[$_.id] } | Measure-Object -Maximum).Maximum) -and $t.state -notin @('done', 'integrated'))
+        critical = ($chain[$t.id] -eq $groupChainMax[[string]$t.group] -and $t.state -notin @('done', 'integrated'))
         # The page answers "why is this category not finished yet", which a state alone cannot: a task nobody has
         # claimed may be waiting on another task rather than on a free builder. dependsOn is carried so the page can
         # tell those two apart without opening tasks.json a second time and disagreeing with this model.
@@ -480,9 +510,10 @@ $tasks = foreach ($t in $doc.tasks) {
 # owner's queue, including side effects addressed to him by name. Prose in gates.md carries no ' | ', so it stays out.
 # A line the owner has answered is re-written in place with a leading 'RESOLVED ' token and is then out of the queue.
 # The rest of the line is left byte-identical, so the record still reads as written and a diff shows only the token.
+# The token may follow the line's own '- ' bullet ('- RESOLVED - ...'): that line is answered too.
 function Lines([string] $f) {
     if (-not (Test-Path $f)) { return ,@() }
-    ,@(Get-Content $f | Where-Object { $_ -notmatch '^\s*RESOLVED\s' -and ($_ -like '- *' -or $_ -match '\S\s\|\s') })
+    ,@(Get-Content $f | Where-Object { $_ -notmatch '^\s*(?:-\s+)?RESOLVED\b' -and ($_ -like '- *' -or $_ -match '\S\s\|\s') })
 }
 # The two kinds in the queue are NOT the same thing, and one number over both is not actionable: an escalation (below)
 # waits on the owner, while a '<task> | <question> | <default applied> | <reasoning>' line, bulleted or not, is a
@@ -790,13 +821,16 @@ if ($mainLock -and $mainLock.minutes -gt $script:MainLockFlagMinutes) {
 }
 $releases = Get-ReleasesPerHour $doc 6
 $buffer['readyPlanned'] = $readyPlanned; $buffer['redQueued'] = $redQueued; $buffer['waitingOnUnticketed'] = $waitUnticketed
+$ownerAnswers = @()
 $inbox = [ordered]@{}
 foreach ($s in $script:InboxSkills) {
     $its = @(Read-InboxItems (Get-InboxPath $P $s))
-    $open = @($its | Where-Object { Test-InboxOpen $_ $s })
-    $stuck = @($its | Where-Object { $_.status -in 'open', 'taken' -and (Get-InboxAgeMinutes $_) -ge $script:InboxLimitMinutes[$s] })
+    $open = @($its | Where-Object { Test-InboxOpen $_ $s $P })
+    $stuck = @($its | Where-Object { $_.status -in 'open', 'woken', 'taken' -and (Get-InboxAgeMinutes $_) -ge $script:InboxLimitMinutes[$s] })
     $inbox[$s] = [ordered]@{ open = $open.Count; stuck = @($stuck | ForEach-Object { "$($_.id) $($_.status) $(Get-InboxAgeMinutes $_)m: $($_.ask)" }) }
     foreach ($x in $inbox[$s].stuck) { $flags.Add("inbox $s item $x") }
+    # Owner answers wait for the coordinator's Apply-OwnerAnswer.ps1; the page lists each one until it is applied.
+    if ($s -eq 'owner-answers') { $ownerAnswers = @($open | ForEach-Object { "$($_.id): $($_.ask -replace ' key=\S+$', '')" }) }
 }
 # owner\gates.md is HAND-maintained: no script writes it (Init-Streams only creates its header), and the
 # "Refreshed ... by" line is typed. So a gate added to the board between refreshes is simply never listed, and
@@ -821,10 +855,18 @@ if ($gateOrphan.Count) { $flags.Add("gates.md lists $($gateOrphan.Count) id(s) t
 # what is left is the rows that predate the refusal - G1.T12 on 2026-09-30, which has a written ruling. The flag
 # names them, because a deadlocked group looks exactly like a slow one (kit item IN-20260930190112-23e6).
 $deadlocks = [Collections.Generic.List[string]]::new()
+# Each group's integration rows indexed once, in board order: a whole-board filter per open row cost seconds per call.
+$intByGroup = @{}
+foreach ($it in @($doc.tasks)) {
+    if ($it['kind'] -ne 'integration') { continue }
+    $ik = [string]$it['group']
+    if (-not $intByGroup.ContainsKey($ik)) { $intByGroup[$ik] = [Collections.Generic.List[object]]::new() }
+    $intByGroup[$ik].Add($it)
+}
 foreach ($t in @($doc.tasks)) {
     if ($t['kind'] -in @('gate', 'integration')) { continue }
     if ($t.state -in @('integrated', 'done')) { continue }
-    $ownInt = @($doc.tasks | Where-Object { $_['kind'] -eq 'integration' -and [string] $_['group'] -eq [string] $t['group'] })
+    $ownInt = @(if ($intByGroup.ContainsKey([string]$t['group'])) { $intByGroup[[string]$t['group']] })
     if ($ownInt.Count -and $ownInt[0].id -in @($t.dependsOn)) { $deadlocks.Add("$($t.id) ($($t.state)) -> $($ownInt[0].id)") }
 }
 # The flag used to end "so neither can move without a step-B ruling", which stopped being true once the ruling landed:
@@ -969,25 +1011,49 @@ function Get-LeftToPlan($doc, [string] $repo) {
     if (-not $root) { $out.reason = "no requirements folder: $($cands -join ' and ') do not exist"; return $out }
     $out.root = $root
     $named = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $acRx = [regex]::new('^AC-[A-Z0-9]+(?:-[A-Z0-9]+)*')
     function AddNames([string] $txt) {
-        foreach ($m in [regex]::Matches($txt, 'AC-[A-Z0-9]+(?:-[A-Z0-9]+)*')) {
-            $v = $m.Value; [void]$named.Add($v)
-            while ($v -match '^(AC-.+)-[A-Z0-9]+$') { $v = $Matches[1]; [void]$named.Add($v) }
+        # An ordinal IndexOf finds each 'AC-' and the id is matched only in a short window there: one regex scan of the
+        # 60 MB of row and ticket text took 5 s, the IndexOf walk 0.3 s (live board, 2026-11-25). Regex.Match(text,
+        # start) is not used: from PowerShell each such call cost time in the whole text's length. Matches are the
+        # full scan's own, left to right and never overlapping; a window the id fills is retried on the rest.
+        $new = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        $i = $txt.IndexOf('AC-', [StringComparison]::Ordinal)
+        while ($i -ge 0) {
+            $win = [math]::Min(256, $txt.Length - $i)
+            $m = $acRx.Match($txt.Substring($i, $win))
+            if ($m.Success -and $m.Length -eq $win -and $win -lt $txt.Length - $i) { $m = $acRx.Match($txt.Substring($i)) }
+            $next = if ($m.Success) { [void]$new.Add($m.Value); $i + $m.Length } else { $i + 3 }
+            $i = if ($next -lt $txt.Length) { $txt.IndexOf('AC-', $next, [StringComparison]::Ordinal) } else { -1 }
+        }
+        $new.ExceptWith($named)
+        foreach ($v in $new) {
+            # Each add also adds every prefix, so an id already in the set has its prefixes too. A prefix keeps at
+            # least one character after 'AC-'.
+            if (-not $named.Add($v)) { continue }
+            for ($cut = $v.LastIndexOf('-'); $cut -gt 3; $cut = $v.LastIndexOf('-')) { $v = $v.Substring(0, $cut); if (-not $named.Add($v)) { break } }
         }
     }
+    # The rows' text and tickets go to AddNames as one buffer: one call per row and ticket cost about 4.6 s on a board
+    # of 3000 rows (2026-11-25), and the set of names does not depend on how the text is split.
+    $nameBuf = [Text.StringBuilder]::new()
+    # One listing of the tickets folder instead of a Test-Path per row: about 1.1 s on a board of 3000 rows.
+    $tixDir = [IO.Path]::GetFullPath((Join-Path $repo '.streams\tickets'))
+    $tixHave = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    if (Test-Path -LiteralPath $tixDir -PathType Container) { foreach ($f in [IO.Directory]::EnumerateFiles($tixDir)) { [void]$tixHave.Add($f) } }
     foreach ($t in @($doc.tasks)) {
         # A retired row was withdrawn and will deliver nothing, so the clauses it names are still left to plan unless
         # another row names them (kit item IN-20261009150944-5bbd).
         if (Test-Retired $t) { continue }
-        $parts = @()
-        foreach ($k in 'why', 'title', 'tests') { if ($t.ContainsKey($k) -and $null -ne $t[$k]) { $parts += @($t[$k] | ForEach-Object { [string]$_ }) } }
-        AddNames ($parts -join "`n")
-        $tix = @(Join-Path $repo ".streams\tickets\$($t.id).md")
+        foreach ($k in 'why', 'title', 'tests') { if ($t.ContainsKey($k) -and $null -ne $t[$k]) { foreach ($x in @($t[$k])) { [void]$nameBuf.Append([string]$x).Append("`n") } } }
+        $own = Join-Path $tixDir "$($t.id).md"
+        if ($tixHave.Contains($own)) { [void]$nameBuf.Append([IO.File]::ReadAllText($own)).Append("`n") }
         if ($t.ContainsKey('artifacts') -and $t.artifacts -and $t.artifacts.ContainsKey('ticket') -and $t.artifacts['ticket']) {
-            $tp = [string]$t.artifacts['ticket']; $tix += $(if ([IO.Path]::IsPathRooted($tp)) { $tp } else { Join-Path $repo $tp })
+            $tp = [string]$t.artifacts['ticket']; $tp = [IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($tp)) { $tp } else { Join-Path $repo $tp }))
+            if ($tp -ine $own -and ($tixHave.Contains($tp) -or (Test-Path -LiteralPath $tp -PathType Leaf))) { [void]$nameBuf.Append([IO.File]::ReadAllText($tp)).Append("`n") }
         }
-        foreach ($p in @($tix | Select-Object -Unique)) { if (Test-Path -LiteralPath $p -PathType Leaf) { AddNames ([IO.File]::ReadAllText($p)) } }
     }
+    AddNames $nameBuf.ToString(); $nameBuf = $null
     # stream-adhoc builds a clause in a closed group with no board row, by design, and records it in its request file
     # .streams\adhoc\<Id>.md. Such a clause is planned (and built) once that change is COMMITTED, i.e. a commit on HEAD
     # whose subject starts '<Id>:' (Commit-AdhocChange.ps1). A request that was reversed or is still open names nothing:
@@ -997,7 +1063,7 @@ function Get-LeftToPlan($doc, [string] $repo) {
     if (Test-Path -LiteralPath $adDir -PathType Container) {
         $adFiles = @(Get-ChildItem -LiteralPath $adDir -Filter 'ADHOC-*.md' -File)
         if ($adFiles.Count) {
-            $landed = @{}
+            $landed = @{}; $headShas = $null
             foreach ($subj in @(git -C $repo log --format=%s -E --grep '^ADHOC-[0-9]+-[0-9]+:' 2>$null)) { if ([string]$subj -match '^(ADHOC-\d+-\d+):') { $landed[$Matches[1]] = $true } }
             # A change the owner committed by hand under another subject carries a 'Landed: <commit>' line in its request
             # file; it counts once that commit is on HEAD (ADHOC-20261102-13 rode the owner's commit 2e12d219).
@@ -1006,7 +1072,12 @@ function Get-LeftToPlan($doc, [string] $repo) {
                 $ok = $landed.ContainsKey($f.BaseName)
                 if (-not $ok) {
                     $lm = [regex]::Match($txt, '(?m)^Landed:[ \t]*([0-9a-fA-F]{7,40})\b')
-                    if ($lm.Success) { git -C $repo merge-base --is-ancestor $lm.Groups[1].Value HEAD 2>$null; $ok = ($LASTEXITCODE -eq 0) }
+                    if ($lm.Success) {
+                        # One rev-list of HEAD for every such file, not one merge-base child per file.
+                        if ($null -eq $headShas) { $headShas = @(git -C $repo rev-list HEAD 2>$null | ForEach-Object { ([string]$_).ToLowerInvariant() }) }
+                        $pre = $lm.Groups[1].Value.ToLowerInvariant()
+                        $ok = $false; foreach ($h in $headShas) { if ($h.StartsWith($pre, [StringComparison]::Ordinal)) { $ok = $true; break } }
+                    }
                 }
                 if ($ok) { AddNames $txt }
             }
@@ -1014,11 +1085,16 @@ function Get-LeftToPlan($doc, [string] $repo) {
     }
     # Clause id -> requirement id. A file's id is its top-level `id:`, which is what group scope.include names.
     $clauseDoc = [ordered]@{}; $docFile = @{}; $bad = @(); $dup = @()
+    # The acceptance list runs from its key to the next top-level key. Cutting it by index costs about a tenth of one
+    # lazy match with a lookahead at every character (4.2 s over 345 files, 2026-11-25).
+    $accRx = [regex]::new('(?m)^acceptance:[ \t]*\r?\n'); $topKeyRx = [regex]::new('(?m)^[A-Za-z_][\w-]*:')
     foreach ($f in @(Get-ChildItem -LiteralPath $root -Recurse -Filter *.yaml -File)) {
         $txt = [IO.File]::ReadAllText($f.FullName)
-        $am = [regex]::Match($txt, '(?ms)^acceptance:[ \t]*\r?\n(.*?)(?=^[A-Za-z_][\w-]*:|\z)')
+        $am = $accRx.Match($txt)
         if (-not $am.Success) { continue }
-        $ids = @([regex]::Matches($am.Groups[1].Value, '(?m)^[ \t]*- id:[ \t]*(AC-[A-Za-z0-9-]+)[ \t]*\r?$') | ForEach-Object { $_.Groups[1].Value })
+        $from = $am.Index + $am.Length; $nk = $topKeyRx.Match($txt, $from)
+        $accBody = if ($nk.Success) { $txt.Substring($from, $nk.Index - $from) } else { $txt.Substring($from) }
+        $ids = @([regex]::Matches($accBody, '(?m)^[ \t]*- id:[ \t]*(AC-[A-Za-z0-9-]+)[ \t]*\r?$') | ForEach-Object { $_.Groups[1].Value })
         $rel = $f.FullName.Substring($root.TrimEnd('\').Length + 1)
         $fst = [regex]::Match($txt, '(?m)^status:[ \t]*(\S+)').Groups[1].Value
         if ($fst -ne 'READY') {
@@ -1036,13 +1112,28 @@ function Get-LeftToPlan($doc, [string] $repo) {
     $out.clauses = $clauseDoc.Count
     $unnamed = @($clauseDoc.Keys | Where-Object { -not $named.Contains($_) })
     $out.unnamed = $unnamed.Count; $out.named = $out.clauses - $unnamed.Count
-    $inGroup = @{}
+    # One pass over the clauses, not one per group: a per-group pipeline filter over every clause cost about 10 s on a
+    # board of some 50 groups. Each group's lists keep the clauses' file order.
+    $inGroup = @{}; $docGroups = @{}; $gClauses = @{}; $gUnnamed = @{}
     foreach ($g in @($doc.groups)) {
+        $gid = [string]$g.id; $gClauses[$gid] = 0; $gUnnamed[$gid] = [Collections.Generic.List[string]]::new()
         $inc = @(); if ($g.ContainsKey('scope') -and $g.scope -and $g.scope.ContainsKey('include')) { $inc = @($g.scope['include'] | ForEach-Object { [string]$_ }) }
-        foreach ($x in $inc) { $inGroup[$x] = $true }
-        $gu = @($unnamed | Where-Object { $clauseDoc[$_] -in $inc })
-        $out.byGroup[[string]$g.id] = [ordered]@{ state = [string]$g.state; clauses = @($clauseDoc.Keys | Where-Object { $clauseDoc[$_] -in $inc }).Count; unnamed = $gu.Count; count = $null }
-        $out.unnamedIds[[string]$g.id] = @($gu)
+        foreach ($x in @($inc | Select-Object -Unique)) {
+            $inGroup[$x] = $true
+            if (-not $docGroups.ContainsKey($x)) { $docGroups[$x] = [Collections.Generic.List[string]]::new() }
+            if (-not $docGroups[$x].Contains($gid)) { $docGroups[$x].Add($gid) }
+        }
+    }
+    foreach ($c in @($clauseDoc.Keys)) {
+        $cd = [string]$clauseDoc[$c]
+        if (-not $docGroups.ContainsKey($cd)) { continue }
+        $isUnnamed = -not $named.Contains($c)
+        foreach ($gid in $docGroups[$cd]) { $gClauses[$gid]++; if ($isUnnamed) { $gUnnamed[$gid].Add($c) } }
+    }
+    foreach ($g in @($doc.groups)) {
+        $gid = [string]$g.id; $gu = @($gUnnamed[$gid])
+        $out.byGroup[$gid] = [ordered]@{ state = [string]$g.state; clauses = $gClauses[$gid]; unnamed = $gu.Count; count = $null }
+        $out.unnamedIds[$gid] = @($gu)
     }
     $nu = @($unnamed | Where-Object { -not $inGroup.ContainsKey($clauseDoc[$_]) })
     $out.unnamedIds['none'] = @($nu)
@@ -1068,7 +1159,8 @@ $model = [ordered]@{
     # The page renders whatever this lists, in this order, so a bucket can never be added here and missed there.
     stateBuckets = @($StateBuckets)
     owner = [ordered]@{ questions = OwnerQuestions (Lines $P.Questions); escalations = Escalations (OwnerQuestions (Lines $P.Questions)); prompts = OwnerPrompts (Lines $P.Prompts); gates = Lines $P.Gates; worktrees = Worktrees $P.Worktrees
-        uncommitted = @($doc.tasks | Where-Object { $_.state -in 'integrated', 'done' -and -not (Test-Retired $_) } | ForEach-Object { $_.id }) }
+        uncommitted = @($doc.tasks | Where-Object { $_.state -in 'integrated', 'done' -and -not (Test-Retired $_) } | ForEach-Object { $_.id })
+        answers = @($ownerAnswers) }
 }
 if ($Json) { $model | ConvertTo-Json -Depth 20; exit 0 }
 $all = @($doc.tasks)

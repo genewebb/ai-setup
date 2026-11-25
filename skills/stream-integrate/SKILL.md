@@ -1,6 +1,6 @@
 ---
 name: stream-integrate
-description: v0.24. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes, even while a suite run is going, and each cycle first handles the oldest open item in its inbox (.streams\inbox\stream-integrate.md), then applies each built, verified patch to the dirty main tree as soon as it is ready and re-runs that task's grader there. When a whole group is integrated it starts one Tier 2 run (Start-SuiteRun.ps1, in a snapshot of main, so main stays open), the scripts screen flaky tests and attribute failures to fix tasks, a Tier 3 retest runs only the failed tests once the fixes land, and Test-GroupClose.ps1 says when the group may close; then it activates the next group (Activate-Group.ps1). Use for /stream-integrate (run under /loop), /stream-integrate once, /stream-integrate gate <task> pass|fail "<note>", /stream-integrate status.
+description: v0.25. Stream kit skill 4 of 5. It runs unattended, never prompts, and there is only ever one running per repo. It wakes at least every 10 minutes, even while a suite run is going, and each cycle first handles the oldest open item in its inbox (.streams\inbox\stream-integrate.md), then applies each built, verified patch to the dirty main tree as soon as it is ready and re-runs that task's grader there. When a whole group is integrated it starts one Tier 2 run (Start-SuiteRun.ps1, in a snapshot of main, so main stays open), the scripts screen flaky tests and attribute failures to fix tasks, a Tier 3 retest runs only the failed tests once the fixes land, and Test-GroupClose.ps1 says when the group may close; then it activates the next group (Activate-Group.ps1). Use for /stream-integrate (run under /loop), /stream-integrate once, /stream-integrate gate <task> pass|fail "<note>", /stream-integrate status.
 ---
 
 # stream-integrate
@@ -134,7 +134,8 @@ and leaves it built. With more than one focus group, "the focus group" in the st
      - **SUSPECT** (grader defect): every clause red on main passed in the builder's worktree log
        (`<task>.grader.wt.txt`) under the same grader (`GRADER sha`), and main held exactly the worktree's content for
        the patch's files. A clause like that can't pass after any `git apply` (file times, tree-local state). The task
-       goes to `planned` with the patch kept, and a line goes to `owner\questions.md`. An author writes a portable
+       goes to `planned` with the patch kept, and an `applied default:` line goes to `decisions.md` (never the owner
+       queue: the default is already applied; kit item IN-20261124144922-836f). An author writes a portable
        grader; the builder then lays the kept patch down and re-verifies, and does not rebuild.
      - **CHECK-SUSPECT**: the same evidence on a row graded by its builder check alone (`artifacts.check`, no
        `artifacts.grader`). An author may not edit a check, so the task goes to `ticketed` with the patch kept and a
@@ -182,8 +183,10 @@ two tests when its variable is missing (`requireEnv`), and its describe is seria
 live-view test after it. Set them in the leg's own command: `SM_VISUAL_OUT` = `<repo>\.streams\logs\<group>.suites.{run}.visual`,
 `SM_LIVE_VIEW_OUT` = `<repo>\.streams\logs\<group>.suites.{run}.live-view`, and `SM_MOCKUP_HOME` only when the owner's
 environment already sets it (nothing in the tree records the mockup folder, so never invent one). When it is unset, the
-first test fails on its named precondition: record that once in `.streams\owner\questions.md` as an environment gap,
-never a fix task (kit item IN-20261004201117-351d).
+first test fails on its named precondition: record that once in `.streams\owner\questions.md` as an environment gap
+(`ESCALATE <task> | SM_MOCKUP_HOME unset | no safe default: the owner names the mockup folder`), never a fix task
+(kit item IN-20261004201117-351d). Any decision the integrator takes with a safe default is logged as an
+`applied default:` line in `decisions.md`, never in the owner queue (kit item IN-20261124144922-836f).
 
 **The completion run.** When every `code`, `docs` and `mockup` row of the focus set is `integrated` (EXCEPT a row whose
 `dependsOn` names the group's integration task: it is built from the green run, planner ruling IN-20260930190044-8bf9),

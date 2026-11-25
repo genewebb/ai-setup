@@ -595,7 +595,21 @@ function Invoke-TasksLocked($P, [string] $Session, [scriptblock] $Action) {
     }
 }
 
+$script:TaskIndex = @{}; $script:TaskIndexDoc = $null; $script:TaskIndexCount = -1
 function Get-Task($doc, [string] $Id) {
+    # An id -> index map of the doc last asked about, so a dependency walk is not a board scan per edge (Get-StreamStatus
+    # took 4-7 min on 2,900 rows, 2026-11-25). A hit counts only when the row at that index is still that id, the doc and
+    # its row count are the same, and the id was unique; anything else falls back to the scan, so a replaced row is found.
+    $ts = $doc.tasks
+    if (-not [object]::ReferenceEquals($script:TaskIndexDoc, $doc) -or $script:TaskIndexCount -ne @($ts).Count) {
+        $map = @{}; $i = 0
+        foreach ($x in $ts) { $k = [string]$x.id; if ($map.ContainsKey($k)) { $map[$k] = -1 } else { $map[$k] = $i }; $i++ }
+        $script:TaskIndex = $map; $script:TaskIndexDoc = $doc; $script:TaskIndexCount = $i
+    }
+    if ($script:TaskIndex.ContainsKey($Id)) {
+        $ix = $script:TaskIndex[$Id]
+        if ($ix -ge 0) { $hit = $ts[$ix]; if ($hit -and [string]$hit.id -eq $Id) { return $hit } }
+    }
     $t = @($doc.tasks | Where-Object { $_.id -eq $Id })
     if ($t.Count -ne 1) { throw "task $Id not found (matches: $($t.Count))" }
     $t[0]

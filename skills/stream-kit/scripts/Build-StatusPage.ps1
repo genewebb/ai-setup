@@ -390,6 +390,48 @@ W ('<div class="note">To make the board follow the priority order instead, the c
 W '</details>'
 W '</section>'
 
+# ---- since you last looked ----
+# The owner bumps .streams\owner\last-seen.json with Set-OwnerSeen.ps1 after reading the page. Rows are grouped by the
+# state their newest history entry after the marker moved them to; an entry that only notes a row counts as a note.
+# ConvertFrom-Json turns an ISO stamp into a DateTime, so a value may arrive as either a DateTime or a string.
+function SeenUtc($v) {
+  if ($v -is [datetime]) { if ($v.Kind -eq [DateTimeKind]::Unspecified) { return [datetime]::SpecifyKind($v, [DateTimeKind]::Utc) } return $v.ToUniversalTime() }
+  [datetime]::Parse([string]$v, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal)
+}
+$seenFile = Join-Path $streams 'owner\last-seen.json'
+W '<section id="since-seen"><h2>Since you last looked</h2><div class="panel">'
+$seenAt = $null
+if (Test-Path -LiteralPath $seenFile) {
+  try {
+    $seenAt = SeenUtc (Get-Content -LiteralPath $seenFile -Raw | ConvertFrom-Json).at
+  } catch { $seenAt = $null }
+}
+if ($null -eq $seenAt) {
+  W '<div class="empty">No marker yet. Run <code>Set-OwnerSeen.ps1 -Repo &lt;repo&gt;</code> after reading this page; the next build lists what changed after it.</div>'
+} else {
+  $movedTo = [ordered]@{}
+  foreach ($t in @($board.tasks)) {
+    $later = @(@($t.history) | Where-Object { $_ -and $_.at -and ((SeenUtc $_.at) -gt $seenAt) })
+    if ($later.Count -eq 0) { continue }
+    $to = [string]$later[-1].to
+    if (-not $to) { $to = 'note' }
+    if (-not $movedTo.Contains($to)) { $movedTo[$to] = [System.Collections.Generic.List[string]]::new() }
+    $movedTo[$to].Add([string]$t.id)
+  }
+  $newItems = @(@($inbox) | Where-Object { $_ -and $_.at -and ((SeenUtc $_.at) -gt $seenAt) })
+  $rowCount = 0; foreach ($k in $movedTo.Keys) { $rowCount += $movedTo[$k].Count }
+  W ('<div class="muted mono">since ' + (E (Format-LocalStamp $seenAt)) + ': ' + $rowCount + ' row(s) changed, ' + $newItems.Count + ' inbox item(s) filed</div>')
+  if ($rowCount -eq 0 -and $newItems.Count -eq 0) { W '<div class="empty">Nothing changed.</div>' }
+  foreach ($k in $movedTo.Keys) {
+    $ids = @($movedTo[$k] | Sort-Object)
+    W ('<div class="flag seen-row">' + (E $k) + ' ' + $ids.Count + ': ' + (E ($ids -join ', ')) + '</div>')
+  }
+  foreach ($g in @($newItems | Group-Object { [string]$_.inbox } | Sort-Object Name)) {
+    W ('<div class="flag seen-inbox">' + (E $g.Name) + ' inbox ' + $g.Count + ' new: ' + (E ((@($g.Group | ForEach-Object { [string]$_.id })) -join ', ')) + '</div>')
+  }
+}
+W '</div></section>'
+
 # ---- this tick ----
 W '<section id="flags"><h2>This tick</h2><div class="panel">'
 W ('<div class="flag">' + (E $WatchdogLine) + '</div>')
@@ -398,7 +440,7 @@ W ('<div class="flag">' + (E $InboxLine) + '</div>')
 # way ("inbox author item ... 41 min" against the model's "inbox stream-author item ... 41m"), which -Unique cannot
 # collapse, so six items read as twelve flags. $stuckItems stays, but only to draw the Inboxes panel below.
 $flags = @($model.flags)
-$stuckItems = @($inbox | Where-Object { $_.status -in @('open','taken') -and $_.ageMinutes -gt $_.limitMinutes })
+$stuckItems = @($inbox | Where-Object { $_.status -in @('open','woken','taken') -and $_.ageMinutes -gt $_.limitMinutes })
 W ('<div class="muted mono">' + $flags.Count + ' flag' + $(if ($flags.Count -ne 1) { 's' } else { '' }) + '</div>')
 if ($flags.Count -eq 0) { W '<div class="empty">No flags.</div>' }
 foreach ($f in $flags) {
@@ -483,6 +525,7 @@ function WriteListPanel([string]$title, $items, [string]$Id = '') {
   }
   W '</div>'
 }
+WriteListPanel 'Owner answers not yet applied' @($model.owner.answers) 'owner-answers'
 WriteListPanel 'Open questions' $qs 'owner-questions'
 # One row per prompt: the tab to answer it in, the session and the blocked command (the text after '<tool>:').
 $prs = @($model.owner.prompts)
@@ -519,7 +562,18 @@ if ($stuckItems.Count -gt 0) {
   }
   W '</tbody></table></div>'
 }
-W '</section>'
+# Held items (Set-InboxItem.ps1 -Status held) wait on a time or on named rows; the status tick wakes them (kit item
+# IN-20261123164856-bce0), so each is listed with the condition it waits on.
+$heldItems = @($inbox | Where-Object { $_.status -eq 'held' })
+W ('<h3>Held</h3><div class="muted mono">' + $heldItems.Count + ' held item(s) waiting on a condition</div>')
+if ($heldItems.Count -gt 0) {
+  W '<div class="scroll"><table><thead><tr><th>Item</th><th>Inbox</th><th>Held by</th><th>Waits on</th><th>Ask</th></tr></thead><tbody>'
+  foreach ($it in ($heldItems | Sort-Object -Property @{E={$_.ageMinutes}} -Descending)) {
+    $ask = [string]$it.ask; if ($ask.Length -gt 200) { $ask = $ask.Substring(0,200) + '...' }
+    W ('<tr><td class="id">' + (E $it.id) + '</td><td class="mono">' + (E ($it.inbox -replace '^stream-','')) + '</td><td class="mono">' + (E $it.statusBy) + '</td><td class="note">' + (E ([string]$it.note)) + '</td><td class="note">' + (E $ask) + '</td></tr>')
+  }
+  W '</tbody></table></div>'
+}W '</section>'
 
 # ---- sessions ----
 $sessions = @{}

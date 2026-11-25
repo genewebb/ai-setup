@@ -1,6 +1,6 @@
 ---
 name: stream-plan
-description: v0.18. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
+description: v0.19. Stream kit skill 1 of 5, and the only interactive skill. The start prompt names the repo, where the requirements are, and exactly which group(s) of work to plan. Nothing outside that scope is planned. The skill reads the in-scope requirements, reads code only as needed, asks the owner requirement questions, cuts each group into tasks with disjoint write sets (or serialized by dependsOn), then publishes a record page and releases the tasks into .streams\tasks.json straight away, with no approval step, so the other stream skills can pick them up. The owner adjusts the implementation during manual testing. Use for /stream-plan, /stream-plan revise, /stream-plan import, /stream-plan status, and /stream-plan inbox (run under /loop: works the plan inbox every 10 minutes).
 ---
 
 # stream-plan
@@ -127,11 +127,13 @@ Each cycle:
    When a requirements row (write set under `docs\requirements\`) reaches `built` or `integrated`, read the `AC-IDS`
    line of its report (`.streams\logs\<task>.md`, see stream-build "Clause ids in the report") and name every added
    or renamed id on the build row that implements it, or on an audit row, in the same cycle.
-4. A decision that only the owner can make goes to the owner queue (`.streams\owner\questions.md`) with the default
-   applied, the same as the auto-approve rule, as `<task> | question | default applied | why`. Only a decision with NO
-   safe default is an escalation, written `ESCALATE <task> | question | why no default`. The status board counts
-   escalations by that shape, not by a leading `- ` (kit item IN-20261004203020-5f5e). Watch mode never waits on AskUserQuestion. The owner works
-   the queue in an interactive `/stream-plan` session.
+4. A decision with a safe default is applied at once, the same as the auto-approve rule, and logged as one line in
+   `.streams\decisions.md`: `- <yyyy-MM-ddTHH:mm:ssZ> [<session>] applied default: <task> | question | default applied | why`. It never goes to the owner queue (owner 2026-11-24 09:48 EST, kit item
+   IN-20261124144922-836f); the planner lists the defaults it applied to the owner in chat. Only a decision with NO
+   safe default goes to the owner queue (`.streams\owner\questions.md`), written
+   `ESCALATE <task> | question | why no default`. The status board counts escalations by that shape, not by a
+   leading `- ` (kit item IN-20261004203020-5f5e). Watch mode never waits on AskUserQuestion. The owner works the
+   queue in an interactive `/stream-plan` session.
 5. Print the **Inbox status line** again, after the work (what is still open, what was closed this cycle). Then end
    the cycle with ScheduleWakeup at 600 s: `noop: true` when there were no open items, `noop: false` when anything
    was written. Pass the same `/loop` prompt back each time. **Backoff** (2026-10-05 priority-focus-design E4): after a

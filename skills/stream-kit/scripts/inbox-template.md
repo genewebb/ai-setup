@@ -8,7 +8,7 @@ Anyone may write here: the owner, any stream session, or this conversation. Only
 One line per event. A new item:
 `- <id> | <utc> | <from> | open | request|bug | <task id or -> | <ask, one sentence> | <evidence path or ->`
 Every later event on it, by any session:
-`- <id> | <utc> | <by> | taken|done|declined|forwarded | <note: result, reason, or the inbox it went to>`
+`- <id> | <utc> | <by> | taken|held|woken|done|declined|forwarded | <note: result, reason, or the inbox it went to>`
 
 - Use the kit scripts (stream-kit\scripts), which lock the file, so two sessions can never take the same item:
   `Send-InboxItem.ps1` to file, `Get-InboxItems.ps1 -Open` to list, `Set-InboxItem.ps1` for taken, done, declined
@@ -16,6 +16,10 @@ Every later event on it, by any session:
   the role's limit) and exits 8.
 - id = `IN-<yyyyMMddHHmmss>-<4 hex>`, made by the sender. Longer detail goes in an evidence file under
   `.streams\inbox\evidence\`, never in a session scratchpad (it vanishes with the session).
+- A holder that waits on something else parks its item with `Set-InboxItem.ps1 -Status held -Until <utc>` and/or
+  `-After <task ids> -State integrated|done` (note `until: <utc>` / `after: <ids> <state>`; both = whichever comes
+  first). A held item is not open while its condition is unmet; once the time passes or every named task reaches
+  the state it reads open again and may be taken (the status tick appends a `woken` line for it).
 - The item's status is its last line. `open` needs an owner. `taken` older than the role's limit counts as open again.
   `forwarded` is owned by the target inbox, where the same id appears as a new `open` line.
 - The receiving skill reads this file at the start of every cycle, takes the oldest open item it can act on within its

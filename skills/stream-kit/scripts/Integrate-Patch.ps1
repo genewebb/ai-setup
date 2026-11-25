@@ -97,10 +97,20 @@ function Write-UncommittedRows($Rows) {
     if (-not $list.Count) { Remove-Item -LiteralPath $script:UncommittedPath -Force -ErrorAction SilentlyContinue; return }
     Write-AtomicText $script:UncommittedPath (ConvertTo-Json -InputObject @($list) -Depth 4)
 }
-function Add-UncommittedRow([string] $Id, [string] $PatchPath, [string] $Why) {
+function Add-UncommittedRow([string] $Id, [string] $PatchPath, [string] $Why, [string] $HoldFor = '') {
     $rows = @(Read-UncommittedRows | Where-Object { [string]$_.id -ne $Id })
-    $rows += [pscustomobject]@{ id = $Id; patch = $PatchPath; at = (Get-Now); why = $Why }
+    $row = [ordered]@{ id = $Id; patch = $PatchPath; at = (Get-Now); why = $Why }
+    if ($HoldFor) { $row.holdFor = $HoldFor }
+    $rows += [pscustomobject]$row
     Write-UncommittedRows $rows
+}
+# CO-LAND (kit item IN-20261123201145-57ec): a row whose artifacts.coLandWith names another row is applied and graded
+# as usual, but its commit waits in uncommitted.json (holdFor = that row) until that row integrates; the partner's
+# commit then takes the union of both patches' paths in ONE commit naming both. A held entry is never retried alone
+# while its partner is not integrated or done.
+function Get-HoldState([string] $Id) {
+    $hr = @($doc.tasks | Where-Object { [string]$_.id -eq $Id }) | Select-Object -First 1
+    if ($hr) { [string]$hr.state } else { '' }
 }
 function Get-PatchPaths([string] $PatchPath) {
     @(Get-Content -LiteralPath $PatchPath | ForEach-Object { if ($_ -match '^diff --git a/(.+) b/(.+)$') { $Matches[1]; $Matches[2] } } | Sort-Object -Unique)
@@ -112,6 +122,8 @@ if (-not $NoCommit) {
         $keepRows = @()
         foreach ($uc in $pendingCommits) {
             $ucId = [string]$uc.id; $ucPatch = [string]$uc.patch
+            $ucHold = if ($uc.PSObject.Properties['holdFor']) { [string]$uc.holdFor } else { '' }
+            if ($ucHold -and (Get-HoldState $ucHold) -notin @('integrated', 'done')) { $keepRows += $uc; "HELD-COMMIT $ucId (co-lands with $ucHold, which is not integrated)"; continue }
             if (-not $retryPolicy.Commit) { $keepRows += $uc; "UNCOMMITTED $ucId (retry skipped: $($retryPolicy.Why))"; continue }
             if (-not $ucPatch -or -not (Test-Path -LiteralPath $ucPatch)) { $keepRows += $uc; "UNCOMMITTED $ucId (retry skipped: patch $ucPatch not found)"; continue }
             $ucPaths = Get-PatchPaths $ucPatch
@@ -248,7 +260,7 @@ if ($batchMax -gt 1) {
     if (-not $bLock) { "RETRY $($t.id) (main tree busy: $(Get-MainTreeLockHolder $P))"; exit 0 }
     $bRows = [Collections.Generic.List[object]]::new(); $bPatch = @{}; $bOwn = @{}
     $bSeen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    foreach ($c in @($ready | Where-Object { $_.kind -in @('code', 'docs', 'mockup') -and -not (Test-InPlaceWriteSet $_.writeSet) -and (Test-DepsAt $doc $_ @('integrated', 'done')) })) {
+    foreach ($c in @($ready | Where-Object { $_.kind -in @('code', 'docs', 'mockup') -and -not (Get-Field $_ 'artifacts', 'coLandWith') -and -not (Test-InPlaceWriteSet $_.writeSet) -and (Test-DepsAt $doc $_ @('integrated', 'done')) })) {
         if ($bRows.Count -ge $batchMax) { break }
         $ok = $false
         $cp = [string](Get-Field $c 'artifacts', 'patch'); if ($cp -and -not [IO.Path]::IsPathRooted($cp)) { $cp = Join-Path $Repo $cp }
@@ -638,14 +650,27 @@ if ($gcode -eq 0) {
     # add refused it, so the patch applied but never committed (kit item IN-20261021161717-670f). Only the patch's own
     # exact file paths are named, so nothing else ignored is ever added.
     $paths = @(Get-Content -LiteralPath $patch | ForEach-Object { if ($_ -match '^diff --git a/(.+) b/(.+)$') { $Matches[1]; $Matches[2] } } | Sort-Object -Unique)
+    $coLand = [string](Get-Field $t 'artifacts', 'coLandWith')
+    if ($coLand -and $coLand -ne [string]$t.id -and (Get-HoldState $coLand) -notin @('integrated', 'done')) {
+        Add-UncommittedRow ([string]$t.id) $patch "co-land hold: commits with $coLand" $coLand
+        Add-Decision $P $Session "commit of $($t.id) held: it co-lands with $coLand, which is not integrated (artifacts.coLandWith)"
+        "HELD-COMMIT $($t.id) (co-lands with $coLand; committed with it)"; exit 0
+    }
+    $heldRows = @(Read-UncommittedRows | Where-Object { $_.PSObject.Properties['holdFor'] -and [string]$_.holdFor -eq [string]$t.id -and [string]$_.patch -and (Test-Path -LiteralPath ([string]$_.patch)) })
+    $heldIds = @($heldRows | ForEach-Object { [string]$_.id })
+    foreach ($hrow in $heldRows) { $paths = @(@($paths) + @(Get-PatchPaths ([string]$hrow.patch)) | Sort-Object -Unique) }
     try {
         $staleLock = Clear-StaleGitIndexLock $P $Session $Repo; if ($staleLock) { "STALE-INDEX-LOCK removed $staleLock" }
         [void](Invoke-Git $Repo (@('add', '-A', '-f', '--') + $paths))
-        $msg = "$($t.id): $($t.title)"
-        [void](Invoke-Git $Repo (@('commit', '-q', '-m', $msg, '-m', "Integrated by stream-integrate ($Session); grader PASS on main.", '-m', 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>', '--') + $paths))
+        $msg = if ($heldIds.Count) { "$(@([string]$t.id) + $heldIds -join ' + '): $($t.title)" } else { "$($t.id): $($t.title)" }
+        $body = "Integrated by stream-integrate ($Session); grader PASS on main."
+        if ($heldIds.Count) { $body += " Co-landed with $($heldIds -join ', ') (artifacts.coLandWith): " + (@($heldRows | ForEach-Object { $hid2 = [string]$_.id; $hr2 = @($doc.tasks | Where-Object { [string]$_.id -eq [string]$hid2 }) | Select-Object -First 1; "$($hid2): $(if ($hr2) { $hr2.title })" }) -join '; ') }
+        [void](Invoke-Git $Repo (@('commit', '-q', '-m', $msg, '-m', $body, '-m', 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>', '--') + $paths))
         $sha = (Invoke-Git $Repo @('rev-parse', '--short', 'HEAD')) | Select-Object -First 1
-        Add-Decision $P $Session "committed $($t.id) as $sha"
+        if ($heldIds.Count) { Write-UncommittedRows @(Read-UncommittedRows | Where-Object { [string]$_.id -notin $heldIds }) }
+        Add-Decision $P $Session "committed $($t.id) as $sha$(if ($heldIds.Count) { " with held co-land row(s) $($heldIds -join ', ')" })"
         "COMMITTED $($t.id) $sha"
+        foreach ($hid in $heldIds) { "CO-LANDED $hid $sha (with $($t.id))" }
         Write-StepTime $t.id 'commit'
         # The stream branch is shared, so every integration commit is pushed as soon as it lands (owner decision,
         # 2026-09-29, kit item IN-20260929001946-67a7 part 1). The branch itself needs a PR, so the push names the
@@ -757,7 +782,7 @@ if ($gcode -eq 0) {
     } elseif (-not $why.Count) {
         $note = "grader-suspect: $($redIds -join ',') red on main but PASS in $wt on identical content under the same grader; patch kept at $($t.artifacts.patch), no rebuild needed; the grader needs re-authoring. Main: $fails"
         & $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To planned -Note $note | Out-Null
-        Add-LineTo $P.Questions ("- {0} | grader red on main only ({1}); same clauses PASS in the worktree on identical content | default: task back to planned for a new grader, verified patch kept for reuse | a clause that cannot pass after git apply (file times, tree-local state) is a grader defect" -f $t.id, ($redIds -join ','))
+        Add-Decision $P $Session ("applied default: {0} | grader red on main only ({1}); same clauses PASS in the worktree on identical content | default: task back to planned for a new grader, verified patch kept for reuse | a clause that cannot pass after git apply (file times, tree-local state) is a grader defect" -f $t.id, ($redIds -join ','))
         "SUSPECT $($t.id)"
     } else {
         & $update -Repo $Repo -Task $t.id -Role integrate -Session $Session -To ticketed -Note ("integrate: grader red on main; " + $fails + " (not a grader defect: " + ($why -join '; ') + ")") | Out-Null

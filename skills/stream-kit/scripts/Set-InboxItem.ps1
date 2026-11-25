@@ -15,16 +15,24 @@
 #               else: the item stays taken, by the same holder. Beat inside any step that can outlast the role's inbox
 #               limit - a skeptic round, a long suite - or the watchdog re-opens the item and a second session repeats
 #               the work (kit item IN-20260930173837-50cb). Only the holder may beat: NOT-HELD, exit 8, otherwise.
+#   held      : by the session that holds it (taken), with -Until <utc> and/or -After <ids> -State integrated|done. The
+#               item leaves -Open until the time passes or every named task reaches the state (both = whichever comes
+#               first); then it reads open again and may be taken. -Note adds free text after the condition.
 #   forwarded : -ForwardTo <skill>; appends forwarded here and the item as a new open line (same id) in that inbox.
 # Exit 2 = no such item.
 param(
     [Parameter(Mandatory)] [string] $Repo,
     [Parameter(Mandatory)] [string] $Skill,
     [Parameter(Mandatory)] [string] $Id,
-    [Parameter(Mandatory)] [ValidateSet('taken', 'beat', 'note', 'done', 'declined', 'forwarded')] [string] $Status,
+    [Parameter(Mandatory)] [ValidateSet('taken', 'beat', 'note', 'held', 'done', 'declined', 'forwarded')] [string] $Status,
     [Parameter(Mandatory)] [string] $By,
     [string] $Note = '',
     [string] $ForwardTo = '',
+    # held: a UTC time (ISO 8601) after which the item opens again.
+    [string] $Until = '',
+    # held: task ids that must all reach -State before the item opens again.
+    [string[]] $After = @(),
+    [ValidateSet('', 'integrated', 'done')] [string] $State = '',
     # Closing an item held by ANOTHER session. Allowed only when that hold is already past the role's limit.
     [switch] $Steal
 )
@@ -32,6 +40,22 @@ param(
 . "$PSScriptRoot\lib\Inbox.ps1"
 $P = Get-StreamPaths (Resolve-Path $Repo).Path
 $path = Get-InboxPath $P $Skill
+$holdNote = ''
+if ($Status -eq 'held') {
+    $parts = @()
+    if ($Until) {
+        $u = [datetime]::MinValue
+        if (-not [datetime]::TryParse($Until, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal, [ref]$u)) { "REFUSED -Until '$Until' is not a time"; exit 2 }
+        $parts += 'until: ' + $u.ToString('yyyy-MM-ddTHH:mm:ssZ')
+    }
+    $ids = @($After | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($ids.Count) {
+        if (-not $State) { 'REFUSED -After needs -State integrated|done'; exit 2 }
+        $parts += 'after: ' + ($ids -join ',') + ' ' + $State
+    }
+    if (-not $parts.Count) { 'REFUSED held needs -Until and/or -After with -State'; exit 2 }
+    $holdNote = ($parts -join '; ') + $(if ($Note) { "; $Note" })
+}
 if ($Status -eq 'forwarded') {
     if (-not $ForwardTo) { 'REFUSED -ForwardTo is required for forwarded'; exit 2 }
     $target = Get-InboxPath $P $ForwardTo
@@ -44,7 +68,12 @@ $item = $null
     $it = $script:item
     switch ($Status) {
         'taken' {
-            if (-not (Test-InboxOpen $it $Skill)) { $script:result = "ALREADY $Id is $($it.status) by $($it.statusBy) $(Get-InboxAgeMinutes $it)m ago"; return }
+            if (-not (Test-InboxOpen $it $Skill $P)) { $script:result = "ALREADY $Id is $($it.status) by $($it.statusBy) $(Get-InboxAgeMinutes $it)m ago"; return }
+        }
+        'held' {
+            if ($it.status -ne 'taken' -or $it.statusBy -ne $By) {
+                $script:result = "NOT-HELD $Id is $($it.status) by $($it.statusBy), not taken by $By"; return
+            }
         }
         'beat' {
             # Stricter than done/declined on purpose: a stale hold may be CLOSED by another session, but nobody may
@@ -61,7 +90,8 @@ $item = $null
             }
         }
         { $_ -in 'done', 'declined' } {
-            if ($it.status -ne 'taken') { $script:result = "NOT-HELD $Id is $($it.status) by $($it.statusBy), not taken by $By"; return }
+            # The session that parked an item (held) may still close it before its condition is met.
+            if ($it.status -ne 'taken' -and -not ($it.status -eq 'held' -and $it.statusBy -eq $By)) { $script:result = "NOT-HELD $Id is $($it.status) by $($it.statusBy), not taken by $By"; return }
             # A stale hold is no hold, but taking it over is now DELIBERATE: another session closes it only with -Steal,
             # and the line says so. Without the stale path at all a dead session's items never drain (kit item
             # IN-20260929001050-1c36); without the flag a live holder's outcome can be written by anyone
@@ -83,6 +113,7 @@ $item = $null
     }
     $note = if ($Status -eq 'forwarded') { "to $ForwardTo$(if ($Note) { ": $Note" })" }
             elseif ($Status -in @('done', 'declined') -and $it.statusBy -ne $By) { "STOLEN from $($it.statusBy) after $(Get-InboxAgeMinutes $it)m$(if ($Note) { ": $Note" })" }
+            elseif ($Status -eq 'held') { $holdNote }
             else { $Note }
     '- {0} | {1} | {2} | {3} | {4}' -f $Id, (Get-Now), (ConvertTo-InboxField $By), $Status, (ConvertTo-InboxField $note)
 })

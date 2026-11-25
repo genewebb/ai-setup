@@ -1,6 +1,6 @@
 ---
 name: stream-coordinator
-description: v0.7. Stream kit supervisor. It runs unattended under /loop and never prompts. Each tick it reads the whole board and every inbox, then keeps work flowing. It works the kit inbox (fix, test, publish), stands in for stream-plan when no planner session is live (write-set and dependsOn revisions through Revise-Task.ps1, blocked-task release, follow-up tasks), and diagnoses stuck flow: dead or silent sessions, stale work to salvage, starved fix tasks, false flags, and memory pressure. It logs one tick line per run and notifies the owner only for a decision only the owner can make. Use for /stream-coordinator (run under /loop 20m; every tick works the inboxes), /stream-coordinator once, and /stream-coordinator blockers.
+description: v0.8. Stream kit supervisor. It runs unattended under /loop and never prompts. Each tick it reads the whole board and every inbox, then keeps work flowing. It works the kit inbox (fix, test, publish), stands in for stream-plan when no planner session is live (write-set and dependsOn revisions through Revise-Task.ps1, blocked-task release, follow-up tasks), and diagnoses stuck flow: dead or silent sessions, stale work to salvage, starved fix tasks, false flags, and memory pressure. It logs one tick line per run and notifies the owner only for a decision only the owner can make. Use for /stream-coordinator (run under /loop 20m; every tick works the inboxes), /stream-coordinator once, and /stream-coordinator blockers.
 ---
 
 # stream-coordinator
@@ -70,6 +70,7 @@ All live in `stream-kit\scripts` (see the stream-kit SKILL for the full table). 
 | `Test-BoardOrder.ps1 -Repo` | Read-only order check: `CLEAN`, or `CYCLE` / `UNKNOWN-DEP` / `UNORDERED a / b : path`. |
 | `Update-Task.ps1 -Role plan -Artifacts @{patch=...}` | Attach a salvaged patch to a task. |
 | `Export-TaskPatch.ps1 -Repo -Task -Worktree` | Salvage a dead builder's worktree as the task's kept patch. |
+| `Apply-OwnerAnswer.ps1 -Repo -Session` | Applies every open `owner-answers` item through the verb that owns it and closes it (step 1, Owner answers). |
 | `Test-StreamKit.ps1`, `Test-StreamKitRecovery.ps1` | Both must end `RESULT fails=0` before any kit publish. |
 
 Session id (2026-10-05, priority-focus-design 3.5): the `session: <id>` in your start prompt (`<role>-<8 hex>`, chosen by the tab launcher so the cost ledger can find your transcript). Use it on every script call. Without one in the prompt, use `coord-<yyyyMMddHHmm>`. Every history line and decision carries it.
@@ -104,6 +105,18 @@ Do these in order. Keep each step short; the whole tick should take minutes.
    does not exist, run `Activate-Group.ps1 -Repo <repo> -Session <you> -Group <focus group>` (no tokens, idempotent:
    `ALREADY-ACTIVE` when another session got there first). The integrator runs it right after a close; this covers a
    close made by hand or a focus group that never closed through step C. Log the `ACTIVATED` line in the tick entry.
+
+   **Owner answers** (always-on proposal K3, owner-approved 2026-11-23). The owner answers from any host with
+   `Send-OwnerAnswer.ps1 -Target <questions|gate|worktree>:<id> -Answer "<text>"`, which files one item in
+   `.streams\inbox\owner-answers.md`. When that inbox has an open item, run
+   `Apply-OwnerAnswer.ps1 -Repo <repo> -Session <you>` before step 2. It takes each item and applies it through the
+   verb that already owns it: a gate answer becomes one `stream-integrate` item carrying
+   `gate <task> pass|fail "<note>"` (the integrator applies it as `/stream-integrate gate`, so a pass sets the gate
+   `done` and a fail files the fix task, the same end state as the session command); a questions answer becomes one
+   `stream-plan` item; a worktree answer that leads with yes, remove or ok runs `Remove-TaskWorktree.ps1`, and any
+   other worktree answer keeps the tree. Each item closes `done` naming what was done (the forwarded item id), or
+   `declined` with the reason. Log the `APPLY-DONE <n>` line in the tick entry. The open count is in the inbox report
+   line as `owner-answers <n>`.
 
 2. **Kit inbox.** Work every open `stream-kit` item by the `/stream-kit inbox` procedure in the stream-kit SKILL:
    1. Take the item.

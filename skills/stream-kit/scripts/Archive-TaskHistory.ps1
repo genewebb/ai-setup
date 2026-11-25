@@ -1,18 +1,20 @@
 # Shrinks tasks.json and decisions.md without removing a row (2026-10-05 priority-focus-design E2). Script only.
-#   Archive-TaskHistory.ps1 -Repo <repo> -Session <id> [-Days 7] [-DryRun]
+#   Archive-TaskHistory.ps1 -Repo <repo> -Session <id> [-Days 7] [-DecisionDays 14] [-DryRun]
 # Rows never leave tasks.json: 65 open rows depended on closed-group rows on 2026-10-05, Get-Task throws on a missing
 # id and Get-BoardProblems would refuse every revision. Only the HISTORY of a `done` row whose last entry is older than
 # -Days moves: it is appended to .streams\archive\<group>.history.json ({ "<id>": [entries...] }) and the row keeps a
 # stub of at most two entries - its last `integrated` entry (Test-GroupClose.ps1 and the Priority page read the
 # integration time) and its last entry, whose note then names the archive. Every reader keeps working: state, write
 # set, dependsOn and claim are untouched, and the stub still ends in `done`.
-# decisions.md: lines of earlier months move to .streams\archive\decisions-<yyyy-MM>.md (appended); the header line
-# and the current month stay. The file is held exclusively while it is rewritten; Add-Decision retries a busy file.
+# decisions.md: dated lines older than -DecisionDays (default 14) move to .streams\archive\decisions-<yyyy-MM>.md, the
+# month of each line (appended); heading lines, undated lines and newer lines stay, and one "Older decisions:" pointer
+# line is kept at the top. The file is held exclusively while it is rewritten; Add-Decision retries a busy file.
 # Prints "ARCHIVED rows <n> entries <n> decisions <n> lines" (or the same after DRY-RUN), exit 0.
 param(
     [Parameter(Mandatory)] [string] $Repo,
     [Parameter(Mandatory)] [string] $Session,
     [int] $Days = 7,
+    [int] $DecisionDays = 14,
     [switch] $DryRun
 )
 $ErrorActionPreference = 'Stop'
@@ -68,7 +70,8 @@ else {
 
 # ---- decisions.md ----
 $nDec = 0
-$month = [datetime]::UtcNow.ToString('yyyy-MM')
+$dcut = [datetime]::UtcNow.AddDays(-$DecisionDays).ToString('yyyy-MM-dd')
+$pointer = 'Older decisions: .streams\archive\decisions-<yyyy-MM>.md (moved by Archive-TaskHistory.ps1)'
 if (Test-Path -LiteralPath $P.Decisions) {
     $fs = $null
     for ($i = 0; -not $fs; $i++) {
@@ -80,13 +83,15 @@ if (Test-Path -LiteralPath $P.Decisions) {
         $text = $sr.ReadToEnd(); $sr.Dispose()
         $keep = [Collections.Generic.List[string]]::new(); $old = [ordered]@{}
         foreach ($l in ($text -split "`n")) {
-            if ($l -match '^- (\d{4}-\d{2})-\d{2}T' -and $Matches[1] -lt $month) {
-                if (-not $old.Contains($Matches[1])) { $old[$Matches[1]] = [Collections.Generic.List[string]]::new() }
-                $old[$Matches[1]].Add($l); $nDec++
+            if ($l -match '^- ((\d{4}-\d{2})-\d{2})T' -and $Matches[1] -lt $dcut) {
+                $m = $Matches[2]
+                if (-not $old.Contains($m)) { $old[$m] = [Collections.Generic.List[string]]::new() }
+                $old[$m].Add($l); $nDec++
             } else { $keep.Add($l) }
         }
         if ($nDec -and -not $DryRun) {
             foreach ($m in $old.Keys) { [IO.File]::AppendAllText((Join-Path $arch "decisions-$m.md"), (($old[$m] -join "`n") + "`n"), [Text.UTF8Encoding]::new($false)) }
+            if (-not ($keep | Where-Object { $_.StartsWith('Older decisions:') })) { $keep.Insert(0, $pointer) }
             $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($keep -join "`n"))
             $fs.SetLength(0); $fs.Write($bytes, 0, $bytes.Length)
         }
@@ -94,6 +99,6 @@ if (Test-Path -LiteralPath $P.Decisions) {
 }
 $line = "rows $nRows entries $nEntries decisions $nDec lines"
 if ($DryRun) { "DRY-RUN ARCHIVED $line"; exit 0 }
-if ($nRows -or $nDec) { Add-Decision $P $Session "ARCHIVED $line (older than $Days days / before $month)" }
+if ($nRows -or $nDec) { Add-Decision $P $Session "ARCHIVED $line (history older than $Days days / decisions before $dcut)" }
 "ARCHIVED $line"
 exit 0

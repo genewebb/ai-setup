@@ -18,6 +18,10 @@ param(
     [Parameter(Mandatory)] [string] $Ask,
     [string] $Task = '-',
     [string] $Evidence = '-',
+    # A duplicate-filing key, e.g. '<task id>:<topic>'. A send whose key matches a live item (any status but done,
+    # declined or forwarded) in the same inbox writes nothing, prints DUPLICATE <id> and exits 10. Whitespace in the
+    # key becomes '-'. Stored at the end of the ask as ' key=<key>', so the line format is unchanged.
+    [string] $Key = '',
     [switch] $Force
 )
 . "$PSScriptRoot\lib\Streams.ps1"
@@ -53,8 +57,22 @@ if (-not $Force -and $Task -and $Task -ne '-' -and $To -in @('stream-author', 's
     }
 }
 $id = 'IN-{0}-{1}' -f (Get-Date).ToUniversalTime().ToString('yyyyMMddHHmmss'), ([guid]::NewGuid().ToString('N').Substring(0, 4))
+$Key = ConvertTo-InboxKey $Key
+if ($Key) { $Ask = "$Ask key=$Key" }
 $line = '- {0} | {1} | {2} | open | {3} | {4} | {5} | {6}' -f $id, (Get-Now), (ConvertTo-InboxField $From), $Kind, (ConvertTo-InboxField $Task), (ConvertTo-InboxField $Ask), (ConvertTo-InboxField $Evidence)
-[void](Invoke-InboxLocked $path $From { $line })
+# The duplicate check reads the inbox inside the lock, so two senders racing with one key cannot both write.
+$script:duplicateOf = $null
+[void](Invoke-InboxLocked $path $From {
+        if ($Key) {
+            $live = @(Read-InboxItems $path | Where-Object { $_.status -notin @('done', 'declined', 'forwarded') -and (Get-InboxItemKey $_.ask) -eq $Key })
+            if ($live.Count) { $script:duplicateOf = $live[0].id; return }
+        }
+        $line
+    })
+if ($script:duplicateOf) {
+    "DUPLICATE $($script:duplicateOf) $To key=$Key"
+    exit 10
+}
 "SENT $id $To"
 # Explicit, because the refusal above exits 9: without this the caller reads a STALE $LASTEXITCODE from whatever ran
 # before, so a successful send after a refused one looks refused. Found by recovery case 19.

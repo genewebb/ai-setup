@@ -2,10 +2,10 @@
 # file's header (inbox-template.md). Every write here goes through a per-file lock (CreateNew, like tasks.json), so a
 # "taken" is checked against the item's latest line and appended in one step: two sessions can never both take it.
 #   item : - <id> | <utc> | <from> | open | request|bug | <task or -> | <ask> | <evidence or ->
-#   event: - <id> | <utc> | <by> | taken|done|declined|forwarded | <note>
+#   event: - <id> | <utc> | <by> | taken|held|woken|done|declined|forwarded | <note>
 
-$script:InboxSkills = @('stream-plan', 'stream-author', 'stream-build', 'stream-integrate', 'stream-status', 'stream-kit')
-$script:InboxLimitMinutes = @{ 'stream-author' = 30; 'stream-build' = 45; 'stream-integrate' = 20; 'stream-plan' = 30; 'stream-status' = 30; 'stream-kit' = 30 }
+$script:InboxSkills = @('stream-plan', 'stream-author', 'stream-build', 'stream-integrate', 'stream-status', 'stream-kit', 'owner-answers')
+$script:InboxLimitMinutes = @{ 'stream-author' = 30; 'stream-build' = 45; 'stream-integrate' = 20; 'stream-plan' = 30; 'stream-status' = 30; 'stream-kit' = 30; 'owner-answers' = 60 }
 $script:InboxHandles = [ordered]@{
     'stream-plan'      = 'new or changed tasks, scope, write sets, dependsOn, revise a released group, answer requirement questions'
     'stream-author'    = 'rewrite a ticket or grader (e.g. a grader-suspect bounce), grader portability, RED-reason disputes'
@@ -13,6 +13,8 @@ $script:InboxHandles = [ordered]@{
     'stream-integrate' = 'retry/re-apply a patch, requeue a bounced task, suites/fix-task questions, gate follow-ups, commit problems'
     'stream-status'    = 'break or keep a claim, report or page changes, stale-state cleanup notes'
     'stream-kit'       = 'bugs or changes in the shared kit scripts (stream-kit\scripts) and the SKILL.md contracts of any role'
+    # Not a role: the owner's answers, written by Send-OwnerAnswer.ps1 and applied by the coordinator.
+    'owner-answers'    = 'owner answers to a questions.md line, a gates.md gate or a worktrees.md removal (Send-OwnerAnswer.ps1); the coordinator applies each'
 }
 
 function Get-InboxPath($P, [string] $Skill) {
@@ -42,6 +44,20 @@ function ConvertTo-InboxField([string] $s) { if (-not $s) { return '-' }; (($s -
 # leading "<id>:" counts: an ask mentions many ids, and skipping every one of them would starve the sort.
 function Get-AskLeadTask([string] $Ask) {
     if ($Ask -match '^\s*([A-Za-z][A-Za-z0-9]*\.[A-Za-z0-9]+)\s*:') { $Matches[1] } else { '' }
+}
+
+# A duplicate-filing key (Send-InboxItem.ps1 -Key): flattened like a field, whitespace made '-', '' when empty.
+function ConvertTo-InboxKey([string] $Key) {
+    if (-not $Key) { return '' }
+    $k = (ConvertTo-InboxField $Key) -replace '\s+', '-'
+    if ($k -eq '-') { return '' }
+    $k
+}
+
+# The key a send stored at the end of its ask as ' key=<key>', or '' when it has none.
+function Get-InboxItemKey([string] $Ask) {
+    if ($Ask -match '(?:^|\s)key=(\S+)\s*$') { return $Matches[1] }
+    ''
 }
 
 function Read-InboxItems([string] $Path) {
@@ -90,10 +106,74 @@ function Get-InboxAgeMinutes($Item) {
     [int]((Get-Date).ToUniversalTime() - [datetime]::Parse($Item.statusAt, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)).TotalMinutes
 }
 
-# Actionable here: open, or taken but silent past the inbox's limit. A forwarded item is owned by the target inbox.
-function Test-InboxOpen($Item, [string] $Skill) {
-    if ($Item.status -eq 'open') { return $true }
-    ($Item.status -eq 'taken' -and (Get-InboxAgeMinutes $Item) -ge $script:InboxLimitMinutes[$Skill])
+# A `held` line parks an item until a condition is met, carried in its note as `until: <utc>` and/or
+# `after: <id>[,<id>...] integrated|done` (both = whichever comes first). Returns $null for a note with neither.
+function Get-InboxHoldCondition([string] $Note) {
+    $c = [ordered]@{ until = $null; after = @(); state = '' }
+    if ($Note -match '(?:^|;\s*)until:\s*([^\s;]+)') {
+        $u = [datetime]::MinValue
+        if ([datetime]::TryParse($Matches[1], [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal, [ref]$u)) { $c.until = $u }
+    }
+    if ($Note -match '(?:^|;\s*)after:\s*([^\s;]+)\s+(integrated|done)\b') {
+        $c.after = @($Matches[1] -split ',' | Where-Object { $_ }); $c.state = $Matches[2]
+    }
+    if ($null -eq $c.until -and -not $c.after.Count) { return $null }
+    $c
+}
+
+$script:InboxTaskStateCache = $null
+# Task id -> state from tasks.json, re-read only when the file changed. $null when it cannot be read: a held item's
+# `after:` part then stays unmet until the status tick writes its `woken` line.
+function Get-InboxTaskStates($P) {
+    if (-not $P -or -not (Test-Path $P.Tasks)) { return $null }
+    $stamp = (Get-Item $P.Tasks).LastWriteTimeUtc.Ticks
+    if ($script:InboxTaskStateCache -and $script:InboxTaskStateCache.path -eq $P.Tasks -and $script:InboxTaskStateCache.stamp -eq $stamp) { return $script:InboxTaskStateCache.map }
+    try { $doc = Get-Content -Raw $P.Tasks | ConvertFrom-Json -AsHashtable -DateKind String -Depth 50 } catch { return $null }
+    $map = @{}; $seen = @{}
+    foreach ($t in @($doc['tasks'])) {
+        if (-not $t) { continue }
+        if ($t['id']) { $map[[string]$t['id']] = [string]$t['state'] }
+        foreach ($h in @($t['history'])) { if ($h -and $h['by'] -and (-not $seen[[string]$h['by']] -or $seen[[string]$h['by']] -lt [string]$h['at'])) { $seen[[string]$h['by']] = [string]$h['at'] } }
+        $c = $t['claim']
+        if ($c -and $c['session'] -and $c['beat'] -and (-not $seen[[string]$c['session']] -or $seen[[string]$c['session']] -lt [string]$c['beat'])) { $seen[[string]$c['session']] = [string]$c['beat'] }
+    }
+    $script:InboxTaskStateCache = @{ path = $P.Tasks; stamp = $stamp; map = $map; seen = $seen }
+    $map
+}
+
+# Whether a session wrote to tasks.json (a history line or a claim beat) inside the last $LimitMinutes: the board half
+# of the watchdog's live-holder rule. A builder deep in one item beats its row claim, never the inbox item, so the
+# item's age alone read it as dead and the next pre-stage took it from a live holder (kit item IN-20261124223506-acbf).
+function Test-InboxHolderOnBoard($P, [string] $Who, [int] $LimitMinutes) {
+    if (-not $P -or -not $Who -or $null -eq (Get-InboxTaskStates $P)) { return $false }
+    $at = $script:InboxTaskStateCache.seen[$Who]
+    if (-not $at) { return $false }
+    ((Get-Date).ToUniversalTime() - [datetime]::Parse($at, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)).TotalMinutes -lt $LimitMinutes
+}
+
+# Whether a held item's condition is met now. `integrated` is met by integrated or done; `done` only by done.
+function Test-InboxHoldMet($Item, $P = $null) {
+    $c = Get-InboxHoldCondition $Item.note
+    if (-not $c) { return $false }
+    if ($null -ne $c.until -and (Get-Date).ToUniversalTime() -ge $c.until) { return $true }
+    if (-not $c.after.Count) { return $false }
+    $states = Get-InboxTaskStates $P
+    if (-not $states) { return $false }
+    $ok = if ($c.state -eq 'done') { @('done') } else { @('integrated', 'done') }
+    foreach ($id in $c.after) { if ($states[$id] -notin $ok) { return $false } }
+    $true
+}
+
+# Actionable here: open (a `woken` item too), held with its condition met, or taken but silent past the inbox's limit.
+# A forwarded item is owned by the target inbox. Without $P a held item's `after:` part is not read (see above), and a
+# taken item past its limit is open; with $P it stays taken while its holder still writes to the board inside that limit.
+function Test-InboxOpen($Item, [string] $Skill, $P = $null) {
+    if ($Item.status -in @('open', 'woken')) { return $true }
+    if ($Item.status -eq 'held') { return (Test-InboxHoldMet $Item $P) }
+    if ($Item.status -ne 'taken') { return $false }
+    $limit = $script:InboxLimitMinutes[$Skill]
+    if ((Get-InboxAgeMinutes $Item) -lt $limit) { return $false }
+    -not (Test-InboxHolderOnBoard $P $Item.statusBy $limit)
 }
 
 # The rows a live inbox hold is working on, as id -> "<item> held by <session> in <inbox>". Claim-Task.ps1 skips these
@@ -109,7 +189,7 @@ function Get-InboxHeldRows($P) {
     foreach ($skill in $script:InboxSkills) {
         foreach ($it in @(Read-InboxItems (Get-InboxPath $P $skill))) {
             if ($it.status -ne 'taken' -and -not ($it.status -eq 'open' -and $skill -eq 'stream-integrate')) { continue }
-            if ((Get-InboxAgeMinutes $it) -ge $script:InboxLimitMinutes[$skill]) { continue }
+            if ((Get-InboxAgeMinutes $it) -ge $script:InboxLimitMinutes[$skill] -and -not ($it.status -eq 'taken' -and (Test-InboxHolderOnBoard $P $it.statusBy $script:InboxLimitMinutes[$skill]))) { continue }
             $id = [string] $it.task
             if (-not $id -or $id -eq '-') { continue }
             if (-not $busy.Contains($id)) { $busy[$id] = if ($it.status -eq 'open') { "$($it.id) open for $skill" } else { "$($it.id) held by $($it.statusBy) in $skill" } }
