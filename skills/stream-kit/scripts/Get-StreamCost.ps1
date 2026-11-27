@@ -52,6 +52,17 @@ $project = Join-Path $ProjectsRoot ($Repo.TrimEnd('\') -replace '[^A-Za-z0-9]', 
 $cursorPath = Join-Path $costDir 'cursor.json'
 $cursor = if (Test-Path $cursorPath) { Get-Content -Raw $cursorPath | ConvertFrom-Json -AsHashtable } else { @{} }
 if ($cursor['files'] -isnot [Collections.IDictionary]) { $cursor['files'] = @{} }
+# Windows paths ignore case, but ConvertFrom-Json -AsHashtable keys do not: a key written as C:\temp missed the
+# enumerated C:\Temp and the file was read again from 0, counting every row twice. Two keys that differ only in case
+# keep the larger offset.
+$ciFiles = [hashtable]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($k in @($cursor['files'].Keys)) {
+    $v = $cursor['files'][$k]
+    $old = $ciFiles[$k]
+    if ($old -is [Collections.IDictionary] -and $v -is [Collections.IDictionary] -and [long]$old['offset'] -ge [long]$v['offset']) { continue }
+    $ciFiles[$k] = $v
+}
+$cursor['files'] = $ciFiles
 $ledgerPath = Join-Path $costDir 'ledger.jsonl'
 # Cut back a ledger tail the cursor never recorded (crash between the append and the cursor write).
 if ($null -ne $cursor['ledgerBytes'] -and (Test-Path $ledgerPath)) {

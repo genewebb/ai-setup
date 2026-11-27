@@ -21,8 +21,11 @@
         Clear-AIScratchLeftovers) goes after one day, since nothing ever reads those again;
       - a DIRECTORY goes when it is empty after the pass and was created more than -KeepDays ago; \temp itself is
         always kept (and re-created when missing: a process whose TEMP folder is gone fails).
-    At most -Max entries (default 5000) go per run, so one run stays short on a host that piled up for weeks; the
-    rest go in the next hours. A file that cannot be removed is kept and reported, never an error.
+    At most -Max entries (default 50000) go per run under the -KeepDays rule, and at most -LeftoverMax (default
+    5000) top-level leftovers under the one-day rule. The two budgets are separate: zero-byte leftovers made faster
+    than they go must never starve the -KeepDays rule (SMVMTR1, 2026-11-26: the leftovers took about 4000 of a shared
+    5000 every hour, so 1.3 million week-old files under D:\tmp\claude never went and D: sat at its 5 GB floor).
+    The rest go in the next hours. A file that cannot be removed is kept and reported, never an error.
 
     Each run appends one line to {ScratchRoot}\ai-config-work\Clear-AIScratch.log (kept at 300 lines) and prints it:
     SWEPT files=<n> dirs=<n> MB=<n> left=<n> in-use=<n> root=<root> <seconds>s. -WhatIf prints WOULD-SWEEP and
@@ -43,7 +46,8 @@
 param(
     [Parameter(ParameterSetName = 'Sweep')][Parameter(ParameterSetName = 'Register')][string]$Root,
     [Parameter(ParameterSetName = 'Sweep')][Parameter(ParameterSetName = 'Register')][ValidateRange(1, 365)][int]$KeepDays = 7,
-    [Parameter(ParameterSetName = 'Sweep')][ValidateRange(1, 1000000)][int]$Max = 5000,
+    [Parameter(ParameterSetName = 'Sweep')][ValidateRange(1, 1000000)][int]$Max = 50000,
+    [Parameter(ParameterSetName = 'Sweep')][ValidateRange(1, 1000000)][int]$LeftoverMax = 5000,
     [Parameter(ParameterSetName = 'Sweep')][switch]$WhatIf,
     [Parameter(ParameterSetName = 'Register', Mandatory)][switch]$Register,
     [Parameter(ParameterSetName = 'Unregister', Mandatory)][switch]$Unregister,
@@ -119,7 +123,7 @@ foreach ($k in @($full, $temp, $logDir, $log)) { [void]$keepAlways.Add($k) }
 
 # 1. Known tool leftovers at the top of the root and of \temp go after a day, whatever -KeepDays says.
 if (-not $WhatIf) {
-    foreach ($r in @(Clear-AIScratchLeftovers -Root @($full, $temp) -OlderThanHours 24 -Max $budget)) { $files += $r.Swept; $budget -= $r.Swept; $left += $r.Left }
+    foreach ($r in @(Clear-AIScratchLeftovers -Root @($full, $temp) -OlderThanHours 24 -Max $LeftoverMax)) { $files += $r.Swept; $left += $r.Left }
 }
 
 function Test-Reparse([string]$Path) { try { ([IO.File]::GetAttributes($Path) -band [IO.FileAttributes]::ReparsePoint) -ne 0 } catch { $true } }

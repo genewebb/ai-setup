@@ -16,6 +16,7 @@ param(
     [string] $WorkDir = ''
 )
 . "$PSScriptRoot\lib\Streams.ps1"
+$null = Disable-StreamBackupPrivilege
 $Repo = (Resolve-Path $Repo).Path
 $P = Get-StreamPaths $Repo
 $lockState = Assert-IntegratorLock $P $Session

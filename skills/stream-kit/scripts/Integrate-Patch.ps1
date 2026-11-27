@@ -33,6 +33,7 @@ param(
     [switch] $NoCommit
 )
 . "$PSScriptRoot\lib\Streams.ps1"
+$null = Disable-StreamBackupPrivilege
 . "$PSScriptRoot\lib\Recovery.ps1"
 $Repo = (Resolve-Path $Repo).Path
 # build/IO failures that say nothing about the code or the grader. GRADER-TIMEOUT is a hung child Invoke-Grader ended
@@ -126,7 +127,12 @@ if (-not $NoCommit) {
             if ($ucHold -and (Get-HoldState $ucHold) -notin @('integrated', 'done')) { $keepRows += $uc; "HELD-COMMIT $ucId (co-lands with $ucHold, which is not integrated)"; continue }
             if (-not $retryPolicy.Commit) { $keepRows += $uc; "UNCOMMITTED $ucId (retry skipped: $($retryPolicy.Why))"; continue }
             if (-not $ucPatch -or -not (Test-Path -LiteralPath $ucPatch)) { $keepRows += $uc; "UNCOMMITTED $ucId (retry skipped: patch $ucPatch not found)"; continue }
-            $ucPaths = Get-PatchPaths $ucPatch
+            $ucPaths = @(Select-RepoContentPaths @(Get-PatchPaths $ucPatch))
+            # An empty pathspec means the whole tree to git status, add and commit, so a patch held only under .streams commits nothing.
+            if (-not $ucPaths.Count) {
+                Add-Decision $P $Session "uncommitted marker for $ucId cleared: every patch path is under .streams"
+                "UNCOMMITTED-CLEARED $ucId (every patch path is under .streams)"; continue
+            }
             $ucDirty = @(& git -C $Repo status --porcelain --untracked-files=all -- @ucPaths 2>$null | Where-Object { $_ })
             if (-not $ucDirty.Count) {
                 Add-Decision $P $Session "uncommitted marker for $ucId cleared: its patch paths hold no change against HEAD"
@@ -321,7 +327,7 @@ if ($batchMax -gt 1) {
         $bNew = @(Get-Content -LiteralPath $combined | ForEach-Object -Begin { $cur = $null } -Process {
                 if ($_ -match '^diff --git a/(.+?) b/(.+)$') { $cur = $Matches[2] } elseif ($cur -and $_ -match '^new file mode') { $cur } })
         if ($bNew.Count) {
-            $script:intentPaths = @(& git -C $Repo ls-files --others -- @bNew 2>$null)
+            $script:intentPaths = @(Select-RepoContentPaths @(& git -C $Repo ls-files --others -- @bNew 2>$null))
             if ($script:intentPaths.Count) { & git -C $Repo add -N -f -- @($script:intentPaths) 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0) { $script:intentPaths = @() } }
         }
         $bLock.Dispose()
@@ -384,7 +390,11 @@ if ($batchMax -gt 1) {
             }
             $sha = ''; $done = @()
             foreach ($r in $landed) {
-                $paths = @(Get-Content -LiteralPath $bPatch[[string]$r.id] | ForEach-Object { if ($_ -match '^diff --git a/(.+) b/(.+)$') { $Matches[1]; $Matches[2] } } | Sort-Object -Unique)
+                $paths = @(Select-RepoContentPaths @(Get-Content -LiteralPath $bPatch[[string]$r.id] | ForEach-Object { if ($_ -match '^diff --git a/(.+) b/(.+)$') { $Matches[1]; $Matches[2] } } | Sort-Object -Unique))
+                if (-not $paths.Count) {
+                    Add-Decision $P $Session "commit of $($r.id) skipped: every patch path is under .streams ($bId)"
+                    "COMMIT-NOTHING $($r.id) (every patch path is under .streams)"; $done += [string]$r.id; continue
+                }
                 try {
                     $staleLock = Clear-StaleGitIndexLock $P $Session $Repo; if ($staleLock) { "STALE-INDEX-LOCK removed $staleLock" }
                     [void](Invoke-Git $Repo (@('add', '-A', '-f', '--') + $paths))
@@ -553,7 +563,7 @@ $script:appliedPatch = $patch; $script:appliedTask = $t.id
 $newPaths = @(Get-Content -LiteralPath $patch | ForEach-Object -Begin { $cur = $null } -Process {
         if ($_ -match '^diff --git a/(.+?) b/(.+)$') { $cur = $Matches[2] } elseif ($cur -and $_ -match '^new file mode') { $cur } })
 if ($newPaths.Count) {
-    $script:intentPaths = @(& git -C $Repo ls-files --others -- @newPaths 2>$null)
+    $script:intentPaths = @(Select-RepoContentPaths @(& git -C $Repo ls-files --others -- @newPaths 2>$null))
     # Best effort: a held index.lock (cleared later, before the commit) only costs the grade its index view.
     if ($script:intentPaths.Count) {
         & git -C $Repo add -N -f -- @($script:intentPaths) 2>&1 | Out-Null
@@ -659,6 +669,14 @@ if ($gcode -eq 0) {
     $heldRows = @(Read-UncommittedRows | Where-Object { $_.PSObject.Properties['holdFor'] -and [string]$_.holdFor -eq [string]$t.id -and [string]$_.patch -and (Test-Path -LiteralPath ([string]$_.patch)) })
     $heldIds = @($heldRows | ForEach-Object { [string]$_.id })
     foreach ($hrow in $heldRows) { $paths = @(@($paths) + @(Get-PatchPaths ([string]$hrow.patch)) | Sort-Object -Unique) }
+    $paths = @(Select-RepoContentPaths $paths)
+    if (-not $paths.Count) {
+        if ($heldIds.Count) { Write-UncommittedRows @(Read-UncommittedRows | Where-Object { [string]$_.id -notin $heldIds }) }
+        Add-Decision $P $Session "commit of $($t.id) skipped: every patch path is under .streams"
+        "COMMIT-NOTHING $($t.id) (every patch path is under .streams)"
+        foreach ($hid in $heldIds) { "CO-LANDED $hid (nothing to commit, with $($t.id))" }
+        exit 0
+    }
     try {
         $staleLock = Clear-StaleGitIndexLock $P $Session $Repo; if ($staleLock) { "STALE-INDEX-LOCK removed $staleLock" }
         [void](Invoke-Git $Repo (@('add', '-A', '-f', '--') + $paths))
@@ -716,7 +734,17 @@ if ($gcode -eq 0) {
         $wtSha = @($wtLines | ForEach-Object { if ("$_" -match '^GRADER sha (\S+)') { $Matches[1] } })
         $mainSha = @(Get-Content -LiteralPath $mainLog -ErrorAction SilentlyContinue | ForEach-Object { if ("$_" -match '^GRADER sha (\S+)') { $Matches[1] } })
         if (-not $wtSha.Count) { $why += 'worktree log has no grader identity' }
-        elseif ($mainSha.Count -and $wtSha[-1] -ne $mainSha[-1]) { $why += 'the grader changed since the worktree run' }
+        elseif ($mainSha.Count) {
+            # An identity is <check>+<grader>, plus census:<hash> only on a run whose changed paths matched the census
+            # paths, so one unchanged grader can log with and without it (kit item IN-20261127152325-6fae). The scripts
+            # are compared against the latest worktree run, the census against the latest worktree run that had one.
+            $split = { param($id) $p = @("$id" -split '\+'); @{ scripts = (@($p | Where-Object { $_ -notlike 'census:*' }) -join '+'); census = @($p | Where-Object { $_ -like 'census:*' }) | Select-Object -First 1 } }
+            $m = & $split $mainSha[-1]
+            $w = & $split $wtSha[-1]
+            $wCensus = @($wtSha | ForEach-Object { (& $split $_).census } | Where-Object { $_ }) | Select-Object -Last 1
+            if ($w.scripts -ne $m.scripts) { $why += 'the grader changed since the worktree run' }
+            elseif ($m.census -and $wCensus -and $m.census -ne $wCensus) { $why += 'the census script changed since the worktree run' }
+        }
     }
     # "main holds exactly what was graded in the worktree" is proved from the PATCH, not from the worktree: the patch is
     # that worktree's content (Export-TaskPatch runs `git diff` in it), and it is still applied to main here. So a

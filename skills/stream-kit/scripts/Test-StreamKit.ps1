@@ -94,6 +94,11 @@ try {
     $kf = Join-Path $Scratch 'badkind.json'; $badkind | ConvertTo-Json -Depth 10 | Set-Content $kf
     $out = & "$S\Add-Tasks.ps1" -Repo $repo -Role plan -Session plan-1 -File $kf
     Case 'plan refuses a kind no claim takes' ($LASTEXITCODE -eq 2 -and ($out -join ' ') -match "G1.T6K: BAD-KIND 'tests'" -and -not (@((J $repo).tasks | Where-Object { $_.id -eq 'G1.T6K' }).Count))
+    $nTasksBefore = @((J $repo).tasks).Count
+    $badid = @{ tasks = @(@{ id = ''; group = 'G1'; title = ': x'; why = @('AC-9'); kind = 'code'; writeSet = @('yid.txt'); dependsOn = @(); estMinutes = 5 }, @{ id = 'G1 .T6I'; group = 'G1'; title = 'y'; why = @('AC-9'); kind = 'code'; writeSet = @('yid2.txt'); dependsOn = @(); estMinutes = 5 }) }
+    $idf = Join-Path $Scratch 'badid.json'; $badid | ConvertTo-Json -Depth 10 | Set-Content $idf
+    $out = & "$S\Add-Tasks.ps1" -Repo $repo -Role plan -Session plan-1 -File $idf
+    Case 'plan refuses an empty or malformed id' ($LASTEXITCODE -eq 2 -and ($out -join ' ') -match "BAD-ID '' " -and ($out -join ' ') -match "BAD-ID 'G1 \.T6I'" -and @((J $repo).tasks).Count -eq $nTasksBefore) ($out -join ' | ')
     $doc0 = Get-Content -Raw (Join-Path $repo '.streams\tasks.json')
     $dk = $doc0 | ConvertFrom-Json -AsHashtable -Depth 50; $rk = @($dk.tasks | Where-Object { $_.id -eq 'G1.T3' })[0] | ConvertTo-Json -Depth 50 | ConvertFrom-Json -AsHashtable -Depth 50
     $rk['id'] = 'G1.T7K'; $rk['writeSet'] = @('yk.txt'); $rk['kind'] = 'tests'; $rk['dependsOn'] = @(); $dk.tasks += $rk
@@ -189,6 +194,13 @@ try {
     $ibOut = @(pwsh -NoProfile -Command ". '$S\lib\Streams.ps1'; Add-IgnoredWriteSetBase '$repo' '$ibWt' @('ign-base/keep.md', 'a.txt', 'ign-base/*.md', 'ign-base/')")
     $ibStaged = @(git -C $ibWt diff --cached --name-only)
     Case 'base carries ignored write-set file, staged' (($ibOut -join ',') -eq 'ign-base/keep.md' -and (Test-Path (Join-Path $ibWt 'ign-base\keep.md')) -and ($ibStaged -contains 'ign-base/keep.md')) "out=$($ibOut -join ',') staged=$($ibStaged -join ',')"
+    # a .streams write-set file (ignored kit state) is never copied or staged into a worktree (kit item IN-20261127172457-259e)
+    New-Item -ItemType Directory -Force (Join-Path $repo '.streams\checks') | Out-Null
+    Set-Content (Join-Path $repo '.streams\checks\ks.ps1') 'kit state'
+    $ksOut = @(pwsh -NoProfile -Command ". '$S\lib\Streams.ps1'; Add-IgnoredWriteSetBase '$repo' '$ibWt' @('.streams/checks/ks.ps1')")
+    $ksStaged = @(git -C $ibWt diff --cached --name-only)
+    Case 'base never stages a .streams write-set file' (-not ($ksOut -join '') -and -not (Test-Path (Join-Path $ibWt '.streams\checks\ks.ps1')) -and -not ($ksStaged -match '^\.streams/')) "out=$($ksOut -join ',') staged=$($ksStaged -join ',')"
+    Remove-Item -Force (Join-Path $repo '.streams\checks\ks.ps1')
     git -C $repo worktree remove --force $ibWt
     Remove-Item -Recurse -Force (Join-Path $repo 'ign-base')
     [IO.File]::WriteAllText($exIgn, $exIgnOld)
@@ -237,9 +249,12 @@ try {
     Add-Content $exIgn2 "`nign2/"
     $t2Patch = Join-Path $repo '.streams\patches\G1.T2.patch'
     [IO.File]::AppendAllText($t2Patch, "diff --git a/ign2/n.md b/ign2/n.md`nnew file mode 100644`n--- /dev/null`n+++ b/ign2/n.md`n@@ -0,0 +1 @@`n+ignored audit note`n")
+    [IO.File]::AppendAllText($t2Patch, "diff --git a/.streams/checks/kitx.py b/.streams/checks/kitx.py`nnew file mode 100644`n--- /dev/null`n+++ b/.streams/checks/kitx.py`n@@ -0,0 +1 @@`n+row check`n")
     $i2 = & "$S\Integrate-Patch.ps1" -Repo $repo -Session integ-1
     Case 'integrates T2 next' ($i2[0] -eq 'INTEGRATED G1.T2' -and $i2[1] -like 'COMMITTED G1.T2 *') ($i2 -join ' | ')
     Case 'T2 commit holds its gitignored patch file' (@(git -C $repo show --name-only --format= HEAD) -contains 'ign2/n.md') (@(git -C $repo show --name-only --format= HEAD) -join ',')
+    # a patch path under .streams (a row check) is applied on main but never committed or pushed (kit item IN-20261127135350-7e35)
+    Case 'T2 commit leaves out its .streams patch file, which main still holds' ((@(git -C $repo show --name-only --format= HEAD) -notcontains '.streams/checks/kitx.py') -and (Test-Path (Join-Path $repo '.streams\checks\kitx.py'))) (@(git -C $repo show --name-only --format= HEAD) -join ',')
     [IO.File]::WriteAllText($exIgn2, $exIgn2Old)
 
     # rebase bounce: T3 built against old c.txt, then the owner edits c.txt in the main tree
@@ -406,9 +421,17 @@ try {
         ((& "$S\Get-InboxItems.ps1" -Repo $repo -Skill stream-kit -Open) -join ' ') -notlike "*$hId*") (LastLine $ib $hId)
     $hTake = & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status taken -By kit-x
     Case 'an unmet held item cannot be taken' (($hTake -join ' ') -like 'ALREADY*') ($hTake -join ' ')
+    $hRe = & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status held -By kit-h -Until ((Get-Date).ToUniversalTime().AddHours(3).ToString('o')) -Note 'rewait'
+    Case 'the holder can re-hold a held item with new conditions' (
+        ($hRe -join ' ') -like "ok $hId held*" -and (LastField $ib $hId 3) -eq 'held' -and (LastField $ib $hId 4) -like 'until: *; rewait') "$($hRe -join ' ') / $(LastLine $ib $hId)"
+    $hReX = & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status held -By kit-x -Until ((Get-Date).ToUniversalTime().AddHours(4).ToString('o'))
+    Case 'another session cannot re-hold a held item' (($hReX -join ' ') -like 'NOT-HELD*' -and $LASTEXITCODE -eq 8 -and (LastField $ib $hId 2) -eq 'kit-h') ($hReX -join ' ')
     $past = (Get-Date).ToUniversalTime().AddMinutes(-5).ToString('yyyy-MM-ddTHH:mm:ssZ')
     Add-Content $ib "- $hId | $(Get-Date -AsUTC -Format 'yyyy-MM-ddTHH:mm:ssZ') | kit-h | held | until: $past"
     Case 'a held item opens once its time has passed' (((& "$S\Get-InboxItems.ps1" -Repo $repo -Skill stream-kit -Open) -join ' ') -like "*$hId | held*") (LastLine $ib $hId)
+    # A note the holder writes after its held line must not erase the hold condition (kit item IN-20261127171111-bc6b).
+    & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status note -By kit-h -Note 'still waiting on the base' | Out-Null
+    Case 'a met held item stays open after a later holder note' ((LastField $ib $hId 3) -eq 'note' -and ((& "$S\Get-InboxItems.ps1" -Repo $repo -Skill stream-kit -Open) -join ' ') -like "*$hId | held*") (LastLine $ib $hId)
     & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status taken -By kit-h | Out-Null
     & "$S\Set-InboxItem.ps1" -Repo $repo -Skill stream-kit -Id $hId -Status held -By kit-h -After G1.T3 -State integrated | Out-Null
     $tf = Join-Path $repo '.streams\tasks.json'; $tBytes = [IO.File]::ReadAllBytes($tf)
@@ -1017,6 +1040,22 @@ try {
     . "$S\lib\Inbox.ps1"
     $ic = Get-Claimable (Get-StreamPaths $cr) (J $cr) 'integrate'
     Case 'the integrate selector lists the built root' (@($ic.ids) -contains 'C2.P' -and -not (@($ic.ids) -contains 'C2.L1')) ($ic.ids -join ',')
+    # A built row behind a dependency that has not landed is not drainable (Integrate-Patch.ps1 Test-DepsAt), so the
+    # integrate gate must not count it (kit item IN-20261126192423-e6e3).
+    $wdoc = J $cr; foreach ($t in $wdoc.tasks) { if ($t.id -eq 'C2.P') { $t.dependsOn = @('C1.S1') }; if ($t.id -eq 'C1.S1') { $t.state = 'ticketed' } }
+    $wdoc | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $cr '.streams\tasks.json') -Encoding utf8
+    $iw = Get-Claimable (Get-StreamPaths $cr) (J $cr) 'integrate'
+    Case 'the integrate selector skips a built row whose dependency has not landed' (-not (@($iw.ids) -contains 'C2.P') -and (@($iw.waiting | ForEach-Object { $_.id }) -contains 'C2.P')) ("deps=$(@((J $cr).tasks | Where-Object { $_.id -eq 'C2.P' } | ForEach-Object { $_.dependsOn }) -join ',') s1=$(@((J $cr).tasks | Where-Object { $_.id -eq 'C1.S1' } | ForEach-Object { $_.state }) -join ',') ids=$($iw.ids -join ',') waiting=$(@($iw.waiting | ForEach-Object { $_.id }) -join ',')")
+    $jdoc | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $cr '.streams\tasks.json') -Encoding utf8
+    $ic2 = Get-Claimable (Get-StreamPaths $cr) (J $cr) 'integrate'
+    Case 'the integrate selector lists it again once the board is restored' (@($ic2.ids) -contains 'C2.P') ($ic2.ids -join ',')
+    # The integrate gate's own-lock rule (kit item IN-20261126192557-d77d): a beat the last unit wrote is no run in flight.
+    $nowU = (Get-Date).ToUniversalTime()
+    $lr1 = Get-IntegratorLockRun $nowU.AddMinutes(-3) $nowU.AddMinutes(-1)
+    $lr2 = Get-IntegratorLockRun $nowU.AddSeconds(-20) $nowU.AddMinutes(-2)
+    $lr3 = Get-IntegratorLockRun $nowU.AddMinutes(-3) $null
+    $lr4 = Get-IntegratorLockRun $nowU.AddMinutes(-25) $null
+    Case 'integrate lock rule: a beat from before the last unit ended is stale, a later beat is a run, the first unit keeps the beat rule, a 20-min beat is nothing' ($lr1 -eq 'stale-beat' -and $lr2 -eq 'run' -and $lr3 -eq 'run' -and $null -eq $lr4) "$lr1|$lr2|$lr3|$lr4"
 
     # Gate, inbox and integrator read the same selector (E1). Board: C1 released and focus (its rows planned, C1.D done
     # so no C2 row is in the effective set), C2 released and frozen with every row ticketed.
@@ -1482,6 +1521,24 @@ if (Test-Path (Join-Path $Root 'impl.txt')) { 'PASS A2'; exit 0 } else { 'FAIL A
     Set-Content (Join-Path $hwt 'impl.txt') 'done'
     $hr4 = @(& "$S\Invoke-Grader.ps1" -Repo $gr -Task H1.G -Root $hwt -Label wt); $hx4 = $LASTEXITCODE
     Case 'check and grader both green is a PASS' ($hx4 -eq 0 -and ($hr4 -join ' ') -match 'PASS A1' -and ($hr4 -join ' ') -match 'PASS A2') "exit $hx4 : $($hr4 -join ' | ')"
+    # An inherited ENABLED backup privilege lets a deny-ACL test read what it denied itself: the grader disables it.
+    $privOk = @(& whoami.exe /priv 2>&1) -match '^SeBackupPrivilege\s'
+    if ($privOk) {
+        $privOut = Join-Path $Scratch 'grader-priv.txt'
+        Set-Content (Join-Path $gr '.streams\graders\H1.V.ps1') @"
+param([string]`$Root)
+& whoami.exe /priv | Set-Content -Path '$privOut'
+'PASS P1'; exit 0
+"@
+        $hd = J $gr; $hV = CTask 'H1.V' 'H1' 'building' 5 @() ''; $hV.artifacts.grader = '.streams\graders\H1.V.ps1'
+        $hd.tasks = @($hd.tasks) + @($hV); $hd | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $gr '.streams\tasks.json') -Encoding utf8
+        $privCmd = ". '$S\lib\Streams.ps1'; `$null = Set-StreamTokenPrivilege SeBackupPrivilege `$true; `$null = Set-StreamTokenPrivilege SeRestorePrivilege `$true; " +
+            "if (-not ((whoami.exe /priv) -match '^SeBackupPrivilege\s.*\bEnabled')) { 'NOT-ENABLED'; exit 9 }; & '$S\Invoke-Grader.ps1' -Repo '$gr' -Task H1.V -Root '$hwt' -Label priv; exit `$LASTEXITCODE"
+        $privRun = @(& pwsh -NoProfile -Command $privCmd 2>&1); $privX = $LASTEXITCODE
+        $privSeen = if (Test-Path $privOut) { Get-Content -Raw $privOut } else { '' }
+        Case 'a grader started with SeBackupPrivilege/SeRestorePrivilege enabled runs its child with both disabled' ($privX -eq 0 -and
+            $privSeen -match '(?m)^SeBackupPrivilege\s.*\bDisabled' -and $privSeen -match '(?m)^SeRestorePrivilege\s.*\bDisabled') "exit $privX : $($privRun -join ' | ') : $privSeen"
+    } else { 'SKIP grader privilege case: this token holds no SeBackupPrivilege' }
     $hr5 = @(& "$S\Invoke-Grader.ps1" -Repo $gr -Task H1.N -Root $hwt -Label wt); $hx5 = $LASTEXITCODE
     Case 'a row with neither a check nor a grader is NO-GRADER' ($hx5 -eq 4 -and ($hr5 -join ' ') -match 'NO-GRADER H1\.N') "exit $hx5 : $($hr5 -join ' | ')"
     $hr6 = @(& "$S\Invoke-Grader.ps1" -Repo $gr -Task H1.O -Root $hwt -Only check -Label red-check -ExpectRed); $hx6 = $LASTEXITCODE
@@ -2154,6 +2211,16 @@ sys.exit(0 if ok else 1)
     ConvertTo-Json -InputObject @([pscustomobject]@{ id = 'A1.P'; patch = (Join-Path $amR '.streams\patches\A1.P.patch'); at = '2026-11-19T00:00:00Z'; why = 'x' }) | Set-Content $ucFile
     $ucI3 = @(& "$S\Integrate-Patch.ps1" -Repo $amR -Session integ-am -Task A1.Q)
     Case 'UNCOMMITTED: a marker whose paths hold no change is cleared with no commit' (@($ucI3 | Where-Object { $_ -like 'UNCOMMITTED-CLEARED A1.P*' }).Count -eq 1 -and -not (Test-Path $ucFile) -and (git -C $amR log -1 --format=%s) -eq $ucSubj) ($ucI3 -join ' | ')
+    # a marker whose every patch path is under .streams has no pathspec left: git status/add/commit with no path would
+    # take the whole dirty tree, so it is cleared with no commit and other dirty work stays uncommitted (kit item IN-20261127180741-a2d1)
+    $ucOnly = Join-Path $amR '.streams\patches\A1.S.patch'
+    [IO.File]::WriteAllText($ucOnly, "diff --git a/.streams/checks/s.py b/.streams/checks/s.py`nnew file mode 100644`n--- /dev/null`n+++ b/.streams/checks/s.py`n@@ -0,0 +1 @@`n+row check`n")
+    Set-Content (Join-Path $amR 'p.txt') 'p dirty other work'
+    ConvertTo-Json -InputObject @([pscustomobject]@{ id = 'A1.P'; patch = $ucOnly; at = '2026-11-19T00:00:00Z'; why = 'x' }) | Set-Content $ucFile
+    $ucHead4 = git -C $amR rev-parse HEAD
+    $ucI4 = @(& "$S\Integrate-Patch.ps1" -Repo $amR -Session integ-am -Task A1.Q)
+    Case 'UNCOMMITTED: a marker whose every path is under .streams is cleared with no commit of the dirty tree' (@($ucI4 | Where-Object { $_ -like 'UNCOMMITTED-CLEARED A1.P*' }).Count -eq 1 -and (git -C $amR rev-parse HEAD) -eq $ucHead4 -and (git -C $amR status --porcelain -- p.txt)) (($ucI4 -join ' | ') + " :: head=$(git -C $amR log -1 --format=%s)")
+    git -C $amR checkout -q -- p.txt
     # CO-LAND (kit item IN-20261123201145-57ec): a row with artifacts.coLandWith is applied and graded, its commit held
     # until the named row integrates; that row's commit then carries both patches' paths in ONE commit naming both.
     $clR = Join-Path $Scratch 'clrepo'; New-Item -ItemType Directory -Path $clR -Force | Out-Null
@@ -2305,6 +2372,41 @@ Add-NightlyYieldNotice `$P ([datetime]'2026-10-22T08:00:00')
     $ciRace = [IO.File]::ReadAllText($ciInbox)
     $ciRaced = @(1..12 | Where-Object { $ciRace -match "\| race $_ \|" })
     Case 'a send racing the compress is kept' ($ciRaced.Count -eq 12 -and $ciRace -notmatch 'bulk 1 ') "kept $($ciRaced.Count) of 12"
+    # Prune-SuiteRuns.ps1 deletes only the output folder of an old, finished run whose groups are all closed, and never
+    # a record or results file (kit item IN-20261126203801-9b5e).
+    $prRepo = Join-Path $Scratch 'prunerepo'
+    New-Item -ItemType Directory -Path $prRepo -Force | Out-Null
+    git -C $prRepo init -q -b main
+    & "$S\Init-Streams.ps1" -Repo $prRepo | Out-Null
+    $prTasks = Join-Path $prRepo '.streams\tasks.json'
+    $prDoc = Get-Content $prTasks -Raw | ConvertFrom-Json -AsHashtable
+    $prDoc.groups = @(@{ id = 'P1'; state = 'closed' }, @{ id = 'P2'; state = 'closed' }, @{ id = 'P3'; state = 'released' })
+    [IO.File]::WriteAllText($prTasks, ($prDoc | ConvertTo-Json -Depth 20))
+    $prRd = Join-Path $prRepo '.streams\suites\runs'
+    $prOld = (Get-Date).ToUniversalTime().AddDays(-10).ToString('yyyy-MM-ddTHH:mm:ssZ'); $prNew = (Get-Date).ToUniversalTime().AddDays(-1).ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $prRuns = @(
+        @{ id = 'run-P1-1'; group = 'P1'; groups = @('P1', 'P2'); status = 'done'; endedAt = $prOld; results = $true },
+        @{ id = 'run-P1-2'; group = 'P1'; groups = @('P1', 'P3'); status = 'done'; endedAt = $prOld; results = $true },
+        @{ id = 'run-P1-3'; group = 'P1'; groups = @('P1'); status = 'done'; endedAt = $prNew; results = $true },
+        @{ id = 'run-P1-4'; group = 'P1'; groups = @('P1'); status = 'running'; endedAt = $null; results = $false },
+        @{ id = 'run-P1-5'; group = 'P1'; groups = @('P1'); status = 'done'; endedAt = $prOld; results = $false },
+        @{ id = 'retest-P2-1'; group = 'P2'; status = 'abandoned'; endedAt = $null; startedAt = $prOld; results = $false })
+    foreach ($pr in $prRuns) {
+        $prDir = Join-Path $prRd "$($pr.id)\Tests.Unit"; New-Item -ItemType Directory -Path $prDir -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $prDir 'x.trx'), ('x' * 2048))
+        $prRec = [ordered]@{ id = $pr.id; group = $pr.group; status = $pr.status; startedAt = $(if ($pr.ContainsKey('startedAt')) { $pr['startedAt'] } else { $prOld }); endedAt = $pr.endedAt }
+        if ($pr.ContainsKey('groups')) { $prRec.groups = $pr['groups'] }
+        [IO.File]::WriteAllText((Join-Path $prRd "$($pr.id).json"), ($prRec | ConvertTo-Json))
+        if ($pr.results) { [IO.File]::WriteAllText((Join-Path $prRd "$($pr.id).results.json"), '[]') }
+    }
+    New-Item -ItemType Directory -Path (Join-Path $prRd 'run-P9-1') -Force | Out-Null
+    $prDry = @(& "$S\Prune-SuiteRuns.ps1" -Repo $prRepo -DryRun)
+    $prLeft = @(Get-ChildItem $prRd -Directory | ForEach-Object Name)
+    Case 'prune dry run names only the old closed finished runs and deletes nothing' ((($prDry -join ' | ') -match 'WOULD-PRUNE run-P1-1 ') -and (($prDry -join ' | ') -match 'WOULD-PRUNE retest-P2-1 ') -and (($prDry -join ' | ') -match 'PRUNE-DONE runs 2 ') -and (($prDry -join ' | ') -match 'ORPHAN run-P9-1') -and $prLeft.Count -eq 7) ($prDry -join ' | ')
+    $prRun = @(& "$S\Prune-SuiteRuns.ps1" -Repo $prRepo)
+    $prLeft = @(Get-ChildItem $prRd -Directory | ForEach-Object Name | Sort-Object)
+    $prFiles = @(Get-ChildItem $prRd -File).Count
+    Case 'prune deletes the folders of old finished runs of closed groups and keeps every record, results file and other folder' ((($prRun -join ' | ') -match 'PRUNE-DONE runs 2 ') -and ($prLeft -join ',') -eq 'run-P1-2,run-P1-3,run-P1-4,run-P1-5,run-P9-1' -and $prFiles -eq 9 -and (Get-Content (Join-Path $prRepo '.streams\decisions.md') -Raw) -match 'Prune-SuiteRuns: deleted 2') (($prRun -join ' | ') + ' / left ' + ($prLeft -join ',') + " files $prFiles")
     # Get-Task on a board of thousands of rows: a dependency walk calls it once per edge, so a board scan per call made
     # Get-StreamStatus take 4-7 min on 2,900 rows. The lookup must stay right after a row is replaced in place, a row is
     # added, and for a missing or duplicate id.

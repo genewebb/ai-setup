@@ -124,6 +124,18 @@ foreach ($pp in $depPatches) {
         $applied.Add($pp)
         continue
     }
+    # A no-code row may record a non-patch file as its artifacts.patch (its verdict tests note): it holds no diff, so
+    # `git apply` refuses it the same way (kit item IN-20261125153911-d925). Recorded in base.deps like an empty patch.
+    if ((Test-Path -LiteralPath $full -PathType Leaf) -and -not ([IO.File]::ReadAllText($full) -match '(?m)^(diff --git |\+\+\+ |GIT binary patch)')) {
+        $notes.Add("NO-DIFF dependency artifact $(Split-Path -Leaf $full) holds no diff (no-code row); nothing to apply")
+        $applied.Add($pp)
+        continue
+    }
+    # A gitignored main-tree file the dependency patch changes is in no base step unless it is in this row's own write
+    # set, so the apply died "No such file or directory" (G31.T018 over G31.T028, kit item IN-20261127134902-1bf2).
+    # Each such file is copied from main first, as for a pending patch above.
+    $ignDep = @(Add-IgnoredWriteSetBase $Repo $wt @(Get-PatchPaths $wt $full))
+    if ($ignDep.Count) { $notes.Add("BASE ignored main-tree file(s) dependency patch $(Split-Path -Leaf $full) touches copied before its apply: $($ignDep -join ', ')") }
     & git -C $wt apply --check --binary --whitespace=nowarn $full 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         & git -C $wt apply --check --reverse --binary --whitespace=nowarn $full 2>&1 | Out-Null

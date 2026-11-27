@@ -55,6 +55,9 @@ $report = [Collections.Generic.List[string]]::new()
     foreach ($t in @($in['tasks'])) {
         if (-not $t) { continue }
         if ($Role -eq 'plan' -and $groupState[[string]$t['group']] -eq 'closed') { $problems.Add("$($t.id): GROUP-CLOSED $($t['group']) is closed; add the row to an open group, or reopen the group in the same batch") }
+        # An empty or malformed id is a row no script can address afterwards (Revise-Task, Update-Task, Claim-Task -Task all
+        # refuse UNKNOWN-TASK), so only a data fix by hand could remove it (kit item IN-20261125212314-9aa1).
+        if ([string]$t['id'] -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { $problems.Add("BAD-ID '$($t['id'])' (title '$("$($t['title'])".Substring(0, [Math]::Min(60, "$($t['title'])".Length)))'): an id is letters, digits, '.', '_' or '-', such as G1.T12") }
         if (-not @($t.why).Count) { $problems.Add("$($t.id): no REQ/AC ids in why") }
         # A kind no claim selector takes leaves the row on the board with no taker (G26 rows filed as 'test' sat unclaimed).
         if ($t.kind -and $t.kind -notin $script:TaskKinds) { $problems.Add("$($t.id): BAD-KIND '$($t.kind)' (one of $($script:TaskKinds -join ', '))") }

@@ -179,6 +179,28 @@ try {
     Case 'check-suspect keeps the patch' ($tb2b.artifacts.patch -eq '.streams\patches\G1.B.patch')
     Case 'check-suspect names the check in history' ($tb2b.history[-1].note -match '^check-suspect: C2 red on main.*\.streams\\checks\\G1\.B\.ps1') $tb2b.history[-1].note
 
+    # ---- 3c. the same grader logged with a census part in the worktree and without one on main is not a grader change
+    foreach ($c3 in @(@{ n = 'r2c'; alter = $false }, @{ n = 'r2d'; alter = $true })) {
+        $r3 = New-Repo $c3.n ([ordered]@{ 'G1.B' = $wtOnly }); $repos += $r3
+        $d3 = J $r3; $row3 = $d3.tasks | Where-Object { $_.id -eq 'G1.B' }
+        New-Item -ItemType Directory (Join-Path $r3 '.streams\checks') -Force | Out-Null
+        Move-Item (Join-Path $r3 '.streams\graders\G1.B.ps1') (Join-Path $r3 '.streams\checks\G1.B.ps1')
+        $row3.artifacts.check = '.streams\checks\G1.B.ps1'; $row3.artifacts.grader = $null
+        $d3 | ConvertTo-Json -Depth 50 | Set-Content (Join-Path $r3 '.streams\tasks.json')
+        [void](Build $r3 'G1.B' 'B done' 'build-1')
+        $wl3 = Join-Path $r3 '.streams\logs\G1.B.grader.wt.txt'
+        $l3 = @(Get-Content $wl3)
+        $l3[-1] = $l3[-1] -replace '^GRADER sha (\S+)', $(if ($c3.alter) { 'GRADER sha 0000000000000000+census:1DEDD2DA6907839C' } else { 'GRADER sha $1+census:1DEDD2DA6907839C' })
+        Set-Content $wl3 $l3
+        $o3 = & "$S\Integrate-Patch.ps1" -Repo $r3 -Session integ-1 -Task G1.B
+        $t3 = T $r3 'G1.B'
+        if ($c3.alter) {
+            Case 'a changed check with a census part still reads as a grader change' ("$o3" -eq 'REVERSED G1.B' -and $t3.history[-1].note -match 'the grader changed since the worktree run') "$o3 | $($t3.history[-1].note)"
+        } else {
+            Case 'census part only in the worktree identity is not a grader change' ("$o3" -eq 'CHECK-SUSPECT G1.B') "$o3 | $($t3.history[-1].note)"
+        }
+    }
+
     # ---- 4. code defect: red in the worktree too -> REVERSED to ticketed, patch kept
     $wtC = Build $r2 'G1.C' 'wrong' 'build-2'
     $o = & "$S\Integrate-Patch.ps1" -Repo $r2 -Session integ-1 -Task G1.C
@@ -2571,6 +2593,46 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case '66z an empty dependency patch is skipped with a note: the tree is made' ((-not $e66z) -and (Test-Path (Join-Path $Scratch 'wt66z\G1.B')) -and (($o66z -join ' ') -match 'EMPTY dependency patch G1\.A\.patch')) "err='$e66z' out=$($o66z -join ' | ')"
     Case '66z base.deps still records the empty dependency patch' ((($deps66z -join ' ') -match '^G1\.A\.patch:\S+$')) "deps=$($deps66z -join ' ')"
 
+    # ---- 66y. A built no-code dependency whose artifacts.patch names a non-empty file that holds NO diff (the verdict
+    # tests note a docs row records) is skipped with a note, not handed to `git apply` (kit item IN-20261125153911-d925:
+    # G31.T012's .tests.md failed every G31.T013 pre-stage). base.deps still records it.
+    $r66y = New-Repo 'r66y' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok'); 'G1.B' = (ContentGrader 'G1.B' 'ok') }); $repos += $r66y
+    $d66y = J $r66y
+    ($d66y.tasks | Where-Object { $_.id -eq 'G1.B' }).dependsOn = @('G1.A')
+    Set-Content -Path (Join-Path $r66y '.streams\tasks.json') -Encoding utf8 -Value ($d66y | ConvertTo-Json -Depth 50)
+    [void](& "$S\Claim-Task.ps1" -Repo $r66y -Role build -Session 'build-66yA' -Task G1.A)
+    New-Item -ItemType Directory -Force (Join-Path $r66y '.streams\verdicts') | Out-Null
+    Set-Content -Path (Join-Path $r66y '.streams\verdicts\G1.A.tests.md') -Encoding utf8 -Value "# G1.A tests`n`n---`n`nNo code change: docs only.`n- clause 1: met"
+    & "$S\Update-Task.ps1" -Repo $r66y -Task G1.A -Role build -Session 'build-66yA' -To built -Release -Artifacts @{ patch = '.streams\verdicts\G1.A.tests.md'; verdict = 'PASS' } | Out-Null
+    [void](& "$S\Claim-Task.ps1" -Repo $r66y -Role build -Session 'build-66yB' -Task G1.B)
+    $e66y = ''; $o66y = @()
+    try { $o66y = @(& "$S\New-TaskWorktree.ps1" -Repo $r66y -Task G1.B -Session 'build-66yB' -WorktreeRoot (Join-Path $Scratch 'wt66y') 2>&1) } catch { $e66y = ("$_" -split "`n")[0].Trim() }
+    $deps66y = @((J $r66y).tasks | Where-Object { $_.id -eq 'G1.B' } | ForEach-Object { $_.base.deps })
+    Case '66y a dependency artifact holding no diff is skipped with a note: the tree is made' ((-not $e66y) -and (Test-Path (Join-Path $Scratch 'wt66y\G1.B')) -and (($o66y -join ' ') -match 'NO-DIFF dependency artifact G1\.A\.tests\.md')) "err='$e66y' out=$($o66y -join ' | ')"
+    Case '66y base.deps still records the no-diff dependency artifact' ((($deps66y -join ' ') -match '^G1\.A\.tests\.md:\S+$')) "deps=$($deps66y -join ' ')"
+    # A no-diff artifact lives outside .streams\patches and is edited after the dependent's base was laid: it put nothing
+    # in the base, so it is never drift (kit item IN-20261125191705-adb5: G26.T921 went BASE-STALE on G31.T013.tests.md).
+    # A real patch that replaces it still is.
+    . "$S\lib\Streams.ps1"
+    Add-Content -Path (Join-Path $r66y '.streams\verdicts\G1.A.tests.md') -Value '- clause 2: met (edited after the base)'
+    $P66y = Get-StreamPaths $r66y; $doc66y = Read-Tasks $P66y
+    $drift66y = @(Get-DependencyBaseDrift $P66y $doc66y (Get-Task $doc66y 'G1.B') | Where-Object { $_ })
+    Case '66y an edited no-diff dependency artifact is not base drift' ($drift66y.Count -eq 0) "drift=$($drift66y | ForEach-Object { $_.leaf + ':' + $_.now })"
+    Set-Content -Path (Join-Path $r66y '.streams\verdicts\G1.A.tests.md') -Encoding utf8 -Value "diff --git a/x.txt b/x.txt`n--- a/x.txt`n+++ b/x.txt`n@@ -1 +1 @@`n-a`n+b"
+    $doc66y = Read-Tasks $P66y
+    $drift66y2 = @(Get-DependencyBaseDrift $P66y $doc66y (Get-Task $doc66y 'G1.B') | Where-Object { $_ })
+    Case '66y the same artifact turned into a real diff is base drift' ($drift66y2.Count -eq 1) "drift=$($drift66y2.Count)"
+    # The dependency rebuilt as a code row: its artifacts.patch now names a real .patch, the old note is no row's artifact.
+    Set-Content -Path (Join-Path $r66y '.streams\verdicts\G1.A.tests.md') -Encoding utf8 -Value "# G1.A tests`n`nNo code change."
+    New-Item -ItemType Directory -Force (Join-Path $r66y '.streams\patches') | Out-Null
+    Set-Content -Path (Join-Path $r66y '.streams\patches\G1.A.patch') -Encoding utf8 -Value "diff --git a/x.txt b/x.txt`n--- a/x.txt`n+++ b/x.txt`n@@ -1 +1 @@`n-a`n+b"
+    $j66y = J $r66y
+    ($j66y.tasks | Where-Object { $_.id -eq 'G1.A' }).artifacts.patch = '.streams\patches\G1.A.patch'
+    Set-Content -Path (Join-Path $r66y '.streams\tasks.json') -Encoding utf8 -Value ($j66y | ConvertTo-Json -Depth 50)
+    $doc66y = Read-Tasks $P66y
+    $drift66y3 = @(Get-DependencyBaseDrift $P66y $doc66y (Get-Task $doc66y 'G1.B') | Where-Object { $_ })
+    Case '66y a dependency rebuilt with a real patch is base drift on its old no-diff leaf' ($drift66y3.Count -eq 1 -and $drift66y3[0].now -eq 'gone') "drift=$($drift66y3 | ForEach-Object { $_.leaf + ':' + $_.now })"
+
     # ---- 66g. A BASE IS NEVER LAID WHILE ANOTHER HOLDER HAS THE MAIN TREE. On 2026-10-17 Builder 4's pre-stage listed
     # main's untracked files while the integrator had G9.T010's patch applied for its grader (kit item
     # IN-20261017025015-83de). New-TaskWorktree now reads main under main-grader.lock; a busy lock throws with the text a
@@ -2664,6 +2726,28 @@ $env:STREAM_RUNNER_START_JITTER_SECONDS = '0'   # no random start wait for the r
     Case '66k a graded patch that creates an ignored file is reversed out: the tree is made without it' ((-not $err66k) -and -not (Test-Path (Join-Path $wt66k 'ign66\new66k.md')) -and ($ls66k -notmatch 'new66k') -and (($o66k -join ' ') -match 'BASE read beside the main grade of G1\.X')) "err='$err66k' ls=$ls66k out=$($o66k -join ' | ')"
     Case '66k a tracked file the graded patch changes under an ignored path is back to its pre-patch text' ((-not $err66k) -and (Test-Path (Join-Path $wt66k 'ign66\old66k.md')) -and ((Get-Content -Raw (Join-Path $wt66k 'ign66\old66k.md')) -match '^before\s*$')) "err='$err66k'"
     Case '66k the main tree keeps the graded ignored file' ((Test-Path (Join-Path $r66k 'ign66\new66k.md'))) "main new66k exists=$(Test-Path (Join-Path $r66k 'ign66\new66k.md'))"
+    # ---- 66w. A BUILT DEPENDENCY PATCH CHANGES A GITIGNORED MAIN-TREE FILE OUTSIDE THE ROW'S WRITE SET. G31.T028.patch
+    # changed .streams/checks/G31.T017.py (ignored); G31.T018's write set does not list it, so no base step copied it and
+    # every pre-stage died "No such file or directory" (kit item IN-20261127134902-1bf2). The file is copied from main
+    # before the apply, so the tree is made with the dependency's change on it.
+    $r66w = New-Repo 'r66w' ([ordered]@{ 'G1.A' = (ContentGrader 'G1.A' 'ok'); 'G1.B' = (ContentGrader 'G1.B' 'ok') }); $repos += $r66w
+    [IO.File]::WriteAllText((Join-Path $r66w '.gitignore'), "/ign66w/`n")
+    & git -C $r66w add .gitignore; & git -C $r66w commit -q -m ign66w | Out-Null
+    New-Item -ItemType Directory (Join-Path $r66w 'ign66w') -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $r66w 'ign66w\chk66w.py'), "before`n")
+    $d66w = J $r66w
+    foreach ($t66w in $d66w.tasks) { $t66w.state = 'ticketed'; if ($t66w.id -eq 'G1.B') { $t66w.dependsOn = @('G1.A') } }
+    Set-Content -Path (Join-Path $r66w '.streams\tasks.json') -Encoding utf8 -Value ($d66w | ConvertTo-Json -Depth 50)
+    [void](& "$S\Claim-Task.ps1" -Repo $r66w -Role build -Session 'build-66wA' -Task G1.A)
+    New-Item -ItemType Directory -Force (Join-Path $r66w '.streams\patches') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $r66w '.streams\patches\G1.A.patch'), "diff --git a/ign66w/chk66w.py b/ign66w/chk66w.py`n--- a/ign66w/chk66w.py`n+++ b/ign66w/chk66w.py`n@@ -1 +1 @@`n-before`n+after`n")
+    & "$S\Update-Task.ps1" -Repo $r66w -Task G1.A -Role build -Session 'build-66wA' -To built -Release -Artifacts @{ patch = '.streams\patches\G1.A.patch'; verdict = 'PASS' } | Out-Null
+    $c66w = @(& "$S\Claim-Task.ps1" -Repo $r66w -Role build -Session 'build-66wB' -Task G1.B 2>&1)
+    $e66w = ''; $o66w = @()
+    try { $o66w = @(& "$S\New-TaskWorktree.ps1" -Repo $r66w -Task G1.B -Session 'build-66wB' -WorktreeRoot (Join-Path $Scratch 'wt66w') 2>&1) } catch { $e66w = ("$_" -split "`n")[0].Trim() }
+    $f66w = Join-Path $Scratch 'wt66w\G1.B\ign66w\chk66w.py'
+    Case '66w a dependency patch changing an ignored main-tree file outside the write set applies: the tree is made' ((-not $e66w) -and (Test-Path -LiteralPath $f66w) -and ((Get-Content -Raw -LiteralPath $f66w) -match '^after\s*$') -and (($o66w -join ' ') -match 'dependency patch G1\.A\.patch touches copied before its apply: ign66w/chk66w\.py')) "err='$e66w' claim=$($c66w -join ' ') out=$($o66w -join ' | ')"
+    Case '66w the main tree keeps its ignored file unchanged' (((Get-Content -Raw (Join-Path $r66w 'ign66w\chk66w.py')) -match '^before\s*$')) "main=$(Get-Content -Raw (Join-Path $r66w 'ign66w\chk66w.py'))"
     # ---- 66i. A BUILT DEPENDENCY WHOSE OWN DEPENDENCY IS NO LONGER BUILT IS NOT A BASE. A is building again (bounced),
     # B is built on A's old patch, C depends on B. C's base would stack B.patch without A's, so C is not claimable;
     # once A is integrated it is (kit item IN-20261017100037-aa62, G9.T026 over G9.T011 over G9.T010).
@@ -4978,6 +5062,27 @@ exit 1
     Case '104a a hung beating grader ends at its limit as GRADER-TIMEOUT exit 8, not RED' ($c104 -eq 8 -and ($o104 -join ' ') -match 'GRADER-TIMEOUT G1\.A' -and $sw104.Elapsed.TotalSeconds -lt 45) "exit=$c104 secs=$([int]$sw104.Elapsed.TotalSeconds) out=$(($o104 | Select-Object -Last 2) -join ' | ')"
     Case '104b the timeout ends the grader''s whole process tree and logs GRADER-TIMEOUT' (-not $gc104 -and (Test-Path $log104) -and @((Get-Content $log104) -match '^GRADER-TIMEOUT').Count -gt 0 -and -not (Get-ChildItem -Path "$log104.*" -ErrorAction SilentlyContinue)) "grandchild=$(if ($gc104) { $gc104.Id } else { 'gone' }) log=$(Test-Path $log104)"
     if ($gc104) { Stop-Process -Id $gc104.Id -Force -ErrorAction SilentlyContinue }
+
+    # 104d (kit item IN-20261126231943-8b15): a web host started by a test step whose own parent then exited
+    # outlived G26.T647's grade, because a parent-id tree walk cannot reach it. Fixture: the grader starts a middle
+    # process that starts a sleeper and exits at once, then the grader hangs; after the timeout the sleeper is gone.
+    $pid104d = Join-Path $Scratch 'grader104d.orphan.pid'
+    $g104d = @'
+param([string]$Root)
+$m = Start-Process pwsh -PassThru -WindowStyle Hidden -ArgumentList '-NoProfile', '-Command', "`$c = Start-Process pwsh -PassThru -WindowStyle Hidden -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 300'; Set-Content -LiteralPath 'PIDFILE' -Value `$c.Id"
+$m.WaitForExit()
+'FAIL C1'
+Start-Sleep -Seconds 90
+exit 1
+'@ -replace 'PIDFILE', $pid104d
+    $r104d = New-Repo 'r104d' @{ 'G1.A' = $g104d }; $repos += $r104d
+    $env:STREAM_BEAT_SECONDS = '1'; $env:STREAM_GRADER_TIMEOUT_SECONDS = '12'
+    try { $o104d = @(& "$S\Invoke-Grader.ps1" -Repo $r104d -Task G1.A -Root $r104d -Label red -Only grader -ExpectRed -BeatSession integ-104d 3>$null); $c104d = $LASTEXITCODE }
+    finally { Remove-Item Env:\STREAM_BEAT_SECONDS, Env:\STREAM_GRADER_TIMEOUT_SECONDS -ErrorAction SilentlyContinue }
+    Start-Sleep -Milliseconds 500
+    $orph104d = if (Test-Path $pid104d) { Get-Process -Id ([int](Get-Content $pid104d)) -ErrorAction SilentlyContinue } else { $null }
+    Case '104d the timeout also ends a grader descendant whose parent already exited' ($c104d -eq 8 -and (Test-Path $pid104d) -and -not $orph104d) "exit=$c104d pidfile=$(Test-Path $pid104d) orphan=$(if ($orph104d) { $orph104d.Id } else { 'gone' })"
+    if ($orph104d) { Stop-Process -Id $orph104d.Id -Force -ErrorAction SilentlyContinue }
 
     # 104c: the grader's stdin is an empty file, so a child that reads input (npx's install prompt, Read-Host) gets
     # end-of-input instead of waiting on a hidden console. Run detached and hidden, the way the runner's units do.

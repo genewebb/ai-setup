@@ -48,6 +48,7 @@ param(
 $missing = @(foreach ($n in 'Repo', 'Task', 'Root') { if (-not (Get-Variable $n -ValueOnly)) { "-$n" } })
 if ($missing.Count) { "MISSING-PARAM $($missing -join ' ') (Invoke-Grader.ps1 needs -Repo, -Task and -Root)"; exit 7 }
 . "$PSScriptRoot\lib\Streams.ps1"
+$null = Disable-StreamBackupPrivilege
 . "$PSScriptRoot\lib\Recovery.ps1"
 $Repo = (Resolve-Path $Repo).Path
 $P = Get-StreamPaths $Repo
@@ -111,6 +112,7 @@ if ((Resolve-Path $Root).Path.TrimEnd('\') -eq $Repo.TrimEnd('\')) {
 }
 $code = 0
 $proc = $null
+$job = $null
 $timedOut = ''
 if ($TimeoutSeconds -le 0) { $TimeoutSeconds = if ($env:STREAM_GRADER_TIMEOUT_SECONDS) { [int]$env:STREAM_GRADER_TIMEOUT_SECONDS } else { 3600 } }
 # The child's redirect files get a name of their own per run (<log>.<pid>-<hex>.part/.err/.in), never the fixed <log>.part.
@@ -135,6 +137,32 @@ foreach ($old in @(Get-ChildItem -LiteralPath $P.Logs -Filter "$Task.grader.$Lab
 # A builder may record a Python check (.streams\checks\<task>.py, taking the root as its one positional argument):
 # pwsh -File refuses any file that is not .ps1, so G26.T447 went red on main with no clause run (kit item
 # IN-20261113183233-fd7f). Python runs isolated (-I), so no PYTHONPATH or user site from the host leaks in.
+# A job object with no kill-on-close limit: closing its handle (this script ending) leaves its processes alone, so
+# an MSBuild node or web host a passing grader leaves behind keeps running as before. Null when the job cannot be
+# made or the child cannot join it (it already belongs to a job that forbids nesting); the timeout then falls back to
+# Kill($true) alone.
+function New-GraderJob($Process) {
+    if (-not $IsWindows) { return $null }
+    if (-not ('StreamKit.GraderJob' -as [type])) {
+        Add-Type -Namespace StreamKit -Name GraderJob -MemberDefinition @'
+[DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+public static extern IntPtr CreateJobObject(IntPtr attributes, string name);
+[DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+[DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool TerminateJobObject(IntPtr job, uint exitCode);
+'@
+    }
+    try {
+        $h = [StreamKit.GraderJob]::CreateJobObject([IntPtr]::Zero, $null)
+        if ($h -eq [IntPtr]::Zero) { return $null }
+        if (-not [StreamKit.GraderJob]::AssignProcessToJobObject($h, $Process.Handle)) { return $null }
+        $h
+    } catch { $null }
+}
+function Stop-GraderJob($Job) {
+    if ($Job) { try { [void][StreamKit.GraderJob]::TerminateJobObject($Job, 1) } catch { } }
+}
 function Get-ScriptLaunch([string] $Path) {
     if ([IO.Path]::GetExtension($Path) -ieq '.py') { return @{ exe = 'python'; argv = @('-I', $Path, $Root) } }
     @{ exe = 'pwsh'; argv = @('-NoProfile', '-NonInteractive', '-File', $Path, '-Root', $Root) }
@@ -154,12 +182,17 @@ try {
             $in = "$tmp.in"
             [IO.File]::WriteAllText($in, '')
             $proc = Start-Process -FilePath $launch.exe -ArgumentList $launch.argv -PassThru -NoNewWindow -RedirectStandardOutput $part -RedirectStandardError $err -RedirectStandardInput $in
+            # Kill($true) walks parent ids, so a descendant whose own parent already exited escapes it (a web host
+            # left by a finished test step held G26.T647's check past its limit). Every process the grader starts
+            # joins this job, and the timeout ends the whole job; a normal end leaves the job's processes running.
+            $job = New-GraderJob $proc
             $every = if ($env:STREAM_BEAT_SECONDS) { [int]$env:STREAM_BEAT_SECONDS } else { 30 }
             $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
             while (-not $proc.HasExited) {
                 $left = ($deadline - [DateTime]::UtcNow).TotalMilliseconds
                 if ($left -le 0) {
                     try { $proc.Kill($true) } catch { }
+                    Stop-GraderJob $job
                     [void]$proc.WaitForExit(10000)
                     $timedOut = "GRADER-TIMEOUT $Task $(Split-Path -Leaf $g) ran past $TimeoutSeconds s and was ended with its process tree (pid $($proc.Id)); a hung child, not a verdict"
                     break
@@ -203,7 +236,7 @@ try {
 } finally {
     # Any other way out of this script (a throw, Ctrl+C) stops the child grader and its tree, so no orphan keeps the
     # .part log open or builds on after the run is over.
-    if ($proc -and -not $proc.HasExited) { try { $proc.Kill($true) } catch { } }
+    if ($proc -and -not $proc.HasExited) { try { $proc.Kill($true) } catch { }; Stop-GraderJob $job }
     if ($mainLock) { $mainLock.Dispose() }
 }
 $identity = ($scripts | ForEach-Object { if ($_ -eq $censusScript) { "census:$(Get-GraderHash $_)" } else { Get-GraderHash $_ } }) -join '+'

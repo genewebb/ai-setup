@@ -75,7 +75,7 @@ function Read-InboxItems([string] $Path) {
             $items[$id] = [ordered]@{ id = $id; at = $f[1]; from = $f[2]
                 kind = if ($f.Count -gt 4) { $f[4] } else { 'request' }; task = if ($f.Count -gt 5) { $f[5] } else { '-' }
                 ask = if ($f.Count -gt 6) { $f[6] } else { '' }; evidence = if ($f.Count -gt 7) { $f[7] } else { '-' }
-                status = $f[3]; statusAt = $f[1]; statusBy = $f[2]; note = '' }
+                status = $f[3]; statusAt = $f[1]; statusBy = $f[2]; note = ''; holdNote = '' }
             if ($items[$id].task -eq '-') { $lead = Get-AskLeadTask $items[$id].ask; if ($lead) { $items[$id].task = $lead } }
             continue
         }
@@ -98,6 +98,8 @@ function Read-InboxItems([string] $Path) {
             continue
         }
         $it.status = $f[3]; $it.statusAt = $f[1]; $it.statusBy = $f[2]; $it.note = if ($f.Count -gt 4) { ($f[4..($f.Count - 1)] -join ' | ') } else { '' }
+        # A held line's note carries its until:/after: condition; a later note line must not erase it (kit item IN-20261127171111-bc6b).
+        $it.holdNote = if ($f[3] -eq 'held') { $it.note } else { '' }
     }
     @($items.Values)
 }
@@ -153,7 +155,7 @@ function Test-InboxHolderOnBoard($P, [string] $Who, [int] $LimitMinutes) {
 
 # Whether a held item's condition is met now. `integrated` is met by integrated or done; `done` only by done.
 function Test-InboxHoldMet($Item, $P = $null) {
-    $c = Get-InboxHoldCondition $Item.note
+    $c = Get-InboxHoldCondition $(if ($Item.holdNote) { $Item.holdNote } else { $Item.note })
     if (-not $c) { return $false }
     if ($null -ne $c.until -and (Get-Date).ToUniversalTime() -ge $c.until) { return $true }
     if (-not $c.after.Count) { return $false }

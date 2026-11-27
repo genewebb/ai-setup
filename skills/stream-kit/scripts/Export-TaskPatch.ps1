@@ -40,7 +40,7 @@ if ($untracked.Count) {
 # directory): a directory entry would sweep in ignored build output (bin, obj).
 foreach ($w in @($t.writeSet)) {
     $w = ([string]$w).Replace('\', '/')
-    if (-not $w -or $w -match '[*?\[]' -or $w.EndsWith('/')) { continue }
+    if (-not $w -or $w -match '[*?\[]' -or $w.EndsWith('/') -or (Test-KitStatePath $w)) { continue }
     if (-not (Test-Path -LiteralPath (Join-Path $Worktree $w) -PathType Leaf)) { continue }
     $ign = @(& git -C $Worktree ls-files --others --ignored --exclude-standard -- $w)
     if ($LASTEXITCODE -ne 0) { throw "git ls-files --ignored failed in $Worktree" }
@@ -49,6 +49,9 @@ foreach ($w in @($t.writeSet)) {
 # stdout only: git's stderr warnings (CRLF conversion and the like) are not file names
 $changed = @(& git -C $Worktree -c core.safecrlf=false diff --name-only | Where-Object { $_ })
 if ($LASTEXITCODE -ne 0) { throw "git diff --name-only failed in $Worktree" }
+# A .streams write-set file is delivered in place on main, never through the patch (Test-KitStatePath).
+@($changed | Where-Object { Test-KitStatePath $_ }) | ForEach-Object { "IN-PLACE $_ (kit state: not exported; write it on main where its reader looks)" }
+$changed = @(Select-RepoContentPaths $changed)
 if (-not $changed.Count) { 'EMPTY no change in worktree'; exit 2 }
 $outside = @($changed | Where-Object { -not (Test-InWriteSet $_ $t.writeSet) })
 if ($outside.Count) { $outside | ForEach-Object { "OUTSIDE $_" }; exit 2 }
@@ -61,7 +64,7 @@ if (-not $OutFile) {
 }
 
 $patch = if ($OutFile) { if ([IO.Path]::IsPathRooted($OutFile)) { $OutFile } else { Join-Path $Repo $OutFile } } else { Join-Path $P.Patches "$Task.patch" }
-& git -C $Worktree -c core.safecrlf=false diff --binary --output=$patch
+& git -C $Worktree -c core.safecrlf=false diff --binary --output=$patch -- . ':(exclude).streams'
 if ($LASTEXITCODE -ne 0) { throw "git diff failed in $Worktree" }
 $changed | ForEach-Object { "IN $_" }
 "PATCH $patch"

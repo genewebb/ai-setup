@@ -236,6 +236,7 @@ function Add-IgnoredWriteSetBase([string] $Repo, [string] $Wt, [string[]] $Write
     foreach ($w in @($WriteSet)) {
         if (-not $w -or $w -match '[*?]' -or $w -match '[\\/]$') { continue }
         $rel = $w -replace '\\', '/'
+        if (Test-KitStatePath $rel) { continue }
         $src = Join-Path $Repo $rel
         $dst = Join-Path $Wt $rel
         if (-not (Test-Path -LiteralPath $src -PathType Leaf) -or (Test-Path -LiteralPath $dst)) { continue }
@@ -329,11 +330,7 @@ function Get-PreStageOnlySessions($P) {
     $only = [Collections.Generic.HashSet[string]]::new()
     $dir = $P.PreStage
     if (-not $dir -or -not (Test-Path $dir)) { return , $only }
-    $rules = [Collections.Generic.HashSet[string]]::new()
-    $logRoot = Join-Path $P.Root 'logs\runner'
-    if (Test-Path $logRoot) {
-        foreach ($r in @(Get-ChildItem $logRoot -Recurse -Filter '*.rules.txt' -File -ErrorAction SilentlyContinue)) { if ($r.Name -match '^[0-9TZ]+-(.+)\.rules\.txt$') { [void]$rules.Add($Matches[1]) } }
-    }
+    $rules = [Collections.Generic.HashSet[string]]::new((Get-RunnerRuleSessions $P))
     foreach ($f in @(Get-ChildItem $dir -Filter '*.json' -File -ErrorAction SilentlyContinue)) {
         try { $m = Get-Content -Raw $f.FullName | ConvertFrom-Json -AsHashtable -DateKind String } catch { continue }
         if ($m -is [Collections.IDictionary] -and $m['session'] -and -not $rules.Contains([string]$m['session'])) { [void]$only.Add([string]$m['session']) }
@@ -504,6 +501,14 @@ function Get-LastWorktreeLedgerStatus($Paths, [string] $Dir) {
 function Test-IntegratorLock($P, [string] $Session) {
     if (-not (Test-Path $P.IntLock)) { return $false }
     try { ((Get-Content -Raw $P.IntLock | ConvertFrom-Json -AsHashtable -DateKind String).session -eq $Session) } catch { $false }
+}
+# The integrate runner gate's reading of its own lock beat (UTC times): 'run' when a run of its own beats it, 'stale-beat'
+# when the beat is fresh but no newer than the runner's last unit end (the unit's own Enter-Integrator.ps1 wrote it, kit
+# item IN-20261126192557-d77d), $null when the beat is missing or 20 min old. With no unit ended yet the beat alone counts.
+function Get-IntegratorLockRun($Beat, $LastUnitEnded) {
+    if (-not $Beat -or ((Get-Date).ToUniversalTime() - [datetime]$Beat).TotalMinutes -ge 20) { return $null }
+    if ($LastUnitEnded -and [datetime]$Beat -le ([datetime]$LastUnitEnded).AddSeconds(5)) { return 'stale-beat' }
+    'run'
 }
 # Writes a fresh beat when the lock is this session's. $true = still ours.
 function Update-IntegratorBeat($P, [string] $Session) {
@@ -891,12 +896,21 @@ function Get-DependencyBaseDrift($P, $doc, $Task) {
         $now = if (Test-Path -LiteralPath $f) { Get-FileHash16 $f } else { 'gone' }
         if ($now -eq $recorded) { continue }
         if ($null -eq $leafToId) {
-            $leafToId = @{}
+            $leafToId = @{}; $leafToPath = @{}
             foreach ($t in $doc.tasks) {
                 $a = if ($t -is [Collections.IDictionary] -and $t.Contains('artifacts')) { $t['artifacts'] } else { $null }
                 $pp = if ($a -is [Collections.IDictionary] -and $a.Contains('patch') -and $a['patch']) { [string]$a['patch'] } else { '' }
-                if ($pp) { $leafToId[(Split-Path -Leaf $pp)] = [string]$t.id }
+                if ($pp) { $lf = Split-Path -Leaf $pp; $leafToId[$lf] = [string]$t.id; $leafToPath[$lf] = $pp }
             }
+        }
+        # A no-code row's artifacts.patch can name a non-patch file outside .streams\patches (its verdict tests note).
+        # New-TaskWorktree.ps1 applies nothing for a file that holds no diff (NO-DIFF), so editing or moving that note
+        # later changes no base: it is not drift while the row's artifact still holds no diff (kit item
+        # IN-20261125191705-adb5). An empty or no-diff .patch is still compared by hash: a later real patch keeps its leaf.
+        if ($leaf -notlike '*.patch' -and $leafToPath.ContainsKey($leaf)) {
+            $cur = $leafToPath[$leaf]
+            if (-not [IO.Path]::IsPathRooted($cur)) { $cur = Join-Path $P.Repo $cur }
+            if ((Test-Path -LiteralPath $cur -PathType Leaf) -and -not ([IO.File]::ReadAllText($cur) -match '(?m)^(diff --git |\+\+\+ |GIT binary patch)')) { continue }
         }
         $dep = if ($leafToId.ContainsKey($leaf)) { $leafToId[$leaf] } else { $leaf -replace '\.patch$', '' }
         $out.Add([ordered]@{ dep = $dep; leaf = $leaf; recorded = $recorded; now = $now })
@@ -990,7 +1004,13 @@ function Get-SessionActivity($P, $doc, $IdleBeats = $null) {
         if (-not $last[$session] -or $last[$session] -lt $at) { $last[$session] = $at }
     }
     foreach ($t in $doc.tasks) {
-        foreach ($h in @($t.history)) { & $note $h.by $h.at '' }
+        # Inline, not through $note: one script block call per history entry was most of this function's cost.
+        foreach ($h in @($t.history)) {
+            $session = [string]$h.by; $at = [string]$h.at
+            if (-not $session -or -not $at) { continue }
+            if (-not $role[$session]) { $x = ($session -split '-')[0]; if ($script:SessionRoleAlias.ContainsKey($x)) { $x = $script:SessionRoleAlias[$x] }; $role[$session] = $x }
+            if (-not $last[$session] -or $last[$session] -lt $at) { $last[$session] = $at }
+        }
         $c = $t['claim']; if ($c -is [Collections.IDictionary]) {
             & $note $c['session'] $c['beat'] $c['role']
             if (Test-ClaimLive $t) { $claim[[string]$c['session']] = [string]$t.id }
@@ -1016,11 +1036,25 @@ function Get-EndedRunnerSessions($P, $Units = $null) {
     $logRoot = Join-Path $P.Root 'logs\runner'
     if (-not (Test-Path $logRoot)) { return , $ended }
     if ($null -eq $Units) { $Units = Get-RunnerUnits $P }
-    foreach ($r in @(Get-ChildItem $logRoot -Recurse -Filter '*.rules.txt' -File -ErrorAction SilentlyContinue)) {
-        if ($r.Name -notmatch '^[0-9TZ]+-(.+)\.rules\.txt$') { continue }
-        if (-not $Units.ContainsKey($Matches[1])) { [void]$ended.Add($Matches[1]) }
-    }
+    foreach ($s in (Get-RunnerRuleSessions $P)) { if (-not $Units.ContainsKey($s)) { [void]$ended.Add($s) } }
     , $ended
+}
+# The session of every runner unit's <stamp>-<session>.rules.txt under .streams\logs\runner, in one .NET directory walk:
+# Get-ChildItem -Recurse over that tree took 0.70 s against 0.08 s (15,056 files, SMVMTR1, 2026-11-25), and the board
+# walks it twice. A walk that throws (a folder deleted or denied mid-walk) falls back to Get-ChildItem, which skips it.
+function Get-RunnerRuleSessions($P) {
+    $names = [Collections.Generic.List[string]]::new()
+    $logRoot = Join-Path $P.Root 'logs\runner'
+    if (-not (Test-Path $logRoot)) { return , $names }
+    try {
+        foreach ($p in [IO.Directory]::EnumerateFiles($logRoot, '*.rules.txt', [IO.SearchOption]::AllDirectories)) {
+            if ([IO.Path]::GetFileName($p) -match '^[0-9TZ]+-(.+)\.rules\.txt$') { $names.Add($Matches[1]) }
+        }
+    } catch {
+        $names.Clear()
+        foreach ($r in @(Get-ChildItem $logRoot -Recurse -Filter '*.rules.txt' -File -ErrorAction SilentlyContinue)) { if ($r.Name -match '^[0-9TZ]+-(.+)\.rules\.txt$') { $names.Add($Matches[1]) } }
+    }
+    , $names
 }
 
 # True when a process is a pwsh: its name is pwsh, or its image path ends in pwsh.exe. The name alone is not enough: a
@@ -1184,6 +1218,10 @@ function Get-Claimable($P, $doc, [string] $Role, $Held = $null) {
             if ($Held.Contains([string]$t.id)) { $r.held++; $r.heldIds.Add([string]$t.id); continue }
         }
         if ($Role -eq 'build' -and -not (Test-BuildReady $P $doc $t)) { $r.waiting.Add($t); continue }
+        # Integrate-Patch.ps1 drains a built row only once every dependsOn row is integrated or done (an in-place mockup
+        # needs no dependency), so a row behind an unlanded dependency waits here too: the gate counted it and launched
+        # units that drained NONE (kit item IN-20261126192423-e6e3).
+        if ($Role -eq 'integrate' -and -not ($t.kind -eq 'mockup' -and (Test-InPlaceWriteSet $t.writeSet)) -and -not (Test-DepsAt $doc $t @('integrated', 'done'))) { $r.waiting.Add($t); continue }
         $r.ids.Add([string]$t.id); $r.rows.Add($t)
     }
     # AUTHOR SPILL (owner ruling 2026-10-12): authors have their own queue. When the focus set offers an author nothing,
@@ -1602,6 +1640,17 @@ function ConvertTo-RepoRel([string] $Path) { ($Path -replace '\\', '/') -replace
 # answer EMPTY. Before 2026-09-30 eight such tasks were planned as code or docs and none of them could be built at all:
 # two grader repairs (G1.T22, G1.T23) and the six AC-coverage audits under .streams\plans (kit item
 # IN-20260930022231-9702). The builder writes the artifact where the grader reads it, exactly as a mockup task does.
+# A path under .streams/ is kit state, ignored by git and read in place by graders and checks: it is never staged in a
+# worktree, exported into a patch or committed (kit item IN-20261127172457-259e: a staged .streams file made .streams a
+# tracked root entry in the worktree only, so the repo's root-entry census went red there, and `git add -f` at commit
+# would have put .streams into the repository).
+function Test-KitStatePath([string] $Path) {
+    $r = ([string]$Path).Replace('\', '/')
+    $r -eq '.streams' -or $r.StartsWith('.streams/')
+}
+function Select-RepoContentPaths([string[]] $Paths) {
+    @(@($Paths) | Where-Object { $_ -and -not (Test-KitStatePath $_) })
+}
 function Test-InPlaceWriteSet($WriteSet) {
     $w = @(@($WriteSet) | Where-Object { $_ })
     if (-not $w.Count) { return $false }
@@ -2089,4 +2138,46 @@ function Resolve-StreamPushRef([string] $Repo, [string] $Configured) {
     $branch = & git -C $Repo symbolic-ref -q --short HEAD 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $branch) { return '' }
     return "refs/heads/$($branch.Trim())"
+}
+
+# A shell whose token has SeBackupPrivilege or SeRestorePrivilege ENABLED (Git Bash on an admin account) passes them on
+# to every child, so a test that denies itself read access to a folder reads it anyway and skips or passes falsely.
+# Graders, drains and suite runs disable both on their own process token before they start a child; the call is a no-op
+# when neither is enabled, and compiles its P/Invoke type only then. Returns the names it disabled. Never throws.
+function Set-StreamTokenPrivilege([string] $Name, [bool] $Enable) {
+    if (-not ('StreamKit.TokenPrivilege' -as [type])) {
+        Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+namespace StreamKit { public static class TokenPrivilege {
+  [StructLayout(LayoutKind.Sequential, Pack = 4)] struct TokenPrivileges { public int Count; public long Luid; public int Attributes; }
+  [DllImport("advapi32.dll", SetLastError = true)] static extern bool OpenProcessToken(IntPtr process, int access, out IntPtr token);
+  [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+  [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool LookupPrivilegeValue(string system, string name, out long luid);
+  [DllImport("advapi32.dll", SetLastError = true)] static extern bool AdjustTokenPrivileges(IntPtr token, bool disableAll, ref TokenPrivileges state, int length, IntPtr previous, IntPtr returned);
+  public static bool Set(string name, bool enable) {
+    IntPtr token;
+    if (!OpenProcessToken(GetCurrentProcess(), 0x28, out token)) return false;
+    try {
+      long luid;
+      if (!LookupPrivilegeValue(null, name, out luid)) return false;
+      var tp = new TokenPrivileges { Count = 1, Luid = luid, Attributes = enable ? 2 : 0 };
+      if (!AdjustTokenPrivileges(token, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero)) return false;
+      return Marshal.GetLastWin32Error() == 0;
+    } finally { CloseHandle(token); }
+  }
+} }
+"@
+    }
+    [StreamKit.TokenPrivilege]::Set($Name, $Enable)
+}
+function Disable-StreamBackupPrivilege {
+    if (-not $IsWindows) { return @() }
+    try {
+        $lines = @(& whoami.exe /priv 2>&1)
+        $on = @(foreach ($n in 'SeBackupPrivilege', 'SeRestorePrivilege') {
+            if ($lines | Where-Object { "$_" -match "^$n\s.*\bEnabled\s*$" }) { $n }
+        })
+        @(foreach ($n in $on) { if (Set-StreamTokenPrivilege $n $false) { $n } })
+    } catch { @() }
 }

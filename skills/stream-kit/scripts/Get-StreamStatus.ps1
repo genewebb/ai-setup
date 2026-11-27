@@ -52,12 +52,19 @@ function Add-Activity([string] $at) {
     if ([datetime]::TryParse($at, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal, [ref] $d)) { $activity.Add($d) }
 }
 $inv = [Globalization.CultureInfo]::InvariantCulture; $toUtc = [Globalization.DateTimeStyles]::AdjustToUniversal
+# Only gaps that start inside the widest delivery window are ever counted (Get-OutageHours skips a gap starting before
+# its window), so each row's history is walked newest first and left at its first entry older than that window plus a
+# day of slack for clock skew between hosts. That entry is still added, so each row's newest activity and the board's
+# last activity are kept. Three quarters of a large board's history is older than the window.
+$activityCutoff = $now.AddHours(-([double]$DeliveryWindowHours[-1] + 24))
 foreach ($t in @($doc.tasks)) {
     # Parsed inline, not through Add-Activity: a function call per history entry was seconds of CPU on a large board.
-    foreach ($h in @($t.history)) {
+    $hist = @($t.history)
+    for ($hi = $hist.Count - 1; $hi -ge 0; $hi--) {
+        $h = $hist[$hi]
         if (-not $h -or ([string]$h.by).StartsWith('status', [StringComparison]::OrdinalIgnoreCase)) { continue }
         $hd = [datetime]::MinValue
-        if ([datetime]::TryParse([string]$h.at, $inv, $toUtc, [ref] $hd)) { $activity.Add($hd) }
+        if ([datetime]::TryParse([string]$h.at, $inv, $toUtc, [ref] $hd)) { $activity.Add($hd); if ($hd -lt $activityCutoff) { break } }
     }
     if ($t.claim) { Add-Activity ([string]$t.claim.at); Add-Activity ([string]$t.claim.beat) }
 }
@@ -343,12 +350,13 @@ if (Test-Path -LiteralPath $tier2HoldFile) {
         $tier2Hold = [ordered]@{ since = ''; by = ''; reason = "unreadable tier2-hold.json: $($_.Exception.Message)"; item = ''; groups = @() }
     }
 }
+$tier2RunGroups = @(foreach ($tr in $tier2Runs) { , @(Get-SuiteRunGroups $tr) })
 foreach ($g in $groups) {
     $gid = [string]$g.id
-    $gts = @($doc.tasks | Where-Object { $_.group -eq $gid })
-    $openGates = @($gts | Where-Object { $_.kind -eq 'gate' -and $_.state -notin @('integrated', 'done') } | ForEach-Object { [string]$_.id })
-    $openFix = @($gts | Where-Object { [string]$_.id -match '\.(R\d+F\d+|KF\d+)$' -and $_.state -notin @('integrated', 'done') } | ForEach-Object { [string]$_.id })
-    $runs = @($tier2Runs | Where-Object { (Get-SuiteRunGroups $_) -contains $gid })
+    $gts = @(if ($tasksByGroup.ContainsKey($gid)) { $tasksByGroup[$gid] })
+    $openGates = @(foreach ($t in $gts) { if ($t.kind -eq 'gate' -and $t.state -notin @('integrated', 'done')) { [string]$t.id } })
+    $openFix = @(foreach ($t in $gts) { if ([string]$t.id -match '\.(R\d+F\d+|KF\d+)$' -and $t.state -notin @('integrated', 'done')) { [string]$t.id } })
+    $runs = @(for ($ri = 0; $ri -lt $tier2Runs.Count; $ri++) { if ($tier2RunGroups[$ri] -contains $gid) { $tier2Runs[$ri] } })
     $lastRun = if ($runs.Count) { $runs[-1] } else { $null }
     $t2 = [ordered]@{ state = 'pending'; run = $null; startedAt = $null; endedAt = $null; typicalMinutes = $tier2Typical; leftMinutes = $null }
     if ([string]$g.state -eq 'closed') { $t2.state = 'closed' }

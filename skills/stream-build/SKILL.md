@@ -1,6 +1,6 @@
 ---
 name: stream-build
-description: v0.18. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
+description: v0.19. Stream kit skill 3 of 5. Each cycle first takes the oldest actionable item from its inbox (.streams\inbox\stream-build.md). It runs unattended and never prompts; every decision a ticket leaves open is auto-accepted (the builder takes its own recommendation, logs it and keeps building) because the owner adjusts at manual testing. It claims ticketed tasks from .streams\tasks.json and builds each one in its own detached git worktree, with no branches and no commits. It proves RED first in that worktree, chooses and writes one test per acceptance clause plus the existing tests its change can break, records them as a runnable check, and hands off a write-set-limited patch with that record; a blind verifier subagent tries to refute it before the task is marked built. Use for /stream-build (run under /loop), /stream-build once, /stream-build status.
 ---
 
 # stream-build
@@ -366,6 +366,9 @@ A build failure that blames the host is checked against the host before it is be
   `BackupService.ExclusionStatement` needs no csproj change to be visible from a Web test.
 - **`CS2012` on `obj\`** is two builds of the same tree at once, not a code defect. Grade the main tree only through
   `Invoke-Grader.ps1`, which holds `.streams\main-grader.lock`.
+- **Grade from the PowerShell tool, not the Bash tool.** Git Bash starts with SeBackupPrivilege and SeRestorePrivilege
+  enabled, which bypass deny ACLs, so a deny-ACL test goes Inconclusive. `Invoke-Grader.ps1` and `Integrate-Patch.ps1`
+  turn both off on their own token at start; a test runner you start yourself from Git Bash keeps them.
 
 ## Claims and liveness
 

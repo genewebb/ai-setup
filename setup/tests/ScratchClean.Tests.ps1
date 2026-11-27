@@ -113,6 +113,32 @@ try {
         Assert-Match $m.Out 'SWEPT files=2 dirs=0 .* left=\d+'
         Assert-Equal 3 @(Get-ChildItem (Join-Path $scratch 'many') -File).Count 'three should be left'
     }
+    # Leftovers have their own budget: many day-old tool folders at the top must not use up -Max.
+    $c0 = Run @('-Root', $scratch)
+    $tops = foreach ($n in 'zz11yy22.q1w', 'zz11yy22.q2w', 'zz11yy22.q3w') {
+        $f = Make "$n\inner.bin" (Get-Date).AddHours(-30)
+        $d = Split-Path $f
+        [IO.Directory]::SetCreationTimeUtc($d, (Get-Date).AddHours(-30).ToUniversalTime()); [IO.Directory]::SetLastWriteTimeUtc($d, (Get-Date).AddHours(-30).ToUniversalTime())
+        $d
+    }
+    1..2 | ForEach-Object { Make "many2\g$_.txt" $old | Out-Null }
+    $lb = Run @('-Root', $scratch, '-Max', '2')
+    Test-Case 'top-level leftovers do not spend -Max: with -Max 2 and three leftovers the two week-old files still go' {
+        Assert-Equal 0 $c0.Code $c0.Out
+        Assert-Equal 0 $lb.Code $lb.Out
+        foreach ($d in $tops) { Assert-True (-not (Test-Path -LiteralPath $d)) "$d should be gone" }
+        Assert-Equal 0 @(Get-ChildItem (Join-Path $scratch 'many2') -File).Count "both week-old files should be gone: $($lb.Out)"
+    }
+    1..3 | ForEach-Object {
+        $f = Make "zz11yy22.r$($_)w\inner.bin" (Get-Date).AddHours(-30); $d = Split-Path $f
+        [IO.Directory]::SetCreationTimeUtc($d, (Get-Date).AddHours(-30).ToUniversalTime()); [IO.Directory]::SetLastWriteTimeUtc($d, (Get-Date).AddHours(-30).ToUniversalTime())
+    }
+    $lm = Run @('-Root', $scratch, '-LeftoverMax', '1')
+    Test-Case '-LeftoverMax bounds the one-day leftover rule alone and reports the rest as left' {
+        Assert-Equal 0 $lm.Code $lm.Out
+        Assert-Match $lm.Out 'left=2 '
+        Assert-Equal 2 @(Get-ChildItem $scratch -Directory -Filter 'zz11yy22.r*').Count 'two leftovers should be left'
+    }
 
     # ---- register / unregister, dry ----
     $d0 = Run @('-Register', '-Root', $scratch, '-DryRun')

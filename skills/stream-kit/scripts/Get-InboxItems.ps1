@@ -29,7 +29,7 @@ if ($Wake) {
             foreach ($it in @(Read-InboxItems $path | Where-Object { $_.status -eq 'held' })) {
                 if (-not (Test-InboxHoldMet $it $P)) { continue }
                 $woken.Add("WOKEN $s $($it.id)")
-                '- {0} | {1} | {2} | woken | {3}' -f $it.id, (Get-Now), (ConvertTo-InboxField $By), (ConvertTo-InboxField "met: $($it.note)")
+                '- {0} | {1} | {2} | woken | {3}' -f $it.id, (Get-Now), (ConvertTo-InboxField $By), (ConvertTo-InboxField "met: $(if ($it.holdNote) { $it.holdNote } else { $it.note })")
             }
         })
     }

@@ -369,9 +369,10 @@ function Record-Unit([string] $Session, $Packet, [string] $Outcome, $Res, $Code,
 # runners launched a Claude unit every interval whatever the board held: on the quiet night of 2026-10-16/17 those idle
 # launches cost about $5 an hour ($115 a day) to find nothing. Each role now has a script gate, read without the lock,
 # and launches only when the gate finds work; with nothing to take it shows the IDLE report and watches the board.
-#   integrate   an actionable stream-integrate item; a built row in the focus set (Get-Claimable integrate, the drain's
-#               own selector); a group 'integrating' (suites, fix tasks, close); or this session's own integrator lock
-#               still beating (a detached run of its own is in flight and must be polled).
+#   integrate   an actionable stream-integrate item; a built row in the focus set whose dependencies are all integrated
+#               or done (Get-Claimable integrate, the drain's own rule); a group 'integrating' (suites, fix tasks,
+#               close); or a run of this session's own in flight: a live suite run record, or a lock beat written
+#               after the runner's last unit ended (lib\Streams.ps1 Get-IntegratorLockRun).
 #   plan, kit   an actionable item in the role's inbox (plan still waits out a live planner).
 #   coordinator an actionable stream-coordinator item; open stream-plan or stream-kit items with no live session of that
 #               role (it stands in); the status page's flags changed since its last unit; free RAM below 6 GB; its
@@ -441,8 +442,19 @@ function Get-TimedGate($doc) {
         if (Test-IntegratorLock $P $stableSession) {
             $beat = $null
             try { $beat = [datetime]::Parse([string](Get-Content -Raw $P.IntLock | ConvertFrom-Json -AsHashtable)['beat'], [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal) } catch { }
-            if ($beat -and ((Get-Date).ToUniversalTime() - $beat).TotalMinutes -lt 20) { $script:timedWhy = @(); return "integrator lock live for $stableSession (a run of its own is in flight)" }
+            # Every unit refreshes the beat (Enter-Integrator.ps1), so a fresh beat alone is no run in flight: an idle unit
+            # relaunched the next one (kit item IN-20261126192557-d77d). A run counts when this session's suite or retest
+            # record is live, or when something beat the lock after this runner's last unit ended (Invoke-IntegratorRun.ps1
+            # beats every 30 s); the runner's first unit keeps the beat rule, as it has no unit end to compare with.
+            $liveRun = $null
+            try { . "$PSScriptRoot\lib\Suites.ps1"; $liveRun = @(Get-SuiteRunRecords $P | Where-Object { [string]$_['session'] -eq $stableSession -and (Test-SuiteRunAlive $_) }) | Select-Object -First 1 } catch { }
+            if ($liveRun) { $script:timedWhy = @(); return "integrator lock live for $stableSession (suite run $($liveRun['id']) in flight)" }
+            $ended = if ($script:lastUnit) { $script:lastUnit.ended } else { $null }
+            $lockWhy = Get-IntegratorLockRun $beat $ended
+            if ($lockWhy -eq 'run') { $script:timedWhy = @(); return "integrator lock live for $stableSession (a run of its own is in flight)" }
+            if ($lockWhy -eq 'stale-beat') { $why.Add("integrator lock beat $(Format-Local $beat) is from before the last unit ended: no run in flight") }
         }
+        if ($cl.waiting.Count) { $w0 = $cl.waiting[0]; $why.Add("$($cl.waiting.Count) built row(s) wait on a dependency that has not landed ($($w0.id) after $(@($w0.dependsOn | Where-Object { $_ -and (Get-Task $doc $_).state -notin @('integrated', 'done') }) -join ', '))") }
         $why.Add("no built row in the focus set$(if ($cl.notFocus) { " ($($cl.notFocus) built row(s) in other groups wait for their group)" })")
         $why.Add('no group integrating')
     } elseif ($Role -eq 'coordinator') {
@@ -556,6 +568,9 @@ function Invoke-StatusTick([string] $Session) {
         $ar = Invoke-TickStep 'Archive-TaskHistory.ps1' @{ Repo = $Repo; Session = $Session }; $steps.Add($ar)
         # Closed inbox items older than 14 days move to inbox\archive (kit item IN-20261123164855-93f4).
         $ci = Invoke-TickStep 'Compress-StreamInboxes.ps1' @{ Repo = $Repo; Session = $Session }; $steps.Add($ci)
+        # Output folders of runs ended over 7 days ago whose groups are all closed (kit item IN-20261126203801-9b5e).
+        # Its failure shows on the tick line but does not hold the day: archive and compress must not run twice.
+        $ps = Invoke-TickStep 'Prune-SuiteRuns.ps1' @{ Repo = $Repo; Session = $Session }; $steps.Add($ps)
         if ($ar.Ok -and $ci.Ok) { Write-AtomicText $dayFile $today }
         $archiveNote = Get-TickNote $ar
     }

@@ -17,7 +17,8 @@
 #               the work (kit item IN-20260930173837-50cb). Only the holder may beat: NOT-HELD, exit 8, otherwise.
 #   held      : by the session that holds it (taken), with -Until <utc> and/or -After <ids> -State integrated|done. The
 #               item leaves -Open until the time passes or every named task reaches the state (both = whichever comes
-#               first); then it reads open again and may be taken. -Note adds free text after the condition.
+#               first); then it reads open again and may be taken. -Note adds free text after the condition. The
+#               session that parked it may re-hold it while it waits; the new conditions replace the old ones.
 #   forwarded : -ForwardTo <skill>; appends forwarded here and the item as a new open line (same id) in that inbox.
 # Exit 2 = no such item.
 param(
@@ -71,7 +72,9 @@ $item = $null
             if (-not (Test-InboxOpen $it $Skill $P)) { $script:result = "ALREADY $Id is $($it.status) by $($it.statusBy) $(Get-InboxAgeMinutes $it)m ago"; return }
         }
         'held' {
-            if ($it.status -ne 'taken' -or $it.statusBy -ne $By) {
+            # The session that parked an item may park it again with new conditions while it waits: a held item is
+            # not open, so its holder could not take it back first (kit item IN-20261126191813-11a1).
+            if ($it.status -notin @('taken', 'held') -or $it.statusBy -ne $By) {
                 $script:result = "NOT-HELD $Id is $($it.status) by $($it.statusBy), not taken by $By"; return
             }
         }
